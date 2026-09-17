@@ -66,7 +66,16 @@ func TestRenderConformanceProjectionAndEscaping(t *testing.T) {
 	// · shape · target · expected · observed · missing · extra · detail") —
 	// previously "Expected"/"Observed" (capitalized), which predates this
 	// screen's machine-layer vocabulary.
-	if !strings.Contains(scalar, `<span>expected:</span> <code>3</code>`) || !strings.Contains(scalar, `<span>observed:</span> <code>4</code>`) || strings.Contains(scalar, `<span>missing:</span>`) || strings.Contains(scalar, `<span>extra:</span>`) {
+	//
+	// RETRY re-pin (verifier item 2, 06a §9 Open decision 5): `extra` is no
+	// longer omitted when the slice is empty — the nine-key envelope is a
+	// fixed shape, and an absent key made the envelope variable-length. It
+	// now always renders, with an em-dash value when there is nothing to
+	// list (`claim-conformance-line--empty`). `missing` stays omitted here:
+	// this check is scalar-shaped, and only a set-shaped check ever
+	// populates Missing (conformance.go's evaluateCheck never sets it on a
+	// scalar comparison), so its absence is unrelated to this decision.
+	if !strings.Contains(scalar, `<span>expected:</span> <code>3</code>`) || !strings.Contains(scalar, `<span>observed:</span> <code>4</code>`) || strings.Contains(scalar, `<span>missing:</span>`) || !strings.Contains(scalar, "<span>extra:</span> <code>—</code>") {
 		t.Fatalf("scalar check did not preserve scalar-only detail fields: %s", scalar)
 	}
 }

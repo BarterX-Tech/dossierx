@@ -819,7 +819,7 @@ func renderClaimsWithBudget(cat *catalog.Catalog, partials map[model.Layout]*tem
 		// projection visible when a project overrides that entire partial and
 		// keeps it inside claim collapse.
 		if result, ok := conformanceResults[c.ID]; ok {
-			rendered := insertEngineBlockBeforeClose(buf.String(), string(components.ConformanceHTML(result)))
+			rendered := insertEngineBlockBeforeClose(buf.String(), string(components.ConformanceHTML(result, cat.ConformanceSnapshot)))
 			renderedByID[c.ID] = template.HTML(rendered)
 			continue
 		}

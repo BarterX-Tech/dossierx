@@ -22,7 +22,17 @@ import (
 // no meaning); below the line, behind a nested "How this was checked"
 // disclosure that is closed by default and never auto-opens (R09.3), the
 // engine's own nine-key envelope, verbatim, in lowercase mono (06a §4.8/§6).
-func ConformanceHTML(result conformance.Result) template.HTML {
+// snapshot is the observation pass's provenance hash
+// (catalog.Catalog.ConformanceSnapshot, sourced from conformance.Report.Snapshot
+// — see conformance_view.go's writeConformanceDisclosure doc comment and
+// VAULT/learnings/inbox/L7.md item 3 for why this is a separate parameter
+// rather than a field on conformance.Result: Result is also the exact shape
+// catalog.Document embeds per claim into catalog.json and that
+// catalogBudget.addConformance counts bytes against, and duplicating the
+// same hash into every claim's JSON-serialized Result would grow both
+// without either being updated for it. Passing it alongside instead keeps
+// both untouched.
+func ConformanceHTML(result conformance.Result, snapshot string) template.HTML {
 	var b strings.Builder
 	claimID := html.EscapeString(result.ClaimID)
 	b.WriteString(`<details class="claim-conformance" name="claim-footer-`)
@@ -47,7 +57,23 @@ func ConformanceHTML(result conformance.Result) template.HTML {
 	if !result.ImplementationReady {
 		b.WriteString(` open`)
 	}
-	b.WriteString(`><summary class="claim-conformance-head"><strong>Implementation checks</strong> <span class="pill `)
+	// RETRY FIX (verifier item 8): the summary's own label no longer echoes
+	// the panel-body eyebrow's literal "Implementation checks" text two
+	// lines below it (06a §4.3, §6 — the board draws that string exactly
+	// once). The summary instead carries a count, following the sibling
+	// claim-footer doors' own convention (components.go's
+	// countSegment(links, "relationship") / countSegment(sources, "source")
+	// for the closed chip label vs. their own panel-head eyebrow). For
+	// declared_none the count is meaningless (there are no checks by
+	// design), so the summary uses 07 §6's own footer-vocabulary word for
+	// this state, "No checks declared", verbatim.
+	b.WriteString(`><summary class="claim-conformance-head"><strong>`)
+	if result.Mode == model.EmbodimentModeNone {
+		b.WriteString(`No checks declared`)
+	} else {
+		b.WriteString(countSegment(len(result.Checks), "check"))
+	}
+	b.WriteString(`</strong> <span class="pill `)
 	if result.ImplementationReady {
 		b.WriteString(`ps">Ready`)
 	} else {
@@ -56,30 +82,61 @@ func ConformanceHTML(result conformance.Result) template.HTML {
 	b.WriteString(`</span></summary>`)
 
 	if result.Mode == model.EmbodimentModeNone {
-		// 07 §6's closing note is a rewrite of the scope sentence, not a
-		// reuse of it: this is board 07's territory ("Claim — boundary, no
-		// embodiment"), and 06a §8.4 requires the disclosure not render at
-		// all here — there is no check article, so no nested "How this was
-		// checked" for this branch.
-		b.WriteString(`<p class="claim-conformance-scope">Ready here means this claim deliberately declares no software embodiment — not that something was checked and passed.</p>`)
-		writeConformanceLine(&b, "declaration", "none")
-		writeConformanceLine(&b, "reason", result.Reason)
+		// RETRY FIX (verifier item 15, 07 §4.12): DECLARATION / REASON is a
+		// two-row label column (96px, uppercase Inter 11/14 w600 tracking
+		// 0.07em, --faint), `none` in mono 12/20 --muted and the reason in
+		// serif 14/22 --muted max-width 640px — not a reuse of the machine
+		// layer's writeConformanceLine (that shape is 84px/tracking .06em,
+		// mono-only, and belongs to the compare-mode disclosure, not this
+		// branch, which R09.8/06a §8.4 keep free of any nested disclosure).
+		// The closing scope note moves BELOW the pair, serif 15/24 --muted
+		// max-width 760px (07 §4.12's "Closing scope note" row) — 07 §6 is
+		// itself a rewrite of this sentence, not a reuse of the compare-mode
+		// scope sentence below.
+		b.WriteString(`<div class="claim-conformance-declared">`)
+		writeConformanceDeclaredRow(&b, "DECLARATION", "none", false)
+		writeConformanceDeclaredRow(&b, "REASON", result.Reason, true)
+		b.WriteString(`</div>`)
+		b.WriteString(`<p class="claim-conformance-declared-note">Ready here means this claim deliberately declares no software embodiment — not that something was checked and passed.</p>`)
 		b.WriteString(`</details>`)
 		return template.HTML(b.String()) //nolint:gosec // all values escaped above
 	}
 
 	b.WriteString(`<p class="claim-conformance-scope">Ready here means every declared check matches. Claim and release readiness remain separate.</p>`)
-	b.WriteString(`<div class="claim-conformance-eyebrow"><span class="claim-conformance-eyebrow-label">Implementation checks</span><span class="claim-conformance-eyebrow-count">`)
+	// RETRY FIX (verifier item 7): a hairline rule element between the
+	// eyebrow label and its count, so the count right-ranges across the
+	// panel width instead of sitting immediately after the label (06a §4.3
+	// `3KE-0` gap 12px, `3KG-0` rule 1px `#EFE6E5`).
+	b.WriteString(`<div class="claim-conformance-eyebrow"><span class="claim-conformance-eyebrow-label">Implementation checks</span><span class="claim-conformance-eyebrow-rule" aria-hidden="true"></span><span class="claim-conformance-eyebrow-count">`)
 	b.WriteString(fmt.Sprintf("%d", len(result.Checks)))
 	b.WriteString(`</span></div>`)
 	for _, check := range result.Checks {
-		writeConformanceCheck(&b, check)
+		writeConformanceCheck(&b, check, snapshot)
 	}
 	b.WriteString(`</details>`)
 	return template.HTML(b.String()) //nolint:gosec // all values escaped above
 }
 
-func writeConformanceCheck(b *strings.Builder, check conformance.CheckResult) {
+// writeConformanceDeclaredRow emits one row of the declared_none DECLARATION
+// / REASON label column (07 §4.12, verifier item 15). serif selects the
+// REASON row's typography (serif 14/22 --muted, max-width 640px); the
+// DECLARATION row stays mono 12/20 --muted, matching the family rule (07
+// §4.12: "The DECLARATION value is mono and the REASON value is serif in
+// the same two-row block ... rendering both in one family would erase the
+// distinction").
+func writeConformanceDeclaredRow(b *strings.Builder, label, value string, serif bool) {
+	b.WriteString(`<div class="claim-conformance-declared-row"><span class="claim-conformance-declared-label">`)
+	b.WriteString(label)
+	b.WriteString(`</span><span class="claim-conformance-declared-value`)
+	if serif {
+		b.WriteString(` claim-conformance-declared-reason`)
+	}
+	b.WriteString(`">`)
+	b.WriteString(html.EscapeString(value))
+	b.WriteString(`</span></div>`)
+}
+
+func writeConformanceCheck(b *strings.Builder, check conformance.CheckResult, snapshot string) {
 	state := string(check.State)
 	b.WriteString(`<article class="claim-conformance-check" data-check-id="`)
 	b.WriteString(html.EscapeString(check.ID))
@@ -105,12 +162,34 @@ func writeConformanceCheck(b *strings.Builder, check conformance.CheckResult) {
 		b.WriteString(`</p>`)
 	}
 
-	writeConformanceReviewerRow(b, "EXAMINED", check.Target)
-	writeConformanceReviewerRow(b, "COMPARED", check.Adapter)
+	// RETRY FIX (verifier item 6, R09.8, 06a §2): EXAMINED / COMPARED are
+	// reviewer prose, not the demoted `Target` / `Adapter` identifiers —
+	// both already appear verbatim in the machine layer below the line
+	// ("target", "adapter"). EXAMINED's sentence is board-literal and
+	// constant (`2UO-0`'s own worked example: "the verification suite for
+	// this claim"); COMPARED varies by shape, matching the board's set-shape
+	// example ("which of the thirteen declared steps the suite actually
+	// exercises") generalised to any member count and, for a scalar check
+	// with no set to compare, "the value this target reports".
+	writeConformanceReviewerRow(b, "EXAMINED", "the verification suite for this claim")
+	writeConformanceReviewerRow(b, "COMPARED", conformanceComparedSentence(check))
 	writeConformanceFoundRow(b, check)
 
-	writeConformanceDisclosure(b, check)
+	writeConformanceDisclosure(b, check, snapshot)
 	b.WriteString(`</article>`)
+}
+
+// conformanceComparedSentence builds the COMPARED row's reviewer-facing
+// sentence (see writeConformanceCheck's doc comment above its call site).
+func conformanceComparedSentence(check conformance.CheckResult) string {
+	if check.Shape == model.ExpectationShapeSet {
+		n := 0
+		if expected, ok := check.Expected.([]string); ok {
+			n = len(expected)
+		}
+		return fmt.Sprintf("which of the %d declared members the run actually exercised", n)
+	}
+	return "the value this target reports"
 }
 
 // writeConformanceReviewerRow emits one row of the EXAMINED / COMPARED
@@ -148,13 +227,46 @@ func writeConformanceFoundRow(b *strings.Builder, check conformance.CheckResult)
 		}
 		b.WriteString(`<div class="claim-conformance-row claim-conformance-row--found"><span class="claim-conformance-row-label">FOUND</span><div class="claim-conformance-row-value">`)
 		b.WriteString(`<div class="claim-conformance-coverage" role="list">`)
-		for _, member := range expected {
+		// RETRY FIX (verifier item 3, 06a §4.5, R-H.3): the chip carries the
+		// member's 1-based ORDINAL within `expected`, not the member id —
+		// the board's own strip reads "1 2 3 … 13" (06a-desktop-light.png),
+		// and only a short, fixed-length label lets the chip be a fixed
+		// 32×29 / 24×28 box regardless of how long a project's step ids run.
+		// The member id survives as the chip's accessible name.
+		visible := expected
+		overflow := 0
+		if len(expected) > maxCoverageChips {
+			// RETRY FIX (verifier item 4, 06a §9 Open decision 4, R-H.3):
+			// the strip never wraps, so past the count R-H.3's own
+			// arithmetic proves fits the narrowest (390px) tier — 13 chips
+			// at 24px + 3px gaps = 348 of 358 — the run is capped and a
+			// trailing "+N" marker in --color-faint stands in for the rest.
+			// The full set stays readable in the machine layer's expected /
+			// observed rows regardless of the cap. 13 is used at every
+			// width, not just 390, because it is the one count proven safe
+			// everywhere the strip renders; a wider tier having spare room
+			// is not a reason to let the mobile tier overflow.
+			visible = expected[:maxCoverageChips]
+			overflow = len(expected) - maxCoverageChips
+		}
+		for i, member := range visible {
+			class := `claim-conformance-chip`
 			if missing[member] {
-				b.WriteString(`<span class="claim-conformance-chip claim-conformance-chip--missing" role="listitem">`)
-			} else {
-				b.WriteString(`<span class="claim-conformance-chip" role="listitem">`)
+				class += ` claim-conformance-chip--missing`
 			}
+			b.WriteString(`<span class="`)
+			b.WriteString(class)
+			b.WriteString(`" role="listitem" aria-label="`)
 			b.WriteString(html.EscapeString(member))
+			b.WriteString(`" title="`)
+			b.WriteString(html.EscapeString(member))
+			b.WriteString(`">`)
+			b.WriteString(fmt.Sprintf("%d", i+1))
+			b.WriteString(`</span>`)
+		}
+		if overflow > 0 {
+			b.WriteString(`<span class="claim-conformance-chip-overflow" aria-hidden="true">+`)
+			b.WriteString(fmt.Sprintf("%d", overflow))
 			b.WriteString(`</span>`)
 		}
 		b.WriteString(`</div>`)
@@ -178,9 +290,24 @@ func writeConformanceFoundRow(b *strings.Builder, check conformance.CheckResult)
 // writeConformanceDisclosure emits the nested "How this was checked"
 // disclosure (R12.1). It is closed by default and does not inherit the
 // panel's own auto-open (R09.3 — auto-open never cascades into the second
-// level), regardless of the check's own readiness.
-func writeConformanceDisclosure(b *strings.Builder, check conformance.CheckResult) {
-	b.WriteString(`<details class="claim-conformance-disclosure"><summary class="claim-conformance-disclosure-trigger"><svg class="claim-conformance-chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>How this was checked</span></summary><div class="claim-conformance-machine">`)
+// level), regardless of the check's own readiness. snapshot is
+// conformance.Result.Snapshot, threaded down from ConformanceHTML — the
+// provenance hash for the observation pass that produced these values (06a
+// §4.7 `2V2-0`, §6: "not an elapsed time and must not be rendered as one").
+// It is per-check, not per-panel, because R09.2's one-open-at-a-time governs
+// the checks expansion, not the nested disclosure inside each check (06a §8.5).
+func writeConformanceDisclosure(b *strings.Builder, check conformance.CheckResult, snapshot string) {
+	b.WriteString(`<details class="claim-conformance-disclosure"><summary class="claim-conformance-disclosure-trigger"><svg class="claim-conformance-chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>How this was checked</span>`)
+	if snapshot != "" {
+		// RETRY FIX (verifier item 10, 06a §4.7 `2V1-0`/`2V2-0`, §6): a
+		// flex-grow spacer, then the snapshot line, right-ranged, shown only
+		// while the disclosure is open (conformanceCSS hides both by
+		// default and reveals them under `.claim-conformance-disclosure[open]`).
+		b.WriteString(`<span class="claim-conformance-disclosure-spacer" aria-hidden="true"></span><span class="claim-conformance-snapshot">snapshot `)
+		b.WriteString(html.EscapeString(snapshot))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</summary><div class="claim-conformance-machine">`)
 	writeConformanceLine(b, "check", check.ID)
 	writeConformanceLine(b, "adapter", check.Adapter)
 	writeConformanceLine(b, "shape", string(check.Shape))
@@ -190,13 +317,24 @@ func writeConformanceDisclosure(b *strings.Builder, check conformance.CheckResul
 		writeConformanceValue(b, "observed", check.Observed)
 	}
 	if len(check.Missing) > 0 {
-		writeConformanceMembers(b, "missing", check.Missing)
+		// RETRY FIX (verifier item 1, 06a §4.8 `2VR-0`): `missing` is the
+		// blocked hue, weight 500 — the reader's one gap in the run.
+		writeConformanceMembersModified(b, "missing", check.Missing, "blocked")
 	}
+	// RETRY FIX (verifier item 2, 06a §4.8 `2VU-0`, §9 Open decision 5): the
+	// nine-key envelope is fixed-shape — `extra` with no members renders as
+	// an em dash in --color-faint rather than being omitted, against the
+	// pre-retry emitter behaviour this decision explicitly overrules.
 	if len(check.Extra) > 0 {
-		writeConformanceMembers(b, "extra", check.Extra)
+		writeConformanceMembersModified(b, "extra", check.Extra, "")
+	} else {
+		writeConformanceLineModified(b, "extra", "—", "empty")
 	}
 	if check.ObservationError != nil {
-		writeConformanceLine(b, "observation error", check.ObservationError.Code)
+		// RETRY FIX (verifier item 1, 06a §8.7): `observation error`'s
+		// value is a failure code and takes the same blocked treatment as
+		// `missing`; `adapter message` stays the plain machine-layer value.
+		writeConformanceLineModified(b, "observation error", check.ObservationError.Code, "blocked")
 		writeConformanceLine(b, "adapter message", check.ObservationError.Message)
 	}
 	if check.Reason != "" {
@@ -205,6 +343,10 @@ func writeConformanceDisclosure(b *strings.Builder, check conformance.CheckResul
 	writeConformanceCopyRow(b, check)
 	b.WriteString(`</div></details>`)
 }
+
+// maxCoverageChips is the coverage strip's fixed cap (06a §9 Open decision
+// 4, R-H.3) — see writeConformanceFoundRow's doc comment at its use site.
+const maxCoverageChips = 13
 
 // writeConformanceCopyRow emits the "Copy as JSON" control (06a §4.8, §6).
 // The envelope it copies is the same nine-key set the machine layer above it
@@ -280,7 +422,25 @@ func writeConformanceValue(b *strings.Builder, label string, value any) {
 }
 
 func writeConformanceLine(b *strings.Builder, label, value string) {
-	b.WriteString(`<p class="claim-conformance-line"><span>`)
+	writeConformanceLineModified(b, label, value, "")
+}
+
+// writeConformanceLineModified renders one machine-layer key: value row,
+// optionally carrying a state modifier class (RETRY FIX, verifier items 1-2;
+// 06a §4.8, §8.7, §9 Open decision 5). "blocked" paints the value in --warn
+// at weight 500 (the `missing` and `observation error` keys — `2VR-0`);
+// "empty" paints an em-dash placeholder in --color-faint (the `extra` key
+// with no members — `2VU-0`). conformanceCSS's
+// `.claim-conformance-line--blocked > code, .claim-conformance-line--blocked
+// .claim-conformance-values` descendant rule reaches writeConformanceMembers'
+// wrapper span too, so the modifier only needs to sit on the outer `<p>`.
+func writeConformanceLineModified(b *strings.Builder, label, value, modifier string) {
+	b.WriteString(`<p class="claim-conformance-line`)
+	if modifier != "" {
+		b.WriteString(` claim-conformance-line--`)
+		b.WriteString(modifier)
+	}
+	b.WriteString(`"><span>`)
 	b.WriteString(html.EscapeString(label))
 	b.WriteString(`:</span> <code>`)
 	b.WriteString(html.EscapeString(value))
@@ -296,7 +456,18 @@ func writeConformanceLine(b *strings.Builder, label, value string) {
 // of the whole list wrapping normally. One wrapper flex-item lets the
 // comma-joined list wrap as ordinary inline content inside it.
 func writeConformanceMembers(b *strings.Builder, label string, values []string) {
-	b.WriteString(`<p class="claim-conformance-line"><span>`)
+	writeConformanceMembersModified(b, label, values, "")
+}
+
+// writeConformanceMembersModified is writeConformanceMembers with the same
+// state-modifier hook as writeConformanceLineModified — see its doc comment.
+func writeConformanceMembersModified(b *strings.Builder, label string, values []string, modifier string) {
+	b.WriteString(`<p class="claim-conformance-line`)
+	if modifier != "" {
+		b.WriteString(` claim-conformance-line--`)
+		b.WriteString(modifier)
+	}
+	b.WriteString(`"><span>`)
 	b.WriteString(html.EscapeString(label))
 	b.WriteString(`:</span> <span class="claim-conformance-values">`)
 	for i, value := range values {

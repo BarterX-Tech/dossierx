@@ -31,6 +31,15 @@ type Catalog struct {
 	Readiness   map[string]readiness.Assessment
 	Conformance map[string]conformance.Result
 
+	// ConformanceSnapshot is the observation pass's provenance hash
+	// (conformance.Report.Snapshot), carried alongside Conformance rather
+	// than duplicated onto each conformance.Result — see
+	// internal/render/components/conformance.go's ConformanceHTML doc
+	// comment. It is deliberately NOT projected into Document/catalog.json:
+	// it is render-only, consumed solely by the "How this was checked"
+	// disclosure's snapshot line (06a §4.7).
+	ConformanceSnapshot string
+
 	// ByFacet and ByModule group claim IDs for convenient lookup by later
 	// render/lint stages. Populated by Build. Each slice of IDs is sorted so
 	// callers never need to re-sort before using or serializing them.
@@ -49,6 +58,7 @@ func (cat *Catalog) SetConformance(report *conformance.Report) {
 	for _, result := range report.Results {
 		cat.Conformance[result.ClaimID] = result
 	}
+	cat.ConformanceSnapshot = report.Snapshot
 }
 
 // SetReadiness attaches a current read-only approval projection for exports
