@@ -143,11 +143,30 @@
   /* The dark blocked notice needs a SURFACE, not a tint. On dark a 10% red
      wash over --paper's near-black is invisible, so the notice takes a ground
      colour of its own (tokens.md §1, --color-dark-blocked-surface) with a
-     hairline to match. In light there is no such problem, so both fall back
-     to the ordinary blocked tint and a border mixed from it — which is what
-     keeps the two modes one rule rather than two. */
-  --blocked-surface: var(--warn-bg);
-  --blocked-hairline: color-mix(in srgb, var(--warn) 30%, var(--border));
+     hairline to match.
+
+     RETRY FIX (verifier item 1; L5's own inbox/L5.md, G9 literal-value
+     citation): light used to fall back to the ordinary --warn-bg chip tint
+     (10% over the surface it sits on), which is right for a small chip but
+     ~3x too dark for a whole section ground — 06 §4.4 / 03 §4.10 measure
+     `#FBF7F7`, a ~3% wash, and 06 §9 OD4/OD5 rule it a color-mix of --warn
+     into --card-bg, not a shared token. `color-mix(in srgb, var(--warn) 3%,
+     var(--card-bg))` reproduces #FBF7F7 on white.
+
+     RETRY FIX (verifier item 2; same citation): --blocked-hairline light
+     used to be color-mix(--warn 30%, --border), one value four different
+     hairline rows shared (#CAB0B3 where the spec names four distinct
+     hexes). This token is now spoken for by exactly ONE of those four —
+     .claim-readiness-eyebrow-rule (06 §4.4 "Eyebrow rule" `#EBD9D8`) — the
+     other three (section top hairline, collapsed-row hairline, blocker-row/
+     "Show more" hairline) are now their own color-mix expressions, inline
+     at their own rules (style.css, .claim-readiness section, L5-owned), per
+     OD4's "express each as its own color-mix" instruction. Dark is
+     untouched: #3A2A2B (style.css:248/351) was already exactly the
+     eyebrow-rule's own dark value (06 §4.4 / 06 §9 OD9), so no dark edit is
+     needed here. */
+  --blocked-surface: color-mix(in srgb, var(--warn) 3%, var(--card-bg));
+  --blocked-hairline: color-mix(in srgb, var(--warn) 20%, var(--card-bg));
 
   /* The mobile bottom sheet's top edge. `transparent` here and var(--border)
      in the two dark blocks, because board 14 §4.8's shell row gives the DARK
@@ -314,8 +333,11 @@
     --shadow-strong: rgba(0, 0, 0, .14);
     --shadow-cast: rgba(9, 20, 38, .12);
     --scrim: rgba(0, 0, 0, .22);
-    --blocked-surface: var(--warn-bg);
-    --blocked-hairline: color-mix(in srgb, var(--warn) 30%, var(--border));
+    /* RETRY FIX (verifier items 1/2): mirrors the :root block's own fix
+       above — TestModeBlocksDeclareTheSameTokenSet requires this block's
+       token set and values to match the :root's byte-for-byte. */
+    --blocked-surface: color-mix(in srgb, var(--warn) 3%, var(--card-bg));
+    --blocked-hairline: color-mix(in srgb, var(--warn) 20%, var(--card-bg));
     /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's top hairline is a DARK-only
        edge, so explicit Light puts it back to nothing. */
     --sheet-hairline: transparent;
@@ -1233,9 +1255,36 @@ th {
    background/border-top-color to it regardless of source order — this
    selector repeats .claim-footer-panel so the modifier's specificity
    matches the base rule's, and source order (this rule comes later) then
-   lets the blocked variant win. */
+   lets the blocked variant win.
+
+   RETRY FIX (verifier item 1). 06 §4.4 / 03 §4.10 measure the section
+   ground as `#FBF7F7` — a ~3% blocked wash over --card-bg, not the 10%
+   `--warn-bg` tint the panel used to borrow (that tint is calibrated for a
+   small chip ground, not a whole section; 10% over white paints
+   rgb(245,235,235), visibly darker/muddier than the board's near-white
+   rgb(251,247,247)). 06 §9 open decision 4/5 (OD4/OD5) is explicit that
+   this ground has no token and must be a color-mix of --warn into
+   --card-bg: `--blocked-surface`'s LIGHT value (style.css:149, :317, both
+   coordinator-held palette blocks, edited here as a literal value change
+   per G9 with this citation) now reads `color-mix(in srgb, var(--warn) 3%,
+   var(--card-bg))`, which reproduces #FBF7F7. The DARK value (#1D1618,
+   style.css:248/351) is untouched — it was already exact, being a genuine
+   SURFACE rather than a tint (OD5's other half).
+
+   RETRY FIX (verifier items 2/3). The panel's own top hairline used to
+   share --blocked-hairline with three unrelated hairlines below, all
+   resolving to one value (#CAB0B3) where the spec names FOUR distinct
+   ones. This row specifically is 06 §4.4's "Section top hairline"
+   (`#E8ECF1` light / `#212934` dark) — the NEUTRAL border hairline, not a
+   --warn-tinted one; #3A2A2B (the correct dark value for
+   .claim-readiness-eyebrow-rule, kept below) belongs to a different row
+   entirely. .claim-footer's own top hairline (style.css:1046 area) already
+   established the identical formula for this exact "neutral section edge"
+   concept — reused verbatim here rather than invented afresh, and it
+   tracks both modes automatically since --border/--card-bg already differ
+   per mode. */
 .claim-readiness--blocked.claim-footer-panel {
-  border-top-color: var(--blocked-hairline);
+  border-top-color: color-mix(in srgb, var(--border) 70%, var(--card-bg));
   background: var(--blocked-surface);
 }
 
@@ -1317,17 +1366,44 @@ th {
   margin: 0;
 }
 
+/* RETRY FIX (verifier item 2; 06 §4.4 "Collapsed row divider + geometry",
+   06 §9 OD9): the collapsed-module-row divider is its OWN color-mix, not a
+   share of --blocked-hairline (which is now spoken for by the eyebrow rule
+   alone). Light target `#EBD9D8` — the SAME hex the eyebrow rule names, so
+   this uses the identical formula; OD9's own point is that the two rows'
+   DARK values differ (`#3A2A2B` eyebrow vs `#33262A` here), which a shared
+   token cannot express without a second engine-owned dark literal (a
+   structural addition to the coordinator-held dark blocks, out of this
+   lane's reach per G9 — filed as a dependency in learnings/inbox/L5.md).
+   The 20%-into-card-bg formula is kept here anyway because it is exact on
+   light and close on dark (measured ~10-15 units off per channel, still
+   read as a warm dark hairline, not the wrong hue), rather than silently
+   falling back to the old, provably-wrong shared mix. */
 .claim-readiness-module + .claim-readiness-module {
-  border-top: 1px solid var(--blocked-hairline);
+  border-top: 1px solid color-mix(in srgb, var(--warn) 20%, var(--card-bg));
 }
 
 .claim-readiness-module-summary {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-block: 8px;
   cursor: pointer;
   list-style: none;
+}
+
+/* RETRY FIX (verifier item 4; 06 §4.4 "Group row" vs "Module row
+   (collapsed)"): a single padding-block: 8px served both states, so the
+   OPEN row (spec: 2px block) and the CLOSED rows (spec: 11px block, 03
+   §4.10 "Group row ... 2px block" is the open form specifically) pitched
+   identically at 8px. Paper's collapsed-row pitch measures 43px; the old
+   uniform rule rendered 37px. Split by the native `open` attribute so no
+   extra class or JS is needed. */
+.claim-readiness-module[open] > .claim-readiness-module-summary {
+  padding-block: 2px;
+}
+
+.claim-readiness-module:not([open]) > .claim-readiness-module-summary {
+  padding-block: 11px;
 }
 
 .claim-readiness-module-summary::marker { content: ""; }
@@ -1340,6 +1416,16 @@ th {
   flex-shrink: 0;
   color: var(--muted);
   transition: transform .16s ease;
+}
+
+/* RETRY FIX (verifier item 10; 06 §4.4 "Module row chevron"): the span was
+   correctly 12×12, but dxIcon's inner <svg> inherits `width/height: 1em` of
+   a 13.6px font, so the glyph itself painted at ~13.59px and overflowed its
+   own span. Pinning the svg's own box stops that regardless of the
+   inherited font-size. */
+.claim-readiness-module-chevron svg {
+  width: 12px;
+  height: 12px;
 }
 
 .claim-readiness-module[open] > .claim-readiness-module-summary .claim-readiness-module-chevron {
@@ -1365,6 +1451,20 @@ th {
   flex: 1 1 auto;
 }
 
+/* RETRY FIX report (verifier item 11; NOT changed here — see
+   learnings/inbox/L5.md and G7): 06 §4.4 measures this pill's dark ground
+   as `#EC8A8329` (~16%), explicitly "not the light #9E3B361A" pattern of a
+   flat token reuse. --warn-bg is a SHARED, coordinator-held palette token
+   (tokens.md's own frozen `--color-dark-blocked-bg` row gives it `rgb(236
+   138 131 / 13%)`, engine `--warn-bg`) consumed well beyond this one pill
+   (banners, the head chip's blocked hue, other lanes' blocked surfaces). A
+   lane-local bump to 16% here would either mean forking a new token
+   (blocked on the closed allowlist, tokens.md's own "Open decisions") or
+   editing the shared dark literal (risking every OTHER --warn-bg consumer
+   this lane does not own and cannot verify at wave-B scope). Left at the
+   token's current 13% and reported per item 11's own permitted alternative
+   for the coordinator to rule on. .claim-readiness-slug--target below reads
+   the same token for the identical reason. */
 .claim-readiness-module-count {
   display: inline-flex;
   flex-shrink: 0;
@@ -1383,6 +1483,16 @@ th {
   padding-left: 24px;
 }
 
+/* One-line row for a module beyond MODULES_VISIBLE_CAP (06 §8 item 9;
+   RETRY FIX, verifier item 12) — the same geometry as an open module's own
+   summary line, minus the chevron/cursor (it is a locator, not itself a
+   disclosure). */
+.claim-readiness-module-row-flat {
+  cursor: default;
+  padding-block: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--warn) 20%, var(--card-bg));
+}
+
 .claim-readiness-blockers {
   margin: 0;
   padding: 0;
@@ -1396,6 +1506,15 @@ th {
    112px right-ranged hop column 06 §3/§4.4 measures; ≤520 collapses to a
    single flex column so the title wraps above the hop pill and the path
    drops last, per M7/M12. */
+/* RETRY FIX (verifier item 2; 06 §4.4 "Blocker row" divider): its own
+   color-mix, not a share of --blocked-hairline — light target `#EFE6E5`,
+   the fourth and lightest of the four hairline hexes, is fit by a lower
+   --warn percentage than the eyebrow/collapsed-row family above (14%
+   measures within 2 units of #EFE6E5 on every channel and lands closest to
+   #33262A on dark of any single-mix candidate tried — see
+   learnings/inbox/L5.md for the arithmetic). .claim-readiness-more below
+   shares this exact value: 06 §4.4 names the same `#EFE6E5` / `#33262A`
+   pair for its own rule. */
 .claim-readiness-blocker {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 112px;
@@ -1403,7 +1522,7 @@ th {
   column-gap: 14px;
   row-gap: 6px;
   padding-block: 10px;
-  border-top: 1px solid var(--blocked-hairline);
+  border-top: 1px solid color-mix(in srgb, var(--warn) 14%, var(--card-bg));
   overflow-wrap: anywhere;
 }
 
@@ -1418,13 +1537,6 @@ th {
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-}
-
-.claim-readiness-blocker-detail {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-family: var(--font-sans);
-  font-size: 13px;
 }
 
 /* The hop pill (direct/upstream - N hop(s)) is styled as a pill even though
@@ -1493,6 +1605,14 @@ th {
   color: var(--faint);
 }
 
+/* RETRY FIX (verifier item 10; 06 §4.4 "Path chevron"): same overflow as
+   the module chevron above — dxIcon's svg inherits 1em of a 13.6px font
+   (13.59px) instead of the span's own 11×11 box. */
+.claim-readiness-path-chevron svg {
+  width: 11px;
+  height: 11px;
+}
+
 /* The within-module truncation (06 §4.4 "Show 9 more in this module": 11
    total facts, 2 rendered up front, 9 more). viewer-runtime.js's
    readinessModule builds only the first READINESS_VISIBLE_CAP rows and
@@ -1500,7 +1620,10 @@ th {
    in-place expansion, never a re-render) — the DOM itself, not a CSS
    display rule, carries the cap, so a project with thousands of facts in
    one module (TestReadinessBrowserScaleBudgets) never pays for rows no
-   one asked to see; the complete list stays reachable, never deleted. */
+   one asked to see; the complete list stays reachable, never deleted. This
+   same class, with the `claim-readiness-more--modules` modifier, is also
+   the module-list cap's own "Show N more modules" control (06 §8 item 9;
+   RETRY FIX, verifier item 12). */
 .claim-readiness-more {
   display: flex;
   align-items: center;
@@ -1509,7 +1632,10 @@ th {
   margin: 0;
   padding: 12px 0 0;
   border: 0;
-  border-top: 1px solid var(--blocked-hairline);
+  /* RETRY FIX (verifier item 2): its own color-mix — see the blocker-row
+     divider comment above, which this rule shares the same target hex
+     with (`#EFE6E5` / `#33262A`, 06 §4.4). */
+  border-top: 1px solid color-mix(in srgb, var(--warn) 14%, var(--card-bg));
   background: transparent;
   color: var(--link);
   font-family: var(--font-sans);
@@ -1527,18 +1653,40 @@ th {
   flex-shrink: 0;
 }
 
-/* The graph link (R09.9's replacement for the inline map). It reuses the
-   sidebar's existing [data-dxg-open] delegated trigger (graph-ui.js:481-486)
-   to open the pane for real rather than shipping a dead link — focusing it
-   on this claim specifically has no engine hook yet (06 §9 open decision 7
-   flags that gap for the graph lane; this is not a regression, the gap
-   already existed). Desktop right-ranges it (06 §4.4's row, minus the empty
-   spacer node 06 §9 P7 records as a Paper defect not to be copied); mobile
-   is left-aligned, one node, per 06 §4.8. */
+/* The panel footer (RETRY FIX, verifier items 5/6): built ONCE by
+   readinessPanelFooter and appended after .claim-readiness-modules (and
+   after the module-list "Show N more modules" control, when present),
+   never per module — two open modules used to draw "See in claims graph"
+   twice. It reuses the sidebar's existing [data-dxg-open] delegated
+   trigger (graph-ui.js:481-486) to open the pane for real rather than
+   shipping a dead link — focusing it on this claim specifically has no
+   engine hook yet (06 §9 open decision 7 flags that gap for the graph
+   lane; this is not a regression, the gap already existed). The resolution
+   sentence (.claim-readiness-resolution, when present) takes the leading
+   `flex: 1 1 0` slot per 03 §4.10 / 05 §4.9's "Resolution note" row, and
+   the link stays right-ranged (06 §4.4's row, minus the empty spacer node
+   06 §9 P7 records as a Paper defect not to be copied). With no sentence,
+   the link alone still right-ranges via the same justify-content. */
 .claim-readiness-module-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
   padding-top: 12px;
+}
+
+/* 03 §4.10's "Resolution note": the only serif run in this panel — a
+   sentence a human wrote about what to do, among machine output (RETRY
+   FIX, verifier item 6). Rendered only when every blocker sits in one
+   module (readinessPanelFooter's own caller decides that; this class is
+   never present otherwise). */
+.claim-readiness-resolution {
+  margin: 0;
+  flex: 1 1 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .claim-readiness-graph-link {
@@ -1645,11 +1793,42 @@ th {
   }
 
   /* 06 §4.8: the mobile graph-link footer is left-aligned, one node, no
-     spacer — the desktop-only right-range this overrides exists because
-     06's own board draws a (defect, P7) empty spacer node to right-range
-     it there; mobile carries no such node at all. */
+     spacer, when there is no resolution sentence — the desktop-only
+     right-range this overrides exists because 06's own board draws a
+     (defect, P7) empty spacer node to right-range it there; mobile carries
+     no such node at all. RETRY FIX (verifier item 6; 03 §4.11 "Resolution
+     note": "column / 10px — the graph link drops below the sentence"):
+     when a sentence IS present the footer instead stacks column-wise, the
+     sentence first (source order) and the link below it, the two-node case
+     03 §4.11 names. */
   .claim-readiness-module-footer {
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .claim-readiness-graph-link {
+    align-self: flex-start;
+  }
+}
+
+/* RETRY FIX (verifier item 9; 06 §5 M13): a coarse pointer needs a ≥44px
+   hit area on every one of this lane's own tap targets — measured at 390
+   before this fix: the module summary 36px, "Show more" 29px, the graph
+   link 16px. `min-height`, not larger type or icons, grows the AREA
+   without growing the visual box (the engine's own precedent for this is
+   `.comment-chip { min-height: 44px }` under its own `(pointer: coarse)`
+   block elsewhere in this file, L2-owned — the fix item's own citation was
+   a pre-revamp line number per G6; resolved here by selector, not by
+   address).
+   Scoped to exactly this lane's own component roots per G11 — none of
+   these three classes exists outside .claim-readiness. */
+@media (pointer: coarse) {
+  .claim-readiness-module-summary,
+  .claim-readiness-more,
+  .claim-readiness-graph-link {
+    min-height: 44px;
   }
 }
 

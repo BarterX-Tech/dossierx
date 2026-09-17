@@ -1682,12 +1682,22 @@
       // never truncated with an ellipsis, since a slug is machine identity).
       // R09.8: the row leads with the title, never the claim id; the id
       // appears only inside the path, where it is machine identity.
+      //
+      // RETRY FIX (verifier item 7): a fourth part — record.detail, rendered
+      // as a .claim-readiness-blocker-detail paragraph — used to follow the
+      // title on every row. 06 §2/§4.4/components-00 §B's "Blocker row" rule
+      // and R-I.1's own "Measured" list all agree the row is exactly THREE
+      // parts (title, hop pill, two-slug path); on the Cutainly corpus
+      // record.detail restates the title verbatim, so the fourth part added
+      // nothing a reader could act on. The field itself is not deleted from
+      // the data — it stays reachable verbatim inside Raw diagnostics
+      // (readinessRawDiagnostics already serialises the full condition/cause
+      // record), which is exactly R09.8's demotion route, not a removal.
       function readinessBlockerRow(item, rootID) {
         var li = el('li', 'claim-readiness-blocker');
 
         var titleGroup = el('div', 'claim-readiness-blocker-title-group');
         titleGroup.appendChild(textEl('strong', 'claim-readiness-blocker-title', readinessFactLabel(item.record, item.type, rootID)));
-        if (item.record.detail) { titleGroup.appendChild(textEl('p', 'claim-readiness-blocker-detail', item.record.detail)); }
         li.appendChild(titleGroup);
 
         li.appendChild(textEl('span', 'claim-readiness-relation', readinessHopLabel(item.record, item.type)));
@@ -1720,11 +1730,82 @@
       // deferred from the DOM, not withheld from the reader.
       var READINESS_VISIBLE_CAP = 2;
 
+      // MODULES_VISIBLE_CAP is 06 §8 item 9's module-list truncation: "the
+      // board shows exactly four [modules]... the remainder are one-line
+      // rows in ascending hop order, and the list is subject to the same
+      // Show N more treatment the within-module list gets." RETRY FIX
+      // (verifier item 12): the Cutainly corpus has claims fanning out
+      // across up to 23 modules (voice.contract.what-this-module-does-not-
+      // own), so an uncapped module list drew 23 full <details> rows.
+      var MODULES_VISIBLE_CAP = 4;
+
+      // readinessModuleRowFlat is the "one-line row" §8 item 9 names for a
+      // module beyond the cap: name, nearest-hop note and count pill, same
+      // geometry as an open module's own summary line but never a
+      // <details> — it is not itself expandable, only a locator, so the
+      // reviewer still sees every module's name and count without paying
+      // for 19 extra disclosure widgets up front.
+      function readinessModuleRowFlat(group) {
+        var row = el('div', 'claim-readiness-module-summary claim-readiness-module-row-flat');
+        row.appendChild(textEl('span', 'claim-readiness-module-name', group.label));
+        row.appendChild(textEl('span', 'claim-readiness-module-hop', readinessNearestHopLabel(group.minHops)));
+        row.appendChild(el('span', 'claim-readiness-module-spacer'));
+        var pill = el('span', 'claim-readiness-module-count');
+        pill.appendChild(document.createTextNode(String(group.items.length)));
+        row.appendChild(pill);
+        return row;
+      }
+
+      // readinessResolutionSentence is 03 §4.10 / 05 §4.9's "Resolution
+      // note" (RETRY FIX, verifier item 6): "Both sit in capability-support.
+      // One approval there clears this claim." The wording is mechanical
+      // from the single group's own key (its module id, the same
+      // lowercase-hyphenated form the quoted example uses — group.label is
+      // the sidebar's Title Case display name, a different string), never
+      // invented prose, and this is called only when there is exactly one
+      // group to name (renderClaimReadiness enforces that).
+      function readinessResolutionSentence(group) {
+        var count = group.items.length;
+        var subject = count === 1 ? 'It sits' : (count === 2 ? 'Both sit' : 'All ' + count + ' sit');
+        return subject + ' in ' + (group.key || group.label) + '. One approval there clears this claim.';
+      }
+
+      // readinessPanelFooter is the panel's OWN footer — "See in claims
+      // graph", plus the resolution sentence when there is exactly one
+      // module to resolve. RETRY FIX (verifier item 5): this used to be
+      // built once PER MODULE inside readinessModule and appended to every
+      // module's own body, so two open modules on one claim drew the link
+      // twice. It is now built once and appended to the panel itself, after
+      // .claim-readiness-modules, per components-00 §B ("Footer · every
+      // panel ends with 'See in claims graph' hard right") and 06 §4.4's
+      // row 3B6-0, which sits at the SECTION's end, after all module rows.
+      function readinessPanelFooter(singleGroup) {
+        var footer = el('div', 'claim-readiness-module-footer');
+        if (singleGroup) {
+          footer.appendChild(textEl('p', 'claim-readiness-resolution', readinessResolutionSentence(singleGroup)));
+        }
+        // The reverse of graph-ui.js's own data-dxg-open-claim link
+        // (graph-ui.js:3585-3594): that gap — "no API for open the graph
+        // focused on claim X" — is recorded, not solved, per 06 §9 open
+        // decision 7. [data-dxg-open] is the SAME delegated trigger the
+        // sidebar button uses (graph-ui.js:68, :481-486), so this link
+        // opens the real pane rather than shipping a dead affordance; it
+        // just cannot focus it on rootID yet.
+        var link = el('a', 'claim-readiness-graph-link');
+        link.href = '#';
+        link.setAttribute('data-dxg-open', '');
+        link.appendChild(dxIcon('git-branch'));
+        link.appendChild(textEl('span', '', 'See in claims graph'));
+        footer.appendChild(link);
+        return footer;
+      }
+
       // readinessModule builds one module's disclosure: a summary line
       // (chevron, module name, "nearest N hop(s)", a count pill) and, once
-      // open, its blocker list, an optional "Show N more in this module",
-      // and a "See in claims graph" link (R09.9's replacement for the old
-      // inline Mermaid trace — the graph pane draws the real shape).
+      // open, its blocker list and an optional "Show N more in this
+      // module". The panel-level "See in claims graph" footer is built
+      // once by readinessPanelFooter, not per module (RETRY FIX, verifier
+      // item 5).
       function readinessModule(group, rootID, index) {
         var details = el('details', 'claim-readiness-module');
         if (index === 0) { details.open = true; }
@@ -1763,22 +1844,6 @@
           });
           body.appendChild(more);
         }
-
-        var footer = el('div', 'claim-readiness-module-footer');
-        // The reverse of graph-ui.js's own data-dxg-open-claim link
-        // (graph-ui.js:3585-3594): that gap — "no API for open the graph
-        // focused on claim X" — is recorded, not solved, per 06 §9 open
-        // decision 7. [data-dxg-open] is the SAME delegated trigger the
-        // sidebar button uses (graph-ui.js:68, :481-486), so this link
-        // opens the real pane rather than shipping a dead affordance; it
-        // just cannot focus it on rootID yet.
-        var link = el('a', 'claim-readiness-graph-link');
-        link.href = '#';
-        link.setAttribute('data-dxg-open', '');
-        link.appendChild(dxIcon('git-branch'));
-        link.appendChild(textEl('span', '', 'See in claims graph'));
-        footer.appendChild(link);
-        body.appendChild(footer);
 
         details.appendChild(body);
         return details;
@@ -1872,6 +1937,15 @@
           var panel = el('div', 'claim-readiness claim-footer-panel' + (blocked ? ' claim-readiness--blocked' : ''));
           panel.setAttribute('aria-label', 'Claim readiness');
 
+          // RETRY FIX (verifier item 8): local approval reasons used to be
+          // appended FIRST, ahead of the READINESS BLOCKERS eyebrow, so a
+          // blocked claim's panel opened with a bare "is not locally
+          // approved" bullet instead of the section head. No board (06
+          // §4.4, 03 §4.10, 05 §4.9, components-00 §B) draws content above
+          // that eyebrow. localNotes is still computed here (it needs
+          // assessment before either branch below), but the actual
+          // .claim-readiness-local append moves below the module list /
+          // summary paragraph, whichever this claim takes.
           var localNotes = (assessment.local_reasons || []).slice();
           // local_approval_issue is a concise alias and may repeat the
           // reason already present in local_reasons. Collapse that one
@@ -1879,13 +1953,6 @@
           // Raw diagnostics.
           if (assessment.local_approval_issue && localNotes.indexOf(assessment.local_approval_issue) < 0) {
             localNotes.push(assessment.local_approval_issue);
-          }
-          if (localNotes.length) {
-            var local = el('div', 'claim-readiness-local');
-            var localList = el('ul');
-            localNotes.forEach(function (note) { localList.appendChild(textEl('li', '', note)); });
-            local.appendChild(localList);
-            panel.appendChild(local);
           }
 
           if (facts.length) {
@@ -1898,12 +1965,48 @@
             panel.appendChild(head);
 
             var modules = el('div', 'claim-readiness-modules');
-            groups.forEach(function (group, index) { modules.appendChild(readinessModule(group, id, index)); });
+            var visibleGroups = groups.slice(0, MODULES_VISIBLE_CAP);
+            var restGroups = groups.slice(MODULES_VISIBLE_CAP);
+            visibleGroups.forEach(function (group, index) { modules.appendChild(readinessModule(group, id, index)); });
             panel.appendChild(modules);
+
+            if (restGroups.length) {
+              // 06 §8 item 9: the remainder are "one-line rows in ascending
+              // hop order", subject to the same Show N more treatment the
+              // within-module list gets — built and appended only on click.
+              var moreModules = el('button', 'claim-readiness-more claim-readiness-more--modules');
+              moreModules.type = 'button';
+              var moreModulesChevron = el('span', 'claim-readiness-more-chevron');
+              moreModulesChevron.setAttribute('aria-hidden', 'true');
+              moreModulesChevron.appendChild(dxIcon('chevron-down'));
+              moreModules.appendChild(moreModulesChevron);
+              moreModules.appendChild(textEl('span', '', 'Show ' + restGroups.length + ' more modules'));
+              moreModules.addEventListener('click', function () {
+                restGroups.slice().sort(function (a, b) { return a.minHops - b.minHops; })
+                  .forEach(function (group) { modules.appendChild(readinessModuleRowFlat(group)); });
+                moreModules.remove();
+              });
+              panel.appendChild(moreModules);
+            }
+
+            // 05 §4.9 / 03 §4.10's resolution sentence sits only when every
+            // blocker sits in one module — components-00 §B: "The sentence
+            // to its left appears only when all blockers sit in one
+            // module, because only then is one approval enough to clear
+            // the claim." (RETRY FIX, verifier item 6.)
+            panel.appendChild(readinessPanelFooter(groups.length === 1 ? groups[0] : null));
           } else {
             var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
             var dependencySentence = assessment.dependency_ready ? 'Its required dependency chain is ready.' : 'Its dependency chain is not ready.';
             panel.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
+          }
+
+          if (localNotes.length) {
+            var local = el('div', 'claim-readiness-local');
+            var localList = el('ul');
+            localNotes.forEach(function (note) { localList.appendChild(textEl('li', '', note)); });
+            local.appendChild(localList);
+            panel.appendChild(local);
           }
 
           panel.appendChild(readinessRawDiagnostics(assessment));
