@@ -227,6 +227,77 @@
 {{- end}}
       </section>{{end}}
     </main>
+
+<!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own
+       chrome: breadcrumb, title/subtitle, scope segmented control, the
+       filter/sort row and the bottom-open findings card with its
+       "WHERE THE BLOCKERS LIVE" rail. R09.6: reached ONLY from the blocked
+       banner's "Show issues" action (#statusStripAction) — there is no nav
+       tab for it, by rule.
+
+       A sibling of <main class="content-area">, not a child of it: a
+       fragment swap replaces <main> and <nav> wholesale (see the comment
+       above #dxgPane), and this view's own DOM state (open/closed, the
+       chosen scope) is exactly the kind of client-only state that pattern
+       already protects #statusStrip and #dxgPane from losing. It occupies
+       the SAME flex slot .content-area does when open (viewer-runtime.js
+       toggles .content-area[hidden] the other way), so the left nav rail
+       stays exactly where 04 §3 draws it, 268px wide, untouched.
+
+       Its body is a skeleton ONLY: every dynamic piece — the breadcrumb
+       text, the subtitle, the counts, the severity chips and the grouped
+       findings list, the rail's bars — is filled in by issues-view JS
+       (viewer-runtime.js) at open time. The chips and the findings list are
+       never re-implemented here: they are lane L8's own
+       #statusStripFilters / .status-group / .status-finding--group nodes,
+       MOVED (never cloned) into #issuesFilters / #issuesFindingsCard so
+       their click handlers and live-poll updates keep working unchanged —
+       composed into this view, not restyled by it.
+
+       This is a document view, not an overlay (04 §7.1's z-index ledger
+       note): no z-index, no scrim, no fixed positioning. -->
+  <section id="issuesView" class="issues-view" hidden tabindex="-1" aria-label="Issues">
+    <header class="issues-header">
+      <nav class="issues-breadcrumb" aria-label="Breadcrumb">
+        <button type="button" id="issuesBack" class="issues-breadcrumb-back" aria-label="Back">
+          <svg class="dx-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span id="issuesBreadcrumbFacet" class="issues-breadcrumb-facet"></span>
+        <span id="issuesBreadcrumbSuffix" class="issues-breadcrumb-suffix"></span>
+      </nav>
+      <div class="issues-title-row">
+        <div class="issues-title-stack">
+          <h1 class="issues-title">Issues</h1>
+          <p id="issuesSubtitle" class="issues-subtitle"></p>
+          <p id="issuesCaveat" class="issues-caveat"></p>
+        </div>
+        <div id="issuesScope" class="issues-scope" role="group" aria-label="Scope">
+          <button type="button" class="issues-scope-seg" data-scope="facet" aria-pressed="true">This facet</button>
+          <button type="button" class="issues-scope-seg" data-scope="module" aria-pressed="false">Module</button>
+          <button type="button" class="issues-scope-seg" data-scope="project" aria-pressed="false">Project</button>
+        </div>
+      </div>
+      <div class="issues-filter-row">
+        <div id="issuesFilters" class="issues-filters"></div>
+        <div class="issues-filter-spacer"></div>
+        <div class="issues-sort">
+          <span class="issues-sort-label">Sort</span>
+          <button type="button" id="issuesSortControl" class="issues-sort-control" aria-haspopup="listbox">
+            <span id="issuesSortValue" class="issues-sort-value">Most claims blocked</span>
+            <svg class="dx-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+    <div class="issues-body">
+      <div id="issuesFindingsCard" class="issues-findings-card"></div>
+      <aside id="issuesRailPanel" class="issues-rail-panel">
+        <p class="issues-rail-heading">WHERE THE BLOCKERS LIVE</p>
+        <p id="issuesRailCaveat" class="issues-rail-caveat"></p>
+        <div id="issuesRailRows" class="issues-rail-rows"></div>
+      </aside>
+    </div>
+  </section>
   </div>
 
 <!-- Comment UI overlay chrome (Phase 5). These live OUTSIDE .layout on purpose:

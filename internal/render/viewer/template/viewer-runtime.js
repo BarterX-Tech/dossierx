@@ -2261,6 +2261,362 @@
         });
       }
 
+      // ================================================================
+      // Issues view (04-issues-screen.md) — lane L8a
+      // ================================================================
+      //
+      // The screen's own chrome around lane L8's status-strip vocabulary:
+      // breadcrumb, title/subtitle, scope and sort controls, the findings
+      // card and the "WHERE THE BLOCKERS LIVE" rail (04 §3, §4.1-4.3, §4.5,
+      // §4.6, §4.9). R09.6: reached ONLY from "Show issues" — the listener
+      // just below runs AFTER the one directly above (source order), so by
+      // the time it fires `stripExpanded` already holds L8's own new value.
+      //
+      // #issuesFilters and #issuesFindingsCard never build their own copy of
+      // the severity chips or the grouped findings list: issuesSyncFromStrip
+      // MOVES #statusStripBody's current children into them (never clones),
+      // so every click handler and every future renderStatusStrip() re-paint
+      // L8 already wired keeps working untouched — composed, not restyled.
+      var issuesViewEl = document.getElementById('issuesView');
+      var issuesBackBtn = document.getElementById('issuesBack');
+      var issuesBreadcrumbFacetEl = document.getElementById('issuesBreadcrumbFacet');
+      var issuesBreadcrumbSuffixEl = document.getElementById('issuesBreadcrumbSuffix');
+      var issuesSubtitleEl = document.getElementById('issuesSubtitle');
+      var issuesScopeEl = document.getElementById('issuesScope');
+      var issuesCaveatEl = document.getElementById('issuesCaveat');
+      var issuesFiltersHost = document.getElementById('issuesFilters');
+      var issuesSortControl = document.getElementById('issuesSortControl');
+      var issuesFindingsCard = document.getElementById('issuesFindingsCard');
+      var issuesRailPanelEl = document.getElementById('issuesRailPanel');
+      var issuesRailCaveatEl = document.getElementById('issuesRailCaveat');
+      var issuesRailRowsEl = document.getElementById('issuesRailRows');
+      var issuesViewOpen = false;
+      // 04 §8 item 7: This facet / Module / Project. Selecting a wider scope
+      // changes the denominator (and the rail's own claim-id basis) and
+      // nothing else — the numerator per module, read straight off L8's own
+      // grouping, never changes with scope.
+      var issuesScope = 'facet';
+      var ISSUES_RAIL_MAX_ROWS = 4;
+
+      // issuesScopedClaimIDs answers 04 §8 item 7's "the current scope" for
+      // any of the three positions, read-only over the SAME lookup maps
+      // initViewer() builds for deep linking (never written here).
+      function issuesScopedClaimIDs(scope) {
+        if (scope === 'project') {
+          var all = Object.create(null);
+          Object.keys(claimToFacet).forEach(function (id) { all[id] = true; });
+          return all;
+        }
+        if (scope === 'module') {
+          var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+          var moduleID = section ? section.id : '';
+          var ids = Object.create(null);
+          Object.keys(claimToFacet).forEach(function (id) {
+            if (facetToModule[claimToFacet[id]] === moduleID) { ids[id] = true; }
+          });
+          return ids;
+        }
+        return activeFacetClaimIDs();
+      }
+
+      // issuesGroupsForScope reruns L8's own pure grouping functions
+      // (collectStatusGroups et al. — called, never edited) over a broader
+      // claim-id set than the active facet, so the rail and the denominator
+      // can answer Module/Project scope without a second data source.
+      function issuesGroupsForScope(scope) {
+        var ids = issuesScopedClaimIDs(scope);
+        var data = lastStatusData || {};
+        var ledger = findingsForActiveFacet(data.ledger_findings || [], ids);
+        var lintErrors = findingsForActiveFacet(data.lint_errors || [], ids);
+        var lintWarnings = findingsForActiveFacet(data.lint_warnings || [], ids);
+        var groups = collectStatusGroups(
+          data.readiness || offlineReadiness(), ids, ledger, lintErrors, lintWarnings,
+          conformanceNotReadyIDs(ids)
+        );
+        // Mirrors renderStatusStrip's own severity-filter + APPROVAL RECORD /
+        // Later exclusions (viewer-runtime.js, above) so the rail and the
+        // denominator always describe the SAME rows the card is showing.
+        var visible = groups.filter(function (g) {
+          return !stripSeverityFilter || g.severity === stripSeverityFilter;
+        });
+        return visible.filter(function (g) {
+          return (g.severity !== 'later' || stripSeverityFilter === 'later') && g.origin !== 'ledger';
+        });
+      }
+
+      function issuesModuleWeights(scope) {
+        var withoutLater = issuesGroupsForScope(scope);
+        var byModule = {};
+        var order = [];
+        withoutLater.forEach(function (g) {
+          var id = ownerModuleID(g);
+          if (!Object.prototype.hasOwnProperty.call(byModule, id)) { byModule[id] = []; order.push(id); }
+          byModule[id].push(g);
+        });
+        var rows = order.map(function (id) {
+          return { id: id, label: moduleLabel(id), weight: uniqueClaimCount(byModule[id]) };
+        });
+        rows.sort(function (a, b) { return b.weight - a.weight; });
+        return {
+          rows: rows,
+          claims: uniqueClaimCount(withoutLater),
+          paths: rows.reduce(function (sum, r) { return sum + r.weight; }, 0)
+        };
+      }
+
+      // issuesApplyScopeDenominator retexts the ALREADY-RENDERED weight
+      // phrase (".status-group-head-note", L8's own node, moved in whole)
+      // rather than re-running findingGroup — 04 §8 item 7: "changing scope
+      // changes the denominator and nothing else", so the numerator this
+      // phrase already carries is left untouched and only the trailing "of
+      // <M>" is rewritten.
+      function issuesApplyScopeDenominator() {
+        if (!issuesFindingsCard) { return; }
+        var m = issuesModuleWeights(issuesScope).claims;
+        issuesFindingsCard.querySelectorAll('.status-group-head-note').forEach(function (note) {
+          var match = /^blocks (\d+) of \d+ claims? here$/.exec(note.textContent || '');
+          if (!match) { return; }
+          note.textContent = 'blocks ' + match[1] + ' of ' + m + ' claim' + (m === 1 ? '' : 's') + ' here';
+        });
+      }
+
+      // renderIssuesRail (04 §4.9): a ranking with bars, proportional to the
+      // facet's blocked-claim TOTAL (§4.9's own measured widths — retry fix
+      // 4, coordinator ruling: "rail bars use the spec's rounding basis" —
+      // round(N / M, 1px) against data.claims, the SAME M
+      // issuesApplyScopeDenominator already writes into every group header's
+      // "blocks N of M claims here" phrase (§8 item 7/9: the rail figures
+      // must agree with the group headers at the same scope). §4.9's table
+      // measures round(92%, 1px) for a count of 24 against a facet total of
+      // 26 (24/26 = 92.3%), NOT 100% for the largest row — §2 and §4.9's
+      // prose ("proportions of the largest count") describes the board's
+      // words, not its pixels, and the pixels are the spec (tokens.md's
+      // standing rule: a measured value wins over paraphrased prose).
+      // Truncated rather than scrolled past four rows, with the same
+      // double-counting caveat sentence mirrored under the mobile subtitle
+      // (§5 M2) once the rail itself is gone. The caveat is DERIVED here,
+      // not the fixture's hand-authored literal, so it stays correct at any
+      // corpus size or scope.
+      function renderIssuesRail() {
+        if (!issuesRailRowsEl) { return; }
+        var data = issuesModuleWeights(issuesScope);
+        issuesRailRowsEl.textContent = '';
+        var shown = data.rows.slice(0, ISSUES_RAIL_MAX_ROWS);
+        var total = data.claims;
+        shown.forEach(function (row) {
+          var wrap = el('div', 'issues-rail-row');
+          var labelRow = el('div', 'issues-rail-row-label');
+          labelRow.appendChild(textEl('span', 'issues-rail-row-name', row.label));
+          labelRow.appendChild(textEl('span', 'issues-rail-row-count', String(row.weight)));
+          wrap.appendChild(labelRow);
+          var track = el('div', 'issues-rail-bar-track');
+          var fill = el('div', 'issues-rail-bar-fill');
+          fill.style.width = (total ? Math.round((row.weight / total) * 100) : 0) + '%';
+          track.appendChild(fill);
+          wrap.appendChild(track);
+          issuesRailRowsEl.appendChild(wrap);
+        });
+        if (data.rows.length > ISSUES_RAIL_MAX_ROWS) {
+          issuesRailRowsEl.appendChild(textEl('p', 'issues-rail-more',
+            (data.rows.length - ISSUES_RAIL_MAX_ROWS) + ' more not shown'));
+        }
+        var caveat = data.claims > 0
+          ? (countLabel(data.claims, 'claim') + ' blocked, ' + countLabel(data.paths, 'path') +
+             ' — a claim blocked through two modules counts under both.')
+          : '';
+        if (issuesRailCaveatEl) { issuesRailCaveatEl.textContent = caveat; }
+        if (issuesCaveatEl) { issuesCaveatEl.textContent = caveat; }
+        // §8 item 5: an empty ranking is a ranking of nothing — the panel is
+        // OMITTED, not rendered empty.
+        if (issuesRailPanelEl) { issuesRailPanelEl.hidden = data.rows.length === 0; }
+      }
+
+      // issuesSyncHeader reads the breadcrumb (04 §4.1) and subtitle
+      // (§4.2) off the SAME active-module/active-facet DOM the rest of the
+      // reading view already maintains — read-only, no new state.
+      function issuesSyncHeader() {
+        var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
+        var activeSection = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
+        if (issuesBreadcrumbFacetEl) {
+          issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';
+        }
+        if (issuesBreadcrumbSuffixEl) {
+          issuesBreadcrumbSuffixEl.textContent = subtab ? ('· ' + subtab.textContent.trim()) : '';
+        }
+        if (issuesSubtitleEl) {
+          var groups = collectStatusGroups(
+            (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
+            activeFacetClaimIDs(), [], [], [], []
+          );
+          issuesSubtitleEl.textContent = blockerHeadline(groups) || 'Nothing in this facet is blocked.';
+        }
+      }
+
+      // issuesSyncFromStrip is the one function that touches L8's DOM: it
+      // MOVES (appendChild on an already-mounted node detaches it from its
+      // old parent) #statusStripBody's current children — the severity
+      // filter row and every .status-group / .status-strip-static-note —
+      // into this view's own containers, in place of the two containers'
+      // stale content from the previous sync. The MutationObserver declared
+      // below calls this again every time renderStatusStrip (L8's function)
+      // repaints #statusStripBody, so a poll, a severity-chip click or a
+      // facet change all keep this view's copy live without this file ever
+      // calling into or editing renderStatusStrip itself.
+      //
+      // It disconnects that observer before moving anything and reconnects
+      // after: appendChild-ing stripBody's OWN children elsewhere is ALSO a
+      // childList mutation of stripBody (a removal), and the observer would
+      // otherwise queue a second, self-triggered call for it — which runs as
+      // a microtask AFTER this synchronous function has already returned, by
+      // which point stripBody is genuinely empty (this function just moved
+      // everything out of it), so that second call would find "no groups"
+      // and overwrite the correct result just produced with the empty-state
+      // message. A plain re-entrancy flag cannot fix this: it would already
+      // be reset by the time the queued microtask ran.
+      function issuesSyncFromStrip() {
+        if (!stripBody || !issuesFindingsCard || !issuesFiltersHost) { return; }
+        if (issuesStripObserver) { issuesStripObserver.disconnect(); }
+        issuesFiltersHost.textContent = '';
+        issuesFindingsCard.textContent = '';
+        Array.prototype.slice.call(stripBody.children).forEach(function (node) {
+          if (node.classList && node.classList.contains('status-strip-filters')) {
+            issuesFiltersHost.appendChild(node);
+          } else {
+            issuesFindingsCard.appendChild(node);
+          }
+        });
+        // 04 §8 items 5/6: nothing blocked in this facet, or a severity
+        // filter that matches nothing — state it in one line rather than
+        // showing zero groups silently. Never hide the filter strip that
+        // caused an empty result (§8 item 6).
+        if (!issuesFindingsCard.querySelector('.status-group')) {
+          issuesFindingsCard.appendChild(textEl('p', 'issues-findings-empty', stripSeverityFilter
+            ? 'No open findings match this filter in this facet.'
+            : 'Nothing in this facet is blocked.'));
+        }
+        issuesApplyScopeDenominator();
+        renderIssuesRail();
+        if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
+      }
+
+      function setIssuesScope(scope) {
+        issuesScope = scope;
+        if (issuesScopeEl) {
+          issuesScopeEl.querySelectorAll('.issues-scope-seg').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', String(btn.getAttribute('data-scope') === scope));
+          });
+        }
+        issuesApplyScopeDenominator();
+        renderIssuesRail();
+      }
+
+      // #systemFacetToc (group 02/system-record.js's right-hand claim list,
+      // "ON THIS FACET") is `position: fixed` — a sibling of .layout, not a
+      // descendant of .content-area — so hiding .content-area alone leaves
+      // it floating over this view's own right rail at the same screen
+      // edge. Toggling its OWN `hidden` property from here does not stick:
+      // system-record.js's layout MutationObserver (its own documented,
+      // pre-existing re-render-on-any-.layout-mutation behaviour — see
+      // renderToc/updateTocActive) reacts to the very childList mutations
+      // issuesSyncFromStrip makes inside #issuesView (a .layout descendant)
+      // and calls renderToc() again on the next frame, which sets
+      // `toc.hidden = false` unconditionally whenever a facet is active —
+      // undoing this lane's `= true` almost immediately. A CSS rule keyed
+      // off #issuesView's own hidden state (below, this lane's appended
+      // section) is not fighting that same reactive loop and always wins.
+
+      function openIssuesView() {
+        if (!issuesViewEl) { return; }
+        var contentArea = document.querySelector('.content-area');
+        if (contentArea) { contentArea.hidden = true; }
+        issuesViewEl.hidden = false;
+        issuesViewOpen = true;
+        // The reading view this replaces can be scrolled deep into an
+        // 828-claim facet; this view has its own internal scroll region
+        // (.issues-body) and starts at its own top regardless of where the
+        // page the reader is leaving happened to be.
+        window.scrollTo(0, 0);
+        issuesSyncHeader();
+        issuesSyncFromStrip();
+        issuesViewEl.focus({ preventScroll: true });
+      }
+
+      // closeIssuesView is this screen's only exit besides ordinary
+      // navigation (a sidebar tab, a citation link — both close it via the
+      // capture-phase listener below): R09.6 puts no second control on the
+      // boards, so the breadcrumb's own back chevron is this lane's choice
+      // for "leave the way you came".
+      function closeIssuesView() {
+        if (!issuesViewEl || issuesViewEl.hidden) { return; }
+        issuesViewEl.hidden = true;
+        issuesViewOpen = false;
+        var contentArea = document.querySelector('.content-area');
+        if (contentArea) { contentArea.hidden = false; }
+      }
+
+      if (issuesBackBtn) {
+        issuesBackBtn.addEventListener('click', closeIssuesView);
+      }
+      if (issuesScopeEl) {
+        issuesScopeEl.addEventListener('click', function (event) {
+          var btn = event.target.closest('.issues-scope-seg');
+          if (btn) { setIssuesScope(btn.getAttribute('data-scope')); }
+        });
+      }
+      // 04 §8 item 13 / §9 Open decision 9: only one sort value exists, so
+      // the control is box-only — no menu to open — until a second value
+      // does. It is left focusable and pressable rather than disabled (04
+      // §8 item 12 reasons the same way about a zero-count severity chip).
+      if (issuesSortControl) {
+        issuesSortControl.addEventListener('click', function (event) { event.preventDefault(); });
+      }
+      // "Show issues" (R09.6) opens this view — UNCONDITIONALLY on every
+      // click of this control, whichever label it currently reads. The
+      // strip's own inline expand/collapse (the listener directly above,
+      // L8's, toggling stripExpanded/#statusStripBody) can already be in
+      // either state before this screen existed — an integrity or
+      // needs-you verdict auto-expands it on load (renderStatusStrip
+      // above), so on THAT fixture the very first click actually turns
+      // "Hide issues" back to collapsed. R09.6 names this control as the
+      // entry point regardless, so this listener does not gate on the
+      // toggle's resulting open/closed state the way an earlier draft did.
+      if (stripToggle) {
+        stripToggle.addEventListener('click', openIssuesView);
+      }
+      // Any ordinary navigation — a sidebar tab, a subtab, a citation link —
+      // leaves this screen the same way the back chevron does. Capture phase
+      // so it runs before the target's own handler, and a click INSIDE the
+      // view (the scope control, the back button itself) never matches these
+      // selectors.
+      document.addEventListener('click', function (event) {
+        if (!issuesViewOpen) { return; }
+        var navHit = event.target.closest &&
+          event.target.closest('.sec-tab, .subtab, a.claim-cite, .claim-links a[href^="#"]');
+        if (navHit) { closeIssuesView(); }
+      }, true);
+      window.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && issuesViewOpen) { closeIssuesView(); }
+      });
+      // #statusStripBody is a stable node outside .layout (like #statusStrip
+      // itself), so one observer registered once at load survives every SSE
+      // fragment swap — nothing here needs re-arming from initViewer(). It is
+      // declared here (not anonymous) because issuesSyncFromStrip itself
+      // disconnects and re-observes around its own moves: appendChild-ing
+      // stripBody's children elsewhere is ALSO a childList mutation of
+      // stripBody, and MutationObserver callbacks run as a microtask AFTER
+      // the synchronous sync already returned — a plain re-entrancy guard
+      // reset at the end of that same synchronous call would already be
+      // false by the time the queued callback ran, so the self-triggered
+      // second sync would still fire and find stripBody freshly emptied by
+      // the first one, overwriting its correct result with the empty state.
+      var issuesStripObserver = (stripBody && window.MutationObserver)
+        ? new MutationObserver(function () {
+            if (issuesViewOpen) { issuesSyncFromStrip(); }
+          })
+        : null;
+      if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
+
       // ---- expand-all toolbar (Q2) --------------------------------------
       // A single global control that sets/clears the `open` PROPERTY on every
       // details.claim-links currently in the DOM. This is a client-side DOM

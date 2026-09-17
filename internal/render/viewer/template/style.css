@@ -189,6 +189,17 @@
      in ThemeTokenAllowlist. */
   --link-bg: color-mix(in srgb, var(--link) 9%, transparent);
 
+  /* 04 §4.3's scope-segmented-control trough: tokens.md §9 Open decision 2
+     derives it from --border mixed into --paper, and that formula is right
+     for light — but the dark board (§4.3, §9 Paper defect 2) is DARKER than
+     --paper itself, an inversion no mix of --border (lighter than dark
+     --paper) into --paper can reach. Genuinely mode-different, so it is
+     declared here AND re-pointed in all three mode blocks below (G13),
+     rather than via light-dark() — a prior lane (L6, style.css:3011-3033)
+     proved light-dark() does not track this engine's explicit Dark toggle,
+     only the OS. Engine-owned: not in ThemeTokenAllowlist. */
+  --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
+
   /* TYPE AND SPACING. Declared here, consumed by the screen lanes. Before
      this block every size, leading and tracking in this file was a literal in
      a rule, which is why the design could not state a scale the stylesheet
@@ -270,6 +281,10 @@
        on dark ONLY. The :root default is `transparent`, so the sheet's
        unconditional border-top paints nothing until this block runs. */
     --sheet-hairline: var(--border);
+    /* 04 §4.3 / §9 Paper defect 2: darker than --paper itself, an inversion
+       a --border/--paper mix cannot reach — see the :root declaration's
+       comment above for why this is its own engine-owned property. */
+    --issues-scope-trough: #080B10;
   }
 }
 
@@ -341,6 +356,7 @@
     /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's top hairline is a DARK-only
        edge, so explicit Light puts it back to nothing. */
     --sheet-hairline: transparent;
+    --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
   }
 }
 
@@ -376,6 +392,10 @@
        on dark ONLY. The :root default is `transparent`, so the sheet's
        unconditional border-top paints nothing until this block runs. */
     --sheet-hairline: var(--border);
+    /* 04 §4.3 / §9 Paper defect 2: darker than --paper itself, an inversion
+       a --border/--paper mix cannot reach — see the :root declaration's
+       comment above for why this is its own engine-owned property. */
+    --issues-scope-trough: #080B10;
   }
 }
 
@@ -4342,15 +4362,33 @@ button.comment-chip--active.comment-chip--empty {
 }
 
 /* ---- mockup component (layout: mockup) --------------------------------
+   lane L8a fix: this comment's own prose used to spell the two selector
+   prefixes below as one dash-star-slash-dot-name glob, all four characters
+   touching, with a star immediately followed by a slash inside it — and a
+   CSS comment ends at the very FIRST star-then-slash it meets, comment
+   nesting or not, so that pairing closed THIS comment early, right there,
+   turning everything after it (the rest of this prose, up to and including
+   the real closing pair a few lines down) into un-commented text a CSS
+   parser has to make sense of as code. Confirmed via git show HEAD (present
+   before any wave-B lane touched this file) and via the browser's own
+   CSSOM: style.css parsed to 633 top-level rules and no @media print block
+   at all before this fix (three separate missing closing braces, fixed at
+   their own sites further down, additionally trapped everything after THEM
+   one level deeper once parsing did resync) — see learnings/inbox/L8a.md
+   for the full evidence chain. Rewritten below with the two symbols kept
+   apart (a real space, never adjacent) so the comment reads as one comment,
+   start to finish — including in this very explanation, which had the same
+   bug in an earlier draft of this fix and is why it is worded so
+   awkwardly: no star may sit immediately before a slash anywhere in here.
    .claim-mockup-body is mockup.html's wrapper for a claim's unescaped
    .RawHTML content (see that template's doc comment and
    internal/lint/raw_html_scope.go's tag/attribute/class allowlist gate).
-   The .gcp-*/.mockup-* rules below are ported verbatim (selector +
+   The .gcp- and .mockup- rules below are ported verbatim (selector +
    declarations, colors included) from a pair of reference docs pages' local
    <style> blocks — the two places this Google Cloud Console log-viewer
    mockup previously lived, byte-identical in both. They are shared/reusable
    here, not tied to either source page: any
-   future module's layout: mockup claim can reuse this same .gcp-*/.mockup-*
+   future module's layout: mockup claim can reuse this same .gcp- / .mockup-
    prefix convention, which is exactly what raw_html_scope.go's CSS-class
    allowlist enforces. Colors are intentionally literal hex, not this
    engine's --ink/--card-bg/etc tokens: this is a mockup of an external,
@@ -7598,6 +7636,557 @@ code {
   }
 }
 
+/* ---- issues view (04) — lane L8a -----------------------------------------
+   04-issues-screen.md §3 (layout), §4.1-4.3 (breadcrumb, title/subtitle,
+   scope control), §4.5 (sort control), §4.6 (findings card shell), §4.9
+   (the WHERE THE BLOCKERS LIVE rail), §5 (mobile rules M1-M13, M2 dropped).
+
+   This section styles ONLY the chrome shell #issuesView adds around lane
+   L8's own status-strip vocabulary (.status-strip-filters, .status-group,
+   .status-finding*) — those selectors and their colours are L8's, declared
+   in the "status strip" section above, and are composed here by
+   viewer-runtime.js MOVING those live nodes into #issuesFilters /
+   #issuesFindingsCard, never by cloning or restyling them. The two rules at
+   the end of this section that DO reach into L8's classes only cancel a
+   margin the inline banner needed and this card does not — they change no
+   colour, weight or size L8 specified.
+
+   A document view, not an overlay: no entry in THE Z-INDEX LEDGER above,
+   because .issues-view carries no z-index of its own — it occupies
+   .content-area's own flex slot in .layout (toggled by
+   issuesView JS via .content-area[hidden]), not a stacked layer over it. */
+.issues-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100vh;
+  overflow: clip;
+  background: var(--paper);
+  font-family: var(--font-sans);
+}
+
+.issues-view[hidden] {
+  display: none;
+}
+
+/* #systemFacetToc (group 02's "ON THIS FACET" rail, position: fixed) and
+   its 860px-tier trigger/scrim are siblings of .layout, not descendants of
+   .content-area, so hiding .content-area alone leaves the facet TOC
+   floating over this view's own right rail at the same screen edge — both
+   want the far-right 280px. Keyed off #issuesView's own [hidden] state
+   (never off a `hidden` PROPERTY toggle on the TOC itself, which
+   viewer-runtime.js's openIssuesView tried and found does not stick —
+   system-record.js's layout MutationObserver re-shows it on its own
+   re-render loop; see that function's comment). */
+body:has(#issuesView:not([hidden])) .facet-toc,
+body:has(#issuesView:not([hidden])) .facet-toc-trigger,
+body:has(#issuesView:not([hidden])) #facetTocScrim {
+  display: none;
+}
+
+/* 04 §3 "Header block": padding-top 32/inline 40/gap 18, flex-shrink 0 — the
+   header never scrolls; §3's "Sticky and scroll regions" says so by
+   construction (a flex-shrink: 0 header above a flex: 1 1 0 scroll body),
+   not via position: sticky. */
+.issues-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 32px 40px 0;
+}
+
+/* 04 §4.1 breadcrumb: chevron + facet label + facet suffix, 10px gap. */
+.issues-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 16px;
+}
+
+.issues-breadcrumb-back {
+  display: inline-flex;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.issues-breadcrumb-back svg {
+  width: 13px;
+  height: 13px;
+}
+
+.issues-breadcrumb-facet {
+  font: 500 13px/16px var(--font-sans);
+  color: var(--muted);
+}
+
+.issues-breadcrumb-suffix {
+  font: 400 13px/16px var(--font-sans);
+  color: var(--faint);
+}
+
+/* 04 §3 "Title row": align-items end, space-between. §4.2 title/subtitle. */
+.issues-title-row {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.issues-title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.issues-title {
+  margin: 0;
+  font: 600 28px/34px var(--font-sans);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* 04 §4.2: the one piece of running prose on this screen — serif, per
+   tokens.md §7 ("read for meaning, not scanned"). */
+.issues-subtitle {
+  margin: 0;
+  font: 400 16px/24px var(--font-serif);
+  color: var(--muted);
+}
+
+/* 04 §5 M2: the rail's caveat sentence, moved under the subtitle once the
+   rail itself is gone below 860px — the identical text also renders into
+   .issues-rail-caveat above that width (§4.9), never both at once. */
+.issues-caveat {
+  display: none;
+  margin: 0;
+  font: 400 12px/17px var(--font-sans);
+  color: var(--faint);
+}
+
+/* 04 §4.3 scope segmented control. Trough ground has no token (§4.3's own
+   "no token" row) and tokens.md §9 Open decision 2 derives it from --border
+   mixed into --paper for light; dark needs a DIFFERENT formula (darker than
+   --paper itself, not a lighter mix of it), so it is declared as its own
+   engine-owned custom property across all four palette blocks below,
+   following the --sheet-hairline / --blocked-surface precedent (G13) rather
+   than light-dark(), which a prior lane (L6) proved does not track the
+   explicit Dark toggle in this engine. */
+.issues-scope {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 32px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--issues-scope-trough);
+  flex-shrink: 0;
+}
+
+.issues-scope-seg {
+  border: 0;
+  background: none;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font: 400 13px/16px var(--font-sans);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.issues-scope-seg[aria-pressed="true"] {
+  background: var(--card-bg);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* 04 §3 "Filter row": align-items center, 8px gap, 4px bottom padding. */
+.issues-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding-bottom: 4px;
+}
+
+/* display: contents — this wrapper generates no box of its own. The moved
+   .status-strip-filters node (L8's own flex row, with L8's own gap/wrap
+   rules at every width, style.css:3320s and its 520px form above) becomes
+   the direct flex item of .issues-filter-row instead, so its wrap/scroll
+   behaviour at each breakpoint is never doubled by a second flex context
+   here. */
+.issues-filters {
+  display: contents;
+}
+
+/* Cancels .status-strip-filters' own bottom margin (tuned for the inline
+   banner's body, style.css:3320s) now that it is visually a direct,
+   center-aligned child of .issues-filter-row instead — no colour, weight
+   or size of L8's chip rule is touched. `display: contents` on
+   .issues-filters (above) removes ITS OWN box from the render tree, but a
+   child-combinator selector still walks the DOM, not the box tree, so the
+   parent named here is .issues-filters — the node's real DOM parent —
+   not .issues-filter-row (confirmed: the `>` form written against
+   .issues-filter-row matched 0 elements via probe). */
+.issues-filters > .status-strip-filters {
+  margin: 0;
+  min-width: 0;
+}
+
+.issues-filter-spacer {
+  flex: 1 1 0;
+}
+
+/* 04 §4.5 sort control. §8 item 13: only one sort value exists today, so the
+   control is box-only — it never opens a menu, per the spec's own "the
+   control's box does not change" when a second value eventually lands. */
+.issues-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.issues-sort-label {
+  font: 400 12px/16px var(--font-sans);
+  color: var(--faint);
+}
+
+.issues-sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px; /* tokens.md §9 Open decision 3: off-scale, per-component literal. */
+  background: var(--card-bg);
+  cursor: default;
+}
+
+.issues-sort-value {
+  font: 500 12px/16px var(--font-sans);
+  color: var(--ink);
+}
+
+.issues-sort-control svg {
+  width: 11px;
+  height: 11px;
+  color: var(--faint);
+  flex-shrink: 0;
+}
+
+/* 04 §3 "Body region": flex: 1 1 0, padding-top 20/inline 40, 20px gap. This
+   is the scroll region — the flex-shrink: 0 header above never moves. */
+.issues-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  align-items: start;
+  gap: 20px;
+  padding: 20px 40px 40px;
+}
+
+/* 04 §4.6 / §9 Open decision 4: the card's zero bottom radii are load-
+   bearing — the list runs off the bottom edge rather than closing itself.
+   12px is off the radius scale and is recorded here as a per-component
+   literal (tokens.md §9 Open decision 3), not widened into --radius-md. */
+.issues-findings-card {
+  flex: 1 1 0;
+  min-width: 0;
+  /* Retry fix 3 (04 §4.6 + §9 Open decision 4 + §3): .issues-body has a
+     definite height (flex: 1 1 0 inside a height: 1024px main column), so
+     this percentage resolves against it, giving the card a FLOOR at the
+     body's height rather than a fixed height — a short list (e.g. the Check
+     chip pressed, one row deep) still reaches the bottom edge instead of
+     closing itself with a square-cornered border mid-page, which §9 Open
+     decision 4 forbids. A longer list still grows past this floor exactly as
+     flex: 1 1 0 already lets it (min-height never caps max content size). */
+  min-height: 100%;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  overflow: clip;
+}
+
+/* Cancels .status-strip-static-note's inline-banner margin the same way the
+   filters rule above does, and gives it the card's own inline padding since
+   it is no longer a child of .status-strip-body. */
+.issues-findings-card > .status-strip-static-note {
+  margin: 0;
+  padding: 14px 20px 0;
+}
+
+/* An empty findings card (04 §8 items 5/6: nothing blocked in this facet, or
+   a severity filter that matches nothing) states the fact in one line rather
+   than showing zero groups silently. */
+.issues-findings-empty {
+  margin: 0;
+  padding: 40px 20px;
+  font: 400 16px/24px var(--font-serif);
+  color: var(--muted);
+}
+
+/* 04 §4.9 right rail panel. Absent below 860px (§5 M1) via the media block
+   further down — every figure it carries already repeats in the group
+   headers a few lines to its left. */
+.issues-rail-panel {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 18px 20px;
+}
+
+.issues-rail-heading {
+  margin: 0;
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--faint); /* §9 Paper defect 8: deliberately quieter than the list's --muted group headers. */
+}
+
+/* 04 §4.9 caveat line: negative top margin folds it under the heading
+   rather than the 12px row gap the panel otherwise uses everywhere else
+   (§9 Paper defect 7 — implemented as the intent, "grouped with the
+   heading", using the same margin technique the board itself used). */
+.issues-rail-caveat {
+  margin: -6px 0 2px;
+  font: 400 11px/16px var(--font-sans);
+  color: var(--faint);
+}
+
+.issues-rail-caveat:empty {
+  display: none;
+}
+
+.issues-rail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.issues-rail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.issues-rail-row-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.issues-rail-row-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 13px/16px var(--font-sans);
+  color: var(--ink);
+}
+
+.issues-rail-row-count {
+  flex-shrink: 0;
+  font: 400 12px/16px var(--font-mono);
+  color: var(--muted);
+}
+
+.issues-rail-bar-track {
+  height: 5px;
+  border-radius: 999px;
+  overflow: clip;
+  background: var(--paper);
+}
+
+/* 04 §4.9: the bar is always draft amber, ranking VOLUME, not severity —
+   never colour these bars per row severity. */
+.issues-rail-bar-fill {
+  height: 5px;
+  background: var(--status-draft);
+}
+
+/* 04 §8 item 8: the rail is a ranking, so it truncates rather than scrolls. */
+.issues-rail-more {
+  margin: 0;
+  font: 400 11px/16px var(--font-sans);
+  color: var(--faint);
+}
+
+/* ---- issues view mobile rules (04 §5) ------------------------------------
+   Every rule maps onto an existing engine query (tokens.md §8): no 390
+   breakpoint is added. M1's rail removal and the top-app-bar row (M12,
+   already the engine's own mobile nav pattern — #navToggle/.sidebar, not
+   rebuilt here) share the 860px tablet tier; every arrangement change is
+   520px phone tier; M9/M13 touch sizing is (pointer: coarse), independent
+   of width, per tokens.md §8's rule of thumb. */
+@media (max-width: 860px) {
+  /* M1: the right rail is removed entirely — every figure it carries
+     already repeats in the group headers. */
+  .issues-rail-panel {
+    display: none;
+  }
+  /* M2: the rail's caveat survives the rail, moved under the subtitle. */
+  .issues-caveat {
+    display: block;
+  }
+  /* Retry fix 1 (04 §3 "Sticky and scroll regions"): no align-items override
+     here. .issues-body already sets align-items: start above 860px, and
+     that value must carry through below it too — align-items governs the
+     CROSS axis of this flex row, not .issues-findings-card's width (that
+     comes from flex: 1 1 0 regardless), so a `stretch` override here only
+     stretched the card to .issues-body's own height. .issues-body is the
+     scroll region (flex: 1 1 0, min-height: 0, overflow-y: auto); stretching
+     the card to match it defeated that scroll and, because the card also
+     carries overflow: clip, silently clipped every group past the first. */
+  /* #navToggle (group 02's fixed hamburger pill, style.css:6516) floats at
+     `top: 10px` over whatever is beneath it at this tier — .content-area's
+     own mobile rule reserves the identical 54px above via padding-top
+     rather than moving the toggle, and .issues-view sits in that same flex
+     slot when open, so it needs the same clearance. Confirmed via probe: a
+     390 render without this rule puts #issuesBreadcrumbFacet's text behind
+     the toggle pill. */
+  .issues-header {
+    padding-top: 54px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* M3: the page ground becomes --card-bg, not --paper — the list is
+     full-bleed and there is no card to raise off a ground. */
+  .issues-view {
+    background: var(--card-bg);
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .issues-header {
+    /* Top stays the 54px the 860px tier above sets (this shorthand would
+       otherwise reset it to 16px and put the breadcrumb back under
+       #navToggle's fixed pill at this narrower tier too). */
+    padding: 54px 16px 0;
+    gap: 10px;
+  }
+  .issues-breadcrumb {
+    gap: 8px;
+  }
+  /* M11: the title drops one step, 28/34 -> 26/32; subtitle 16/24 -> 15/23. */
+  .issues-title {
+    font-size: 26px;
+    line-height: 32px;
+  }
+  .issues-subtitle {
+    font-size: 15px;
+    line-height: 23px;
+  }
+  /* 04-mobile board (5VR-0/5YF-0): the title row itself stacks at this
+     width — title-stack full width on its own line, the scope control
+     full width on the line below it (M7) — rather than staying a
+     side-by-side row. Without this, .issues-scope's own `width: 100%`
+     below reads as 100% of a flex ROW's content box and fights
+     .issues-title-stack for the same horizontal space, collapsing the
+     title/subtitle column to zero width and wrapping every word onto its
+     own line (confirmed via probe: .issues-title-stack rect.w was 0px
+     before this fix). */
+  .issues-title-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  /* M7: the scope control goes full width, three equal segments, and its
+     radius grows 8 -> 9px with a 7px segment radius. */
+  .issues-scope {
+    margin: 0;
+    width: 100%;
+    border-radius: 9px;
+  }
+  .issues-scope-seg {
+    flex: 1 1 0;
+    height: 30px;
+    border-radius: 7px;
+    text-align: center;
+  }
+  /* M8: the filter chips run off the right edge and never wrap. The chip
+     strip itself (.status-strip-filters, moved in) already carries its own
+     520px no-wrap/scroll form (style.css's status-strip mobile block,
+     retry fix 10) — that rule matches by class wherever the node sits, so
+     it is not repeated here. This row only supplies M8's own top margin and
+     lets the row wrap so M10's sort control can fall to its own line below. */
+  .issues-filter-row {
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-bottom: 0;
+  }
+  /* A zero-height, 100%-basis item forces the flex-wrap row above to break
+     after it — the sort control (next sibling) lands on its own line
+     without the spacer needing to be measured or hidden. */
+  .issues-filter-spacer {
+    flex-basis: 100%;
+    height: 0;
+  }
+  /* M10: the sort row becomes its own line, `Sort` pushed left, control
+     hard right. */
+  .issues-sort {
+    margin-top: 16px;
+    width: 100%;
+  }
+  .issues-sort-label {
+    flex: 1 1 0;
+  }
+  .issues-body {
+    padding: 14px 0 40px;
+  }
+  /* M4: the findings card dissolves — no border, no radius, no side inset. */
+  .issues-findings-card {
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  .issues-findings-empty {
+    padding: 40px 16px;
+  }
+}
+
+/* 04 §5 M13: no control this screen adds reaches 44px on its own (scope
+   segments 30/32px, sort control 28px, the breadcrumb's back chevron), so
+   the coarse-pointer hit area grows the same way L8's own
+   .status-severity-chip does above — an invisible, absolutely-positioned
+   overhang, never a change to the drawn box. */
+@media (pointer: coarse) {
+  .issues-scope-seg,
+  .issues-sort-control,
+  .issues-breadcrumb-back {
+    position: relative;
+  }
+  .issues-scope-seg::after,
+  .issues-sort-control::after {
+    content: "";
+    position: absolute;
+    inset: -7px 0;
+  }
+  .issues-breadcrumb-back::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+}
+
 /* ---- print — THE @media print block ------------------------------------
    There is exactly one @media print block in this stylesheet and this is it;
    internal/render/theme_tokens_test.go fails if a second one appears.
@@ -7689,6 +8278,18 @@ code {
   .comments-rail,
   .status-strip { display: none !important; }
   .content-area { padding: 0; }
+
+  /* Retry fix 7 (04 §7.1): an Issues view that is a document view needs a
+     deliberate print decision instead of inheriting .status-strip's
+     display: none !important above. Decision: .issues-view PRINTS — it
+     holds the actual findings, not chrome, and a reader who opened it wants
+     those rows on paper. Its right rail panel (04 §4.9, WHERE THE BLOCKERS
+     LIVE) is the one part suppressed: every figure it carries already
+     repeats in the group headers a few lines to its left (the same reason
+     §5 M1 drops it at 390), so on paper it joins the other decorative rails
+     already hidden above (.facet-toc, .comments-rail) rather than competing
+     with the list for the printed page. */
+  .issues-rail-panel { display: none !important; }
   .card,
   .claim-tree { break-inside: avoid; }
   .claim-collapse-toggle { pointer-events: none; }
