@@ -4180,7 +4180,7 @@ button.comment-chip--active.comment-chip--empty {
      exact-match set, leaving the desktop `var(--shadow-cast, …)` consumer as
      the one both that test and theme_tokens_test.go:542-543 find. */
   #commentsPanel.comments-rail {
-    box-shadow: none;
+    box-shadow: 0 0 0 var(--shadow-cast);
   }
   .comments-rail-grabber {
     display: flex;
@@ -8695,6 +8695,253 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
    scale or the color tokens; a full print stylesheet is out of scope for
    v0.4.1.
 */
+/* ---- 02 · Reading view default: Paper-fit recovery ---------------------
+   The reading surface keeps navigation on the page ground. Desktop groups
+   are deliberately unboxed; phone navigation is deferred into a 328px
+   drawer and a thumb-reachable facet sheet. */
+.mobile-app-bar,
+.nav-drawer-close,
+.facet-toc__grabber,
+.facet-toc__close { display: none; }
+
+.sidebar {
+  background: var(--paper);
+}
+
+.sidebar-header {
+  padding: 24px 20px 20px;
+  border-bottom: 0;
+}
+
+.logo { display: none; }
+
+.top h1 {
+  font-size: 19px;
+  line-height: 24px;
+}
+
+#nav {
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 18px;
+}
+
+.nav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin: 0 8px 12px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--faint);
+}
+
+.nav-search .dx-icon { width: 15px; height: 15px; flex: 0 0 auto; }
+.nav-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 14px/18px var(--font-sans);
+}
+.nav-search input::placeholder { color: var(--faint); opacity: 1; }
+
+.system-nav-groups { order: 1; margin-top: 0; }
+.system-nav-group {
+  margin: 0 0 6px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+}
+.system-nav-group__toggle {
+  min-height: 32px;
+  padding: 8px 8px 6px;
+  color: var(--faint);
+}
+.system-nav-group__count {
+  min-width: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--faint);
+}
+.system-nav-group__body { padding: 0 0 5px; border-top: 0; }
+#dxgOpen { order: 2; margin-top: auto; }
+
+.sidebar-footer {
+  padding: 14px 20px 22px;
+  background: var(--paper);
+}
+.theme-control {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin: 0;
+}
+.theme-control button {
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 0;
+  border-right-width: 0;
+  padding: 4px 9px;
+}
+.theme-control button:first-child { border-radius: 6px 0 0 6px; }
+.theme-control button:last-child { border-right-width: 1px; border-radius: 0 6px 6px 0; }
+
+/* Header, tabs, then action state: preserve the module title's reading
+   rhythm while leaving the first corpus-driven section heading intact. */
+.module-section > #statusStrip { margin-top: -6px; margin-bottom: 22px; }
+
+@media (max-width: 860px) {
+  .mobile-app-bar {
+    display: flex;
+    position: fixed;
+    z-index: 41;
+    inset: 0 0 auto;
+    align-items: center;
+    height: 44px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .nav-toggle {
+    position: static;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: 0 0 0 var(--shadow-cast);
+  }
+  .nav-toggle .dx-icon,
+  .mobile-app-bar__search .dx-icon { width: 20px; height: 20px; }
+  .mobile-app-bar__wordmark {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 600 16px/22px var(--font-sans);
+    letter-spacing: -.01em;
+  }
+  .mobile-app-bar__search {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+  }
+  .mobile-theme-control { flex: 0 0 auto; }
+  .mobile-theme-control button {
+    min-width: 0;
+    min-height: 30px;
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+  .mobile-theme-control .dx-icon { width: 13px; height: 13px; }
+  .content-area { padding-top: 60px; }
+
+  .sidebar {
+    width: min(328px, calc(100vw - 42px));
+    background: var(--paper);
+  }
+  .sidebar-header {
+    padding: 22px 20px 16px;
+    border-bottom: 0;
+  }
+  .top { align-items: flex-start; gap: 0; }
+  .top h1 { font-size: 19px; line-height: 24px; }
+  .nav-drawer-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin: -10px -12px 0 auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+  }
+  .nav-drawer-close .dx-icon { width: 20px; height: 20px; }
+  #nav { padding: 0 12px 12px; }
+  .nav-search { margin: 0 8px 14px; }
+  .system-nav-group__toggle { min-height: 36px; }
+  .sec-tab { min-height: 44px; }
+  .sidebar-footer { padding: 14px 20px 22px; }
+  .sidebar-footer .theme-control button { min-height: 36px; }
+
+  .facet-toc {
+    z-index: 40;
+    width: 100%;
+    height: min(660px, 78dvh);
+    max-height: min(660px, 78dvh);
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 0 0 var(--shadow-cast);
+  }
+  .facet-toc__grabber {
+    display: block;
+    width: 36px;
+    height: 4px;
+    flex: 0 0 auto;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--border-strong);
+  }
+  .facet-toc__head {
+    align-items: center;
+    padding: 14px 16px 12px;
+  }
+  .facet-toc__identity small { display: none; }
+  .facet-toc__name { font-size: 16px; line-height: 22px; }
+  .facet-toc__total { margin-left: auto; font: 12px/16px var(--font-mono); }
+  .facet-toc__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin: -11px -12px -10px 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+  }
+  .facet-toc__close .dx-icon { width: 20px; height: 20px; }
+  .facet-toc__list { padding: 6px 8px; overflow-y: auto; }
+  .facet-toc__item { min-height: 44px; padding: 11px 12px; }
+  .facet-toc__item > span { display: none; }
+  .facet-toc__item > strong { font-size: 14px; line-height: 20px; }
+}
+
+@media (pointer: coarse) {
+  .nav-toggle,
+  .mobile-app-bar__search,
+  .nav-drawer-close,
+  .facet-toc__close { min-width: 44px; min-height: 44px; }
+}
+
 @media print {
   :root { color-scheme: light; }
 

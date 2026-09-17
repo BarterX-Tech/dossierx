@@ -112,6 +112,99 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	}
 }
 
+func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
+	p := softMountFitProject(t)
+	ctx := browserContext(t)
+	runCDP(t, ctx,
+		chromedp.EmulateViewport(390, 844),
+		chromedp.Navigate(p.renderStatic()),
+	)
+	pollTrue(t, ctx, `!!(document.querySelector('.mobile-app-bar') && document.querySelector('.facet-toc-trigger'))`)
+	runCDP(t, ctx, chromedp.Evaluate(`window.dossierxPositionStatusStrip()`, nil))
+	if !evalBool(t, ctx, `(function () {
+		var section = document.querySelector('.module-section:not([hidden])');
+		var header = section && section.querySelector(':scope > .system-record-head');
+		var tabs = section && section.querySelector(':scope > .sub-nav');
+		var strip = document.getElementById('statusStrip');
+		var firstClaims = section && section.querySelector(':scope > .claim-group:not([hidden])');
+		return header && tabs && strip && firstClaims && tabs.nextElementSibling === strip &&
+		  strip.nextElementSibling === firstClaims;
+	})()`) {
+		t.Fatal("reading order must be module heading, facet tabs, status, then claims")
+	}
+	if !evalBool(t, ctx, `(function () {
+		var menu = document.getElementById('navToggle');
+		var search = document.getElementById('mobileSearchToggle');
+		var light = document.querySelector('.mobile-theme-control [data-theme-choice="light"]');
+		var dark = document.querySelector('.mobile-theme-control [data-theme-choice="dark"]');
+		return menu && search && light && dark && menu.getAttribute('aria-label') === 'Open modules' &&
+		  !/Sections/.test(menu.textContent) && getComputedStyle(menu).minHeight === '44px';
+	})()`) {
+		t.Fatal("mobile app bar must expose the compact menu, search, and two-way theme controls")
+	}
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
+	pollTrue(t, ctx, `document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('navSearch')`)
+	if !evalBool(t, ctx, `getComputedStyle(document.querySelector('.sidebar')).width === '328px' && !!document.getElementById('navDrawerClose')`) {
+		t.Fatal("mobile modules navigation must be a 328px drawer with a visible close control")
+	}
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('navDrawerClose').click()`, nil))
+	pollTrue(t, ctx, `!document.body.classList.contains('nav-open')`)
+
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.facet-toc-trigger').click()`, nil))
+	pollTrue(t, ctx, `document.body.classList.contains('facet-toc-open') && !!document.querySelector('.facet-toc__grabber') && !!document.querySelector('.facet-toc__close')`)
+	if !evalBool(t, ctx, `(function () {
+		var sheet = document.getElementById('systemFacetToc');
+		var close = sheet.querySelector('.facet-toc__close');
+		return sheet && close && close.getAttribute('aria-label') === 'Close facet panel' &&
+		  parseFloat(getComputedStyle(sheet).height) <= 660 && getComputedStyle(close).minHeight === '44px';
+	})()`) {
+		t.Fatal("facet index must use the accessible, bounded bottom-sheet shell")
+	}
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.facet-toc__close').click()`, nil))
+	pollTrue(t, ctx, `!document.body.classList.contains('facet-toc-open')`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.facet-toc-trigger').click(); document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))`, nil))
+	pollTrue(t, ctx, `!document.body.classList.contains('facet-toc-open')`)
+}
+
+func TestEmphasisDoesNotTurnLockedCardIntoWarning(t *testing.T) {
+	p := newProjectRaw(t, defaultConfigYAML)
+	p.writeClaim("locked.yaml", `id: widget.contract.locked
+facet: contract
+module: widget
+status: draft
+emphasis: true
+body: |
+  An approved claim can be important without being a warning.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`)
+	p.run("claim", "lock", "widget.contract.locked", "--reason", "viewer test lock")
+	p.writeClaim("warning.yaml", `id: widget.contract.warning
+facet: contract
+module: widget
+status: draft
+layout: banner
+body: |
+  This is an explicit warning callout.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`)
+	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()))
+	pollTrue(t, ctx, `!!document.getElementById('widget.contract.locked')`)
+	if !evalBool(t, ctx, `(function () {
+		var card = document.getElementById('widget.contract.locked');
+		var banner = document.getElementById('widget.contract.warning');
+		return card && banner && !card.classList.contains('claim-card--warn') &&
+		  banner.classList.contains('claim-banner') &&
+		  getComputedStyle(banner).borderTopColor !== getComputedStyle(card).borderTopColor;
+	})()`) {
+		t.Fatal("ordinary emphasis must not paint a locked card as warning-red, while explicit banners stay semantic warnings")
+	}
+}
+
 func TestReadyConformanceStaysInsideCollapsedClaim(t *testing.T) {
 	p := newProjectRaw(t, conformanceConfigYAML)
 	p.writeClaim("overview.yaml", conformanceClaimYAML)

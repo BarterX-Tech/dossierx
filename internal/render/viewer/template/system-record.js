@@ -458,11 +458,12 @@
       var freshnessHTML = generatedAt
         ? '<div class="freshness-footer"><p class="freshness-footer__line"><svg class="dx-icon freshness-footer__icon" aria-hidden="true"><use href="#dx-icon-clock"/></svg><span class="freshness-footer__phrase" data-generated-at="' + generatedAt + '">Updated recently</span></p><p class="freshness-footer__caption">Claims changed since then are not in this view</p></div>'
         : '';
-      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
+      toc.innerHTML = '<div class="facet-toc__grabber" aria-hidden="true"></div><div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span><button class="facet-toc__close" type="button" aria-label="Close facet panel"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
         var claim = document.getElementById(event.target.value);
         if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
       });
+      toc.querySelector('.facet-toc__close').addEventListener('click', closeFacetToc);
       document.body.appendChild(toc);
     }
     var active = activeFacet();

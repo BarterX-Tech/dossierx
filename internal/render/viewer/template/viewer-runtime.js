@@ -1489,9 +1489,9 @@
       }
 
 // The status endpoint is project-wide, but the reader's orientation is
-// module-local. Place the notice between the active record header and its
-// facet controls, where it can be seen before reading without competing
-// with either navigation rail. The section fallback covers the brief
+// module-local. Place the notice after the active facet controls, where it
+// can be seen before reading without interrupting the module → facet →
+// action sequence. The section fallback covers the brief
 // interval before system-record.js has enhanced a fresh SSE fragment.
       function positionStatusStrip() {
         if (!stripEl) { return; }
@@ -1503,8 +1503,11 @@
           if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
           return;
         }
+        var subNav = section.querySelector(':scope > .sub-nav');
         var header = section.querySelector(':scope > .system-record-head, :scope > .track-head');
-        if (header) {
+        if (subNav) {
+          if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
+        } else if (header) {
           if (header.nextElementSibling !== stripEl) { header.insertAdjacentElement('afterend', stripEl); }
         } else if (section.firstElementChild !== stripEl) {
           section.insertBefore(stripEl, section.firstChild);
@@ -3105,8 +3108,35 @@
           setDrawer(!document.body.classList.contains('nav-open'));
         });
       }
+      var mobileSearchToggle = document.getElementById('mobileSearchToggle');
+      if (mobileSearchToggle) {
+        mobileSearchToggle.addEventListener('click', function () {
+          setDrawer(true);
+          var search = document.getElementById('navSearch');
+          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
+        });
+      }
+      var navSearch = document.getElementById('navSearch');
+      if (navSearch) {
+        navSearch.addEventListener('input', function () {
+          var query = navSearch.value.trim().toLowerCase();
+          document.querySelectorAll('.system-nav-group').forEach(function (group) {
+            var rows = Array.prototype.slice.call(group.querySelectorAll('.sec-tab'));
+            var matches = rows.filter(function (row) {
+              var visible = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+              row.hidden = !visible;
+              return visible;
+            });
+            group.hidden = query !== '' && matches.length === 0;
+          });
+        });
+      }
       if (navOverlay) {
         navOverlay.addEventListener('click', function () { setDrawer(false); });
+      }
+      var navDrawerClose = document.getElementById('navDrawerClose');
+      if (navDrawerClose) {
+        navDrawerClose.addEventListener('click', function () { setDrawer(false); });
       }
       if (commentsOverlay) {
         commentsOverlay.addEventListener('click', function () { closeCommentPanel(); });
