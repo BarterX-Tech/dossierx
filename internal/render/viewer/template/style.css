@@ -6552,46 +6552,105 @@ code {
   box-shadow: none;
 }
 
+/* 13 §3/§4.1: header row 60px, 28px inline padding, 14px gap. */
 .dxg-head {
-  min-height: 58px;
-  gap: 12px;
-  padding: 10px 18px;
+  min-height: 60px;
+  gap: 14px;
+  padding: 0 28px;
   border-color: var(--border);
   background: var(--card-bg);
 }
 
+/* 13 §4.1: "Claims graph" — sans 19/24 w600. */
 .dxg-title {
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 720;
-  letter-spacing: -.018em;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0;
   text-transform: none;
 }
 
+/* 13 §4.1: freshness stamp — mono 12/16 --color-faint. */
 .dxg-stamp {
-  color: var(--muted);
-  font-size: 11.5px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .dxg-head-actions { gap: 8px; }
 
+/* 13 §4.1: Refresh / Close Esc — padding 5px 12px, 6px radius, --border-strong
+   border, --muted label, sans 13/16 w500. D14 gives re-run layout this same
+   box (it is a .dxg-btn, not a .dxg-toggle), so this rule reaches all three. */
+.dxg-btn {
+  min-height: 32px;
+  padding: 5px 12px;
+  border-color: var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.dxg-btn:hover { border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong)); }
+
+/* 13 §3 (RETRY fix list item 4): inline padding 28px, so the bar's left/
+   right edges line up with .dxg-head's own 28px gutter; group gap 26px.
+   Seven live control groups (the board's five plus the pre-13 Granularity
+   and Highlight-overlay axes, 13 §4.2's own comment: "neither control
+   exists on any board") do not fit one 54px row at 1440 — measured via
+   probe at 1440/scoped state: two rows, module+facet+track+granularity+
+   overlay filling the first, relations+view the second. Recorded as a
+   spec amendment against §3 in learnings/inbox/L9.md rather than shipped
+   silently; block padding is still sized so EACH row lands at the
+   spec's 54px (13px top/bottom around a 28px-tall control). */
 .dxg-controls {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: end;
-  gap: 12px 14px;
-  padding: 13px 18px 15px;
+  gap: 14px 26px;
+  padding: 13px 28px;
   border-color: var(--border);
   background: color-mix(in srgb, var(--card-bg) 76%, var(--paper));
 }
 
+/* 13 §3: label -> control gap 9px (the row-gap, between the eyebrow line
+   and the control beneath it); relation-chip row gap 6px (the column-gap,
+   between a group's own children — the three RELATIONS chips are the only
+   group with more than one). */
 .dxg-ctl {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 9px 6px;
   min-width: 0;
+}
+
+/* 13 §3, node 3OG-0: a 1x20px --color-border divider before RELATIONS.
+   Drawn on the group's own left edge (::before, not a sibling DOM node) so
+   the seven-groups-wide nth-child(N) grid-column-span selectors above never
+   shift — inserting an eighth grid child would renumber every one of them.
+   Self-contained for the same reason: it draws at 0/20px centered inside
+   the 26px gap already reserved by the group gap above, whichever row
+   RELATIONS lands on. */
+.dxg-ctl[data-dxg-group="relationships"] {
+  position: relative;
+  padding-left: 26px;
+}
+
+.dxg-ctl[data-dxg-group="relationships"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  transform: translateY(-50%);
 }
 
 .dxg-ctl:nth-child(1) { grid-column: span 2; }
@@ -6602,19 +6661,19 @@ code {
 .dxg-ctl:nth-child(6) { grid-column: span 7; }
 .dxg-ctl:nth-child(7) { grid-column: span 5; justify-content: flex-end; }
 
+/* 13 §4.2 (RETRY fix list item 2): eyebrow label — sans 11/14 w600, tracking
+   .08em, --faint. Was mono 9px w720 tracking .09em --muted. */
 .dxg-ctl-label {
   flex: 0 0 100%;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 720;
-  letter-spacing: .09em;
-  line-height: 1.2;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  line-height: 14px;
   text-transform: uppercase;
 }
 
-.dxg-btn,
-.dxg-select,
 .dxg-toggle,
 .dxg-notice-action,
 .dxg-detail-open {
@@ -6628,50 +6687,103 @@ code {
   line-height: 1.2;
 }
 
-.dxg-btn,
-.dxg-toggle,
-.dxg-notice-action,
 .dxg-detail-open { padding: 8px 11px; }
 
+/* 13 §4.2 (RETRY fix list item 3): split out of the shared toggle/button
+   rule above so the select's own values — border-color, radius, size and
+   weight — never disturb .dxg-toggle's correct 12/16. border-color
+   --border-strong (not --border); radius 6px (not 5px); sans 13/16 w500.
+   Padding takes the spec's 5px 10px on three sides; the inline-end side
+   keeps the wider room the native chevron already needs. */
 .dxg-select {
+  min-height: 36px;
   width: 100%;
   max-width: none;
-  padding: 7px 30px 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  padding: 5px 30px 5px 10px;
 }
 
-.dxg-btn:hover,
 .dxg-select:hover,
-.dxg-toggle:hover,
 .dxg-notice-action:hover,
 .dxg-detail-open:hover { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); }
 
+/* 13 §4.2: the relation/VIEW toggle is a PILL — padding 5px 11px, radius
+   999px — never the 5px-radius rectangle the buttons and selects take. ON:
+   sans 12/16 w600 --color-accent on an accent-tinted ground; OFF: sans
+   12/16 w500 --color-faint, "the quietest label on the bar, because an off
+   toggle is a filter that is doing nothing" (D8). D14 keeps `labels` as this
+   pill and moves `re-run layout` out of it entirely, onto .dxg-btn above —
+   the VIEW group is one reversible state beside one button, not two chips
+   that read as the same kind of control (R11.1, P14). */
 .dxg-toggle {
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill, 999px);
   background: transparent;
-  color: var(--muted);
+  color: var(--faint);
   font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
 }
 
+.dxg-toggle:hover { border-color: color-mix(in srgb, var(--link) 62%, var(--border-strong)); }
+
+/* Navigation, not approval — --link, never --accent. See graph.css's own
+   .dxg-toggle[aria-pressed="true"] comment (tokens.md Disagreement 7 / G2). */
 .dxg-toggle[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
-  background: var(--accent-bg);
-  color: var(--ink);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--link);
+  background: var(--link-bg, color-mix(in srgb, var(--link) 9%, transparent));
+  color: var(--link);
+  font-weight: 600;
+  box-shadow: none;
 }
 
+/* 13 §4.3 (RETRY fix list item 1): the draft/attention band — every notice
+   kind except 'warn'. Ground --status-draft-bg (its dark arm above already
+   carries the spec's dark hex), body sans 13/18 w400 --ink, padding 9px
+   block / 28px inline, gap 10px. Reused verbatim by the empty-scope and
+   empty-overlay notices (13 §8.9/§8.10) — one band, not a second
+   empty-state device. */
 .dxg-notice {
-  min-height: 44px;
-  gap: 12px;
-  padding: 8px 18px;
+  align-items: flex-start;
+  min-height: 0;
+  gap: 10px;
+  padding: 9px 28px;
   border-color: var(--border);
-  background: var(--card-bg);
-  color: var(--muted);
-  line-height: 1.45;
+  background: var(--status-draft-bg);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
 }
+
+.dxg-notice-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--status-draft);
+}
+
+.dxg-notice-body { min-width: 0; }
 
 .dxg-notice-action {
-  min-height: 32px;
+  min-height: 0;
+  border: 0;
   background: transparent;
-  color: var(--ink);
+  padding: 0;
+  box-shadow: none;
+  color: var(--link);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .dxg-body { background: var(--paper); }
@@ -6689,80 +6801,151 @@ code {
   line-height: 1.45;
 }
 
-/* Diagnostics are available elsewhere; this view reserves the rail for the
-   selected node only and returns the rest of the width to the graph. */
-.dxg-gaps { display: none !important; }
+/* 13 reinstates this rail as "WHAT THE LAYOUT FOUND" (D2) — the shipped
+   sheet's own reason for hiding it was "diagnostics are available
+   elsewhere"; the board's reason is "readings about this picture, not
+   findings about the corpus", a different claim the hide does not
+   contradict. See renderGaps (graph-ui.js) for the rebuilt heading, count,
+   intro and rule blocks; graph.css's own .dxg-gaps already gives it the
+   flex/scroll role now that nothing here turns it off. */
 
+/* 13 §8.1 — the empty state keeps the rail's own inset now that .dxg-detail
+   itself carries none (its children do). */
+.dxg-detail-empty {
+  padding: 20px 24px;
+}
+
+/* D1 — 348px, not the engine's 310px: the rail carries a six-row property
+   list at a fixed 96px label plus serif prose, and 310px cannot hold
+   "Protection language requires current evidence" on two lines beside a
+   96px label (13 §3, node 3VZ-0). */
 .dxg-rail {
-  width: min(310px, 32%);
+  width: min(348px, 32%);
   border-color: var(--border);
   background: var(--card-bg);
 }
 
-.dxg-rail:has(.dxg-detail-empty) { display: none; }
+/* D3 — the rail never disappears. A rail that vanishes with nothing
+   selected makes the canvas width jump between selections mid-read; the
+   empty state (13 §8.1) is .dxg-detail-empty's own quiet line instead. */
 
+/* The detail block sits at the TOP of the rail now (mountPane swapped the
+   append order) and is sized to its content — the readings block below it
+   is the one that flexes and scrolls (graph.css's .dxg-gaps). */
 .dxg-detail {
-  flex: 1;
+  flex: 0 0 auto;
   max-height: none;
-  padding: 18px;
+  padding: 0;
   border: 0;
   background: var(--card-bg);
   color: var(--ink);
 }
 
-.dxg-detail-id {
-  margin: 0 0 16px;
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -.012em;
-  line-height: 1.35;
+/* 13 §3: SELECTED block padding 20px top / 22px bottom / 24px inline, gap
+   12px. */
+.dxg-detail-selected {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px 22px;
 }
 
+/* 13 §3: property block padding 6px top / 18px bottom / 24px inline. */
+.dxg-detail-props {
+  padding: 6px 24px 18px;
+}
+
+/* 13 §4.7: a fixed 96px label column so six rows form one vertical rule;
+   16px between label and value; each row padding-block 9px, baseline
+   aligned, with its own bottom rule except the last (no wrapping row
+   element, so the rule is drawn on both grid children — see the dt/dd rule
+   below). */
 .dxg-detail-rows {
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
-  gap: 8px 12px;
-  font-size: 11.5px;
-  line-height: 1.45;
+  grid-template-columns: 96px minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 0;
+  font-size: 13px;
+  line-height: 19px;
 }
 
+.dxg-detail-rows dt,
+.dxg-detail-rows dd {
+  padding-block: 9px;
+  align-self: baseline;
+}
+
+.dxg-detail-rows dt:not(:last-of-type),
+.dxg-detail-rows dd:not(:last-of-type) {
+  border-bottom: 1px solid var(--border);
+}
+
+/* 13 §4.7 (RETRY fix list item 14): the label's own 11/14 (it was
+   inheriting .dxg-detail-rows' 19px line-height above), and flex-shrink:0
+   so a long value in the sibling dd can never compress the fixed label
+   column. */
 .dxg-detail-rows dt {
-  color: var(--muted);
+  flex-shrink: 0;
+  color: var(--faint);
   font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 680;
-  letter-spacing: .04em;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 
-.dxg-detail-open { margin-top: 16px; }
+/* "expand this group" is the only remaining consumer of the plain chip
+   style; .dxg-detail is now unpadded (its children carry their own insets),
+   so this one supplies its own. */
+.dxg-detail-open:not(.dxg-detail-back) { margin: 8px 24px 18px; }
 
+/* 13 §3: back-link row padding-block 16px, padding-inline 24px, gap 8px,
+   bottom rule. graph.css's .dxg-detail-open.dxg-detail-back carries the
+   colour and typography; this is geometry only, matching the desktop rail's
+   own inset rather than the generic detail padding above. */
+.dxg-detail-open.dxg-detail-back {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 13 §3 (RETRY fix list item 10): padding 14px block / 28px inline. */
 .dxg-legend {
-  padding: 10px 18px;
+  padding: 14px 28px;
   border-color: var(--border);
   background: var(--card-bg);
 }
 
 .dxg-legend-list { gap: 6px 16px; }
-.dxg-legend-item { gap: 6px; color: var(--muted); font-size: 11px; }
+/* 13 §4.5 (RETRY fix list item 10): 12/16, not the pre-13 11px/unset line
+   height. */
+.dxg-legend-item { gap: 6px; color: var(--muted); font-size: 12px; line-height: 16px; }
 .dxg-legend-name { font-family: var(--font-sans); }
-.dxg-legend-group {
-  color: var(--ink);
-  font-size: 9px;
-  font-weight: 720;
-  letter-spacing: .09em;
-}
-.dxg-legend-swatch { width: 10px; height: 10px; }
 
-.dxg-legend-module {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid var(--ink);
-  border-radius: 3px;
-  background: var(--dxg-facet-other);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-bg) 40%, transparent);
+/* 13 §4.5: "Section label (FACETS, MARKS) | sans 10/12 w600, tracking
+   0.08em | --color-faint". graph.css's own rule (its section-label comment
+   right above it) draws the pre-13 form — mono, 9px w720 tracking .09em,
+   --color-ink here — measured off a board this lane now owns; re-pinned to
+   the board's own values rather than left as an unmeasured guess. */
+.dxg-legend-group {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--faint);
+}
+
+/* 13 §4.5: facet swatch 9x9, radius 999px (a circle, same border-radius:50%
+   graph.css's base rule already gives every .dxg-legend-swatch). The
+   collapsed-module swatch is "deliberately larger" at 11x11 (D7) and wins
+   below on the later, more specific rule — graph.css's own 11px base would
+   otherwise apply to every swatch alike, which flattens exactly the
+   distinction D7 asks for. */
+.dxg-legend-swatch { width: 9px; height: 9px; }
+
+.dxg-legend-swatch.dxg-swatch-other {
+  width: 11px;
+  height: 11px;
 }
 
 .dxg-btn:focus-visible,
@@ -6824,12 +7007,18 @@ code {
     border-top: 1px solid var(--border);
   }
 
+  /* .dxg-detail is content-sized now (13's SELECTED block + rows + back
+     link, D1-D5), which can run taller than this tier's 210px rail cap —
+     so unlike the 348px desktop rail, HERE it scrolls internally rather
+     than pushing the readings block out of the rail entirely. */
   .dxg-detail {
     max-height: 210px;
-    padding: 14px 16px;
+    overflow-y: auto;
   }
 
-  .dxg-detail-id { margin-bottom: 12px; }
+  .dxg-detail-selected,
+  .dxg-detail-props { padding-inline: 16px; }
+  .dxg-detail-open.dxg-detail-back { padding-inline: 16px; }
 
   .dxg-legend {
     overflow-x: auto;
@@ -6838,6 +7027,265 @@ code {
   }
 
   .dxg-legend-list { flex-wrap: nowrap; width: max-content; }
+}
+
+/* =========================================================================
+   13 §5 — mobile rules, mapped onto the engine's own breakpoints. No 390px
+   query anywhere (tokens.md §8): M1-M12 sit at max-width:520px (below), M13
+   /M14 at (pointer:coarse) — graph.css's own query, extended a few rules
+   down — and M16 is folded into the ground-colour rule here. Appended
+   after this file's 860px graph container per OD1: a lane's new mobile
+   rule goes in its own block, never edited into a shared one in place, and
+   here it also has to win over graph.css's 704px stacking query AND this
+   file's own 860px query above for the very same selectors, which a later
+   block at equal specificity does for free.
+   lane: L9 */
+@media (max-width: 520px) {
+  /* M16 — page ground is --color-card, not --color-paper (measured on
+     AFZ-0 / AST-0): the banded sections supply the only contrast a paper
+     ground would flatten. */
+  #dxgPane,
+  .dxg-surface {
+    background: var(--card-bg);
+  }
+
+  .dxg-head {
+    min-height: 52px;
+    padding: 2px 16px 14px;
+    gap: 5px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* RETRY fix list item 18: 13 §4.10 measures the glyph on the mobile
+     screen header too ("Screen header: glyph 17x17..."). Only the divider
+     between the identity cluster and the provenance line — a desktop-only
+     device, absent from the mobile spec's own row list — is dropped. */
+  .dxg-head-divider {
+    display: none;
+  }
+
+  .dxg-title { font-size: 19px; line-height: 24px; }
+
+  /* The provenance sub-line indents to sit under the title, past the
+     glyph + gap the header still draws here (13 §4.10, "aligns under the
+     title, past the 17px icon + 10px gap"). */
+  .dxg-provenance {
+    flex: 1 1 100%;
+    padding-left: 27px;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  /* M6 — Refresh dropped, the freshness stamp dropped, Close loses its Esc
+     hint. Refresh is already absent without a server; here it is absent
+     regardless. */
+  .dxg-head-spacer,
+  .dxg-stamp,
+  [data-dxg-refresh],
+  .dxg-close-hint {
+    display: none;
+  }
+
+  .dxg-head-actions { margin-left: auto; }
+
+  /* M7 — the control strip wraps; it does not scroll sideways. Reverses
+     this file's own 860px overflow-x/scroll-snap rules above by winning on
+     source order at equal specificity. */
+  .dxg-controls {
+    display: flex;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    scroll-snap-type: none;
+    padding: 12px 16px;
+    gap: 9px;
+  }
+
+  .dxg-ctl {
+    flex: 0 0 auto;
+    scroll-snap-align: none;
+  }
+
+  /* M5 — MODULE / FACET / TRACK eyebrows dropped; the select values name
+     themselves. Granularity and Highlight overlay steer the canvas the
+     same way VIEW does, and the canvas is gone (M1), so their eyebrows and
+     their controls drop for the identical reason M4 drops VIEW — "this
+     steers a drawing that is not drawn". Neither control exists on any
+     board (they postdate 13's Paper file); this is the same principle
+     applied to two groups the spec table has no row for. */
+  .dxg-ctl-label { display: none; }
+  .dxg-ctl[data-dxg-group="granularity"],
+  .dxg-ctl[data-dxg-group="overlay"],
+  .dxg-ctl[data-dxg-group="view"] {
+    display: none;
+  }
+
+  .dxg-select {
+    width: auto;
+    max-width: none;
+    padding: 5px 26px 5px 9px;
+  }
+
+  /* Relation chips keep the desktop 12px (13 §4.11) but the OFF chip steps
+     500 -> 600 — "nothing in this system is heavier than 600" (M11) — and
+     both strips wrap instead of scrolling (M7's own rule, restated for the
+     relation row specifically since it is a second .dxg-ctl). */
+  .dxg-ctl[data-dxg-group="relationships"] {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 0;
+  }
+
+  /* No divider on the mobile filter strip (13 §4.11 draws none) — the
+     desktop-only ::before above. */
+  .dxg-ctl[data-dxg-group="relationships"]::before {
+    content: none;
+  }
+
+  .dxg-toggle { font-weight: 600; }
+  .dxg-toggle[aria-pressed="true"] { font-weight: 600; }
+
+  .dxg-notice {
+    padding: 10px 16px;
+    gap: 10px;
+  }
+
+  /* M1 — the canvas is not drawn at all: an arrangement decision (R-H.0's
+     argued exception, D12), not a component that narrows. Reverses this
+     file's 860px min-height rule above by the same later-wins rule. */
+  .dxg-canvas-holder,
+  .dxg-canvas,
+  .dxg-canvas-hint {
+    display: none;
+  }
+
+  /* M3 — the rail collapses into the page flow. Nothing here is a rail or
+     a sheet any longer (R-J.1/R-J.6): no internal scroll region, no
+     border, no max-height clamp. The pane's own .dxg-surface becomes the
+     one scrolling column instead. */
+  .dxg-body { display: block; }
+
+  .dxg-surface { overflow-y: auto; }
+
+  .dxg-rail {
+    width: auto;
+    max-height: none;
+    border: 0;
+    background: transparent;
+  }
+
+  .dxg-detail {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dxg-detail-selected,
+  .dxg-detail-props {
+    padding-inline: 16px;
+  }
+
+  /* 13 §4.12: mobile title one step up (17/24 vs the desktop 16/23);
+     property rows lead with a 4px top pad rather than the desktop's
+     symmetric 9px. */
+  .dxg-detail-title { font-size: 17px; line-height: 24px; }
+  .dxg-detail-rows dt,
+  .dxg-detail-rows dd { padding-top: 4px; }
+
+  /* M9 — two columns at an 88px label (down from the desktop 96px); only
+     STATUS and IN A CYCLE survive (13 §4.12). The engine's other rows stay
+     in the DOM (D4 keeps them for the rail) and are hidden here rather
+     than skipped in JS, so nothing about renderDetail's order has to know
+     which width it is running at. */
+  .dxg-detail-rows { grid-template-columns: 88px minmax(0, 1fr); }
+
+  .dxg-detail-rows dt:not([data-dxg-mobile-row]),
+  .dxg-detail-rows dd:not([data-dxg-mobile-row]) {
+    display: none;
+  }
+
+  .dxg-gaps {
+    flex: none;
+    overflow: visible;
+    padding: 20px 16px;
+  }
+
+  .dxg-rail-head { position: static; }
+
+  /* M2 / M1 — AROUND THIS CLAIM replaces the canvas; the desktop intro
+     sentence is replaced by the one-word mobile variant (13 §6). */
+  .dxg-neighborhood { display: block; }
+  .dxg-rail-intro--desktop { display: none; }
+  .dxg-rail-intro--mobile { display: block; }
+
+  .dxg-neighborhood,
+  .dxg-neighborhood-eyebrow,
+  .dxg-neighborhood-intro,
+  .dxg-neighbor-group,
+  .dxg-neighbor-head,
+  .dxg-neighbor-row {
+    padding-inline: 0;
+  }
+
+  .dxg-neighborhood { padding: 16px 16px 12px; }
+  .dxg-neighbor-head,
+  .dxg-neighbor-row { padding-inline: 16px; margin-inline: -16px; width: calc(100% + 32px); }
+
+  /* M12 — row titles one step up from the desktop rail's 13/19. */
+  .dxg-neighbor-title { font-size: 14px; line-height: 19px; }
+
+  /* M12 — reading title/heading one step up too. */
+  .dxg-rule-phrase,
+  .dxg-rule-head { font-size: 14px; line-height: 20px; }
+  .dxg-rule-body { font-size: 13px; line-height: 20px; }
+
+  /* M12 — the collapsed tail is w600 on mobile, where the desktop tail is
+     w500 (13 §4.14). */
+  .dxg-rule-tail { font-weight: 600; }
+
+  .dxg-detail-open.dxg-detail-back {
+    padding: 16px;
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  /* M8 — the legend wraps; it does not scroll sideways. Reverses this
+     file's own 860px nowrap/max-content rule above. */
+  .dxg-legend {
+    overflow-x: visible;
+    padding: 14px 16px;
+  }
+
+  .dxg-legend-list {
+    flex-wrap: wrap;
+    width: auto;
+    column-gap: 16px;
+    row-gap: 8px;
+  }
+
+  /* M6's note ("the two arrow marks and the selected mark are dropped;
+     only has an open comment thread survives") applies to the legend's
+     MARKS group specifically — the edge samples and the selected/review
+     node marks steer or describe the canvas, which is gone. */
+  .dxg-legend [data-dxg-edge],
+  .dxg-legend [data-dxg-mark="selected"],
+  .dxg-legend [data-dxg-mark="review"] {
+    display: none;
+  }
+}
+
+/* M13 — every tappable control here reaches the same >=44px floor the rest
+   of this file already gives .dxg-btn/.dxg-toggle/.dxg-select at
+   (pointer: coarse); the edge row and the back link are the two this
+   file's own coarse block (graph.css) does not reach. Target size, never
+   width — a 1440px touch display gets this and none of the max-width:520px
+   rules above. */
+@media (pointer: coarse) {
+  .dxg-neighbor-row,
+  .dxg-detail-open.dxg-detail-back,
+  .dxg-rule-tail {
+    min-height: 44px;
+  }
 }
 
 @media (min-width: 861px) and (max-width: 1180px) {

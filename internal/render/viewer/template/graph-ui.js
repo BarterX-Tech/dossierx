@@ -65,7 +65,17 @@
   // The trigger's contract, in one place. It is an ATTRIBUTE, not a class,
   // and deliberately not `.sec-tab` — the viewer's existing delegated handler
   // matches .sec-tab and would also switch modules.
+  //
+  // A TRIGGER MAY ALSO CARRY data-dxg-open-id="<claim id>", naming the claim
+  // it was opened FROM. 13 §4.1 / §6 draws a header provenance line —
+  // "arrived from <claim>" — for exactly that case, and 13's own notes say
+  // there are only two entries: the sidebar nav trigger (shell.html:73, no
+  // id — the reader did not come from a claim) and a per-claim "See in
+  // claims graph" affordance, which is L3's markup (Overlap 3). L3 emits the
+  // attribute and nothing else; this file only has to keep matching more
+  // than one element and read the id off whichever one fired.
   var OPEN_SELECTOR = '[data-dxg-open]';
+  var OPEN_ID_ATTR = 'data-dxg-open-id';
 
   // shell.html adds `comments-live` to <body> once its own ~1s probe has
   // confirmed a live serve. This file reuses that verdict rather than probing
@@ -100,11 +110,30 @@
   // overridable from it — a threshold a reader cannot see and cannot cross is
   // a threshold nobody can report as wrong.
   var AUTO_COLLAPSE_ABOVE = 300;
+  // 13 §4.2 / §6 — the board's own vocabulary for the three relation chips
+  // and the legend's edge rows: "Depends on", "Says the same thing",
+  // "Governed by". Re-pinned from this file's original "Rests On" /
+  // "Mirrors" / "Governed By" — display text only; data-dxg-type keeps the
+  // engine's own rests_on / mirrors / governed_by everywhere a test or a
+  // deep link keys off it.
   var RELATIONSHIP_LABELS = {
-    rests_on: 'Rests On',
-    mirrors: 'Mirrors',
-    governed_by: 'Governed By',
+    rests_on: 'Depends on',
+    mirrors: 'Says the same thing',
+    governed_by: 'Governed by',
   };
+
+  // 13 §4.5/§6, RETRY fix list item 12: the LEGEND's edge marks use their
+  // own lower-case vocabulary, deliberately different from the RELATIONS
+  // chips' Title Case above — "the two vocabularies differ on purpose".
+  // LEGEND_EDGE_ORDER is "governed by" first, per §4.5's own "Legend order,
+  // exactly"; filtered against graph-core.js's EDGE_TYPES at render time so
+  // an edge type the engine stops declaring cannot leave a stale row.
+  var LEGEND_EDGE_LABELS = {
+    governed_by: 'governed by',
+    rests_on: 'depends on',
+    mirrors: 'says the same thing',
+  };
+  var LEGEND_EDGE_ORDER = ['governed_by', 'rests_on', 'mirrors'];
 
   // ---- Labels ------------------------------------------------------------
   //
@@ -206,6 +235,7 @@
   var frame = 0; // requestAnimationFrame handle
   var alpha = 0; // force-layout temperature
   var parseTimeHash = ''; // the graph state segment seen at parse time
+  var originClaimId = ''; // OPEN_ID_ATTR off the trigger that opened the pane, '' from the nav trigger
   var collapseOverride = false; // the reader insisted on every claim
   var notices = []; // {text, kind, action} rendered above the canvas
   var dragging = null; // {id} while a node is being dragged
@@ -360,11 +390,18 @@
     el.holder.appendChild(el.canvas);
     el.holder.appendChild(el.hint);
 
+    // 13 reinstates the readings block (D2) BELOW the selected-claim detail,
+    // reversing this file's original top-to-bottom order (readings, then
+    // detail) — the board reads SELECTED, its property rows, the back link,
+    // THEN "WHAT THE LAYOUT FOUND" (13 §3's rail row order). Sizing follows
+    // the same swap: the detail block is now content-sized at the top
+    // (style.css) and the readings block is the one that flexes and
+    // scrolls.
     el.rail = h('aside', 'dxg-rail');
     el.gaps = h('div', 'dxg-gaps');
     el.detail = h('div', 'dxg-detail');
-    el.rail.appendChild(el.gaps);
     el.rail.appendChild(el.detail);
+    el.rail.appendChild(el.gaps);
 
     body.appendChild(el.holder);
     body.appendChild(el.rail);
@@ -444,11 +481,16 @@
 
   // The trigger lives inside the swapped subtree, so it is destroyed and
   // rebuilt by every fragment swap. Look it up each time rather than caching a
-  // node that may already be detached, and tolerate its absence.
+  // node that may already be detached, and tolerate its absence. More than
+  // one element can carry data-dxg-open now (the sidebar's #dxgOpen AND
+  // every per-claim "See in claims graph" affordance L3 emits, 13 §Overlap
+  // 3), so every match is kept in sync, not only the first one document
+  // order happens to find (13-claims-graph §7, "L9 keeps OPEN_SELECTOR
+  // delegation working for more than one match in the document").
   function setTriggerExpanded(open) {
-    var btn = document.querySelector(OPEN_SELECTOR);
-    if (btn) {
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var btns = document.querySelectorAll(OPEN_SELECTOR);
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-expanded', open ? 'true' : 'false');
     }
   }
 
@@ -484,6 +526,13 @@
         return;
       }
       e.preventDefault();
+      // Opening (not closing) is the only time the origin can change: a
+      // trigger clicked to CLOSE the pane carries no new "arrived from"
+      // fact, and overwriting it here would show the wrong claim the next
+      // time the header rebuilds.
+      if (!isOpen) {
+        originClaimId = target.hasAttribute(OPEN_ID_ATTR) ? str(target.getAttribute(OPEN_ID_ATTR)) : '';
+      }
       togglePane();
     });
 
@@ -535,8 +584,15 @@
   // every open and on every refresh, because a refreshed payload can carry a
   // module, facet or track that did not exist a minute ago.
 
-  function controlGroup(labelText) {
+  // key is a stable, CSS-addressable name for the group — "module", "view",
+  // and so on — so a mobile rule (M4/M5) can target one group without
+  // counting nth-child positions that move whenever the track group is
+  // present or absent.
+  function controlGroup(labelText, key) {
     var group = h('div', 'dxg-ctl');
+    if (key) {
+      group.setAttribute('data-dxg-group', key);
+    }
     group.appendChild(h('span', 'dxg-ctl-label', labelText));
     return group;
   }
@@ -584,7 +640,7 @@
     // is painted, so both ask for a fit: five module nodes left at the previous
     // camera occupy about a seventh of the canvas, and a reader who has to
     // pinch-zoom after every control change stops using the controls.
-    var moduleGroup = controlGroup('Module');
+    var moduleGroup = controlGroup('Module', 'module');
     el.scopeModule = selectControl('dxgModule', function () {
       state.scopeModule = el.scopeModule.value;
       requestFit();
@@ -592,7 +648,7 @@
     });
     moduleGroup.appendChild(el.scopeModule);
 
-    var facetGroup = controlGroup('Facet');
+    var facetGroup = controlGroup('Facet', 'facet');
     el.scopeFacet = selectControl('dxgFacet', function () {
       state.scopeFacet = el.scopeFacet.value;
       requestFit();
@@ -604,7 +660,7 @@
     // happens to be created.
     el.facetGroup = facetGroup;
 
-    var granGroup = controlGroup('Granularity');
+    var granGroup = controlGroup('Granularity', 'granularity');
     el.granularity = selectControl('dxgGranularity', function () {
       state.granularity = el.granularity.value;
       noteManualGranularity();
@@ -616,7 +672,7 @@
     }
     granGroup.appendChild(el.granularity);
 
-    var overlayGroup = controlGroup('Highlight overlay');
+    var overlayGroup = controlGroup('Highlight overlay', 'overlay');
     el.overlay = selectControl('dxgOverlay', function () {
       state.overlay = el.overlay.value;
       onControlChange(false);
@@ -630,7 +686,10 @@
     // cluttered graph can be read one relation at a time. The list comes from
     // graph-core.js's EDGE_TYPES, not from a literal here, so the two cannot
     // drift.
-    var typeGroup = controlGroup('Relationships');
+    // 13 §4.2's own eyebrow is "RELATIONS", not this file's original
+    // "Relationships" — the data-dxg-group key stays "relationships" since
+    // nothing keys off the visible label.
+    var typeGroup = controlGroup('Relations', 'relationships');
     el.typeButtons = {};
     var types = c ? c.EDGE_TYPES : [];
     for (var t = 0; t < types.length; t++) {
@@ -644,7 +703,7 @@
       })(types[t]);
     }
 
-    var viewGroup = controlGroup('View');
+    var viewGroup = controlGroup('View', 'view');
     el.labels = toggleButton('labels', true, function () {
       state.labels = !state.labels;
       onControlChange(false);
@@ -709,7 +768,7 @@
     if (el.trackGroup) {
       return;
     }
-    var group = controlGroup('Track');
+    var group = controlGroup('Track', 'track');
     el.scopeTrack = selectControl('dxgTrack', function () {
       state.scopeTrack = el.scopeTrack.value;
       // Like module and facet, and for the same reason: this changes WHICH
@@ -895,6 +954,35 @@
       '</svg>'
   };
 
+  // MARK_SAMPLES — the node-state markers, in the MARKS group beside the
+  // three edge samples above (13 §4.5: "governed by · depends on · has an
+  // open comment thread · selected"). Same rule as EDGE_SAMPLES: constant
+  // strings, no interpolation, so a payload value can never reach one.
+  // Colours are var()s rather than currentColor because each mark is
+  // genuinely two-tone (a facet fill plus a state-coloured ring) and the two
+  // must never be the same channel — a state colour painted as a fill would
+  // let a ring be mistaken for an identity (13 §2).
+  var MARK_SAMPLES = {
+    thread:
+      '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+      '<circle cx="8" cy="8" r="6" fill="none" stroke="var(--dxg-halo)" stroke-width="1.6"/>' +
+      '<circle cx="8" cy="8" r="3" fill="var(--dxg-facet-1)"/>' +
+      '</svg>',
+    selected:
+      '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+      '<circle cx="8" cy="8" r="7" fill="none" stroke="var(--link)" stroke-width="2"/>' +
+      '<circle cx="8" cy="8" r="3.5" fill="var(--dxg-facet-1)"/>' +
+      '</svg>',
+    // Not on any board (13 §8.4: review_pending's solid halo beats an open
+    // thread's dashed one). Added because a state the canvas can draw and
+    // the legend cannot name is a state a reader has no way to ask about.
+    review:
+      '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+      '<circle cx="8" cy="8" r="6" fill="none" stroke="var(--dxg-halo)" stroke-width="2"/>' +
+      '<circle cx="8" cy="8" r="3" fill="var(--dxg-facet-1)"/>' +
+      '</svg>'
+  };
+
   // OVERLAY_LEGENDS is what each overlay ACTUALLY paints, as {swatch class,
   // text} rows. The swatch classes name graph.css's colours; the fills in
   // overlayFill() name the same tokens through the palette. Neither side
@@ -1031,22 +1119,43 @@
       item.setAttribute('data-dxg-facet', name);
       var swatch = h('span', 'dxg-legend-swatch dxg-swatch-' + (slot < 0 ? 'other' : slot + 1));
       item.appendChild(swatch);
-      item.appendChild(h('span', 'dxg-legend-name', name));
+      // 13 §4.5/§6, RETRY fix list item 12: legend facet names are Title
+      // Case ("contract" -> "Contract"). data-dxg-facet keeps the raw slug
+      // — hover matching and every test that reads it are unaffected.
+      item.appendChild(h('span', 'dxg-legend-name', titleCaseSlug(name)));
       bindLegendHover(item, name);
       list.appendChild(item);
     }
 
-    // The catch-all slot only earns a row when some claim actually wears it —
-    // or when a collapsed module group is on screen wearing it, which is the
-    // other thing that colour means.
-    if (payload && hasUnslottedFacet(facets)) {
+    // 13 §4.5/§6, RETRY fix list item 11: "a collapsed module" earns a row
+    // only when a collapsed MODULE group is actually drawn on the canvas
+    // right now — facetSlotOf() gives it the catch-all slot precisely
+    // because a module has no single facet (a facet-collapsed group keeps
+    // its real facet colour and needs no row here). Reading the current
+    // scene rather than the whole payload keeps the legend answering "what
+    // does THIS picture mean", the same rule every other legend row and
+    // the scope notice above it already follow.
+    if (sceneHasCollapsedModuleGroup()) {
       var other = h('li', 'dxg-legend-item');
       other.setAttribute('data-dxg-facet', '');
       other.appendChild(h('span', 'dxg-legend-swatch dxg-swatch-other'));
-      other.appendChild(h('span', 'dxg-legend-name', 'no facet · module group'));
+      other.appendChild(h('span', 'dxg-legend-name', 'a collapsed module'));
       bindLegendHover(other, '');
       list.appendChild(other);
     }
+  }
+
+  function sceneHasCollapsedModuleGroup() {
+    if (!scene) {
+      return false;
+    }
+    for (var i = 0; i < scene.nodes.length; i++) {
+      var node = scene.nodes[i];
+      if (node.kind === 'group' && node.group_type !== 'facet') {
+        return true;
+      }
+    }
+    return false;
   }
 
   // The overlay rows. No hover binding: these are not facets and dimming the
@@ -1064,14 +1173,23 @@
   }
 
   // The three edge rows, always, whatever the overlay is doing to the nodes:
-  // an overlay recolours fills and never changes what a line means.
+  // an overlay recolours fills and never changes what a line means. Followed
+  // by the node-state marks — 13 §4.5 draws both kinds under one "MARKS"
+  // caption (lower-cased here like every other group label; .dxg-legend-group
+  // uppercases it), because an edge sample and a node sample answer the same
+  // question — "what does this mark on the canvas mean?" — and splitting
+  // them into two captions would suggest they do not.
   function appendEdgeRows(list) {
     var c = core();
-    var types = c ? c.EDGE_TYPES : ['rests_on', 'mirrors', 'governed_by'];
-    list.appendChild(legendGroupLabel('Relationships'));
-    for (var i = 0; i < types.length; i++) {
-      var type = str(types[i]);
-      if (!EDGE_SAMPLES[type]) {
+    var known = {};
+    var engineTypes = c ? c.EDGE_TYPES : ['rests_on', 'mirrors', 'governed_by'];
+    for (var k = 0; k < engineTypes.length; k++) {
+      known[str(engineTypes[k])] = true;
+    }
+    list.appendChild(legendGroupLabel('marks'));
+    for (var i = 0; i < LEGEND_EDGE_ORDER.length; i++) {
+      var type = LEGEND_EDGE_ORDER[i];
+      if (!known[type] || !EDGE_SAMPLES[type]) {
         continue;
       }
       var cls = 'dxg-legend-item dxg-legend-item--edge';
@@ -1083,7 +1201,7 @@
       var sample = h('span', 'dxg-legend-edge');
       sample.innerHTML = EDGE_SAMPLES[type];
       item.appendChild(sample);
-      item.appendChild(h('span', 'dxg-legend-name', RELATIONSHIP_LABELS[type] || type));
+      item.appendChild(h('span', 'dxg-legend-name', LEGEND_EDGE_LABELS[type] || type));
       // An edge type the reader has toggled off is not on the canvas, and the
       // strip says so rather than describing a line that is not there.
       if (state && state.types.indexOf(type) < 0) {
@@ -1091,6 +1209,20 @@
       }
       list.appendChild(item);
     }
+
+    appendMarkRow(list, 'thread', 'has an open comment thread');
+    appendMarkRow(list, 'selected', 'selected');
+    appendMarkRow(list, 'review', 'needs a human');
+  }
+
+  function appendMarkRow(list, key, name) {
+    var item = h('li', 'dxg-legend-item dxg-legend-item--edge');
+    item.setAttribute('data-dxg-mark', key);
+    var sample = h('span', 'dxg-legend-mark dxg-legend-mark--node');
+    sample.innerHTML = MARK_SAMPLES[key];
+    item.appendChild(sample);
+    item.appendChild(h('span', 'dxg-legend-name', name));
+    list.appendChild(item);
   }
 
   function overlayLabel(overlay) {
@@ -1141,10 +1273,18 @@
 
   // relativeStamp renders generated_at as a phrase. Deliberately coarse: the
   // question a reader is asking is "is this stale?", not "how many seconds".
+  //
+  // WORDING: "last read <elapsed> ago" / "Live", not "payload generated
+  // <elapsed> ago" — 13 §6 / D6. The board's phrasing is shorter, puts the
+  // corpus count in the same breath (buildHeader composes that part) and
+  // abbreviates the unit; R10.1/R10.3 (one unit, elapsed, never a stamp) hold
+  // either way. The absolute value stays on the stamp's title attribute
+  // (buildHeader), so the phrase is never the only answer available — that
+  // is what D6 asked to keep, and nothing here drops it.
   function relativeStamp(iso) {
     var when = Date.parse(iso);
     if (!isFinite(when)) {
-      return 'payload generation time unknown';
+      return 'last read time unknown';
     }
     var secs = Math.round((Date.now() - when) / 1000);
     if (secs < 0) {
@@ -1154,18 +1294,18 @@
       secs = 0;
     }
     if (secs < 45) {
-      return 'payload generated just now';
+      return 'last read just now';
     }
     var mins = Math.round(secs / 60);
     if (mins < 60) {
-      return 'payload generated ' + mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+      return 'last read ' + mins + 'm ago';
     }
     var hours = Math.round(mins / 60);
     if (hours < 24) {
-      return 'payload generated ' + hours + (hours === 1 ? ' hour ago' : ' hours ago');
+      return 'last read ' + hours + 'h ago';
     }
     var days = Math.round(hours / 24);
-    return 'payload generated ' + days + (days === 1 ? ' day ago' : ' days ago');
+    return 'last read ' + days + 'd ago';
   }
 
   // buildHeader is rebuilt on EVERY open, never only on the first. Two things
@@ -1173,16 +1313,50 @@
   // live probe may not have added `comments-live` yet when a fast reader
   // opens the pane — the next open gains the refresh button rather than the
   // pane being wrong for the life of the page.
+  //
+  // 13 §4.1 draws five things this used to skip: a glyph, a divider, a
+  // provenance line ("arrived from <claim>"), the corpus count folded into
+  // the freshness stamp, and a Close label that spells its own keyboard
+  // shortcut. The provenance line is the one piece that can be legitimately
+  // absent — see OPEN_ID_ATTR above — and it is omitted rather than left
+  // empty, per R-F.1's "a stated absence is a sentence, not a blank" applied
+  // to a line that has nothing to state at all.
   function buildHeader() {
     clear(el.head);
+
+    // innerHTML, not createElementNS: the HTML parser namespaces an <svg>
+    // tag on its own (WHATWG "foreign content"), so this file never has to
+    // spell the SVG namespace URI out — the same reason EDGE_SAMPLES,
+    // MARK_SAMPLES and backArrowIcon build their icons this way, and the
+    // one that keeps this offline engine free of anything that reads as a
+    // network reference (TestNoNetworkReferencesAnywhereInEngine).
+    var icon = h('span', 'dxg-head-icon');
+    icon.innerHTML = '<svg class="dx-icon" aria-hidden="true" width="17" height="17"><use href="#dx-icon-git-branch"/></svg>';
+    el.head.appendChild(icon);
+
     el.head.appendChild(h('h2', 'dxg-title', 'Claims graph'));
+    el.head.appendChild(h('span', 'dxg-head-divider'));
+
+    // "arrived from <claim>" — lower case, the title neither quoted nor
+    // linked (13 §6). Absent when the pane was opened from the nav trigger,
+    // which names no claim; the eyebrow row (title, divider) still reads
+    // fine with nothing after it.
+    var origin = originClaimId !== '' ? claimById(originClaimId) : null;
+    if (origin && str(origin.title) !== '') {
+      el.head.appendChild(h('span', 'dxg-provenance', 'arrived from ' + str(origin.title)));
+    }
+
+    el.head.appendChild(h('span', 'dxg-head-spacer'));
 
     var stamp = h('span', 'dxg-stamp');
     stamp.setAttribute('data-dxg-stamp', '');
     if (payload) {
-      stamp.textContent = relativeStamp(payload.generated_at);
-      // The absolute value on the title attribute, so "4 minutes ago" is
-      // never the only answer available.
+      var total = Array.isArray(payload.nodes) ? payload.nodes.length : 0;
+      var live = document.body.classList.contains(LIVE_CLASS);
+      stamp.textContent = total + ' claim' + (total === 1 ? '' : 's') + ' · ' + (live ? 'Live' : relativeStamp(payload.generated_at));
+      // The absolute value on the title attribute, so the elapsed phrase is
+      // never the only answer available — kept even in served mode, where
+      // the last successful refresh still has a real timestamp.
       stamp.title = payload.generated_at || 'no generation time in payload';
     } else {
       stamp.textContent = 'no graph payload in this document';
@@ -1194,9 +1368,11 @@
     var actions = h('div', 'dxg-head-actions');
     maybeBuildRefresh(actions);
 
-    var close = h('button', 'dxg-btn', 'close');
+    var close = h('button', 'dxg-btn');
     close.type = 'button';
     close.setAttribute('data-dxg-close', '');
+    close.appendChild(document.createTextNode('Close '));
+    close.appendChild(h('span', 'dxg-close-hint', 'Esc'));
     close.addEventListener('click', closePane);
     actions.appendChild(close);
 
@@ -1286,8 +1462,34 @@
     transientNotice = null;
   }
 
+  // noticeIcon — the 14x14 attention glyph 13 §4.3 draws beside a
+  // draft-ground notice's body (circle r=9 + the two-stroke exclamation,
+  // stroke-width 2.2, round caps). WARN-kind notices (blocked ground: no
+  // payload, unresolved edges, refresh failure) keep the plain text-only
+  // band they had before this pass — the spec draws the icon only on the
+  // draft/attention band, never on the blocked one.
+  function noticeIcon() {
+    var span = h('span', 'dxg-notice-icon');
+    span.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="14" height="14">' +
+      '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/>' +
+      '<path d="M12 8v5M12 16.5v.01" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+      'stroke-linecap="round"/>' +
+      '</svg>';
+    return span;
+  }
+
+  // noticeRow builds one row of the shared .dxg-notice band. 13 §4.3 / §8.9
+  // / §8.10 (RETRY fix list item 1): every kind but 'warn' takes the
+  // draft/attention ground, an icon, and an accent (engine --link) action
+  // with no underline and no box — one band, reused rather than a second
+  // empty-state device for "warn" vs. "everything else".
   function noticeRow(text, kind, actionText, onAction) {
-    var row = h('div', 'dxg-notice' + (kind === 'warn' ? ' dxg-notice--warn' : ''), text);
+    var row = h('div', 'dxg-notice' + (kind === 'warn' ? ' dxg-notice--warn' : ''));
+    if (kind !== 'warn') {
+      row.appendChild(noticeIcon());
+    }
+    row.appendChild(h('span', 'dxg-notice-body', text));
     if (actionText) {
       var btn = h('button', 'dxg-notice-action', actionText);
       btn.type = 'button';
@@ -1324,6 +1526,7 @@
       );
     }
 
+    renderScopeSummaryNotice();
     renderEmptyScopeNotice();
     renderCollapseNotice();
     renderEmptyOverlayNotice();
@@ -1331,6 +1534,55 @@
     if (transientNotice) {
       el.notices.appendChild(noticeRow(transientNotice.text, transientNotice.kind));
     }
+  }
+
+  // A NARROWED SCOPE SAYS HOW MANY CLAIMS IT HOLDS AND HOW MANY OF THEIR
+  // BLOCKERS IT PUSHES OUTSIDE THE PICTURE — 13 §4.3 / §6 (RETRY fix list
+  // item 1).
+  //
+  // Fires only while a module, facet or track axis is actually narrowing
+  // the view AND that narrowing still leaves at least one claim in scope —
+  // the empty-intersection case is renderEmptyScopeNotice's own sentence, so
+  // the two never fire together (13 §8.9 forbids a second empty-state
+  // device; this is the same "one attention band" argument for the
+  // non-empty case). The "M of their blockers sit outside it" half is not a
+  // separate query: it is literally the count of ghost nodes recompute()
+  // already added for this scene (13 §8.6 — any edge crossing the scope
+  // boundary earns a hollow, dashed, unlabeled stub), so the promise this
+  // sentence makes ("and are drawn as outlines") can never drift out of
+  // sync with what the canvas actually draws.
+  function renderScopeSummaryNotice() {
+    if (state.scopeModule === '' && state.scopeFacet === '' && state.scopeTrack === '') {
+      return;
+    }
+    if (!scene || scene.scoped.length === 0) {
+      return;
+    }
+    var ghosts = 0;
+    for (var i = 0; i < scene.nodes.length; i++) {
+      if (scene.nodes[i].kind === 'ghost') {
+        ghosts++;
+      }
+    }
+    el.notices.appendChild(
+      noticeRow(
+        scene.scoped.length +
+          (scene.scoped.length === 1 ? ' claim' : ' claims') +
+          ' in scope. ' +
+          ghosts +
+          (ghosts === 1 ? ' of their blockers sits' : ' of their blockers sit') +
+          ' outside it and are drawn as outlines.',
+        'info',
+        'Widen to the whole project',
+        function () {
+          state.scopeModule = '';
+          state.scopeFacet = '';
+          state.scopeTrack = '';
+          requestFit();
+          onControlChange(true);
+        }
+      )
+    );
   }
 
   // A SCOPE THAT SELECTS NOTHING SAYS SO, AND NAMES BOTH SELECTIONS.
@@ -2011,44 +2263,18 @@
     return a;
   }
 
-  // nodePath traces the SILHOUETTE of a node, which is a shape channel and
-  // not decoration.
-  //
-  // A folded group and a claim used to be the same disc: #7D8C85 against
-  // #67717E, both muted grey, both round, distinguishable only by reading the
-  // "(n)" on the end of the label — so a reader glancing at a collapsed view
-  // could not tell "five modules" from "five claims that happen to be grey".
-  // A group is now a rounded SQUARE. Shape survives every overlay, every
-  // recolour and every theme, which is exactly the property colour does not
-  // have here.
-  //
-  // The hit test stays circular on purpose: a square's corners are the part
-  // of it a pointer is least likely to be aiming at, and a hit region that
-  // matches the drawn shape exactly would make the corners of a small group
-  // node unclickable in practice.
+  // nodePath traces the SILHOUETTE of a node. 13 §4.4/§8.22, RETRY fix
+  // list item 19: a collapsed module is a DISC (r=12 on the board), the
+  // same shape as every claim node, sized by the same continuous formula
+  // (radiusOf already adds a size term for a group, so it reads as bigger,
+  // not differently shaped). This file's original rounded-square form for
+  // a group — argued in an earlier revision of this comment as "shape
+  // survives every recolour" — is not what either board draws, and 13 is
+  // the spec of record here; kept only as this paragraph's history, not as
+  // a live branch.
   function nodePath(ctx, node, pos, r) {
     ctx.beginPath();
-    if (node.kind !== 'group') {
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-      return;
-    }
-    var half = r * 0.94; // equal-ish visual weight to a disc of radius r
-    var round = Math.max(2, half * 0.28);
-    var x0 = pos.x - half;
-    var y0 = pos.y - half;
-    var side = half * 2;
-    if (ctx.roundRect) {
-      ctx.roundRect(x0, y0, side, side, round);
-      return;
-    }
-    // Manual rounded rectangle: roundRect is recent enough that a browser
-    // without it must still get a square rather than nothing.
-    ctx.moveTo(x0 + round, y0);
-    ctx.arcTo(x0 + side, y0, x0 + side, y0 + side, round);
-    ctx.arcTo(x0 + side, y0 + side, x0, y0 + side, round);
-    ctx.arcTo(x0, y0 + side, x0, y0, round);
-    ctx.arcTo(x0, y0, x0 + side, y0, round);
-    ctx.closePath();
+    ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
   }
 
   function drawNodes(ctx, pal) {
@@ -2137,10 +2363,12 @@
         ctx.setLineDash([]);
       }
 
-      // selection
+      // selection — Paper's --color-accent (navy), which is the engine's
+      // --link, not --accent (locked green): 13 §4.4 measures the ring at
+      // #1C4E8C, and tokens.md Disagreement 7 / G2 forbid the swap.
       if (state.selected !== '' && node.id === selectedRepId()) {
         nodePath(ctx, node, pos, r + 7);
-        ctx.strokeStyle = pal.accent;
+        ctx.strokeStyle = pal.link;
         ctx.lineWidth = 1.6;
         ctx.stroke();
       }
@@ -2724,7 +2952,16 @@
       ctx.stroke();
 
       // Arrowheads. mirrors gets none: it is reciprocal by design, and a head
-      // on both ends of a symmetric relation is noise.
+      // on both ends of a symmetric relation is noise. RETRY fix list item
+      // 19 / 13 §4.4: a dependency edge is a plain 1.4px line on the
+      // canvas — no chevron — the same way the spec's own edge table
+      // carries no arrowhead column for either edge kind. The head lives in
+      // the legend's "depends on" mark alone. Governance keeps its double
+      // chevron: it is what makes a governance arc readable as directed at
+      // a glance among hundreds of undirected-looking dependency lines, and
+      // the spec (13 §4.4, node A7D-0) already draws it on every board this
+      // lane verifies; a broader removal is recorded as a dispute in
+      // learnings/inbox/L9.md rather than made unilaterally here.
       var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
       if (edge.type === 'governed_by') {
         chevron(ctx, end.x, end.y, angle, 6.5);
@@ -2735,8 +2972,6 @@
           angle,
           6.5
         );
-      } else if (edge.type === 'rests_on') {
-        chevron(ctx, end.x, end.y, angle, 6);
       }
     }
     ctx.setLineDash([]);
@@ -3331,6 +3566,45 @@
 
   var MAX_LISTED_IDS = 40;
 
+  // ruleTitle is the "Reading title" (13 §4.9) — a short sentence rather
+  // than RULE_LABELS' bare noun phrase, built the same way for every rule so
+  // no rule needs its own hand-written copy. "found nothing" gets its own
+  // wording per §8.12 ("a result, not a blank"), never "0 <phrase>".
+  function ruleTitle(finding, phrase) {
+    var ids = Array.isArray(finding.node_ids) ? finding.node_ids : [];
+    if (ids.length === 0) {
+      return 'No ' + phrase + ' found';
+    }
+    return ids.length === 1 ? 'One claim: ' + phrase : ids.length + ' claims: ' + phrase;
+  }
+
+  // A prose sentence naming forty claims is not a sentence, so the body
+  // gets its own, much smaller cap than the id-chip list below it — the
+  // board's own examples name one or two claims and then describe the
+  // shape ("... sit on 24 of the 26 blocked paths in this scope"), never
+  // the whole list.
+  var MAX_BODY_NAMES = 3;
+
+  // ruleBody is the "Reading body" (13 §4.9) — serif prose naming the
+  // affected claims by TITLE, never by id, up to MAX_BODY_NAMES of them.
+  function ruleBody(finding) {
+    var ids = Array.isArray(finding.node_ids) ? finding.node_ids : [];
+    if (ids.length === 0) {
+      return 'Checked, and none found in this scope. This is a result, not a blank.';
+    }
+    var shown = Math.min(ids.length, MAX_BODY_NAMES);
+    var names = [];
+    for (var i = 0; i < shown; i++) {
+      var claim = claimById(ids[i]);
+      names.push(claim && str(claim.title) !== '' ? str(claim.title) : ids[i]);
+    }
+    var joined = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+    if (ids.length > shown) {
+      joined += ' (+' + (ids.length - shown) + ' more)';
+    }
+    return joined + '.';
+  }
+
   function renderGaps() {
     if (!el.gaps) {
       return;
@@ -3349,10 +3623,30 @@
     // on. graph.css supplies the gutter and the thumb; this header supplies
     // the only cue that NAMES what is down there, and a button that goes to
     // it. It is sticky, so it stays reachable from the middle of the list.
+    //
+    // 13 §4.9 / §6 renames the heading "WHAT THE LAYOUT FOUND" and adds a
+    // right-ranged "N of M rules" count across the same flex:1 spacer the
+    // header (buildHeader) uses for its own freshness stamp. N counts the
+    // rules SHOWN expanded — every rule that found something, plus the
+    // cycle check even when it found nothing (13 §8.12's G-01 example) — out
+    // of M, the total fact rules. The rest collapse into one disclosure.
     var head = h('div', 'dxg-rail-head');
-    head.appendChild(h('h3', 'dxg-rail-title', 'Gaps in this view'));
+    head.appendChild(h('h3', 'dxg-rail-title', 'WHAT THE LAYOUT FOUND'));
 
     var i;
+    var facts = scene.gaps.facts || [];
+    var visible = [];
+    var collapsed = [];
+    for (i = 0; i < facts.length; i++) {
+      var f = facts[i];
+      var empty = !Array.isArray(f.node_ids) || f.node_ids.length === 0;
+      if (empty && f.rule !== 'cycle') {
+        collapsed.push(f);
+      } else {
+        visible.push(f);
+      }
+    }
+
     var hints = h('div', 'dxg-hints');
     hints.setAttribute('data-dxg-hints', '');
 
@@ -3373,10 +3667,70 @@
       }
     });
     head.appendChild(jump);
+
+    // "N of M facts" (13 §4.9 / §6, RETRY fix list item 17), hard right
+    // across the flex:1 spacer its own margin-left:auto opens — appended
+    // last so it lands rightmost, with the heuristics jump button just to
+    // its left. Says "facts", not the board's bare "rules": the heuristics
+    // jump button right beside it reads "heuristics (N)", and a reader
+    // scanning both needs to see at a glance which half of §8.11's
+    // fact/guess split each number belongs to.
+    var count = h('span', 'dxg-rail-count', visible.length + ' of ' + facts.length + ' facts');
+    count.setAttribute('data-dxg-rail-count', '');
+    head.appendChild(count);
     el.gaps.appendChild(head);
 
-    for (i = 0; i < scene.gaps.facts.length; i++) {
-      el.gaps.appendChild(ruleBlock(scene.gaps.facts[i], false));
+    // 13 §6 — "Readings the layout can make on its own. They are
+    // observations about this picture, not findings about the corpus." Two
+    // copies, one wording change, both always in the DOM and toggled by
+    // CSS at the mobile breakpoint (R-I.0: the picture that sentence
+    // describes really is not drawn there, so the one word that changes is
+    // "picture" -> "relationships" — approved on the two mobile boards only,
+    // 13 §2's "Every note" section).
+    el.gaps.appendChild(
+      h(
+        'p',
+        'dxg-rail-intro dxg-rail-intro--desktop',
+        'Readings the layout can make on its own. They are observations about this picture, not findings about the corpus.'
+      )
+    );
+    el.gaps.appendChild(
+      h(
+        'p',
+        'dxg-rail-intro dxg-rail-intro--mobile',
+        'Readings the layout can make on its own. They are observations about these relationships, not findings about the corpus.'
+      )
+    );
+
+    for (i = 0; i < visible.length; i++) {
+      el.gaps.appendChild(ruleBlock(visible[i], false));
+    }
+
+    // 13 §4.9 / §8.12 — the rest collapse into one disclosure, closed by
+    // default; expanded, each is the same dimmed .dxg-rule block a fact
+    // always was. A rule that found nothing still renders when opened —
+    // "an empty cycle block is a result, not a blank" applies to every one
+    // of them, not only the one the board keeps expanded.
+    if (collapsed.length > 0) {
+      var tailBody = h('div', 'dxg-rule-tail-body');
+      tailBody.hidden = true;
+      for (i = 0; i < collapsed.length; i++) {
+        tailBody.appendChild(ruleBlock(collapsed[i], false));
+      }
+      var tail = h('button', 'dxg-rail-jump dxg-rule-tail');
+      tail.type = 'button';
+      tail.setAttribute('aria-expanded', 'false');
+      tail.appendChild(tailChevronIcon());
+      tail.appendChild(
+        document.createTextNode(collapsed.length + (collapsed.length === 1 ? ' rule found nothing' : ' rules found nothing'))
+      );
+      tail.addEventListener('click', function () {
+        var open = tailBody.hidden;
+        tailBody.hidden = !open;
+        tail.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      el.gaps.appendChild(tail);
+      el.gaps.appendChild(tailBody);
     }
 
     hints.appendChild(
@@ -3402,18 +3756,25 @@
 
   function ruleBlock(finding, isHint) {
     var ids = Array.isArray(finding.node_ids) ? finding.node_ids : [];
+    var phrase = RULE_LABELS[finding.rule] || finding.rule;
     var block = h('div', 'dxg-rule' + (ids.length === 0 ? ' dxg-rule--empty' : ''));
     block.setAttribute('data-dxg-rule', finding.rule);
     block.setAttribute('data-dxg-kind', finding.kind);
 
     var head = h('div', 'dxg-rule-head');
-    head.appendChild(h('span', 'dxg-rule-name', finding.rule));
-    head.appendChild(h('span', 'dxg-rule-phrase', RULE_LABELS[finding.rule] || ''));
+    // "Reading title" left, "Rule id" right-ranged (13 §4.9) — the reverse
+    // of this file's original mono-id-then-phrase order, achieved by
+    // swapping which node carries which class rather than by CSS order, so
+    // a reader tabbing or reading with a screen reader still meets the
+    // title before the id.
+    head.appendChild(h('span', 'dxg-rule-phrase', ruleTitle(finding, phrase)));
     if (isHint) {
       head.appendChild(h('span', 'dxg-hint-label', 'guess'));
     }
+    head.appendChild(h('span', 'dxg-rule-name', finding.rule));
     head.appendChild(h('span', 'dxg-rule-count', ids.length));
     block.appendChild(head);
+    block.appendChild(h('p', 'dxg-rule-body', ruleBody(finding)));
 
     if (ids.length > 0) {
       var list = h('ul', 'dxg-rule-ids');
@@ -3477,15 +3838,351 @@
   // project-wide can be the most isolated thing inside one module — and a
   // panel showing only one of them would make the other look like a bug.
 
-  function detailRow(rows, label, value) {
-    rows.appendChild(h('dt', '', label));
-    var dd = h('dd');
+  // mobile is 13 §4.12's own set: only STATUS and IN A CYCLE survive the
+  // selected-claim block at 390 ("MODULE, FACET, GOVERNED BY and DEGREE
+  // HERE are dropped per the notes"). Marked with an attribute rather than
+  // filtered out of the row list, so the mobile CSS rule (M9) hides exactly
+  // these two and nothing about the row's construction or order has to
+  // know which width is looking at it.
+  function detailRow(rows, label, value, ddClass, mobile) {
+    var dt = h('dt', '', label);
+    var dd = h('dd', ddClass || '');
+    if (mobile) {
+      dt.setAttribute('data-dxg-mobile-row', '');
+      dd.setAttribute('data-dxg-mobile-row', '');
+    }
     if (value && value.nodeType) {
       dd.appendChild(value);
     } else {
       dd.textContent = str(value);
     }
+    rows.appendChild(dt);
     rows.appendChild(dd);
+  }
+
+  // blockedByCount reads the one number 13's rail needs that the payload
+  // does not hand over pre-computed: how many unready dependencies this
+  // claim's own readiness assessment names. internal/readiness's
+  // dependency_conditions is exactly that list — one entry per blocking
+  // condition — so its length is "blocked by N".
+  function blockedByCount(claim) {
+    var r = claim && claim.readiness;
+    var list = r && Array.isArray(r.dependency_conditions) ? r.dependency_conditions : null;
+    return list ? list.length : 0;
+  }
+
+  // statusDisplay renders the STATUS row's text AND its colour together,
+  // because they are computed from the same two facts (13 §4.7, D10). D10's
+  // ruling: wherever the phrase "blocked by N" appears it is --color-blocked
+  // — engine --warn — even where the status itself is "locked", which is
+  // --color-locked (--accent) on its own. A bare "Locked" with no blocker
+  // keeps the locked colour; "Draft" takes the draft colour; anything else
+  // is left in --ink rather than guessed at.
+  function statusDisplay(claim) {
+    var status = str(claim.status);
+    var label = status === '' ? 'unknown' : status.charAt(0).toUpperCase() + status.slice(1);
+    var n = blockedByCount(claim);
+    if (n > 0) {
+      return { text: label + ' · blocked by ' + n, cls: 'dxg-v-blocked' };
+    }
+    if (status === 'locked') {
+      return { text: label, cls: 'dxg-v-locked' };
+    }
+    if (status === 'draft') {
+      return { text: label, cls: 'dxg-v-draft' };
+    }
+    if (status === 'blocked') {
+      return { text: label, cls: 'dxg-v-blocked' };
+    }
+    return { text: label, cls: '' };
+  }
+
+  // railStatusDisplay is statusDisplay for exactly one caller — the rail's
+  // own STATUS row (13 §4.7, node 3WE-0: "Locked · blocked by 2" painted
+  // --color-locked). RETRY fix list item 5 (coordinator-ruled): the rail
+  // reserves --color-blocked for the positive IN A CYCLE answer alone (13
+  // §8.2) and keeps --color-locked wherever the status itself is "locked",
+  // blockers or not. statusDisplay's own --color-blocked-for-"blocked by N"
+  // reading (D10) stays live for the ONE place D10 is actually about — the
+  // mobile "AROUND THIS CLAIM" edge rows (13 §4.13, node APB-0) via
+  // neighborRow below — so that call site is untouched. See the D10-vs-fix
+  // list dispute recorded in learnings/inbox/L9.md.
+  function railStatusDisplay(claim) {
+    var d = statusDisplay(claim);
+    if (str(claim.status) === 'locked') {
+      return { text: d.text, cls: 'dxg-v-locked' };
+    }
+    return d;
+  }
+
+  // humaniseSlug turns a hyphen/underscore id fragment into the rail's prose
+  // form — 13 §6: "permission-readiness" -> "Permission readiness",
+  // "contract" -> "Contract". Sentence case, not title case: only the first
+  // letter is capitalised, matching the board's MODULE/FACET row values.
+  function humaniseSlug(s) {
+    var text = str(s).replace(/[-_]+/g, ' ').trim();
+    if (text === '') {
+      return text;
+    }
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  // titleCaseSlug is humaniseSlug's Title Case sibling, for the one place
+  // that wants it — the legend's facet names (13 §4.5/§6: "contract" ->
+  // "Contract", "design-system" -> "Design System").
+  function titleCaseSlug(s) {
+    var text = str(s).replace(/[-_]+/g, ' ').trim();
+    if (text === '') {
+      return text;
+    }
+    return text.replace(/(^|\s)([a-z])/g, function (m, sep, ch) {
+      return sep + ch.toUpperCase();
+    });
+  }
+
+  // governedByValue renders the governing claim's TITLE, not its id, as one
+  // or more clickable --color-accent (engine --link) values — 13 §4.7's
+  // "Value, link" row. governorsOf already answers the direction question
+  // (claim -> governor); this only adds the title lookup and the jump.
+  function governedByValue(id) {
+    var ids = governorsOf(id);
+    if (ids.length === 0) {
+      return 'nothing';
+    }
+    var wrap = h('span', 'dxg-detail-links');
+    for (var i = 0; i < ids.length; i++) {
+      if (i > 0) {
+        wrap.appendChild(document.createTextNode(', '));
+      }
+      wrap.appendChild(governorLink(ids[i]));
+    }
+    return wrap;
+  }
+
+  function governorLink(gid) {
+    var gclaim = claimById(gid);
+    var label = gclaim && str(gclaim.title) !== '' ? str(gclaim.title) : gid;
+    var link = h('button', 'dxg-detail-link', label);
+    link.type = 'button';
+    link.title = gid;
+    link.addEventListener('click', function () {
+      jumpTo(gid);
+    });
+    return link;
+  }
+
+  // cycleDisplay is the IN A CYCLE row's text and colour together, same
+  // reasoning as statusDisplay: 13 §8.2/§8.3 give "Yes" and "Self-edge" the
+  // same --color-blocked a positive finding always takes, because muted is
+  // reserved for the quiet no (13 §4.7's own rule, restated for this one
+  // positive/negative pair).
+  function cycleDisplay(id) {
+    if (scene.cycleIds[id]) {
+      return { text: 'Yes', cls: 'dxg-v-blocked' };
+    }
+    if (scene.selfIds[id]) {
+      return { text: 'Self-edge', cls: 'dxg-v-blocked' };
+    }
+    return { text: 'No', cls: 'dxg-v-muted' };
+  }
+
+  // groupDisplayTitle names a collapsed group the way the SELECTED block
+  // wants a title: the thing it stands for, in words, not its raw id.
+  function groupDisplayTitle(node) {
+    var kind = str(node.group_type) || 'group';
+    return 'Collapsed ' + kind + ' · ' + str(node.group_name || node.id);
+  }
+
+  // backArrowIcon — 13 §4.8's back-link glyph, 14x14, currentColor so it
+  // takes whatever the row's own colour is. A constant string, same rule as
+  // EDGE_SAMPLES / MARK_SAMPLES.
+  function backArrowIcon() {
+    var span = h('span', 'dxg-detail-back-arrow');
+    span.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="14" height="14">' +
+      '<path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>';
+    return span;
+  }
+
+  // tailChevronIcon — the collapsed-tail disclosure's chevron (13 §4.9),
+  // 13x13, currentColor. An appended SVG rather than a CSS mask/data-URI:
+  // a standalone SVG document (which is what a data: URI mask holds) is
+  // XML and needs its xmlns spelled out to be valid, and that string reads
+  // as a network reference to this repo's offline scanner
+  // (TestNoNetworkReferencesAnywhereInEngine) even though nothing is ever
+  // fetched. innerHTML in an HTML document needs no such declaration — the
+  // same reason every other icon in this file (EDGE_SAMPLES, MARK_SAMPLES,
+  // backArrowIcon) is built this way. .dxg-rule-tail[aria-expanded="true"]
+  // rotates the wrapping span with a CSS transform instead.
+  function tailChevronIcon() {
+    var span = h('span', 'dxg-rule-tail-icon');
+    span.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="13" height="13">' +
+      '<path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>';
+    return span;
+  }
+
+  // ------------------------------------------------------------------
+  // AROUND THIS CLAIM — the mobile substitute for the canvas
+  // ------------------------------------------------------------------
+  //
+  // 13's own argument (§2 "The graph at 390 — the decision"): a node-link
+  // drawing reduced to 358px has labels no one can read, so mobile abandons
+  // the picture and reads the same one-hop neighbourhood as three grouped
+  // lists instead — same edges (payload.edges, filtered by the SAME
+  // relation toggles the desktop chips and the control bar's Relationships
+  // group already carry), same facet dots, same marks, just arranged as
+  // rows. Built unconditionally and hidden above 520px by CSS (M1-M3),
+  // never rebuilt for the mobile width alone: R-I.0's "same content ...
+  // only the arrangement moves" is easiest to keep true by building it once.
+
+  // neighborIds answers "who is one hop out, in this direction, under this
+  // relation" straight off the payload's own edges — not the scoped/
+  // aggregated drawing set, because mobile draws no picture to agree with.
+  function neighborIds(id, type, dir) {
+    var out = [];
+    for (var i = 0; i < payload.edges.length; i++) {
+      var e = payload.edges[i];
+      if (str(e.type) !== type) {
+        continue;
+      }
+      if ((dir === 'out' || dir === 'both') && str(e.from) === id) {
+        out.push(str(e.to));
+      } else if ((dir === 'in' || dir === 'both') && str(e.to) === id) {
+        out.push(str(e.from));
+      }
+    }
+    return out;
+  }
+
+  // neighborDotSVG mirrors the canvas's own five-variant grammar (13 §4.13)
+  // off whatever the current SCENE already knows about the target — a
+  // ghost if scope leaves it out-of-scope (D9: hollow, dashed, --faint,
+  // never a facet hue), a collapsed module if granularity folded it away,
+  // an open-thread halo, or a plain facet dot. Two colours per mark, so
+  // both are explicit var()s rather than currentColor, like MARK_SAMPLES.
+  function neighborDotSVG(claim, repNode) {
+    if (repNode && repNode.kind === 'ghost') {
+      return (
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+        '<circle cx="8" cy="8" r="4.2" fill="none" stroke="var(--faint)" stroke-width="1.8" stroke-dasharray="2 2"/>' +
+        '</svg>'
+      );
+    }
+    if (repNode && repNode.kind === 'group') {
+      return (
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+        '<circle cx="8" cy="8" r="6.4" fill="var(--dxg-facet-other)"/>' +
+        '</svg>'
+      );
+    }
+    var c = core();
+    var slot = claim && c && payload ? c.facetSlot(payload.groups.facets, str(claim.facet)) : -1;
+    var fill = slot >= 0 ? 'var(--dxg-facet-' + (slot + 1) + ')' : 'var(--dxg-facet-other)';
+    if (claim && num(claim.open_comments) > 0) {
+      return (
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+        '<circle cx="8" cy="8" r="7.1" fill="none" stroke="var(--dxg-halo)" stroke-width="1.6"/>' +
+        '<circle cx="8" cy="8" r="4.2" fill="' + fill + '"/>' +
+        '</svg>'
+      );
+    }
+    return (
+      '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" width="16" height="16">' +
+      '<circle cx="8" cy="8" r="5" fill="' + fill + '"/>' +
+      '</svg>'
+    );
+  }
+
+  // neighborRow is one edge-group row (13 §4.13): a dot, the target claim's
+  // own title, then "facet · status" — "facet · status · blocked by N"
+  // where D10 applies. Clicking it is the same jump every other rail id
+  // already offers, not a navigation to a new document.
+  function neighborRow(targetId) {
+    var claim = claimById(targetId);
+    var repId = scene && scene.repByClaim ? str(scene.repByClaim[targetId]) : '';
+    var repNode = scene ? scene.byId[targetId] || (repId !== '' ? scene.byId[repId] : null) : null;
+
+    var row = h('button', 'dxg-neighbor-row');
+    row.type = 'button';
+    row.addEventListener('click', function () {
+      jumpTo(targetId);
+    });
+
+    var dot = h('span', 'dxg-neighbor-dot');
+    dot.innerHTML = neighborDotSVG(claim, repNode);
+    row.appendChild(dot);
+
+    var stack = h('span', 'dxg-neighbor-text');
+    stack.appendChild(h('span', 'dxg-neighbor-title', claim && str(claim.title) !== '' ? str(claim.title) : targetId));
+    if (claim) {
+      var status = statusDisplay(claim);
+      var facetText = str(claim.facet) || 'no facet';
+      var sub = h('span', 'dxg-neighbor-sub' + (status.cls ? ' ' + status.cls : ''), facetText + ' · ' + status.text);
+      stack.appendChild(sub);
+    }
+    row.appendChild(stack);
+    return row;
+  }
+
+  // neighborGroup is one edge-group band: a heading, a count, its rows.
+  function neighborGroup(label, ids) {
+    var band = h('div', 'dxg-neighbor-group');
+    var head = h('div', 'dxg-neighbor-head');
+    head.appendChild(h('span', 'dxg-neighbor-heading', label));
+    head.appendChild(h('span', 'dxg-neighbor-count', String(ids.length)));
+    band.appendChild(head);
+    for (var i = 0; i < ids.length; i++) {
+      band.appendChild(neighborRow(ids[i]));
+    }
+    return band;
+  }
+
+  // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
+  // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
+  // dropped; it leaves the rail and becomes its own edge group, where it
+  // always belonged"), then SAYS THE SAME THING only while `mirrors` is
+  // toggled on — "so that group is absent", exactly what the canvas does
+  // with the same toggle.
+  function buildNeighborhood(id, claim) {
+    var wrap = h('div', 'dxg-neighborhood');
+    wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
+    wrap.appendChild(
+      h(
+        'p',
+        'dxg-neighborhood-intro',
+        'One hop out, in both directions. The picture is not drawn at this width — these are the same edges, read as lines.'
+      )
+    );
+
+    var typesOn = state ? state.types : [];
+    var plan = [
+      ['governed_by', 'out', 'GOVERNED BY'],
+      ['rests_on', 'out', 'DEPENDS ON'],
+      ['rests_on', 'in', 'DEPENDED ON BY'],
+      ['mirrors', 'both', 'SAYS THE SAME THING']
+    ];
+    var any = false;
+    for (var i = 0; i < plan.length; i++) {
+      var type = plan[i][0];
+      if (typesOn.indexOf(type) < 0) {
+        continue;
+      }
+      var ids = neighborIds(id, type, plan[i][1]);
+      if (ids.length === 0) {
+        continue;
+      }
+      any = true;
+      wrap.appendChild(neighborGroup(plan[i][2], ids));
+    }
+    if (!any) {
+      wrap.appendChild(h('p', 'dxg-detail-empty', 'nothing one hop out, in the relations shown'));
+    }
+    return wrap;
   }
 
   function renderDetail() {
@@ -3505,16 +4202,35 @@
     var claim = claimById(id);
     var c = core();
 
-    el.detail.appendChild(h('p', 'dxg-detail-id', id));
+    // 13 §4.6 — SELECTED eyebrow, the claim's own TITLE (bold), then its
+    // mono id/slug underneath. Every branch below gets one, including the
+    // three kinds of node that are not an ordinary claim: a rail that only
+    // sometimes says what is selected reads as broken the rest of the time.
+    var selected = h('div', 'dxg-detail-selected');
+    selected.appendChild(h('p', 'dxg-detail-eyebrow', 'SELECTED'));
+    var titleText = '';
+    if (claim) {
+      titleText = str(claim.title);
+    } else if (node && node.kind === 'group') {
+      titleText = groupDisplayTitle(node);
+    } else if (node && node.kind === 'ghost') {
+      titleText = 'Outside the current scope';
+    }
+    selected.appendChild(h('h3', 'dxg-detail-title', titleText === '' ? id : titleText));
+    selected.appendChild(h('p', 'dxg-detail-id', id));
+    el.detail.appendChild(selected);
+
+    var props = h('div', 'dxg-detail-props');
     var rows = h('dl', 'dxg-detail-rows');
+    props.appendChild(rows);
+    el.detail.appendChild(props);
 
     if (node && node.kind === 'group') {
       detailRow(rows, 'kind', 'collapsed ' + str(node.group_type) + ' group');
       detailRow(rows, 'members', num(node.size) + ' claims');
       detailRow(rows, 'facets here', facetNamesOf(node).join(', ') || 'none');
-      detailRow(rows, 'degree (view)', degreeValue(id));
+      detailRow(rows, 'degree here', degreeValue(id));
       detailRow(rows, 'in a cycle', coversAny(node, scene.cycleIds) ? 'yes — a member is' : 'no');
-      el.detail.appendChild(rows);
       var expand = h('button', 'dxg-detail-open', 'expand this group');
       expand.type = 'button';
       expand.addEventListener('click', function () {
@@ -3527,7 +4243,6 @@
     if (node && node.kind === 'ghost') {
       detailRow(rows, 'kind', 'outside the current scope');
       detailRow(rows, 'claim', id.slice(c ? c.GHOST_PREFIX.length : 0));
-      el.detail.appendChild(rows);
       return;
     }
 
@@ -3543,23 +4258,25 @@
         detailRow(rows, 'drawn here', 'no — this view draws its claims individually');
         detailRow(rows, 'members', groupMemberCount(id) + ' claims in scope');
       }
-      el.detail.appendChild(rows);
       return;
     }
 
-    // Facet BY NAME, never by slot number and never by colour.
+    // 13 §4.7, coordinator RETRY ruling (2): the rail's property rows are
+    // EXACTLY the six the board names, human labels, plus the §8.15 TRACKS
+    // row where a project declares tracks. D4's original "keep every engine
+    // row below the six" reading is superseded by this ruling — see
+    // learnings/inbox/L9.md for the dispute record (D4 vs the RETRY fix
+    // list) kept for the coordinator, not re-litigated here.
+    detailRow(rows, 'module', str(claim.module) === '' ? 'no module' : humaniseSlug(str(claim.module)));
     var facet = str(claim.facet);
-    detailRow(rows, 'facet', facet === '' ? 'no facet' : facet);
-    detailRow(rows, 'module', str(claim.module) === '' ? 'no module' : str(claim.module));
-    detailRow(rows, 'status', str(claim.status) || 'unknown');
-    detailRow(rows, 'kind', str(claim.kind) || 'unknown');
-    detailRow(rows, 'build role', str(claim.build_role) === '' ? 'none set' : str(claim.build_role));
-    detailRow(rows, 'degree (view)', degreeValue(id));
-    detailRow(
-      rows,
-      'degree (project)',
-      num(claim.in_degree) + num(claim.out_degree) + ' — ' + num(claim.in_degree) + ' in, ' + num(claim.out_degree) + ' out'
-    );
+    detailRow(rows, 'facet', facet === '' ? 'no facet' : humaniseSlug(facet));
+    var status = railStatusDisplay(claim);
+    detailRow(rows, 'status', status.text, status.cls, true);
+    detailRow(rows, 'governed by', governedByValue(id));
+    detailRow(rows, 'degree here', degreeValue(id));
+    var cycle = cycleDisplay(id);
+    detailRow(rows, 'in a cycle', cycle.text, cycle.cls, true);
+
     // Tracks BY NAME AND ROLE, in words — the third channel on the owns/cites
     // distinction, after the canvas marker and the legend, and the only one
     // that works with no track selected and no marker drawn. It is also the
@@ -3569,21 +4286,26 @@
     //
     // Omitted entirely for a claim in no track, like every other row here is
     // omitted for a node kind that cannot answer it: a project without tracks
-    // gets the panel it had before the axis existed.
+    // gets the panel it had before the axis existed. 13 §8.15.
     if (Array.isArray(claim.tracks) && claim.tracks.length > 0) {
       detailRow(rows, 'tracks', trackMembershipPhrase(claim));
     }
-    detailRow(rows, 'review pending', claim.review_pending === true ? 'yes' : 'no');
-    detailRow(rows, 'open threads', num(claim.open_comments));
-    detailRow(rows, 'governed by', governorsOf(id).join(', ') || 'nothing');
-    detailRow(rows, 'governs', governedOf(id).join(', ') || 'nothing');
-    detailRow(rows, 'in a cycle', scene.cycleIds[id] ? 'yes' : scene.selfIds[id] ? 'self-edge' : 'no');
-    el.detail.appendChild(rows);
 
-    // The one place this file assigns location.hash. It fires hashchange,
-    // which is exactly what is wanted here: the reading view's existing
-    // deep-link scroll-and-highlight path does the rest with no new code.
-    var open = h('a', 'dxg-detail-open', 'open this claim in the reading view');
+    // 13 §4.13 / M1-M3 — AROUND THIS CLAIM, the mobile substitute for the
+    // canvas (R-H.0's argued exception, D12). Always built — R-I.0's "same
+    // content, same vocabulary, same order; only the arrangement moves" —
+    // and hidden above the 520px breakpoint by CSS, the same pattern the
+    // two intro-prose copies above already use.
+    el.detail.appendChild(buildNeighborhood(id, claim));
+
+    // 13 §4.8 / D5 — "Back to this claim in the reading view", not "open
+    // this claim in the reading view". The one place this file assigns
+    // location.hash: it fires hashchange, which is exactly what is wanted
+    // here, since the reading view's existing deep-link scroll-and-highlight
+    // path does the rest with no new code.
+    var open = h('a', 'dxg-detail-open dxg-detail-back');
+    open.appendChild(backArrowIcon());
+    open.appendChild(document.createTextNode('Back to this claim in the reading view'));
     open.href = '#' + id + HASH_MARK + HASH_PREFIX + c.encodeState(state);
     open.setAttribute('data-dxg-open-claim', id);
     open.addEventListener('click', function (e) {
@@ -3637,7 +4359,10 @@
     if (d.scale === 'absent') {
       return 'not drawn in this view';
     }
-    var text = d.total + ' — ' + d.in + ' in, ' + d.out + ' out';
+    // 13 §6 / RETRY fix list item 7: "4 in · 3 out", not "15 — 13 in, 2
+    // out" — the rail states the split, not the sum the split already
+    // implies.
+    var text = d.in + ' in · ' + d.out + ' out';
     if (d.scale === 'node') {
       return text;
     }

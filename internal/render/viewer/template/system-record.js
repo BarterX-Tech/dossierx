@@ -663,26 +663,21 @@
     });
   }
 
-  function enhanceGraphLabels() {
-    var pane = document.getElementById('dxgPane');
-    if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-    var names = { rests_on: 'Rests On', mirrors: 'Mirrors', governed_by: 'Governed By' };
-    pane.querySelectorAll('[data-dxg-type]').forEach(function (button) {
-      var next = names[button.dataset.dxgType];
-      if (next && button.textContent !== next) { button.textContent = next; }
-    });
-    pane.querySelectorAll('[data-dxg-edge]').forEach(function (item) {
-      var name = item.querySelector('.dxg-legend-name');
-      var next = names[item.dataset.dxgEdge];
-      if (name && next && name.textContent !== next) { name.textContent = next; }
-    });
-    pane.querySelectorAll('.dxg-ctl-label').forEach(function (label) {
-      if (label.textContent.trim().toLowerCase() === 'edge types') { label.textContent = 'Relationships'; }
-    });
-    pane.querySelectorAll('.dxg-legend-group').forEach(function (label) {
-      if (label.textContent.trim().toLowerCase() === 'edges') { label.textContent = 'Relationships'; }
-    });
-  }
+  // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
+  // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
+  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
+  // "edge types" / "edges" headings to "Relationships" — a fixup for a
+  // pre-13 build of the pane that had no display-label map of its own.
+  // graph-ui.js now builds every one of those labels correctly at the
+  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
+  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
+  // legend group), and this shim was firing on every rebuild and silently
+  // reverting all of it back to the pre-13 wording — removed here rather
+  // than left to fight graph-ui.js on every interaction. Found via
+  // graph_redrive_test.go/graph_pane_test.go passing while the rendered
+  // page itself still showed the old strings; see learnings/inbox/L9.md.
+  // The #dxgPane MutationObserver that called this on every pane mutation
+  // is removed below it, for the same reason.
 
   var running = false;
   function enhance() {
@@ -707,7 +702,6 @@
     // built. renderToc() must still run after syncNavigation(), which is
     // what makes activeFacet() see the right module/facet's hidden state.
     enhanceTimestamp();
-    enhanceGraphLabels();
     running = false;
   }
 
@@ -718,11 +712,6 @@
     scheduled = true;
     requestAnimationFrame(function () { scheduled = false; enhance(); });
   }).observe(layout, { childList: true, subtree: true }); }
-  var graphPane = document.getElementById('dxgPane');
-  if (graphPane) {
-    new MutationObserver(function () { requestAnimationFrame(enhanceGraphLabels); })
-      .observe(graphPane, { childList: true, subtree: true });
-  }
   document.addEventListener('click', function (event) {
     // Keep the selected tab's group visible when navigation itself changes,
     // but respect a reader explicitly closing that group. Running
