@@ -272,6 +272,57 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		}
 	})
 
+	// The guard above places the print block by BYTE OFFSET, which says nothing
+	// about how deeply nested it is. Integration of wave A landed a style.css
+	// whose last four `}` had been eaten by three successive merges: the file
+	// parsed (CSS auto-closes unterminated blocks at EOF) and every offset guard
+	// here still passed, but `@media print` had become a nested at-rule inside
+	// `.claim-footer-chip` inside `@media (pointer: coarse)` inside `@media
+	// (max-width: 520px)`, so none of its rules reached a desktop printed page —
+	// viewer-tests/reveal_test.go's two print cases were the only thing that saw
+	// it. Braces are what the cascade is actually built out of, so they are
+	// pinned here directly: the file balances, and the print block opens at
+	// depth 0.
+	t.Run("BracesBalanceAndPrintIsTopLevel", func(t *testing.T) {
+		printAt := strings.Index(css, "@media print")
+		if printAt < 0 {
+			t.Fatal("no @media print block in style.css")
+		}
+		depth, minDepth, atPrint := 0, 0, -1
+		for i := 0; i < len(css); i++ {
+			if i == printAt {
+				atPrint = depth
+			}
+			switch css[i] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth < minDepth {
+					minDepth = depth
+				}
+			}
+		}
+		if minDepth < 0 {
+			t.Errorf("style.css closes %d more block(s) than it opens at its worst "+
+				"point; a stray `}` ends a block early and every rule after it "+
+				"changes meaning", -minDepth)
+		}
+		if depth != 0 {
+			t.Errorf("style.css ends with %d unclosed block(s). The CSS parser will "+
+				"close them for you at EOF, which is why this is invisible to every "+
+				"other guard in this file — but everything written after the missing "+
+				"`}` is nested inside whatever was left open, and applies only when "+
+				"that block's condition does.", depth)
+		}
+		if atPrint != 0 {
+			t.Errorf("the `@media print` block opens at brace depth %d, want 0. "+
+				"A nested @media print only matches when its enclosing conditions "+
+				"do as well, so the printed page silently loses every rule in it.",
+				atPrint)
+		}
+	})
+
 	t.Run("PrintPinsLightColorSchemeInItsOwnRoot", func(t *testing.T) {
 		printAt := strings.Index(css, "@media print")
 		if printAt < 0 {
@@ -332,10 +383,27 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// L8 (third attempt; G9 count re-pin) drops .status-strip out of this
 		// set: 02 §4.10 "Radius" and 03 §4.5 make the collapsed banner a flush
 		// band with only a bottom hairline, so `border-radius: var(--radius)`
-		// left .status-strip (and the redundant .status-strip--open override,
-		// see learnings/deadcode/L8.md). The 520px inset-card form keeps its own
-		// literal 10px, never a --radius consumer. Merged count re-pinned by the
-		// coordinator from the merged tree (L2 +1, L8 -2 against the pilot's 9).
+		// left .status-strip. The 520px inset-card form keeps its own literal
+		// 10px, never a --radius consumer.
+		//
+		// The merged-tree arithmetic, recounted at integration by running this
+		// same regexp over `git show <merge>:…/style.css` for each wave-A merge
+		// (the previous comment here said "L2 +1, L8 -2 against the pilot's 9",
+		// which sums to 8 and never matched the pinned 9):
+		//
+		//   pilot 6b04cd9 (L3)  9
+		//   + L2  ea529d8      +1  #dxgOpen/.sec-tab row, --radius-sm -> --radius
+		//   + L4  bb760a9      +0  (its one new `var(--radius-pill, 999px)` is a
+		//                           different token and this regexp excludes it)
+		//   + L6  0410ceb      +0
+		//   + L8  91fa05f      -1  .status-strip's base rule
+		//   = 9
+		//
+		// L8's own lane notes say -2 because its earlier attempt also deleted a
+		// `.status-strip--open` top-radius override; that override was already
+		// absent from the integration tree before the L8 merge landed, so only
+		// one occurrence was left for the merge to remove. -2 is true of the
+		// lane's own base, not of this file.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
 		if n != 9 {
 			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
