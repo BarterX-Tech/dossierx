@@ -5,30 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.17] - 2026-09-19
 
 ### Changed
 
-- Fit the System Record viewer chrome in place: module headers read catalog
-  lock counts (so soft-mounted corpora no longer show 0 of 0), the status strip
-  groups unique blockers with severity chips and stays collapsed unless
-  Critical or Needs you is non-zero, implementation checks live inside the
-  claim and stay closed when ready, pill words are sentence case, and an
-  in-page System / Light / Dark control sets `html[data-theme]` without letting
-  dark values reach print.
-- Viewer chrome uses Lucide icons (lock, navigation, theme, comments, nav
-  chevrons) instead of mixed emoji and CSS triangles. The evidence-footer
-  chevron stays the CSS border triangle. Light / Dark is the built-in reader
-  choice (System follows the OS when no explicit choice is stored);
-  project-defined themes and presets are removed.
-  Legacy `viewer.theme` configuration now fails with a migration message,
-  rather than being silently ignored.
+- The System Record viewer uses a new default look: Inter, Source Serif 4, and
+  IBM Plex Mono; Lucide chrome in place of mixed emoji and CSS triangles; and
+  a fitted reading view, Issues screen, graph pane, focus mode, and mobile
+  navigation. Module headers read catalog lock counts (soft-mounted corpora
+  no longer show 0 of 0). The status strip groups unique blockers with
+  severity chips and stays collapsed unless Critical or Needs you is
+  non-zero. Implementation checks live inside the claim and stay closed when
+  ready. Pill words are sentence case. An in-page System / Light / Dark
+  control sets `html[data-theme]` without letting dark values reach print;
+  System follows the OS when no explicit choice is stored.
+
+### Removed
+
+- Project-defined viewer themes are gone. `viewer.theme`, the `dossierx theme`
+  CLI, the `dossierx-theme` skill, and theme presets no longer exist. A
+  project that still sets `viewer.theme` fails `dossierx check` with a
+  migration message instead of rendering a custom palette. Light / Dark /
+  System is the built-in reader choice only.
+
+### Maintenance
+
 - Regenerate the committed fixture viewers and
-  `testdata/render-across-releases.golden.txt` for the design-revamp default
-  look. The deprecated theme-preset fixture and theme-parity freeze are
-  removed with the custom-theme feature. A follow-up keeps the fenced-code
-  pill reset after the live `code` rule, restores the Live freshness badge,
-  and avoids an SVG namespace URI in the footer chevron.
+  `testdata/render-across-releases.golden.txt` against v0.7.16 for the
+  design-revamp default look. The theme-preset fixture is removed with the
+  custom-theme feature (`fixture-theme-preset` was 4120102 bytes in v0.7.16).
+  Byte sizes move as follows: `fixture-basic` 4116665 -> 1175554;
+  `fixture-conformance-v1` 544528 -> 1229699; `fixture-graph-demo` 4264431 ->
+  1438165; `fixture-portability` 4119076 -> 1180057; `fixture-theme-flat`
+  4158701 -> 4818961. This range does not change engine graph, readiness,
+  lock, or build-order behavior.
+
+Existing projects should rerun `dossierx check` after upgrading to regenerate
+their self-contained viewer. Projects that still declare `viewer.theme` must
+remove that key before `check` will succeed.
 
 ## [0.7.16] - 2026-09-13
 

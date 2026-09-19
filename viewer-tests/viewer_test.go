@@ -61,7 +61,10 @@ func requireAll(t *testing.T, ctx context.Context, what, prelude string, clauses
 	b.WriteString(prelude)
 	b.WriteString("\nvar out=[];\n")
 	for _, c := range clauses {
-		name, _ := json.Marshal(c[0])
+		name, err := json.Marshal(c[0])
+		if err != nil {
+			t.Fatalf("json.Marshal clause name %q: %v", c[0], err)
+		}
 		fmt.Fprintf(&b, "try{ if(!(%s)){ out.push(%s); } }catch(e){ out.push(%s+\" threw \"+e.message); }\n",
 			c[1], name, name)
 	}
