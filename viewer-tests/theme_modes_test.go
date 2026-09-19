@@ -3,11 +3,12 @@ package viewertests
 // Built-in reader mode choices remain supported after custom project themes are removed.
 import (
 	"context"
-	"github.com/chromedp/chromedp"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/chromedp/chromedp"
 )
 
 const unthemedConfigYAML = `schema_version: 1

@@ -1,9 +1,10 @@
 package viewertests
 
 import (
-	"github.com/chromedp/chromedp"
 	"strings"
 	"testing"
+
+	"github.com/chromedp/chromedp"
 )
 
 func TestGroup02ContinuousReadingCanvas(t *testing.T) {
