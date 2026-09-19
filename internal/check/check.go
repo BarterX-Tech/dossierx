@@ -121,7 +121,7 @@ type Result struct {
 	ConformanceBlockingChecks  int
 	// ConformanceGateFailed is true only when Run reached and refused at the
 	// optional gate. A populated non-matched report is not enough: an earlier
-	// scan, projection, theme, lint, or ledger failure remains authoritative.
+	// scan, projection, lint, or ledger failure remains authoritative.
 	ConformanceGateFailed bool
 	// CatalogError and RenderError keep ordinary projection failures out of the
 	// conformance input domain. FailurePhase names which pipeline boundary
@@ -176,27 +176,6 @@ type Result struct {
 	// locked build order reports stale"; this is the field that lets it, without
 	// parsing a hint string.
 	BuildOrders []BuildOrderReport
-
-	// ThemeError is the viewer theme's refusal — an unreadable or unstaged
-	// theme file, a font whose bytes are not the format its extension
-	// claims, a font family nothing names, the total font cap — or "" when
-	// the theme is fine or absent. It is a STRING rather than an error
-	// because Result is a value the machine surface projects, and it is a
-	// separate field rather than a lint finding because it is not one: no
-	// claim is at fault and no lint rule was run.
-	//
-	// A non-empty ThemeError clears OK. The viewer this project would render
-	// does not exist, so a status that said "ok" would be describing a
-	// document nobody can produce.
-	ThemeError string
-
-	// ThemeFontCount/ThemeFontBytes are how much of the reader's download
-	// the project's own fonts account for: the number of faces the theme
-	// inlines and their total RAW size (base64 expands it by a third in the
-	// emitted viewer). Zero for a project with no fonts, which is almost all
-	// of them, and zero when ThemeError is set — nothing was accepted.
-	ThemeFontCount int
-	ThemeFontBytes int64
 
 	// GitignoreCheck is the reason the store-gitignored guard gave NO verdict
 	// — "not a work tree", "outside the work tree", "git not available" — and
@@ -387,17 +366,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		rt, resolveErr := config.ResolveTheme(cfg, os.ReadFile)
-		if resolveErr != nil {
-			res.ThemeError = resolveErr.Error()
-			res.ConformanceFailurePhase = "render"
-			return res, fmt.Errorf("render: %w", resolveErr)
-		}
-		res.ThemeFontCount = len(rt.Fonts)
-		for _, f := range rt.Fonts {
-			res.ThemeFontBytes += int64(len(f.Data))
-		}
-		html, renderErr := render.RenderWithThemeBounded(cat, cfg, rt, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
@@ -456,17 +425,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		rt, resolveErr := config.ResolveTheme(cfg, os.ReadFile)
-		if resolveErr != nil {
-			res.ThemeError = resolveErr.Error()
-			res.ConformanceFailurePhase = "render"
-			return res, fmt.Errorf("render: %w", resolveErr)
-		}
-		res.ThemeFontCount = len(rt.Fonts)
-		for _, f := range rt.Fonts {
-			res.ThemeFontBytes += int64(len(f.Data))
-		}
-		html, renderErr := render.RenderWithThemeBounded(cat, cfg, rt, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
@@ -622,12 +581,12 @@ func conformanceOutputBound(kind string, data []byte) error {
 // the same field and decide for themselves.
 //
 // Projects with no embodiment declaration retain the pre-conformance read-only
-// path: lint, theme validation, and ledger reporting, without constructing a
+// path: lint and ledger reporting, without constructing a
 // catalog or viewer. An opted-in project additionally builds those projections
 // in memory so its conformance status, catalog, and viewer can be capacity-
 // checked as one agreeing set.
 func Status(claims []model.Claim, cfg *config.Config) Result {
-	return status(claims, cfg, loadLedgerInputs(cfg), os.ReadFile, conformanceWorktreeReader(cfg))
+	return status(claims, cfg, loadLedgerInputs(cfg), conformanceWorktreeReader(cfg))
 }
 
 // StatusStaged is Status evaluated against the GIT INDEX: the claim registry
@@ -652,24 +611,13 @@ func StatusStaged(sp StagedProject, cfg *config.Config) Result {
 	if sp.Config != nil {
 		cfg = sp.Config
 	}
-	read := sp.readIndex
-	if read == nil {
-		// A StagedProject a caller built by hand (only tests do) has no
-		// index reader. Refusing to fall back to os.ReadFile is the point:
-		// silently grading the theme against the working tree under
-		// --staged is exactly the bypass the rest of this file exists to
-		// close, so the theme rules report that they could not run.
-		read = func(path string) ([]byte, error) {
-			return nil, fmt.Errorf("%s: no git index reader (this StagedProject was not built by Staged)", path)
-		}
-	}
 	readObservations := sp.readConformanceIndex
 	if readObservations == nil {
 		readObservations = func(string) ([]byte, error) {
 			return nil, errors.New("no git index observation reader")
 		}
 	}
-	return status(sp.Claims, cfg, sp.ledger, read, readObservations)
+	return status(sp.Claims, cfg, sp.ledger, readObservations)
 }
 
 // status is the shared body of Status and StatusStaged. The only thing that
@@ -678,7 +626,7 @@ func StatusStaged(sp StagedProject, cfg *config.Config) Result {
 // identical by construction, which is what keeps "what --staged checks" and
 // "what --validate checks" the same set of rules rather than two lists that
 // have to be kept in step by hand.
-func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func(string) ([]byte, error), readObservations conformance.ReadFunc) Result {
+func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObservations conformance.ReadFunc) Result {
 	var res Result
 	var err error
 	res.Conformance, err = conformance.Evaluate(claims, conformanceObservationPath(cfg), readObservations)
@@ -741,8 +689,8 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func
 	}
 	if res.Conformance == nil {
 		// This is the compatibility boundary for projects that did not opt in.
-		// Before structured conformance, read-only checks validated the theme but
-		// never built or encoded the catalog/viewer. Applying the new projection
+		// Read-only checks without structured conformance do not
+		// build or encode the catalog/viewer. Applying the new projection
 		// cap here made an unchanged large client fail --validate even though its
 		// existing catalog was below the cap. Keep the historical path exact.
 		if in.flagsErr != nil {
@@ -751,14 +699,6 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func
 			return res
 		}
 		res.Readiness = readiness.Compute(claims, in.store, in.flags)
-		if rep, themeErr := config.ValidateTheme(cfg, read); themeErr != nil {
-			res.ThemeError = themeErr.Error()
-			res.ConformanceFailurePhase = "render"
-			return res
-		} else {
-			res.ThemeFontCount = rep.FontCount
-			res.ThemeFontBytes = rep.FontBytes
-		}
 		return finishStatus(res, claims, cfg)
 	}
 	cat, buildErr := catalog.Build(claims, cfg)
@@ -782,22 +722,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func
 		return res
 	}
 
-	// Resolve the theme only after the conformance and catalog preflights. That
-	// is the exact ordering used by Run, so a project with two independent
-	// faults gets one stable primary failure through normal check, --validate,
-	// --staged and /api/status. The injected reader remains load-bearing:
-	// --staged answers from the index, never the adjacent working tree.
-	resolvedTheme, themeErr := config.ResolveTheme(cfg, read)
-	if themeErr != nil {
-		res.ThemeError = themeErr.Error()
-		res.ConformanceFailurePhase = "render"
-		return res
-	}
-	res.ThemeFontCount = len(resolvedTheme.Fonts)
-	for _, font := range resolvedTheme.Fonts {
-		res.ThemeFontBytes += int64(len(font.Data))
-	}
-	_, renderErr := render.RenderWithThemeBounded(cat, cfg, resolvedTheme, conformance.MaxOutputBytes)
+	_, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
 	if renderErr != nil {
 		res.RenderError = renderErr.Error()
 		res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)

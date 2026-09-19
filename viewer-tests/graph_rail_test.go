@@ -258,14 +258,18 @@ func TestGraphRailNamesOnlyNodesTheCanvasDraws(t *testing.T) {
 // Finding 4b — a degree is never printed under the wrong node's name
 // ---------------------------------------------------------------------
 
-// degreeRow reads the detail panel's "degree (view)" value, and whether it
-// carries the note that says whose number it is.
+// degreeRow reads the detail panel's degree value, and whether it carries
+// the note that says whose number it is.
+//
+// Re-pinned for screen 13 §4.7 / D4: the board's row is "DEGREE HERE", the
+// rail's rename of the engine's "degree (view)" — same value, same note,
+// new label, now one of the six rows the board fixes in order and case.
 func degreeRow(t *testing.T, ctx context.Context) (string, bool) {
 	t.Helper()
 	text := evalString(t, ctx, `(function () {
 		var dts = document.querySelectorAll('.dxg-detail-rows dt');
 		for (var i = 0; i < dts.length; i++) {
-			if (dts[i].textContent === 'degree (view)') { return dts[i].nextElementSibling.textContent; }
+			if (dts[i].textContent === 'degree here') { return dts[i].nextElementSibling.textContent; }
 		}
 		return '';
 	})()`)
@@ -286,8 +290,11 @@ func TestGraphDetailDegreeNamesTheNodeItsNumbersBelongTo(t *testing.T) {
 
 	t.Run("drawn itself: the numbers are its own and are stated plainly", func(t *testing.T) {
 		text, noted := degreeRow(t, ctx)
-		if text != "0 — 0 in, 0 out" {
-			t.Fatalf("degree (view) = %q, want the claim's own %q", text, "0 — 0 in, 0 out")
+		// Re-pinned for 13 §6 (RETRY fix list item 7): "4 in · 3 out", not
+		// "15 — 13 in, 2 out" — the rail states the in/out split, not the
+		// sum the split already implies.
+		if text != "0 in · 0 out" {
+			t.Fatalf("degree here = %q, want the claim's own %q", text, "0 in · 0 out")
 		}
 		if noted {
 			t.Fatal("a node reporting its OWN degree must not carry the 'not this claim's' note")
@@ -312,8 +319,10 @@ func TestGraphDetailDegreeNamesTheNodeItsNumbersBelongTo(t *testing.T) {
 		if !strings.Contains(text, "not this claim") {
 			t.Fatalf("degree (view) = %q, want it to say the numbers are not this claim's", text)
 		}
-		if !strings.HasPrefix(text, "1 — 0 in, 1 out") {
-			t.Fatalf("degree (view) = %q, want it to open with the module's real degree (1 — 0 in, 1 out)", text)
+		// Re-pinned for 13 §6 (RETRY fix list item 7), same format change as
+		// the sibling case above.
+		if !strings.HasPrefix(text, "0 in · 1 out") {
+			t.Fatalf("degree here = %q, want it to open with the module's real degree (0 in · 1 out)", text)
 		}
 	})
 
@@ -363,7 +372,10 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 	ctx := staticGraphTab(t, p)
 	openGraphPane(t, ctx)
 
-	wantEdges := []string{"rests_on", "mirrors", "governed_by"}
+	// Re-pinned for 13 §4.5 (RETRY fix list item 12): "Legend order,
+	// exactly" puts governed by first, then depends on, then mirrors —
+	// not graph-core.js's EDGE_TYPES declaration order.
+	wantEdges := []string{"governed_by", "rests_on", "mirrors"}
 
 	cases := []struct {
 		name     string
@@ -420,9 +432,15 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 				t.Fatalf("legend edge samples that actually draw a line = %d, want 3", n)
 			}
 
+			// Re-pinned for screen 13 §4.5 / §6: the legend's second caption
+			// is "MARKS" (board vocabulary — "FACETS ... │ MARKS · governed
+			// by · depends on · has an open comment thread · selected"),
+			// covering both the edge samples and the node-state marks the
+			// group now also carries. Source text is lower-cased like every
+			// other group label here; .dxg-legend-group's CSS uppercases it.
 			groups := legendGroups(t, ctx)
-			if len(groups) != 2 || groups[0] != tc.group || groups[1] != "Relationships" {
-				t.Fatalf("legend captions under overlay %q = %v, want [%q Relationships]", tc.overlay, groups, tc.group)
+			if len(groups) != 2 || groups[0] != tc.group || groups[1] != "marks" {
+				t.Fatalf("legend captions under overlay %q = %v, want [%q marks]", tc.overlay, groups, tc.group)
 			}
 
 			facets := legendFacetNames(t, ctx)

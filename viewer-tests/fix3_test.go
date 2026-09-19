@@ -279,6 +279,10 @@ func TestReplyRepopulatesOnResolvedConflict(t *testing.T) {
 	tid := p.seedComment("human", "parent thread")
 	ctx, _, _ := serveOpenTabWithStop(t, p)
 	openPanelLive(t, ctx)
+	// 14 §4.4 OD14.8: the reply composer is a REVEAL target for the bare
+	// `Reply` label, not mounted visible at rest.
+	waitVisible(t, ctx, "#commentsPanel .comment-reply-trigger")
+	runCDP(t, ctx, chromedp.Click("#commentsPanel .comment-reply-trigger", chromedp.ByQuery))
 	waitVisible(t, ctx, "#commentsPanel .comment-reply-composer .comment-composer-input")
 
 	const draft = "an unsent reply draft"
@@ -372,7 +376,12 @@ func TestReloadPreservesReplyDraft(t *testing.T) {
 	// Open the panel and type a reply to the seeded thread WITHOUT submitting.
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)
+	replyTrigger := `#commentsPanel .comment-thread[data-thread-id="` + tid + `"] .comment-reply-trigger`
 	replyInput := `#commentsPanel .comment-thread[data-thread-id="` + tid + `"] .comment-reply-composer .comment-composer-input`
+	// 14 §4.4 OD14.8: the reply composer is a REVEAL target for the bare
+	// `Reply` label, not mounted visible at rest.
+	waitVisible(t, ctx, replyTrigger)
+	runCDP(t, ctx, chromedp.Click(replyTrigger, chromedp.ByQuery))
 	waitVisible(t, ctx, replyInput)
 	const draft = "an unsent reply draft"
 	runCDP(t, ctx, chromedp.SendKeys(replyInput, draft, chromedp.ByQuery))

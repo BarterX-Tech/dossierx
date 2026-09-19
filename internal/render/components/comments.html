@@ -7,9 +7,8 @@
      (len(c.Comments) > 0; a zero-thread claim gets no baked panel at all, only
      the chip below). The 💬 chip that reveals this panel is NOT hand-built here
      any more: since v0.4.1 it is components.CommentChipHTML, bound as the
-     "commentChip" template func and called from each chip-bearing partial's own
-     <div class="k"> head line, so the chip sits in the claim head rather than
-     beside this panel. It emits ZERO id= attributes: an
+     "commentChip" template func and emitted at the end of the shared footer.
+     It emits ZERO id= attributes: an
      overview claim renders N times and only one copy may keep its root id
      (render.stripOverviewIDs strips the rest), so claims and threads are keyed
      by data-claim-id / data-thread-id and the viewer JS fans state out with
@@ -40,7 +39,7 @@
   {{- end}}
   {{- if .Resolved}}
   <details class="comments-resolved">
-    <summary>{{len .Resolved}} resolved</summary>
+    <summary><svg class="comments-resolved-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg><span>{{len .Resolved}} resolved</span></summary>
     {{- range .Resolved}}
     {{template "dossierx-comment-thread" .}}
     {{- end}}

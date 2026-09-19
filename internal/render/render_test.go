@@ -264,107 +264,6 @@ func TestRender_OverrideMissingPartialFallsBack(t *testing.T) {
 	}
 }
 
-// ---- themeOverrideCSS ------------------------------------------------
-
-// sharedTheme is the resolved shape a flat-only viewer.theme merges to:
-// every token identical in both colour schemes, so everything lands in the
-// unconditional :root block and nothing is scoped to a media query.
-func sharedTheme(pairs ...string) *config.ResolvedTheme {
-	rt := &config.ResolvedTheme{}
-	for i := 0; i < len(pairs); i += 2 {
-		rt.Shared = append(rt.Shared, config.ThemeDecl{Token: pairs[i], Value: pairs[i+1]})
-	}
-	return rt
-}
-
-func TestThemeOverrideCSS_EmptyMapIsNoOp(t *testing.T) {
-	if got := themeOverrideCSS(nil); got != "" {
-		t.Errorf("themeOverrideCSS(nil) = %q, want empty string", got)
-	}
-	if got := themeOverrideCSS(&config.ResolvedTheme{}); got != "" {
-		t.Errorf("themeOverrideCSS(empty) = %q, want empty string", got)
-	}
-}
-
-func TestThemeOverrideCSS_OnlySuppliedKeysAppear(t *testing.T) {
-	theme := sharedTheme("accent", "#ff0000", "ink", "#00ff00")
-	got := string(themeOverrideCSS(theme))
-
-	if !strings.Contains(got, "--accent:#ff0000;") {
-		t.Errorf("output missing --accent declaration: %q", got)
-	}
-	if !strings.Contains(got, "--ink:#00ff00;") {
-		t.Errorf("output missing --ink declaration: %q", got)
-	}
-	if !strings.HasPrefix(got, ":root{") || !strings.HasSuffix(got, "}") {
-		t.Errorf("output is not a single :root{...} block: %q", got)
-	}
-	for _, unsupplied := range []string{"--muted:", "--paper:", "--font-sans:", "--radius:"} {
-		if strings.Contains(got, unsupplied) {
-			t.Errorf("output contains a declaration for an unsupplied key %q: %q", unsupplied, got)
-		}
-	}
-}
-
-// TestThemeOverrideCSS_PreservesGivenOrder pins ONE property: emission writes
-// declarations in the order the resolved theme hands them over, unchanged, on
-// every run. It does not prove allowlist order, because it is fed slices that
-// are already in it — that property belongs to the merge, and the test that
-// actually proves it end-to-end from scrambled maps is
-// TestThemeOverrideCSS_FourParts in theme_emit_test.go.
-func TestThemeOverrideCSS_PreservesGivenOrder(t *testing.T) {
-	theme := &config.ResolvedTheme{Shared: []config.ThemeDecl{
-		{Token: "accent", Value: "#111111"},
-		{Token: "ink", Value: "#222222"},
-		{Token: "font-mono", Value: "monospace"},
-		{Token: "radius", Value: "8px"},
-	}}
-
-	want := ":root{--accent:#111111;--ink:#222222;--font-mono:monospace;--radius:8px;}"
-
-	for i := 0; i < 20; i++ {
-		if got := string(themeOverrideCSS(theme)); got != want {
-			t.Fatalf("themeOverrideCSS order mismatch on iteration %d:\ngot:  %s\nwant: %s", i, got, want)
-		}
-	}
-}
-
-func TestRender_ThemeCSSInjectedAfterBaseCSS(t *testing.T) {
-	cfg := &config.Config{Viewer: config.Viewer{Theme: config.Theme{
-		Shared: map[string]string{"accent": "#123456"},
-	}}}
-	out, err := Render(&catalog.Catalog{}, cfg)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-
-	// shell.html emits three <style> blocks: graph.css first, style.css second,
-	// the theme override last. strings.Index therefore finds the graph block,
-	// not the base sheet; what this asserts — and all the cascade needs — is
-	// that the theme block is the LAST one.
-	firstIdx := strings.Index(out, "<style>")
-	if firstIdx == -1 {
-		t.Fatalf("output missing the first <style> block (graph.css):\n%s", out)
-	}
-	themeIdx := strings.LastIndex(out, "<style>")
-	if themeIdx <= firstIdx {
-		t.Fatalf("expected a later <style> block after the first one:\n%s", out)
-	}
-	if !strings.Contains(out[themeIdx:], "--accent:#123456;") {
-		t.Errorf("last <style> block missing theme override:\n%s", out)
-	}
-}
-
-func TestRender_NoThemeConfiguredEmitsEmptyThemeStyleBlock(t *testing.T) {
-	out, err := Render(&catalog.Catalog{}, nil)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	if !strings.Contains(out, "<style></style>") {
-		t.Errorf("expected an empty <style></style> block for the theme when none is configured:\n%s", out)
-	}
-}
-
 // ---- grouping (NAV_SPEC) ----------------------------------------------
 
 func groupedClaim(id, module, facet string, status model.Status) model.Claim {
@@ -652,7 +551,7 @@ func TestOrderClaims_DoesNotMutateInput(t *testing.T) {
 	}
 }
 
-// ---- newGroup section headings -----------------------------------------
+// ---- newGroup section metadata -----------------------------------------
 
 func sectionedClaim(id, module, facet, section string, order int) model.Claim {
 	c := groupedClaim(id, module, facet, model.StatusDraft)
@@ -661,7 +560,7 @@ func sectionedClaim(id, module, facet, section string, order int) model.Claim {
 	return c
 }
 
-func TestNewGroup_HeadingInjectedOnceAtStartOfEachSectionRun(t *testing.T) {
+func TestNewGroup_SectionMetadataOrdersClaimsWithoutVisibleHeadings(t *testing.T) {
 	claims := []model.Claim{
 		sectionedClaim("w.a", "widget", "contract", "Alpha", 1),
 		sectionedClaim("w.b", "widget", "contract", "Alpha", 2),
@@ -671,9 +570,7 @@ func TestNewGroup_HeadingInjectedOnceAtStartOfEachSectionRun(t *testing.T) {
 	g := newGroup("widget", "contract", claims, rendered, nil)
 
 	want := []template.HTML{
-		`<h4 class="section-heading">Alpha</h4>`,
 		"A", "B",
-		`<h4 class="section-heading">Beta</h4>`,
 		"C",
 	}
 	if len(g.Claims) != len(want) {
@@ -704,10 +601,7 @@ func TestNewGroup_NoSectionSetEmitsNoHeadings(t *testing.T) {
 	}
 }
 
-func TestNewGroup_MixedSectionAndNoSectionClaimsSkipHeadingOnlyForUnset(t *testing.T) {
-	// A claim with no Section set must never get a heading in front of it,
-	// but must also not reset the "current section" a later same-Section
-	// claim is compared against.
+func TestNewGroup_MixedSectionAndNoSectionClaimsStayInSemanticOrder(t *testing.T) {
 	claims := []model.Claim{
 		sectionedClaim("w.a", "widget", "contract", "Alpha", 1),
 		sectionedClaim("w.b", "widget", "contract", "", 2),
@@ -717,7 +611,6 @@ func TestNewGroup_MixedSectionAndNoSectionClaimsSkipHeadingOnlyForUnset(t *testi
 	g := newGroup("widget", "contract", claims, rendered, nil)
 
 	want := []template.HTML{
-		`<h4 class="section-heading">Alpha</h4>`,
 		"A", "B", "C",
 	}
 	if len(g.Claims) != len(want) {
@@ -727,16 +620,6 @@ func TestNewGroup_MixedSectionAndNoSectionClaimsSkipHeadingOnlyForUnset(t *testi
 		if g.Claims[i] != want[i] {
 			t.Errorf("newGroup Claims[%d] = %q, want %q", i, g.Claims[i], want[i])
 		}
-	}
-}
-
-func TestSectionHeadingHTML_Escapes(t *testing.T) {
-	got := string(sectionHeadingHTML(`5 - <script>alert(1)</script>`))
-	if strings.Contains(got, "<script>") {
-		t.Fatalf("sectionHeadingHTML must escape its input, got: %s", got)
-	}
-	if !strings.HasPrefix(got, `<h4 class="section-heading">`) || !strings.HasSuffix(got, `</h4>`) {
-		t.Fatalf("sectionHeadingHTML = %q, want wrapped in <h4 class=\"section-heading\">...</h4>", got)
 	}
 }
 
@@ -891,6 +774,53 @@ func TestBuildModuleGroups_AllLockedRequiresEveryFacetLocked(t *testing.T) {
 	}
 	if byModule["gadget"].AllLocked {
 		t.Errorf("gadget: internals facet has a draft claim, want AllLocked=false: %#v", byModule["gadget"])
+	}
+}
+
+func TestBuildModuleGroups_LockCountsOnTwoFacetLockedModule(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.a", "widget", "contract", model.StatusLocked),
+		groupedClaim("w.b", "widget", "contract", model.StatusLocked),
+		groupedClaim("w.c", "widget", "internals", model.StatusLocked),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	rendered := map[string]template.HTML{"w.a": "", "w.b": "", "w.c": ""}
+	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, rendered))
+	if len(moduleGroups) != 1 {
+		t.Fatalf("module groups = %d, want 1", len(moduleGroups))
+	}
+	got := moduleGroups[0]
+	if got.ClaimCount != 3 || got.LockedCount != 3 || got.FacetCount != 2 {
+		t.Fatalf("widget counts = claims %d locked %d facets %d, want 3/3/2", got.ClaimCount, got.LockedCount, got.FacetCount)
+	}
+}
+
+func TestRender_ModuleSectionLockMetricAttrs(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.a", "widget", "contract", model.StatusLocked),
+		groupedClaim("w.b", "widget", "internals", model.StatusLocked),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`data-claim-count="2"`,
+		`data-locked-count="2"`,
+		`data-facet-count="2"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("rendered module section missing %q", want)
+		}
 	}
 }
 

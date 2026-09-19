@@ -153,7 +153,7 @@ func TestCLIConformanceCapacityRefusalIsConsistentAndNeverPrintsOK(t *testing.T)
 	}
 }
 
-func TestCLIConformanceInvalidThemeStopsAtRenderInEveryMode(t *testing.T) {
+func TestCLIConformanceRemovedThemeStopsAtConfigInEveryMode(t *testing.T) {
 	root, cfgPath := conformanceCLIProject(t)
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -171,36 +171,8 @@ func TestCLIConformanceInvalidThemeStopsAtRenderInEveryMode(t *testing.T) {
 		{"--config", cfgPath, "check", "--staged"},
 	} {
 		env, stderr, err := execCLIJSON(t, args...)
-		if err == nil || env.Error == nil || env.Error.Code != "invalid_config" || env.StoppedAt != "render" {
+		if err == nil || env.Error == nil || env.Error.Code != "invalid_config" || env.StoppedAt != "config" {
 			t.Fatalf("args=%v env=%+v stderr=%s err=%v", args, env, stderr, err)
-		}
-	}
-}
-
-func TestCLIConformanceCapacityPrecedesInvalidThemeInEveryMode(t *testing.T) {
-	root, cfgPath := conformanceCapacityCLIProject(t)
-	raw, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw = append(raw, []byte("viewer:\n  theme:\n    preset: does-not-exist\n")...)
-	if err := os.WriteFile(cfgPath, raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	stagedGit(t, root, "add", "--", ".")
-	for _, args := range [][]string{
-		{"--config", cfgPath, "check"},
-		{"--config", cfgPath, "check", "--validate"},
-		{"--config", cfgPath, "check", "--staged"},
-	} {
-		env, stderr, err := execCLIJSON(t, args...)
-		if err == nil || env.Error == nil || env.Error.Code != "conformance_capacity_exceeded" || env.StoppedAt != "conformance" {
-			t.Fatalf("args=%v env=%+v stderr=%s err=%v", args, env, stderr, err)
-		}
-		var data checkData
-		envData(t, env, &data)
-		if data.ThemeError != "" || data.FailurePhase != "conformance" {
-			t.Fatalf("args=%v reported secondary theme fault: %+v", args, data)
 		}
 	}
 }

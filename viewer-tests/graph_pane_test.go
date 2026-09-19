@@ -30,6 +30,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -384,8 +385,15 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 	if stamp == "" || stamp != generated {
 		t.Fatalf("header stamp title = %q, want the payload's generated_at %q", stamp, generated)
 	}
-	if phrase := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').textContent`); !strings.HasPrefix(phrase, "payload generated") {
-		t.Fatalf("header stamp text = %q, want a 'payload generated …' phrase", phrase)
+	// Re-pinned for screen 13 §6 / D6: the board's wording is
+	// "828 claims · last read 2h ago" — corpus count, then elapsed
+	// freshness — not the engine's former "payload generated 2 hours ago".
+	// The absolute value stays on the title attribute (asserted above), so
+	// nothing the old prefix protected is lost; R10.3's one-unit rule (one
+	// unit, elapsed, never a timestamp) is satisfied by both forms.
+	stampPhrase := regexp.MustCompile(`^\d+ claims? · last read `)
+	if phrase := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').textContent`); !stampPhrase.MatchString(phrase) {
+		t.Fatalf("header stamp text = %q, want an 'N claim(s) · last read …' phrase (13 §6)", phrase)
 	}
 }
 
@@ -534,7 +542,9 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// sat — and their order relative to everything else is unchanged.
 	labels := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-controls .dxg-ctl .dxg-ctl-label'))
 		.map(function (e) { return e.textContent; })`)
-	wantLabels := []string{"Module", "Facet", "Granularity", "Highlight overlay", "Relationships", "View"}
+	// Re-pinned for screen 13 §4.2: the board's own eyebrow is "RELATIONS",
+	// not this file's original "Relationships".
+	wantLabels := []string{"Module", "Facet", "Granularity", "Highlight overlay", "Relations", "View"}
 	if fmt.Sprint(labels) != fmt.Sprint(wantLabels) {
 		t.Fatalf("control groups = %v, want %v", labels, wantLabels)
 	}
@@ -563,8 +573,10 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// at twenty facets where colour alone has stopped working at about twelve.
 	facets := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-legend [data-dxg-facet] .dxg-legend-name'))
 		.map(function (e) { return e.textContent; })`)
-	if fmt.Sprint(facets) != fmt.Sprint([]string{"contract", "design"}) {
-		t.Fatalf("legend facet names = %v, want the project's own facets", facets)
+	// Re-pinned for 13 §4.5/§6 (RETRY fix list item 12): legend facet names
+	// are Title Case ("contract" -> "Contract").
+	if fmt.Sprint(facets) != fmt.Sprint([]string{"Contract", "Design"}) {
+		t.Fatalf("legend facet names = %v, want the project's own facets, Title Case", facets)
 	}
 
 	// Selecting a node fills the detail panel — facet identity's THIRD
@@ -581,8 +593,10 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		}
 		return '';
 	})()`)
-	if facetRow != "design" {
-		t.Fatalf("detail panel facet row = %q, want design", facetRow)
+	// Re-pinned for 13 §6 (RETRY fix list item 7): the rail's FACET value is
+	// humanised ("design" -> "Design"), same sentence-case rule as MODULE.
+	if facetRow != "Design" {
+		t.Fatalf("detail panel facet row = %q, want Design", facetRow)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.design.thing"]').length`); n != 1 {
 		t.Fatalf("detail panel open-claim links = %d, want 1", n)

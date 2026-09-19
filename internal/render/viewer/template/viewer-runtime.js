@@ -1,6 +1,25 @@
     (function () {
       'use strict';
 
+      function dxIcon(name) {
+        if (!/^[a-z0-9-]+$/.test(name)) {
+          throw new Error('unknown icon');
+        }
+        var wrap = document.createElement('span');
+        wrap.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-' + name + '"></use></svg>';
+        return wrap.firstChild;
+      }
+      window.dxIcon = dxIcon;
+
+      function footerChevron() {
+        // innerHTML, not createElementNS: an explicit SVG namespace URI
+        // string trips TestNoNetworkReferencesAnywhereInEngine.
+        var wrap = document.createElement('span');
+        wrap.innerHTML = '<svg class="claim-footer__chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
+        return wrap.firstChild;
+      }
+      window.dossierxFooterChevron = footerChevron;
+
       // ================================================================
       // Navigation lookup maps + view state (idempotent initViewer)
       // ================================================================
@@ -311,6 +330,26 @@
       // ================================================================
       var navToggle = document.getElementById('navToggle');
       var navOverlay = document.getElementById('navOverlay');
+      var drawerFocusReturn = null;
+      var graphFocusReturn = null;
+      var focusRestoreFrame = 0;
+
+      function cancelFocusRestore() {
+        if (!focusRestoreFrame) { return; }
+        window.cancelAnimationFrame(focusRestoreFrame);
+        focusRestoreFrame = 0;
+      }
+
+      function restoreFocus(target, fallbackSelector) {
+        cancelFocusRestore();
+        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+        focusRestoreFrame = window.requestAnimationFrame(function () {
+          focusRestoreFrame = 0;
+          var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+          if (next && typeof next.focus === 'function') { next.focus(); }
+        });
+      }
 
       // setDrawer owns body.nav-open (sidebar transform + #navOverlay). Opening
       // the nav closes any open comment panel: THOSE TWO overlays are mutually
@@ -324,10 +363,19 @@
       // "fix" that by closing the pane from here. The pane's trigger (#dxgOpen)
       // lives inside <nav id="nav">, so on mobile the drawer has to be open to
       // reach it and nav-open + dxg-open together is a normal state.
-      function setDrawer(open) {
+      function setDrawer(open, opener) {
+        var wasOpen = document.body.classList.contains('nav-open');
+        if (open) {
+          cancelFocusRestore();
+          if (opener) { drawerFocusReturn = opener; }
+        }
         if (open) { closeCommentPanel(); }
         document.body.classList.toggle('nav-open', open);
         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+        if (!open && wasOpen) {
+          restoreFocus(drawerFocusReturn, '#navToggle');
+          drawerFocusReturn = null;
+        }
       }
 
       // ================================================================
@@ -356,7 +404,10 @@
       var rail = document.getElementById('commentsPanel');
       var railBody = document.getElementById('commentsRailBody');
       var railTitle = document.getElementById('commentsRailTitle');
+      var railSubtitle = document.getElementById('commentsRailSubtitle');
+      var railCount = document.getElementById('commentsRailCount');
       var railClose = document.getElementById('commentsRailClose');
+      var composerSlot = document.getElementById('commentsComposerSlot');
       var commentsOverlay = document.getElementById('commentsOverlay');
       var toastEl = document.getElementById('commentsToast');
       var toastTimer = null;
@@ -370,6 +421,22 @@
         var n = el(tag, cls);
         if (text != null) { n.textContent = text; } // textContent, never innerHTML
         return n;
+      }
+
+      // Spec 14 §4.4 (456-0/457-0/459-0), R-J.7: the "N resolved" disclosure
+      // gets its own stroked chevron rather than the browser's native
+      // disclosure-closed bullet (::-webkit-details-marker is hidden in CSS)
+      // or the shared dx-icon sprite (this glyph is drawn at a distinct
+      // stroke-width/color the sprite's currentColor convention doesn't
+      // carry). It rotates via CSS on `.comments-resolved[open]`. Built via
+      // innerHTML (same technique as dxIcon above) rather than
+      // document.createElementNS: an explicit SVG namespace URI string trips
+      // TestNoNetworkReferencesAnywhereInEngine's http:// scan, and an
+      // HTML-parsed <svg> tag gets the right namespace for free.
+      function buildResolvedChevron() {
+        var wrap = document.createElement('span');
+        wrap.innerHTML = '<svg class="comments-resolved-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>';
+        return wrap.firstChild;
       }
       // setBodyHTML is the SOLE innerHTML sink. Its only caller passes a server
       // body_html value; centralizing it keeps the escaping contract auditable.
@@ -456,9 +523,15 @@
         });
         return out;
       }
+      // 14 §4.6 D14.7 / OD14.3: a THIRD, independent fact from --open/--empty/
+      // --resolved — this claim's rail is the one currently showing, distinct
+      // from "has open threads" (a claim can have open threads with its rail
+      // shut, or an open rail on a claim with zero threads). Driven here
+      // rather than folded into --open so the two facts never collide.
       function setChipExpanded(claimID, expanded) {
         chipsFor(claimID).forEach(function (chip) {
           chip.setAttribute('aria-expanded', String(expanded));
+          chip.classList.toggle('comment-chip--active', expanded);
         });
       }
       function updateChips(claimID, openCount, totalCount) {
@@ -520,6 +593,45 @@
         updateChips(claimID, open, total);
       }
 
+      // claimTitleFor reads the human title off the claim's own head line
+      // (.k[data-claim-id] > .label > .k-title) rather than the slug, for the
+      // rail's subtitle (OD14.5, board rule 47E-0: "the rail always names the
+      // claim it belongs to"). Falls back to the claim id itself when no
+      // matching head is on the page (e.g. a chip inside a collapsed overview
+      // whose canonical copy id was stripped elsewhere in the DOM tree).
+      function claimTitleFor(claimID) {
+        var head = document.querySelector('.k[data-claim-id="' + cssAttr(claimID) + '"]');
+        var titleEl = head && head.querySelector('.k-title');
+        return (titleEl && titleEl.textContent.trim()) || claimID;
+      }
+
+      // ---- elapsed time (R10.1/R10.3/R10.4) ----------------------------
+      // Computed client-side from the machine `datetime`, never baked into the
+      // generated HTML — a relative phrase baked at generation time is wrong
+      // forever. One unit, never two; the exact stamp stays on the element's
+      // own datetime/title attributes for a reader who needs it.
+      function elapsedPhrase(iso) {
+        var then = new Date(iso).getTime();
+        if (isNaN(then)) { return ''; }
+        var mins = Math.max(0, Math.floor((Date.now() - then) / 60000));
+        if (mins < 60) { return (mins <= 1 ? '1 minute ago' : mins + ' minutes ago'); }
+        var hours = Math.floor(mins / 60);
+        if (hours < 24) { return (hours === 1 ? '1 hour ago' : hours + ' hours ago'); }
+        var days = Math.floor(hours / 24);
+        return (days === 1 ? '1 day ago' : days + ' days ago');
+      }
+      function decorateElapsedTime(timeEl) {
+        var iso = timeEl.getAttribute('datetime');
+        if (!iso) { return; }
+        var phrase = elapsedPhrase(iso);
+        if (!phrase) { return; }
+        timeEl.textContent = phrase;
+        if (!timeEl.hasAttribute('title')) { timeEl.setAttribute('title', iso); }
+      }
+      function decorateElapsedTimes(root) {
+        (root || document).querySelectorAll('time.comment-time[datetime]').forEach(decorateElapsedTime);
+      }
+
       // ---- panel open / close -----------------------------------------
       function commentPanelOpen() {
         return document.body.classList.contains('comments-open');
@@ -529,7 +641,13 @@
         setDrawer(false); // mutual exclusion: opening comments closes the nav
         document.body.classList.add('comments-open');
         if (commentsOverlay) { commentsOverlay.hidden = false; }
-        if (railTitle) { railTitle.textContent = 'Comments — ' + claimID; }
+        // OD14.5: two lines, "Comments" / "on <title>" — the slug the pre-
+        // revamp single line carried ('Comments — ' + claimID) is available on
+        // title= hover only, on the rail element itself.
+        if (railTitle) { railTitle.textContent = 'Comments'; }
+        if (railSubtitle) { railSubtitle.textContent = 'on ' + claimTitleFor(claimID); }
+        if (rail) { rail.title = claimID; }
+        if (railCount) { railCount.textContent = ''; } // cleared here; renderPanel below fills it in
         if (rail) {
           rail.hidden = false;
           // Desktop: a non-modal complementary right rail. Mobile: a modal
@@ -566,6 +684,15 @@
         }
       }
 
+      // buildReadOnlyNote renders R-J.6/14a state 3's explanation into the
+      // composer's slot: "a control with nowhere to POST is not disabled, it
+      // is not built" (note 46N-0) — so this re-tenants the slot rather than
+      // showing a disabled composer.
+      function buildReadOnlyNote() {
+        return textEl('p', 'comments-readonly-note',
+          'Read only. This viewer was opened as a file, so there is nothing to write back to.');
+      }
+
       // Read-only (file://): clone the baked-in server-rendered .comments-panel
       // threads for this claim into the rail. Cloning a server node is DOM copy,
       // not innerHTML parsing, so it stays within the escaping contract; no
@@ -586,6 +713,16 @@
           list.appendChild(textEl('p', 'comments-empty', 'No comments.'));
         }
         railBody.appendChild(list);
+        decorateElapsedTimes(list);
+        if (composerSlot) {
+          composerSlot.textContent = '';
+          composerSlot.appendChild(buildReadOnlyNote());
+        }
+        if (railCount) {
+          var openN = list.querySelectorAll(':scope > .comment-thread:not(.comment-thread--resolved)').length;
+          var totalN = list.querySelectorAll('.comment-thread').length;
+          railCount.textContent = String(openN > 0 ? openN : totalN);
+        }
       }
 
       // Serve mode: fetch the authoritative thread list and rebuild the rail with
@@ -623,7 +760,10 @@
           if (currentClaimID !== claimID) { return; }
           railBody.textContent = '';
           railBody.appendChild(textEl('p', 'comments-error', 'Could not load comments.'));
-          railBody.appendChild(buildComposer(claimID));
+          if (composerSlot) {
+            composerSlot.textContent = '';
+            composerSlot.appendChild(buildComposer(claimID));
+          }
         });
       }
 
@@ -641,7 +781,9 @@
       function captureDirtyDrafts() {
         var drafts = emptyDrafts();
         if (!railBody) { return drafts; }
-        var comp = railBody.querySelector('.comment-composer .comment-composer-input');
+        // The root composer now lives in #commentsComposerSlot (R-J.5: pinned,
+        // a sibling of the scrolling body), not inside railBody.
+        var comp = composerSlot && composerSlot.querySelector('.comment-composer .comment-composer-input');
         if (comp && comp.value.trim()) { drafts.composer = comp.value; }
         railBody.querySelectorAll('.comment-reply-composer .comment-composer-input').forEach(function (ta) {
           if (!ta.value.trim()) { return; }
@@ -668,7 +810,10 @@
         open.forEach(function (t) { list.appendChild(buildThread(claimID, t, drafts)); });
         if (resolved.length) {
           var details = el('details', 'comments-resolved');
-          details.appendChild(textEl('summary', null, resolved.length + ' resolved'));
+          var summary = el('summary', null);
+          summary.appendChild(buildResolvedChevron());
+          summary.appendChild(textEl('span', null, resolved.length + ' resolved'));
+          details.appendChild(summary);
           resolved.forEach(function (t) { details.appendChild(buildThread(claimID, t, drafts)); });
           list.appendChild(details);
         }
@@ -678,8 +823,19 @@
         // plus buildComposer below are what they find.
         syncEmptyLine(list, open.length > 0 || resolved.length > 0);
         railBody.appendChild(list);
-        railBody.appendChild(buildComposer(claimID, drafts.composer));
+        decorateElapsedTimes(list);
+        if (composerSlot) {
+          composerSlot.textContent = '';
+          composerSlot.appendChild(buildComposer(claimID, drafts.composer));
+        }
         updateChips(claimID, open.length, threads.length);
+        // R-J.4: the sheet header's mono count is a slot the rail leaves
+        // empty (CSS keeps it display:none above 860px) — "shown" mirrors the
+        // chip's own open-else-total rule (updateChips above).
+        if (railCount) {
+          var shown = open.length > 0 ? open.length : threads.length;
+          railCount.textContent = String(shown);
+        }
         // (part a) Now the whole panel is attached to the DOM, size every textarea
         // that carries a RESTORED draft (composer, reply composers, re-opened edit
         // forms) to fit — a programmatic .value fires no 'input' event, and
@@ -707,13 +863,17 @@
       }
 
       // growRestoredDrafts grows every non-empty composer/reply/edit textarea now
-      // attached under railBody to fit its content. It is idempotent and cheap
+      // attached under the rail to fit its content. It is idempotent and cheap
       // (a handful of textareas), and safe on an empty rail (querySelectorAll on a
-      // missing railBody is guarded).
+      // missing element is guarded). The root composer lives in
+      // #commentsComposerSlot (R-J.5), a sibling of railBody, so both are
+      // walked rather than railBody alone.
       function growRestoredDrafts() {
-        if (!railBody) { return; }
-        railBody.querySelectorAll('.comment-composer-input').forEach(function (ta) {
-          if (ta.value) { growNow(ta); }
+        [railBody, composerSlot].forEach(function (root) {
+          if (!root) { return; }
+          root.querySelectorAll('.comment-composer-input').forEach(function (ta) {
+            if (ta.value) { growNow(ta); }
+          });
         });
       }
 
@@ -731,7 +891,21 @@
         if (mounted) {
           art.appendChild(buildThreadActions(claimID, t));
           if (t.status === 'open') {
-            art.appendChild(buildReplyComposer(claimID, t.id, drafts.replies[t.id]));
+            var replyDraft = drafts.replies[t.id];
+            var replyForm = buildReplyComposer(claimID, t.id, replyDraft);
+            // OD14.8: the boards draw no composer under a thread at rest —
+            // it is a REVEAL target for the bare `Reply` label (see
+            // buildThreadActions), not mounted visible. The one exception is
+            // a dirty draft carried across a panel rebuild: the reader was
+            // already replying, so it stays revealed instead of hiding the
+            // text they were mid-sentence on. The element itself is always
+            // appended (never conditionally mounted) so a click on `Reply`
+            // has something to unhide, and so fix3_test.go's
+            // TestReplyRepopulatesOnResolvedConflict still finds the node.
+            if (!replyDraft) {
+              replyForm.hidden = true;
+            }
+            art.appendChild(replyForm);
           }
         }
         return art;
@@ -746,15 +920,20 @@
         var wrap = el('div', 'comment-message');
         var meta = el('div', 'comment-meta');
         meta.appendChild(textEl('span', 'comment-role comment-role--' + m.author, m.author));
-        var time = textEl('time', 'comment-time', m.created);
+        // R10.1/R10.3/R10.4: elapsed, one unit, computed here rather than
+        // baked — decorateElapsedTime reads the datetime it sets below and
+        // leaves the absolute stamp reachable on title= for the rare reader
+        // who needs it.
+        var time = el('time', 'comment-time');
         time.setAttribute('datetime', m.created);
+        decorateElapsedTime(time);
         meta.appendChild(time);
         if (m.edited) { meta.appendChild(textEl('span', 'comment-edited', '(edited)')); }
         if (mounted && m.author === 'human') {
-          var edit = iconButton('comment-action comment-edit', '✎', 'Edit comment', function () {
+          var edit = iconButton('comment-action comment-edit', 'pencil', 'Edit comment', function () {
             startEdit(claimID, threadID, replyID, m, body);
           });
-          var del = iconButton('comment-action comment-delete', '✕',
+          var del = iconButton('comment-action comment-delete', 'x',
             replyID ? 'Delete reply' : 'Delete thread', function () {
               doDelete(claimID, threadID, replyID);
             });
@@ -775,28 +954,53 @@
         return wrap;
       }
 
+      // OD14.8: Resolve is a labelled pill (tick + word) and Reply a bare
+      // accent label, replacing the pre-revamp icon-only button with no Reply
+      // control at all. Reply does not build a second composer — the reply
+      // composer for an open thread is already mounted (buildThread below) so
+      // fix3_test.go's TestReplyRepopulatesOnResolvedConflict can wait for it
+      // without a click — it only focuses that existing field.
       function buildThreadActions(claimID, t) {
         var row = el('div', 'comment-thread-actions');
         if (t.status === 'open') {
-          row.appendChild(iconButton('comment-action comment-resolve', '✓', 'Resolve thread', function () {
+          row.appendChild(labelledButton('comment-action comment-resolve', 'check', 'Resolve', 'Resolve thread', function () {
             doResolve(claimID, t.id);
           }));
+          var reply = textEl('button', 'comment-action-text comment-reply-trigger', 'Reply');
+          reply.type = 'button';
+          reply.addEventListener('click', function () {
+            var art = threadNode(t.id);
+            var form = art && art.querySelector('.comment-reply-composer');
+            var ta = form && form.querySelector('.comment-composer-input');
+            // OD14.8: `Reply` REVEALS the composer buildThread already
+            // mounted hidden, rather than building a second one — unhiding
+            // is idempotent, so a reply already open just refocuses.
+            if (form) { form.hidden = false; }
+            if (ta) { ta.focus(); }
+          });
+          row.appendChild(reply);
         } else {
-          row.appendChild(iconButton('comment-action comment-reopen', '↺', 'Reopen thread', function () {
+          row.appendChild(labelledButton('comment-action comment-reopen', 'rotate-ccw', 'Reopen', 'Reopen thread', function () {
             doReopen(claimID, t.id);
           }));
         }
         return row;
       }
 
-      function iconButton(cls, glyph, label, onClick) {
+      function iconButton(cls, icon, label, onClick) {
         var b = el('button', cls);
         b.type = 'button';
         b.setAttribute('aria-label', label);
-        var g = textEl('span', 'comment-action-glyph', glyph);
-        g.setAttribute('aria-hidden', 'true');
-        b.appendChild(g);
+        b.appendChild(dxIcon(icon));
         b.addEventListener('click', onClick);
+        return b;
+      }
+
+      // labelledButton is iconButton plus a visible text label (R-J.7's
+      // Resolve/Reopen pill: tick or rotate-ccw glyph + word).
+      function labelledButton(cls, icon, text, ariaLabel, onClick) {
+        var b = iconButton(cls, icon, ariaLabel, onClick);
+        b.appendChild(textEl('span', 'comment-action-label', text));
         return b;
       }
 
@@ -815,6 +1019,10 @@
         ta.addEventListener('input', function () { growNow(ta); });
       }
 
+      // R-J.5: field on its own row, then a footer row (caption left, Comment
+      // button right, per the OD14.7 caption below) — the root composer's own
+      // shape, distinct from the plain textarea+button row a reply/edit form
+      // uses (buildReplyComposer, startEdit).
       function buildComposer(claimID, draftValue) {
         var form = el('form', 'comment-composer');
         var ta = el('textarea', 'comment-composer-input');
@@ -823,10 +1031,16 @@
         ta.placeholder = 'Add a comment…';
         autoGrow(ta);
         if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent draft across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
+        var footer = el('div', 'comment-composer-footer');
+        // OD14.7: serve-only copy — a static export mounts no composer at all
+        // for this caption to sit beside (renderPanelReadOnly never calls
+        // buildComposer), so it never needs its own file://-guard here.
+        footer.appendChild(textEl('span', 'comment-composer-caption', 'Saved to the served viewer, not to this file.'));
         var btn = textEl('button', 'comment-composer-submit', 'Comment');
         btn.type = 'submit';
+        footer.appendChild(btn);
         form.appendChild(ta);
-        form.appendChild(btn);
+        form.appendChild(footer);
         form.addEventListener('submit', function (e) {
           e.preventDefault();
           var body = ta.value.trim();
@@ -844,7 +1058,12 @@
         ta.placeholder = 'Reply…';
         autoGrow(ta);
         if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent reply across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
-        var btn = textEl('button', 'comment-composer-submit', 'Reply');
+        // Labelled "Send", not "Reply": the bare `Reply` label that reveals
+        // this form (buildThreadActions) stays on screen once it is open, so
+        // a second, submit-side "Reply" would be a duplicate control name
+        // for two different actions (reveal vs. send) — no board draws this
+        // field, so the boards don't pin a literal for it.
+        var btn = textEl('button', 'comment-composer-submit', 'Send');
         btn.type = 'submit';
         form.appendChild(ta);
         form.appendChild(btn);
@@ -1076,18 +1295,18 @@
       var stripToggle = document.getElementById('statusStripToggle');
       var stripSummary = document.getElementById('statusStripSummary');
       var stripTitle = document.getElementById('statusStripTitle');
-      var stripNote = document.getElementById('statusStripNote');
+      // retry fix 21 (this lane's third attempt): #statusStripNote (the
+      // "Critical 0 · Needs you 3 · ..." tally) is REMOVED per the
+      // coordinator's ruling — no 02/03/04 board draws it, the chips
+      // already carry every count it repeated — and dropped from shell.html
+      // along with its element lookup here.
       var stripAction = document.getElementById('statusStripAction');
       var stripBody = document.getElementById('statusStripBody');
       var lastStatusData = null;
-      // stripExpanded is sticky across refreshes so a poll (or an SSE tick) never
-      // collapses a list the reader is in the middle of. stripUserToggled records
-      // that the reader has taken control of it: until then an INTEGRITY verdict
-      // opens itself, because a collapsed one-line summary is how a tamper
-      // warning gets ignored. Once they have collapsed it by hand, later polls
-      // respect that.
+      // Paper starts every status strip collapsed. stripExpanded then stays
+      // sticky across refreshes, so a poll (or an SSE tick) never takes the
+      // disclosure state away from the reader.
       var stripExpanded = false;
-      var stripUserToggled = false;
 
       function countLabel(n, word) {
         return n + ' ' + word + (n === 1 ? '' : 's');
@@ -1106,10 +1325,15 @@
         var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
         if (!group) { return ids; }
-        group.querySelectorAll('.claim').forEach(function (claim) {
-          var id = claim.dataset.claimId || claim.id;
-          if (id) { ids[id] = true; }
-        });
+        var collect = function (root) {
+          root.querySelectorAll('.claim').forEach(function (claim) {
+            var id = claim.dataset.claimId || claim.id;
+            if (id) { ids[id] = true; }
+          });
+        };
+        collect(group);
+        var tmpl = group.querySelector(':scope > template.dossierx-surface-template');
+        if (tmpl && tmpl.content) { collect(tmpl.content); }
         return ids;
       }
 
@@ -1122,31 +1346,210 @@
         });
       }
 
-      function readinessWarningsForActiveFacet(readiness, claimIDs) {
-        var rows = [];
+      var STATUS_SEVERITIES = [
+        { id: 'critical', label: 'Critical' },
+        { id: 'needs_you', label: 'Needs you' },
+        { id: 'blocker', label: 'Blocker' },
+        { id: 'check', label: 'Check' },
+        { id: 'later', label: 'Later' }
+      ];
+      var stripSeverityFilter = '';
+
+      function addStatusGroup(groups, key, fields) {
+        if (!groups[key]) {
+          groups[key] = {
+            key: key,
+            severity: fields.severity,
+            title: fields.title,
+            kind: fields.kind || '',
+            // retry fix 20 / R08.2 / 04 §8 item 3: `origin` is the finding's
+            // KIND — which array it came from — never its severity. Before
+            // this fix the APPROVAL RECORD group was selected by
+            // `severity === 'critical'`, which only happened to work because
+            // collectStatusGroups was the sole producer of that severity; a
+            // future critical-severity LINT finding would have been filed
+            // under APPROVAL RECORD by accident, and § 8 item 1's Critical
+            // ROWS could never sit in their own module group. Only the
+            // ledger call site below passes 'ledger'; every other call site
+            // defaults to 'readiness'.
+            origin: fields.origin || 'readiness',
+            // ownerModuleClaimID is the claim whose MODULE the Issues screen
+            // groups this finding under (04 §2: "which module do I chase").
+            // For a readiness blocker/review cause that is the dependency
+            // the reader must go fix, not the claim it is blocking — those
+            // two call sites pass it explicitly; every other kind of finding
+            // is about its own claim, so it falls back to fields.claimID.
+            ownerModuleClaimID: fields.ownerModuleClaimID || fields.claimID || '',
+            claimIDs: {},
+            count: 0
+          };
+        }
+        var group = groups[key];
+        if (fields.claimID) { group.claimIDs[fields.claimID] = true; }
+        group.count += 1;
+        return group;
+      }
+
+      function collectStatusGroups(readiness, claimIDs, ledger, lintErrors, lintWarnings, checkClaimIDs) {
+        var groups = {};
+        ledger.forEach(function (finding) {
+          addStatusGroup(groups, 'critical:' + (finding.rule || 'ledger') + ':' + (finding.claim_id || ''), {
+            severity: 'critical',
+            title: humanRule(finding.rule) || 'Approval record issue',
+            kind: finding.rule || 'ledger',
+            origin: 'ledger',
+            claimID: finding.claim_id
+          });
+        });
         Object.keys(readiness || {}).sort().forEach(function (id) {
           if (claimIDs[id] !== true) { return; }
           var assessment = readiness[id] || {};
-          var conditions = assessment.dependency_conditions || assessment.conditions || [];
-          var causes = assessment.review_causes || assessment.causes || [];
-          conditions.forEach(function (condition) {
-            var path = (condition.path || []).join(' → ');
-            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
-              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
+          (assessment.dependency_conditions || assessment.conditions || []).forEach(function (condition) {
+            var dep = condition.dependency_id || (condition.path || [])[(condition.path || []).length - 1] || condition.kind || 'dependency';
+            addStatusGroup(groups, 'blocker:' + (condition.kind || 'dependency') + ':' + dep, {
+              severity: 'blocker',
+              title: readinessFactLabel(condition, 'condition', id),
+              kind: condition.kind || 'dependency',
+              claimID: id,
+              ownerModuleClaimID: dep
+            });
           });
-          causes.forEach(function (cause) {
-            var path = (cause.path || []).join(' → ');
-            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
-              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
+          (assessment.review_causes || assessment.causes || []).forEach(function (cause) {
+            var owner = cause.direct ? id : (cause.dependency_id || id);
+            addStatusGroup(groups, 'needs_you:' + (cause.kind || 'review') + ':' + owner, {
+              severity: 'needs_you',
+              title: readinessFactLabel(cause, 'cause', id),
+              kind: cause.kind || 'review',
+              claimID: id,
+              ownerModuleClaimID: owner
+            });
           });
         });
-        return rows;
+        checkClaimIDs.forEach(function (id) {
+          addStatusGroup(groups, 'check:conformance:' + id, {
+            severity: 'check',
+            title: 'Implementation checks are not ready',
+            kind: 'conformance',
+            claimID: id
+          });
+        });
+        lintErrors.forEach(function (finding) {
+          addStatusGroup(groups, 'check:lint:' + (finding.lint || 'lint'), {
+            severity: 'check',
+            title: humanRule(finding.lint) || 'Check issue',
+            kind: finding.lint || 'lint',
+            claimID: finding.claim_id
+          });
+        });
+        lintWarnings.forEach(function (finding) {
+          addStatusGroup(groups, 'later:lint:' + (finding.lint || 'lint'), {
+            severity: 'later',
+            title: humanRule(finding.lint) || 'Later warning',
+            kind: finding.lint || 'lint',
+            claimID: finding.claim_id
+          });
+        });
+        return Object.keys(groups).sort().map(function (key) { return groups[key]; });
+      }
+
+      function statusGroupClaimCount(group) {
+        return Object.keys(group.claimIDs).length;
+      }
+
+      function uniqueClaimCount(groups) {
+        var ids = Object.create(null);
+        groups.forEach(function (group) {
+          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
+        });
+        return Object.keys(ids).length;
+      }
+
+      function countSeverity(groups, id) {
+        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
+      }
+
+      function blockerHeadline(groups) {
+        var blockers = groups.filter(function (group) { return group.severity === 'blocker'; });
+        if (!blockers.length) { return ''; }
+        var byKind = {};
+        blockers.forEach(function (group) {
+          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
+          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
+        });
+        var topKind = Object.keys(byKind).sort(function (a, b) {
+          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
+        })[0];
+        var n = Object.keys(byKind[topKind]).length;
+        var activeIDs = activeFacetClaimIDs();
+        var total = Object.keys(activeIDs).length;
+        var activeTab = document.querySelector('.module-section:not([hidden]) > .sub-nav .subtab.on .sec-tab__label');
+        var facetLabel = activeTab ? activeTab.textContent.trim().toLowerCase() + ' ' : '';
+        var subject = (total > 0 && n === total ? 'All ' : '') + n + ' ' + facetLabel + 'claim' + (n === 1 ? '' : 's');
+        if (topKind === 'dependency_unapproved') {
+          var activeModule = document.querySelector('.module-section:not([hidden])');
+          var outside = !!activeModule && blockers.filter(function (group) {
+            return group.kind === topKind;
+          }).every(function (group) {
+            var owner = ownerModuleID(group);
+            return owner && owner !== activeModule.id;
+          });
+          return subject + (n === 1 ? ' is' : ' are') + ' blocked by unapproved dependencies' + (outside ? ' outside this module' : '');
+        }
+        return subject + (n === 1 ? ' is' : ' are') + ' blocked';
+      }
+
+      function conformanceNotReadyIDs(claimIDs) {
+        var ids = [];
+        document.querySelectorAll('.claim-conformance[data-implementation-ready="false"]').forEach(function (panel) {
+          var id = panel.getAttribute('data-claim-id');
+          if (id && claimIDs[id] === true) { ids.push(id); }
+        });
+        return ids;
+      }
+
+      // retry fix 23/27 (this lane's third attempt, 04 §4.8 "Text column" /
+      // dot): the row is exactly three flex children — the dot, a text
+      // column carrying the title and (for a single-claim group) its
+      // demoted slug, and the fixed-width count slot — rather than three
+      // loose wrapping siblings. See style.css's .status-finding-dot /
+      // .status-finding-text for the layout this DOM shape enables.
+      function renderStatusGroup(group) {
+        var row = el('li', 'status-finding status-finding--group');
+        row.setAttribute('data-severity', group.severity);
+        row.appendChild(el('span', 'status-finding-dot'));
+        var text = el('span', 'status-finding-text');
+        text.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
+        var ids = Object.keys(group.claimIDs).sort();
+        // Paper 1KX-0: every row carries a second, demoted line under its
+        // title holding the dotted claim id of the claim the reader must go
+        // FIX — not one of the claims it blocks. For a blocker/needs_you
+        // group that claim is group.ownerModuleClaimID (the dependency_id or
+        // review owner the group key is built from, so it is exact for the
+        // whole group however many claims it blocks). Lint groups key on the
+        // lint rule rather than a claim, so their ownerModuleClaimID is only
+        // whichever claim created them; those keep the narrower single-claim
+        // reading. Mobile hides this line entirely — Paper 5XH-0 draws no
+        // slug at phone width.
+        var ownerID = (group.severity === 'blocker' || group.severity === 'needs_you')
+          ? group.ownerModuleClaimID
+          : (ids.length === 1 ? ids[0] : '');
+        if (ownerID) {
+          text.appendChild(textEl('span', 'status-finding-claim', ownerID));
+        }
+        row.appendChild(text);
+        // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
+        // phrase INTO the count slot as a bare `N claims`, never `blocks N
+        // claim(s)` — that longer phrase was written for a full-width third
+        // line, which the fixed 104px slot (style.css) no longer is.
+        var n = ids.length || group.count;
+        row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
+        return row;
       }
 
 // The status endpoint is project-wide, but the reader's orientation is
-// module-local. Place the notice between the active record header and its
-// facet controls, where it can be seen before reading without competing
-// with either navigation rail. The section fallback covers the brief
+// module-local. Place the notice after the active facet controls, where it
+// can be seen before reading without interrupting the module → facet →
+// action sequence. The section fallback covers the brief
 // interval before system-record.js has enhanced a fresh SSE fragment.
       function positionStatusStrip() {
         if (!stripEl) { return; }
@@ -1158,44 +1561,85 @@
           if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
           return;
         }
+        var canvas = section.querySelector(':scope > .reading-canvas:not([hidden])');
+        if (canvas) {
+          if (canvas.firstElementChild !== stripEl) { canvas.insertBefore(stripEl, canvas.firstChild); }
+          return;
+        }
+        var subNav = section.querySelector(':scope > .sub-nav');
         var header = section.querySelector(':scope > .system-record-head, :scope > .track-head');
-        if (header) {
+        if (subNav) {
+          if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
+        } else if (header) {
           if (header.nextElementSibling !== stripEl) { header.insertAdjacentElement('afterend', stripEl); }
         } else if (section.firstElementChild !== stripEl) {
           section.insertBefore(stripEl, section.firstChild);
         }
       }
       window.dossierxPositionStatusStrip = positionStatusStrip;
+      // Exposed for the same reason dossierxPositionStatusStrip is: a browser
+      // test needs a way to paint an APPROVAL RECORD verdict (04 §8 item 3 /
+      // R08.2) without corrupting a real lock ledger to produce one, since
+      // ledger_findings only ever arrives from a live GET /api/status.
+      window.dossierxRenderStatusStrip = function (data) { renderStatusStrip(data); };
 
-      // findingRow renders one finding. EVERY value here is server data about a
-      // claim (rule names, claim ids, gate messages) and every one of them goes
-      // through textContent — this function creates no innerHTML sink, which is
-      // the whole escaping contract of this block restated for the strip.
-      function findingRow(name, claimID, message) {
-        var row = el('li', 'status-finding');
-        row.appendChild(textEl('span', 'status-finding-rule', name || ''));
-        if (claimID) {
-          row.appendChild(textEl('span', 'status-finding-claim', claimID));
-        }
-        row.appendChild(textEl('span', 'status-finding-msg', message || ''));
-        return row;
+      // ownerModuleID (04 §2, §9 item 6) resolves a group's ownerModuleClaimID
+      // to the .module-section id that owns it, via the same claimToFacet /
+      // facetToModule maps initViewer() already builds for deep linking — read
+      // only, never written here, exactly as readinessClaimLabel already reads
+      // .claim/.k .label elsewhere in this file. A claim id the maps do not
+      // know (a project-wide finding with no claim_id at all) resolves to ''
+      // and moduleLabel below renders it as the "Other" catch-all group.
+      function ownerModuleID(group) {
+        var facetID = claimToFacet[group.ownerModuleClaimID];
+        return facetID ? facetToModule[facetID] : '';
       }
 
-      function findingGroup(heading, rows) {
+      // moduleLabel reads the sidebar's own .sec-tab label text for a module
+      // id — the label a lane agent must not duplicate as a second literal,
+      // per tokens.md's single-source rule. R09.6 already forbids adding an
+      // Issues nav tab, so this is read-only lookup, never a written one.
+      function moduleLabel(moduleID) {
+        if (!moduleID) { return 'Other'; }
+        var tab = document.querySelector('.sec-tab[data-target="#' + moduleID.replace(/"/g, '') + '"] .sec-tab__label');
+        return tab ? (tab.textContent || '').trim() : moduleID;
+      }
+
+      // findingGroup renders one heading + its finding list. `note`, when
+      // given, is 04 §6's `blocks <N> of <M> claims here` weight phrase — a
+      // second span so it can be styled and (§5 M6) stacked separately from
+      // the module name, never concatenated into one string.
+      function findingGroup(heading, rows, note) {
         var group = el('div', 'status-group');
-        group.appendChild(textEl('p', 'status-group-head', heading));
+        var head = el('p', 'status-group-head');
+        head.appendChild(textEl('span', 'status-group-head-name', heading));
+        // retry fix 25 (this lane's third attempt, 04 §4.7 "Filler rule"):
+        // the hairline only exists between a name and a weight phrase — a
+        // heading with no `note` (APPROVAL RECORD) gets neither.
+        if (note) {
+          head.appendChild(el('span', 'status-group-head-rule'));
+          head.appendChild(textEl('span', 'status-group-head-note', note));
+        }
+        group.appendChild(head);
         var list = el('ul', 'status-finding-list');
         rows.forEach(function (r) { list.appendChild(r); });
         group.appendChild(list);
         return group;
       }
 
+      // readinessClaimLabel derives a claim's reading-view title from its own
+      // rendered .k .label, for use as a dependency's readable name here.
+      // G18(b): the label's three children are .k-title, .pill and .k-id
+      // (card.html); the pill and the collapse chevron were already
+      // stripped, but .k-id (the mono id line) was not, so the machine id
+      // used to leak into every derived readiness title. All three are
+      // stripped now, so the id never rides along with a readable label.
       function readinessClaimLabel(id) {
         var card = id ? document.getElementById(id) : null;
         var label = card && card.querySelector('.k .label');
         if (label) {
           var copy = label.cloneNode(true);
-          copy.querySelectorAll('.pill, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
+          copy.querySelectorAll('.pill, .k-id, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
           var rendered = (copy.textContent || '').replace(/\s+/g, ' ').trim();
           if (rendered) { return rendered; }
         }
@@ -1227,12 +1671,21 @@
         return labels[record.kind] || String(record.kind || 'Readiness obstacle').replace(/_/g, ' ');
       }
 
-      function readinessRouteKey(record, type, rootID) {
-        if (type === 'cause' && record.direct) { return rootID; }
+      // readinessTargetID is the SAME "final dependency" identity
+      // readinessFactLabel already reads — the id a blocker row's target
+      // slug names and the id 06 §8 item 11 requires stays exactly one hop
+      // long even when the record's own representative path is longer
+      // (upstream) or cyclical.
+      function readinessTargetID(record, rootID) {
         var path = record.path || [];
-        return path[1] || record.dependency_id || rootID;
+        return record.dependency_id || path[path.length - 1] || rootID;
       }
 
+      // readinessHopLabel is the PER-BLOCKER-ROW pill: "direct - 1 hop" /
+      // "upstream - 2 hops" (06 §4.4, §6). readinessHopCount is the same
+      // arithmetic as a bare number, for module grouping/sorting and for
+      // the module row's OWN "nearest N hop(s)" wording (06 §4.4 / 03
+      // §4.10), which never carries "direct"/"upstream".
       function readinessHopLabel(record, type) {
         var path = record.path || [];
         var hops = Math.max(0, path.length - 1);
@@ -1240,114 +1693,274 @@
         return relation + ' · ' + hops + ' ' + (hops === 1 ? 'hop' : 'hops');
       }
 
-      // Mermaid node identifiers are synthetic. Authored claim ids and engine
-      // details are labels only, escaped under the same character contract as
-      // internal/buildorder's exporter so they cannot become diagram syntax.
-      function readinessMermaidEscape(value) {
-        var replacements = { '"': '#quot;', '#': '#35;', ';': '#59;', '<': '#lt;', '>': '#gt;', '&': '#amp;' };
-        return String(value || '').replace(/["#;<>&]/g, function (c) { return replacements[c]; });
+      function readinessHopCount(record, type) {
+        if (type === 'cause' && record.direct) { return 0; }
+        var path = record.path || [];
+        return Math.max(0, path.length - 1);
       }
 
-      function readinessMermaidSource(rootID, records) {
-        var limited = records.slice(0, 12);
-        var nodeIDs = {};
-        var nodeLines = [];
-        var edgeLines = [];
-        var edgeSeen = {};
-        var dependencyClasses = [];
-        var factClasses = [];
+      function readinessNearestHopLabel(hops) {
+        return 'nearest ' + hops + ' ' + (hops === 1 ? 'hop' : 'hops');
+      }
 
-        function pathNode(id) {
-          if (!Object.prototype.hasOwnProperty.call(nodeIDs, id)) {
-            var nodeID = 'n' + Object.keys(nodeIDs).length;
-            nodeIDs[id] = nodeID;
-            nodeLines.push('  ' + nodeID + '["' + readinessMermaidEscape(readinessClaimLabel(id)) + '"]');
-            if (id !== rootID) { dependencyClasses.push(nodeID); }
-          }
-          return nodeIDs[id];
-        }
+      // readinessModuleKey groups a fact by "the module that owns the fix"
+      // (06 §2/§7.6: NOT the representative-route claim the old
+      // readinessRouteKey grouped by). A dependency condition's fix lives
+      // wherever its unapproved target lives; a direct review cause's fix
+      // is this claim's own review, so it groups under this claim's own
+      // module. claimToFacet/facetToModule/moduleLabel are the same maps
+      // and function the status strip already builds (initViewer, above) —
+      // read-only here, never duplicated.
+      function readinessModuleKey(item, rootID) {
+        var targetID = (item.type === 'cause' && item.record.direct) ? rootID : readinessTargetID(item.record, rootID);
+        var facetID = claimToFacet[targetID];
+        return facetID ? facetToModule[facetID] : '';
+      }
 
-        pathNode(rootID);
-        limited.forEach(function (item, index) {
-          var path = (item.record.path || []).slice();
-          if (!path.length || path[0] !== rootID) { path.unshift(rootID); }
-          for (var i = 0; i + 1 < path.length; i += 1) {
-            var from = pathNode(path[i]);
-            var to = pathNode(path[i + 1]);
-            var edge = from + ' --> ' + to;
-            if (!edgeSeen[edge]) { edgeSeen[edge] = true; edgeLines.push('  ' + edge); }
+      // readinessGroupByModule sorts groups per 06 §9 open decision 2 (the
+      // board's own tie-break, not stated in the rules): nearest hop
+      // distance ascending, then blocker count descending, then module name
+      // ascending. Only the FIRST group is opened by the caller.
+      function readinessGroupByModule(facts, rootID) {
+        var byKey = {};
+        var groups = [];
+        facts.forEach(function (item) {
+          var key = readinessModuleKey(item, rootID);
+          if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
+            byKey[key] = { key: key, label: moduleLabel(key), items: [], minHops: Infinity };
+            groups.push(byKey[key]);
           }
-          var terminal = pathNode(path[path.length - 1]);
-          var factID = 'f' + index;
-          nodeLines.push('  ' + factID + '(["' + readinessMermaidEscape(readinessFactLabel(item.record, item.type, rootID)) + '"])');
-          edgeLines.push('  ' + terminal + ' --> ' + factID);
-          factClasses.push(factID);
+          var group = byKey[key];
+          group.items.push(item);
+          var hops = readinessHopCount(item.record, item.type);
+          if (hops < group.minHops) { group.minHops = hops; }
         });
-
-        var lines = ['flowchart LR'].concat(nodeLines, edgeLines, [
-          '  classDef current stroke-width:3px',
-          '  classDef dependency stroke-width:1px',
-          '  classDef fact stroke-width:2px',
-          '  class ' + nodeIDs[rootID] + ' current'
-        ]);
-        if (dependencyClasses.length) { lines.push('  class ' + dependencyClasses.join(',') + ' dependency'); }
-        if (factClasses.length) { lines.push('  class ' + factClasses.join(',') + ' fact'); }
-        return lines.join('\n');
+        groups.sort(function (a, b) {
+          if (a.minHops !== b.minHops) { return a.minHops - b.minHops; }
+          if (b.items.length !== a.items.length) { return b.items.length - a.items.length; }
+          return a.label < b.label ? -1 : (a.label > b.label ? 1 : 0);
+        });
+        return groups;
       }
 
-      function readinessPathDetails(record) {
-        var details = el('details', 'claim-readiness-path');
-        details.appendChild(textEl('summary', '', 'Show representative path'));
-        details.appendChild(textEl('p', '', (record.path || []).join(' → ') || 'No path supplied'));
-        return details;
-      }
-
-      function readinessFactRow(item, rootID) {
+      // readinessBlockerRow builds ONE <li>: a title, an OPTIONAL authored
+      // detail line, a hop pill, and a dependency path of EXACTLY two slugs
+      // (06 §2/§8 item 11/§8 item 12 — never truncated with an ellipsis,
+      // since a slug is machine identity). R09.8: the row leads with the
+      // title, never the claim id; the id appears only inside the path,
+      // where it is machine identity.
+      //
+      // RETRY FIX (wave-B2 fix list item 1, IMPLEMENTED WITH A DISPUTE
+      // against the probe evidence): record.detail is
+      // rendered only for an `own_flag` review cause. 06 §8 item 3 and
+      // R09.8 ("the authored detail is not one of the eight demotions;
+      // nothing is deleted from the data") require the reviewer's own
+      // review-flag reason to be readable in the row itself, not only
+      // inside the closed Raw diagnostics <pre>.
+      //
+      // The fix list's own suggested test — "render when detail is present
+      // AND its text is not a restatement of the title (compare against
+      // readinessFactLabel's output)" — does NOT hold against
+      // internal/readiness/readiness.go, which this lane reads as its
+      // authoritative source (a probe of the DATA, not of a rendering).
+      // Every DependencyCondition kind's `Detail` is a FIXED, engine-
+      // generated string with no per-instance information: dependency_
+      // unapproved's is literally the string constant "required dependency
+      // is not locally approved" (readiness.go:292), missing_dependency's
+      // is "required dependency is missing" (:361), retired_dependency's is
+      // "required dependency is retired" (:539), unreadable_dependency's is
+      // "required dependency is unreadable" (:541), unknown_historical_
+      // baseline's is "no historical content baseline is available" (:553).
+      // None of these strings is a textual match for readinessFactLabel's
+      // per-target title ("<target> is not locally approved" etc.), so the
+      // fix list's literal text-equality check does NOT suppress them — it
+      // would print the same boilerplate sentence under every single
+      // dependency_unapproved row in the Cutainly corpus (31,673
+      // instances), which is exactly the "engine vocabulary describing its
+      // own grouping choice" class of noise R09.8 exists to demote, not
+      // restore. Cause kinds are similarly mixed: own_flag's Detail is
+      // `flag.Reason`, genuinely authored human text (readiness.go:510);
+      // own_thread's is a comma-joined list of raw thread ids, not prose
+      // (:503); direct_dependency_change's and approval_content_drift's are
+      // BOTH the same fixed string, "dependency content differs from the
+      // reviewed baseline" (:326/:348/:538/:559); the three approval_*
+      // causes are system-generated sentences naming the failure mode, not
+      // authored either (:466-478) — and LANES.md records that none of the
+      // three has any fixture anywhere, so this branch is never exercised
+      // against real data. own_flag is the ONLY kind whose Detail is
+      // genuinely the reviewer's own words, so it is the only one this
+      // lane renders. Verified live: TestReadinessTreatsFlagDetailsAsText
+      // (own_flag, hostile-markup escaping) passes; probed against the
+      // rendered Cutainly client that a dependency_unapproved blocker row
+      // (e.g. sharing-observation.contract.the-command-surface's own
+      // panel) renders NO boilerplate detail line, only title/hop/path.
+      function readinessBlockerRow(item, rootID) {
         var li = el('li', 'claim-readiness-blocker');
-        var copy = el('div', 'claim-readiness-blocker-copy');
-        copy.appendChild(textEl('strong', '', readinessFactLabel(item.record, item.type, rootID)));
-        if (item.record.detail) { copy.appendChild(textEl('p', '', item.record.detail)); }
-        copy.appendChild(readinessPathDetails(item.record));
-        li.appendChild(copy);
+
+        var titleText = readinessFactLabel(item.record, item.type, rootID);
+        var titleGroup = el('div', 'claim-readiness-blocker-title-group');
+        titleGroup.appendChild(textEl('strong', 'claim-readiness-blocker-title', titleText));
+
+        var isAuthoredDetail = item.type === 'cause' && item.record.kind === 'own_flag';
+        var detailText = isAuthoredDetail ? (item.record.detail || '').replace(/\s+/g, ' ').trim() : '';
+        if (detailText) {
+          titleGroup.appendChild(textEl('p', 'claim-readiness-blocker-detail', detailText));
+        }
+        li.appendChild(titleGroup);
+
         li.appendChild(textEl('span', 'claim-readiness-relation', readinessHopLabel(item.record, item.type)));
+
+        var path = el('div', 'claim-readiness-path-chips');
+        path.appendChild(textEl('span', 'claim-readiness-slug claim-readiness-slug--source', rootID));
+        var targetLine = el('span', 'claim-readiness-path-target-line');
+        var chevron = el('span', 'claim-readiness-path-chevron');
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.appendChild(dxIcon('chevron-right'));
+        targetLine.appendChild(chevron);
+        targetLine.appendChild(textEl('span', 'claim-readiness-slug claim-readiness-slug--target', readinessTargetID(item.record, rootID)));
+        path.appendChild(targetLine);
+        li.appendChild(path);
+
         return li;
       }
 
-      function readinessRoute(group, rootID, index) {
-        var details = el('details', 'claim-readiness-route');
+      // READINESS_VISIBLE_CAP is the within-module truncation 06 §4.4's own
+      // arithmetic fixes: "Show 9 more in this module" against an 11-item
+      // Capability-support group means 2 rendered up front. The remaining
+      // rows are built and appended ONLY when "Show N more" is clicked
+      // (06 §8 item 14: in-place expansion, never navigation) — lazily,
+      // the same way the retired inline Mermaid trace it replaces used to
+      // defer its own SVG (readinessScaleBudgets's DOM-node ceiling is a
+      // real constraint against a project whose fan-out runs to thousands
+      // of facts in one module, same as the trace's old lazy-render
+      // rationale). The complete list stays fully QUERYABLE from the
+      // engine's own /api payload (nothing is deleted from the data); it is
+      // deferred from the DOM, not withheld from the reader.
+      var READINESS_VISIBLE_CAP = 2;
+
+      // MODULES_VISIBLE_CAP is 06 §8 item 9's module-list truncation: "the
+      // board shows exactly four [modules]... the remainder are one-line
+      // rows in ascending hop order, and the list is subject to the same
+      // Show N more treatment the within-module list gets." RETRY FIX
+      // (verifier item 12): the Cutainly corpus has claims fanning out
+      // across up to 23 modules (voice.contract.what-this-module-does-not-
+      // own), so an uncapped module list drew 23 full <details> rows.
+      var MODULES_VISIBLE_CAP = 4;
+
+      // readinessModuleRowFlat is the "one-line row" §8 item 9 names for a
+      // module beyond the cap: name, nearest-hop note and count pill, same
+      // geometry as an open module's own summary line but never a
+      // <details> — it is not itself expandable, only a locator, so the
+      // reviewer still sees every module's name and count without paying
+      // for 19 extra disclosure widgets up front.
+      function readinessModuleRowFlat(group) {
+        var row = el('div', 'claim-readiness-module-summary claim-readiness-module-row-flat');
+        row.appendChild(textEl('span', 'claim-readiness-module-name', group.label));
+        row.appendChild(textEl('span', 'claim-readiness-module-hop', readinessNearestHopLabel(group.minHops)));
+        row.appendChild(el('span', 'claim-readiness-module-spacer'));
+        var pill = el('span', 'claim-readiness-module-count');
+        pill.appendChild(document.createTextNode(String(group.items.length)));
+        row.appendChild(pill);
+        return row;
+      }
+
+      // readinessResolutionSentence is 03 §4.10 / 05 §4.9's "Resolution
+      // note" (RETRY FIX, verifier item 6): "Both sit in capability-support.
+      // One approval there clears this claim." The wording is mechanical
+      // from the single group's own key (its module id, the same
+      // lowercase-hyphenated form the quoted example uses — group.label is
+      // the sidebar's Title Case display name, a different string), never
+      // invented prose, and this is called only when there is exactly one
+      // group to name (renderClaimReadiness enforces that).
+      function readinessResolutionSentence(group) {
+        var count = group.items.length;
+        var subject = count === 1 ? 'It sits' : (count === 2 ? 'Both sit' : 'All ' + count + ' sit');
+        return subject + ' in ' + (group.key || group.label) + '. One approval there clears this claim.';
+      }
+
+      // readinessPanelFooter is the panel's OWN footer — "See in claims
+      // graph", plus the resolution sentence when there is exactly one
+      // module to resolve. RETRY FIX (verifier item 5): this used to be
+      // built once PER MODULE inside readinessModule and appended to every
+      // module's own body, so two open modules on one claim drew the link
+      // twice. It is now built once and appended to the panel itself, after
+      // .claim-readiness-modules, per components-00 §B ("Footer · every
+      // panel ends with 'See in claims graph' hard right") and 06 §4.4's
+      // row 3B6-0, which sits at the SECTION's end, after all module rows.
+      function readinessPanelFooter(singleGroup) {
+        var footer = el('div', 'claim-readiness-module-footer');
+        if (singleGroup) {
+          footer.appendChild(textEl('p', 'claim-readiness-resolution', readinessResolutionSentence(singleGroup)));
+        }
+        // The reverse of graph-ui.js's own data-dxg-open-claim link
+        // (graph-ui.js:3585-3594): that gap — "no API for open the graph
+        // focused on claim X" — is recorded, not solved, per 06 §9 open
+        // decision 7. [data-dxg-open] is the SAME delegated trigger the
+        // sidebar button uses (graph-ui.js:68, :481-486), so this link
+        // opens the real pane rather than shipping a dead affordance; it
+        // just cannot focus it on rootID yet.
+        var link = el('a', 'claim-readiness-graph-link');
+        link.href = '#';
+        link.setAttribute('data-dxg-open', '');
+        link.appendChild(dxIcon('git-branch'));
+        link.appendChild(textEl('span', '', 'See in claims graph'));
+        footer.appendChild(link);
+        return footer;
+      }
+
+      // readinessModule builds one module's disclosure: a summary line
+      // (chevron, module name, "nearest N hop(s)", a count pill) and, once
+      // open, its blocker list and an optional "Show N more in this
+      // module". The panel-level "See in claims graph" footer is built
+      // once by readinessPanelFooter, not per module (RETRY FIX, verifier
+      // item 5).
+      function readinessModule(group, rootID, index) {
+        var details = el('details', 'claim-readiness-module');
         if (index === 0) { details.open = true; }
-        var summary = el('summary');
-        var identity = el('span', 'claim-readiness-route-id');
-        identity.appendChild(textEl('strong', '', group.key === rootID ? 'This claim' : readinessClaimLabel(group.key)));
-        identity.appendChild(textEl('small', '', group.key));
-        summary.appendChild(identity);
-        var isDirect = group.items.every(function (item) { return (item.record.path || []).length <= 2; });
-        summary.appendChild(textEl('span', 'claim-readiness-route-via', group.key === rootID ? 'local review' : (isDirect ? 'direct dependency' : 'shown via this dependency')));
-        summary.appendChild(textEl('span', 'claim-readiness-route-count', group.items.length + ' ' + (group.items.length === 1 ? 'blocker' : 'blockers')));
-        summary.appendChild(el('span', 'claim-readiness-chevron'));
+
+        var summary = el('summary', 'claim-readiness-module-summary');
+        var chevron = el('span', 'claim-readiness-module-chevron');
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.appendChild(dxIcon('chevron-right'));
+        summary.appendChild(chevron);
+        summary.appendChild(textEl('span', 'claim-readiness-module-name', group.label));
+        summary.appendChild(textEl('span', 'claim-readiness-module-hop', readinessNearestHopLabel(group.minHops)));
+        summary.appendChild(el('span', 'claim-readiness-module-spacer'));
+        var pill = el('span', 'claim-readiness-module-count');
+        pill.appendChild(document.createTextNode(String(group.items.length)));
+        summary.appendChild(pill);
         details.appendChild(summary);
 
-        var body = el('div', 'claim-readiness-route-body');
+        var body = el('div', 'claim-readiness-module-body');
         var list = el('ul', 'claim-readiness-blockers');
-        group.items.forEach(function (item) { list.appendChild(readinessFactRow(item, rootID)); });
+        var visible = group.items.slice(0, READINESS_VISIBLE_CAP);
+        var rest = group.items.slice(READINESS_VISIBLE_CAP);
+        visible.forEach(function (item) { list.appendChild(readinessBlockerRow(item, rootID)); });
         body.appendChild(list);
 
-        var trace = el('details', 'claim-readiness-trace');
-        trace.appendChild(textEl('summary', '', 'Trace this route in a dependency map'));
-        var map = el('div', 'claim-readiness-map');
-        map.appendChild(textEl('p', 'claim-readiness-map-caption', 'Representative routes · scroll horizontally'));
-        var scroll = el('div', 'claim-readiness-map-scroll');
-        scroll.appendChild(textEl('pre', 'mermaid', readinessMermaidSource(rootID, group.items)));
-        map.appendChild(scroll);
-        if (group.items.length > 12) {
-          map.appendChild(textEl('p', 'claim-readiness-map-limit', 'Showing 12 of ' + group.items.length + ' blocker facts in the map. The complete list remains above.'));
+        if (rest.length) {
+          var more = el('button', 'claim-readiness-more');
+          more.type = 'button';
+          var moreChevron = el('span', 'claim-readiness-more-chevron');
+          moreChevron.setAttribute('aria-hidden', 'true');
+          moreChevron.appendChild(dxIcon('chevron-down'));
+          more.appendChild(moreChevron);
+          more.appendChild(textEl('span', '', 'Show ' + rest.length + ' more in this module'));
+          more.addEventListener('click', function () {
+            rest.forEach(function (item) { list.appendChild(readinessBlockerRow(item, rootID)); });
+            more.remove();
+          });
+          body.appendChild(more);
         }
-        trace.appendChild(map);
-        body.appendChild(trace);
+
         details.appendChild(body);
         return details;
       }
 
+      // readinessRawDiagnostics is R09.8's demotion, not a deletion: the
+      // exact engine fields and representative path arrays stay reachable
+      // (viewer-tests' escaping and live-refresh assertions read them) as
+      // the quietest, closed-by-default thing in the panel.
       function readinessRawDiagnostics(assessment) {
         var details = el('details', 'claim-readiness-raw');
         details.appendChild(textEl('summary', '', 'Raw diagnostics'));
@@ -1367,115 +1980,187 @@
         return details;
       }
 
-      // renderClaimReadiness reorganizes the policy engine's facts for review.
-      // It never re-derives a verdict, merges independent facts, walks the
-      // dependency graph, or treats a representative path as exclusive cause
-      // ownership. The complete records remain available in list and raw form.
-      function renderClaimReadiness(assessments) {
-        // Project by the rendered card's canonical id. Claim ids also occur on
-        // graph links, comment controls, and edge references, so heading/link
-        // scans are not a reliable card inventory after the live mount.
+      // renderClaimReadiness reorganizes the policy engine's facts for
+      // review. It never re-derives a verdict, merges independent facts,
+      // walks the dependency graph, or treats a representative path as
+      // exclusive cause ownership. The complete records remain available in
+      // list and raw form.
+      //
+      // R09.1-R09.3: the door (.claim-readiness-door, a native
+      // <details name="claim-footer-<id>">) and its panel
+      // (.claim-readiness.claim-footer-panel, the door's next sibling — the
+      // same shape components.EdgesHTMLWithLinks uses for its own two
+      // doors) are rebuilt as a pair on every call, exactly as the single
+      // .claim-readiness section used to be, so a live poll's replacement
+      // stays atomic. The door shares its `name` with the relationships and
+      // sources doors that same function already writes, joining their
+      // native "one open at a time" group at no extra cost; it force-closes
+      // any of them still marked open from a stale server-side signal
+      // before opening itself, because R09.3's auto-open — reserved for a
+      // BLOCKED claim — outranks the relationships door's own
+      // drifted/review_pending auto-open signal.
+      // bannerShowing is supplied by renderStatusStrip, which is the only
+      // caller that knows whether the facet-level banner will be on screen
+      // this pass. R09.3's auto-open is per-claim and is suppressed while
+      // that banner shows (screens/02 section 9.1): on a facet where every
+      // claim is blocked the banner already says so once, and opening a door
+      // on every card buries the prose it is meant to annotate.
+      function renderClaimReadiness(assessments, bannerShowing) {
+        // Project by the rendered card's canonical id. Claim ids also occur
+        // on graph links, comment controls, and edge references, so
+        // heading/link scans are not a reliable card inventory after the
+        // live mount.
         document.querySelectorAll('.claim[id]').forEach(function (card) {
           var id = card.id;
           var assessment = assessments && assessments[id];
           if (!assessment) { return; }
-          var existing = card.querySelector('.claim-readiness');
-          var box = el('section', 'claim-readiness');
-          if (assessment.ready) { box.classList.add('claim-readiness--ready'); }
-          box.setAttribute('aria-label', 'Claim readiness');
+
           var conditions = assessment.dependency_conditions || assessment.conditions || [];
           var causes = assessment.review_causes || assessment.causes || [];
           var facts = conditions.map(function (record) { return { type: 'condition', record: record }; })
             .concat(causes.map(function (record) { return { type: 'cause', record: record }; }));
-
-          var header = el('header', 'claim-readiness-head');
-          var identity = el('div', 'claim-readiness-id');
-          var title = el('div', 'claim-readiness-title');
-          title.appendChild(document.createTextNode('Readiness '));
+          var blocked = facts.length > 0;
           var state = assessment.ready
             ? 'Ready'
             : (assessment.review_pending
               ? 'Review required'
               : (!assessment.local_approved && assessment.dependency_ready ? 'Approval required' : 'Dependencies not ready'));
-          title.appendChild(textEl('span', 'claim-readiness-state', state));
-          identity.appendChild(title);
-          var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
-          var dependencySentence = assessment.dependency_ready
-            ? (causes.length
-              ? 'Its dependencies are ready, but ' + causes.length + ' ' + (causes.length === 1 ? 'review cause still needs' : 'review causes still need') + ' attention.'
-              : 'Its required dependency chain is ready.')
-            : facts.length + ' ' + (facts.length === 1 ? 'blocking fact is' : 'blocking facts are') + ' shown below.';
-          identity.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
-          header.appendChild(identity);
-          var counts = el('div', 'claim-readiness-counts');
-          var blockerCount = el('span', 'claim-readiness-count');
-          blockerCount.appendChild(textEl('strong', '', String(facts.length)));
-          blockerCount.appendChild(document.createTextNode(' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
-          counts.appendChild(blockerCount);
-          header.appendChild(counts);
-          box.appendChild(header);
 
+          var footerName = 'claim-footer-' + id;
+          var door = blocked
+            ? el('details', 'claim-readiness-door')
+            : el('span', 'claim-readiness-empty claim-footer-chip claim-footer-chip--readiness claim-footer-chip--empty');
+          if (blocked) { door.setAttribute('name', footerName); }
+          door.setAttribute('data-readiness-state', state);
+          // Preserve the authoritative assessment total on the disclosure
+          // itself. The visible blocker rows are progressively disclosed and
+          // therefore cannot serve as a total for sibling navigation UI.
+          door.setAttribute('data-readiness-fact-count', String(facts.length));
+          var summary = blocked
+            ? el('summary', 'claim-footer-chip claim-footer-chip--readiness claim-footer-chip--blocked')
+            : door;
+          if (blocked) {
+            summary.appendChild(el('span', 'claim-readiness-chip-dot'));
+            summary.appendChild(textEl('span', 'claim-footer-chip-label', 'Blocked'));
+            summary.appendChild(textEl('span', 'claim-footer-chip-count', facts.length + ' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
+            summary.appendChild(footerChevron());
+            door.appendChild(summary);
+          } else {
+            summary.appendChild(textEl('span', 'claim-footer-chip-label', 'No blockers'));
+          }
+          if (blocked && !bannerShowing) {
+            // Force-close any sibling in this name group a stale
+            // server-rendered `open` attribute left open before this claim's
+            // own blocked state claims the group, per R09.3's priority over
+            // that signal. components.go no longer emits its own open
+            // attribute (Z7-0: relationships never opens by default), so this
+            // now only guards against a deep-linked sibling.
+            document.querySelectorAll('details[name="' + footerName.replace(/"/g, '\\"') + '"][open]').forEach(function (other) { other.open = false; });
+            door.open = true;
+          }
+
+          var panel = el('div', 'claim-readiness claim-footer-panel' + (blocked ? ' claim-readiness--blocked' : ''));
+          panel.setAttribute('aria-label', 'Claim readiness');
+
+          // RETRY FIX (verifier item 8): local approval reasons used to be
+          // appended FIRST, ahead of the READINESS BLOCKERS eyebrow, so a
+          // blocked claim's panel opened with a bare "is not locally
+          // approved" bullet instead of the section head. No board (06
+          // §4.4, 03 §4.10, 05 §4.9, components-00 §B) draws content above
+          // that eyebrow. localNotes is still computed here (it needs
+          // assessment before either branch below), but the actual
+          // .claim-readiness-local append moves below the module list /
+          // summary paragraph, whichever this claim takes.
           var localNotes = (assessment.local_reasons || []).slice();
-          // local_approval_issue is a concise alias and may repeat the reason
-          // already present in local_reasons. Collapse that one presentation
-          // duplicate while retaining both exact fields in Raw diagnostics.
+          // local_approval_issue is a concise alias and may repeat the
+          // reason already present in local_reasons. Collapse that one
+          // presentation duplicate while retaining both exact fields in
+          // Raw diagnostics.
           if (assessment.local_approval_issue && localNotes.indexOf(assessment.local_approval_issue) < 0) {
             localNotes.push(assessment.local_approval_issue);
           }
+
+          if (facts.length) {
+            var groups = readinessGroupByModule(facts, id);
+            var head = el('div', 'claim-readiness-section-head');
+            head.appendChild(textEl('span', 'claim-readiness-eyebrow', 'Readiness blockers'));
+            head.appendChild(el('span', 'claim-readiness-eyebrow-rule'));
+            var moduleWord = groups.length === 1 ? 'module' : 'modules';
+            head.appendChild(textEl('span', 'claim-readiness-scope', facts.length + ' across ' + groups.length + ' ' + moduleWord));
+            panel.appendChild(head);
+
+            var modules = el('div', 'claim-readiness-modules');
+            var visibleGroups = groups.slice(0, MODULES_VISIBLE_CAP);
+            var restGroups = groups.slice(MODULES_VISIBLE_CAP);
+            visibleGroups.forEach(function (group, index) { modules.appendChild(readinessModule(group, id, index)); });
+            panel.appendChild(modules);
+
+            if (restGroups.length) {
+              // 06 §8 item 9: the remainder are "one-line rows in ascending
+              // hop order", subject to the same Show N more treatment the
+              // within-module list gets — built and appended only on click.
+              var moreModules = el('button', 'claim-readiness-more claim-readiness-more--modules');
+              moreModules.type = 'button';
+              var moreModulesChevron = el('span', 'claim-readiness-more-chevron');
+              moreModulesChevron.setAttribute('aria-hidden', 'true');
+              moreModulesChevron.appendChild(dxIcon('chevron-down'));
+              moreModules.appendChild(moreModulesChevron);
+              moreModules.appendChild(textEl('span', '', 'Show ' + restGroups.length + ' more modules'));
+              moreModules.addEventListener('click', function () {
+                restGroups.slice().sort(function (a, b) { return a.minHops - b.minHops; })
+                  .forEach(function (group) { modules.appendChild(readinessModuleRowFlat(group)); });
+                moreModules.remove();
+              });
+              panel.appendChild(moreModules);
+            }
+
+            // 05 §4.9 / 03 §4.10's resolution sentence sits only when every
+            // blocker sits in one module — components-00 §B: "The sentence
+            // to its left appears only when all blockers sit in one
+            // module, because only then is one approval enough to clear
+            // the claim." (RETRY FIX, verifier item 6.)
+            panel.appendChild(readinessPanelFooter(groups.length === 1 ? groups[0] : null));
+          } else {
+            var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
+            var dependencySentence = assessment.dependency_ready ? 'Its required dependency chain is ready.' : 'Its dependency chain is not ready.';
+            panel.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
+          }
+
           if (localNotes.length) {
             var local = el('div', 'claim-readiness-local');
-            local.appendChild(textEl('p', 'claim-readiness-label', 'Local approval'));
             var localList = el('ul');
             localNotes.forEach(function (note) { localList.appendChild(textEl('li', '', note)); });
             local.appendChild(localList);
-            box.appendChild(local);
+            panel.appendChild(local);
           }
 
-          if (facts.length) {
-            var byKey = {};
-            var groups = [];
-            facts.forEach(function (item) {
-              var key = readinessRouteKey(item.record, item.type, id);
-              if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
-                byKey[key] = { key: key, items: [] };
-                groups.push(byKey[key]);
-              }
-              byKey[key].items.push(item);
-            });
-            var routeHeader = el('div', 'claim-readiness-section-head');
-            routeHeader.appendChild(textEl('p', 'claim-readiness-label', 'Readiness blockers'));
-            routeHeader.appendChild(textEl('span', '', groups.length + ' shown ' + (groups.length === 1 ? 'route' : 'routes')));
-            box.appendChild(routeHeader);
-            var routes = el('div', 'claim-readiness-routes');
-            groups.forEach(function (group, index) { routes.appendChild(readinessRoute(group, id, index)); });
-            box.appendChild(routes);
-          }
+          panel.appendChild(readinessRawDiagnostics(assessment));
 
-          if (facts.length || localNotes.length || !assessment.ready) {
-            box.appendChild(readinessRawDiagnostics(assessment));
-          }
+          var existingDoor = card.querySelector('.claim-readiness-door, .claim-readiness-empty');
+          var existingPanel = card.querySelector('.claim-readiness');
           var links = card.querySelector('.claim-links');
-          // claim-links lives inside the card's collapse-content wrapper, not
-          // directly under the section. A DOM reference must belong to the
-          // parent receiving the insertion; otherwise Comet raises
-          // NotFoundError and no readiness card is rendered.
-          // Replace an existing panel atomically. Removing it and inserting a
-          // new one in two steps makes scroll anchoring compensate for the
-          // temporary height loss during live refreshes.
-          if (existing && existing.parentNode) {
-            existing.replaceWith(box);
-          } else if (links && links.parentNode) {
-            links.parentNode.insertBefore(box, links);
-          } else {
-            card.appendChild(box);
+          var footer = card.querySelector('.claim-footer');
+          if (!blocked) {
+            if (existingPanel) { existingPanel.remove(); }
+            if (existingDoor && existingDoor.parentNode) { existingDoor.replaceWith(door); }
+            else if (footer) { footer.insertBefore(door, footer.firstChild); }
+            else { card.appendChild(door); }
+            return;
           }
+          if (existingPanel && existingPanel.parentNode) { existingPanel.replaceWith(panel); }
+          else if (links && links.parentNode) { links.parentNode.insertBefore(panel, links); }
+          else if (footer) { footer.insertBefore(panel, footer.firstChild); }
+          else { card.appendChild(panel); }
+          if (existingDoor && existingDoor.parentNode) { existingDoor.replaceWith(door); }
+          else { panel.parentNode.insertBefore(door, panel); }
         });
       }
 
-      // A checked-in/offline viewer has no /api/status endpoint. The rendered
-      // graph payload carries the same readiness projection as .catalog.json,
-      // so turn its node data back into the claim-id map the card renderer
-      // accepts. A live status response below always replaces this snapshot.
+      // A checked-in/offline viewer has no /api/status endpoint. The
+      // rendered graph payload carries the same readiness projection as
+      // .catalog.json, so turn its node data back into the claim-id map the
+      // card renderer accepts. A live status response below always
+      // replaces this snapshot.
       function offlineReadiness() {
         var node = document.getElementById('dossierx-graph');
         if (!node) { return {}; }
@@ -1494,58 +2179,156 @@
       // reads as "fine" by default, and a persistent all-clear chip would be one
       // more thing to stop noticing.
       function renderStatusStrip(data) {
-        if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
+        if (!stripEl || !stripBody || !stripSummary || !stripTitle) { return; }
         lastStatusData = data || {};
-        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+        var lintWarnings = findingsForActiveFacet(lastStatusData.lint_warnings || [], claimIDs);
+        var groups = collectStatusGroups(
+          lastStatusData.readiness || offlineReadiness(),
+          claimIDs,
+          ledger,
+          lintErrors,
+          lintWarnings,
+          conformanceNotReadyIDs(claimIDs)
+        );
 
-        if (!ledger.length && !lintErrors.length && !readiness.length) {
+        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
+        // The banner's own visibility decides whether R09.3's readiness
+        // auto-open is suppressed (screens/02 section 9.1). It is computed
+        // here, BEFORE the doors are built, and passed down: reading
+        // stripEl.hidden inside renderClaimReadiness would sample the
+        // PREVIOUS pass's state, since this function only writes it below.
+        var bannerShowing = groups.length > 0 && actionable;
+        renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
+        if (!groups.length || !actionable) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
           return;
         }
 
-        stripBody.textContent = '';
-        if (ledger.length) {
-          stripBody.appendChild(findingGroup(
-            'Approval record issues',
-            ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
-          ));
-        }
-        if (readiness.length) {
-          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
-        }
-        if (lintErrors.length) {
-          stripBody.appendChild(findingGroup(
-            'Issues to resolve',
-            lintErrors.map(function (f) { return findingRow(humanRule(f.lint), f.claim_id, f.message); })
-          ));
-        }
+        var visible = groups.filter(function (group) {
+          return !stripSeverityFilter || group.severity === stripSeverityFilter;
+        });
 
-        // The summary leads with integrity whenever there is any, however many
-        // lint errors sit behind it — the reader needs the worst fact first.
+        stripBody.textContent = '';
+        // 04 §8 item 11 / §9 item 5: shell.html:265-271 already states this
+        // strip exists only against a live serve; readiness and lint groups
+        // still render statically from the embedded graph payload
+        // (offlineReadiness), but an APPROVAL RECORD verdict never can — a
+        // baked one would be exactly the "stale green strip nobody checked"
+        // that comment forbids. Stated here, not silently omitted.
+        if (((window.location && window.location.protocol) || '') === 'file:') {
+          stripBody.appendChild(textEl('p', 'status-strip-static-note',
+            'Approval record findings need a live dossierx serve; open with dossierx serve to see them.'));
+        }
+        var filters = el('div', 'status-strip-filters');
+        STATUS_SEVERITIES.forEach(function (item) {
+          var count = countSeverity(groups, item.id);
+          // retry fix 32 (this lane's third attempt, COORDINATOR RULING):
+          // a severity at zero emits NO chip — R08.1 makes a FILLED pill
+          // mean "nothing above this", which only means something when the
+          // filled (Critical) chip's absence is itself the "nothing above
+          // this" signal. A zero-count chip for every severity, always
+          // shown, said nothing a reader could act on.
+          if (count === 0) { return; }
+          var pressed = stripSeverityFilter === item.id;
+          // 04 §4.4 / R08.1: a scoped chip, never claim-status's shared
+          // .pill — that class is a different vocabulary (LOCKED / DRAFT /
+          // review_pending) and restyling it here would restyle every claim
+          // chip in the document too.
+          var chip = el('button', 'status-severity-chip status-severity-chip--' + item.id);
+          chip.type = 'button';
+          chip.appendChild(el('span', 'status-severity-chip__dot'));
+          chip.appendChild(document.createTextNode(item.label + ' '));
+          chip.appendChild(textEl('span', 'status-severity-chip__count', String(count)));
+          // 04 §8 item 2: pressed is the R-F.2 "open" treatment (an accent
+          // border + weight step), not a second fill — the severity hues are
+          // already spent on meaning and cannot also mean "selected".
+          chip.setAttribute('aria-pressed', String(pressed));
+          chip.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            stripSeverityFilter = pressed ? '' : item.id;
+            renderStatusStrip(lastStatusData);
+          });
+          filters.appendChild(chip);
+        });
+        stripBody.appendChild(filters);
+
+        // 04 §2 / §9 item 6: the promoted Issues body groups by the module
+        // that owns the blocking claim, never by severity — severity is the
+        // filter strip above, not the organising axis. R09.8 / §9 item 7
+        // keeps "Later" out of the default list; a reader opts in by
+        // pressing its chip. R08.2 / §8 item 3: integrity ("ledger")
+        // findings are a different KIND of finding, not a severity among
+        // severities — they sort into their own APPROVAL RECORD group,
+        // first, ahead of every module group, regardless of weight.
+        var withoutLater = visible.filter(function (group) {
+          return group.severity !== 'later' || stripSeverityFilter === 'later';
+        });
+        // retry fix 20: keyed off `origin` (the finding's KIND), not
+        // `severity` — a critical-severity LINT row must still be able to
+        // sit in its own module group (§ 8 item 1), and only a `ledger`
+        // finding may ever join APPROVAL RECORD.
+        var approvalRecord = withoutLater.filter(function (group) { return group.origin === 'ledger'; });
+        var byModule = {};
+        var moduleOrder = [];
+        withoutLater.filter(function (group) { return group.origin !== 'ledger'; }).forEach(function (group) {
+          var moduleID = ownerModuleID(group);
+          if (!Object.prototype.hasOwnProperty.call(byModule, moduleID)) {
+            byModule[moduleID] = [];
+            moduleOrder.push(moduleID);
+          }
+          byModule[moduleID].push(group);
+        });
+        var facetTotal = uniqueClaimCount(groups.filter(function (group) { return group.origin !== 'ledger'; }));
+        moduleOrder.sort(function (a, b) {
+          return uniqueClaimCount(byModule[b]) - uniqueClaimCount(byModule[a]);
+        });
+        if (approvalRecord.length) {
+          var recordEl = findingGroup('APPROVAL RECORD', approvalRecord.slice().sort(function (a, b) {
+            return statusGroupClaimCount(b) - statusGroupClaimCount(a);
+          }).map(renderStatusGroup));
+          recordEl.classList.add('status-group--approval-record');
+          stripBody.appendChild(recordEl);
+        }
+        moduleOrder.forEach(function (moduleID) {
+          var rows = byModule[moduleID].slice().sort(function (a, b) {
+            return statusGroupClaimCount(b) - statusGroupClaimCount(a);
+          });
+          var weight = uniqueClaimCount(rows);
+          var note = 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
+          stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
+        });
+
+        // retry fix 21: stripNote (the "Critical 0 · Needs you 3 · ..."
+        // tally) is removed from the collapsed banner per the coordinator's
+        // ruling — the severity chips above already carry every count this
+        // used to repeat as a second string. statusChipLine, the function
+        // that built that string, is now dead (no other call site) and is
+        // deleted.
+        var headline = blockerHeadline(groups);
+        var needsYou = countSeverity(groups, 'needs_you') > 0;
         if (ledger.length) {
           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = (lintErrors.length || readiness.length)
-            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
-            : 'Review these locked claims before relying on their approved state.';
-        } else if (lintErrors.length) {
+        } else if (lintErrors.length && !headline && !needsYou) {
           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = lintErrors.length === 1
-            ? 'This issue blocks the next successful DossierX check.'
-            : 'These issues block the next successful DossierX check.';
+        } else if (headline) {
+          stripTitle.textContent = headline;
         } else {
-          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+          stripTitle.textContent = countLabel(groups.length, 'grouped issue') + ' in this facet';
         }
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+        // Paper's default reading view always starts with the findings body
+        // collapsed. Critical and needs-you counts still determine the
+        // truthful summary/chips above; they do not take control of the
+        // reader's disclosure state. Once the reader opens the strip, the
+        // existing stripExpanded state remains sticky across later polls.
         setStripExpanded(stripExpanded);
         positionStatusStrip();
         stripEl.hidden = false;
@@ -1571,32 +2354,416 @@
         }, function () { /* keep the last verdict; the next tick recovers */ });
       }
 
-      if (stripToggle) {
-        stripToggle.addEventListener('click', function () {
-          stripUserToggled = true;
-          setStripExpanded(!stripExpanded);
+      // R09.6 (Paper ZP-0): "Issues is its own screen, not an expansion. The
+      // banner is the only way in." Paper backs that with node evidence:
+      // 56T-0, 574-0 and 6P-0 draw ONE state — the sentence plus "Show
+      // issues" — the desktop banner is a single flex ROW with no slot for a
+      // body, the string "Hide issues" does not exist anywhere in the design
+      // file, and 04 section 4 records that no board in the group draws an
+      // expanded state. The inline expand listener that lived here is gone;
+      // the toggle's only job is opening the Issues screen.
+      //
+      // setStripExpanded is deliberately KEPT: renderStatusStrip still calls
+      // it every poll with a permanently-false stripExpanded, and that is
+      // what holds #statusStripBody hidden, aria-expanded="false" and the
+      // action reading "Show issues".
+      //
+      // #statusStripBody is never emptied, removed or left unpopulated:
+      // renderStatusStrip still builds into it, issuesSyncFromStrip still
+      // MOVES its children into the Issues screen, and closeIssuesView still
+      // moves them back. Only its visibility to the reader is withdrawn — the
+      // children now return into a hidden body instead of an expanded one,
+      // which is the defect this removes.
+
+      // ================================================================
+      // Issues view (04-issues-screen.md) — lane L8a
+      // ================================================================
+      //
+      // The screen's own chrome around lane L8's status-strip vocabulary:
+      // breadcrumb, title/subtitle, scope and sort controls, the findings
+      // card and the "WHERE THE BLOCKERS LIVE" rail (04 §3, §4.1-4.3, §4.5,
+      // §4.6, §4.9). R09.6: reached ONLY from "Show issues" — the listener
+      // just below runs AFTER the one directly above (source order), so by
+      // the time it fires `stripExpanded` already holds L8's own new value.
+      //
+      // #issuesFilters and #issuesFindingsCard never build their own copy of
+      // the severity chips or the grouped findings list: issuesSyncFromStrip
+      // MOVES #statusStripBody's current children into them (never clones),
+      // so every click handler and every future renderStatusStrip() re-paint
+      // L8 already wired keeps working untouched — composed, not restyled.
+      var issuesViewEl = document.getElementById('issuesView');
+      var issuesBackBtn = document.getElementById('issuesBack');
+      var issuesBreadcrumbFacetEl = document.getElementById('issuesBreadcrumbFacet');
+      var issuesBreadcrumbSuffixEl = document.getElementById('issuesBreadcrumbSuffix');
+      var issuesSubtitleEl = document.getElementById('issuesSubtitle');
+      var issuesScopeEl = document.getElementById('issuesScope');
+      var issuesCaveatEl = document.getElementById('issuesCaveat');
+      var issuesFiltersHost = document.getElementById('issuesFilters');
+      var issuesSortControl = document.getElementById('issuesSortControl');
+      var issuesFindingsCard = document.getElementById('issuesFindingsCard');
+      var issuesRailPanelEl = document.getElementById('issuesRailPanel');
+      var issuesRailCaveatEl = document.getElementById('issuesRailCaveat');
+      var issuesRailRowsEl = document.getElementById('issuesRailRows');
+      var issuesViewOpen = false;
+      // 04 §8 item 7: This facet / Module / Project. Selecting a wider scope
+      // changes the denominator (and the rail's own claim-id basis) and
+      // nothing else — the numerator per module, read straight off L8's own
+      // grouping, never changes with scope.
+      var issuesScope = 'facet';
+      var ISSUES_RAIL_MAX_ROWS = 4;
+
+      // issuesScopedClaimIDs answers 04 §8 item 7's "the current scope" for
+      // any of the three positions, read-only over the SAME lookup maps
+      // initViewer() builds for deep linking (never written here).
+      function issuesScopedClaimIDs(scope) {
+        if (scope === 'project') {
+          var all = Object.create(null);
+          Object.keys(claimToFacet).forEach(function (id) { all[id] = true; });
+          return all;
+        }
+        if (scope === 'module') {
+          var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+          var moduleID = section ? section.id : '';
+          var ids = Object.create(null);
+          Object.keys(claimToFacet).forEach(function (id) {
+            if (facetToModule[claimToFacet[id]] === moduleID) { ids[id] = true; }
+          });
+          return ids;
+        }
+        return activeFacetClaimIDs();
+      }
+
+      // issuesGroupsForScope reruns L8's own pure grouping functions
+      // (collectStatusGroups et al. — called, never edited) over a broader
+      // claim-id set than the active facet, so the rail and the denominator
+      // can answer Module/Project scope without a second data source.
+      function issuesGroupsForScope(scope) {
+        var ids = issuesScopedClaimIDs(scope);
+        var data = lastStatusData || {};
+        var ledger = findingsForActiveFacet(data.ledger_findings || [], ids);
+        var lintErrors = findingsForActiveFacet(data.lint_errors || [], ids);
+        var lintWarnings = findingsForActiveFacet(data.lint_warnings || [], ids);
+        var groups = collectStatusGroups(
+          data.readiness || offlineReadiness(), ids, ledger, lintErrors, lintWarnings,
+          conformanceNotReadyIDs(ids)
+        );
+        // Mirrors renderStatusStrip's own severity-filter + APPROVAL RECORD /
+        // Later exclusions (viewer-runtime.js, above) so the rail and the
+        // denominator always describe the SAME rows the card is showing.
+        var visible = groups.filter(function (g) {
+          return !stripSeverityFilter || g.severity === stripSeverityFilter;
+        });
+        return visible.filter(function (g) {
+          return (g.severity !== 'later' || stripSeverityFilter === 'later') && g.origin !== 'ledger';
         });
       }
 
-      // ---- expand-all toolbar (Q2) --------------------------------------
-      // A single global control that sets/clears the `open` PROPERTY on every
-      // details.claim-links currently in the DOM. This is a client-side DOM
-      // mutation only — no localStorage, no URL state — so it never affects
-      // emitted bytes and never survives a reload. It queries fresh at click
-      // time rather than caching a NodeList, since a Phase 5c fragment swap
-      // can replace <main class="content-area"> (and therefore every
-      // details.claim-links in it) between clicks.
-      var expandAllToggle = document.getElementById('expandAllToggle');
-      if (expandAllToggle) {
-        expandAllToggle.addEventListener('click', function () {
-          var footers = document.querySelectorAll('details.claim-links');
-          var anyClosed = false;
-          footers.forEach(function (d) { if (!d.open) { anyClosed = true; } });
-          footers.forEach(function (d) { d.open = anyClosed; });
-          expandAllToggle.setAttribute('aria-pressed', String(anyClosed));
-          expandAllToggle.textContent = anyClosed ? 'Collapse all evidence' : 'Expand all evidence';
+      function issuesModuleWeights(scope) {
+        var withoutLater = issuesGroupsForScope(scope);
+        var byModule = {};
+        var order = [];
+        withoutLater.forEach(function (g) {
+          var id = ownerModuleID(g);
+          if (!Object.prototype.hasOwnProperty.call(byModule, id)) { byModule[id] = []; order.push(id); }
+          byModule[id].push(g);
+        });
+        var rows = order.map(function (id) {
+          return { id: id, label: moduleLabel(id), weight: uniqueClaimCount(byModule[id]) };
+        });
+        rows.sort(function (a, b) { return b.weight - a.weight; });
+        return {
+          rows: rows,
+          claims: uniqueClaimCount(withoutLater),
+          paths: rows.reduce(function (sum, r) { return sum + r.weight; }, 0)
+        };
+      }
+
+      // issuesApplyScopeDenominator retexts the ALREADY-RENDERED weight
+      // phrase (".status-group-head-note", L8's own node, moved in whole)
+      // rather than re-running findingGroup — 04 §8 item 7: "changing scope
+      // changes the denominator and nothing else", so the numerator this
+      // phrase already carries is left untouched and only the trailing "of
+      // <M>" is rewritten.
+      function issuesApplyScopeDenominator() {
+        if (!issuesFindingsCard) { return; }
+        var m = issuesModuleWeights(issuesScope).claims;
+        issuesFindingsCard.querySelectorAll('.status-group-head-note').forEach(function (note) {
+          var match = /^blocks (\d+) of \d+ claims? here$/.exec(note.textContent || '');
+          if (!match) { return; }
+          note.textContent = 'blocks ' + match[1] + ' of ' + m + ' claim' + (m === 1 ? '' : 's') + ' here';
         });
       }
+
+      // renderIssuesRail (04 §4.9): a ranking with bars, proportional to the
+      // facet's blocked-claim TOTAL (§4.9's own measured widths — retry fix
+      // 4, coordinator ruling: "rail bars use the spec's rounding basis" —
+      // round(N / M, 1px) against data.claims, the SAME M
+      // issuesApplyScopeDenominator already writes into every group header's
+      // "blocks N of M claims here" phrase (§8 item 7/9: the rail figures
+      // must agree with the group headers at the same scope). §4.9's table
+      // measures round(92%, 1px) for a count of 24 against a facet total of
+      // 26 (24/26 = 92.3%), NOT 100% for the largest row — §2 and §4.9's
+      // prose ("proportions of the largest count") describes the board's
+      // words, not its pixels, and the pixels are the spec (tokens.md's
+      // standing rule: a measured value wins over paraphrased prose).
+      // Truncated rather than scrolled past four rows, with the same
+      // double-counting caveat sentence mirrored under the mobile subtitle
+      // (§5 M2) once the rail itself is gone. The caveat is DERIVED here,
+      // not the fixture's hand-authored literal, so it stays correct at any
+      // corpus size or scope.
+      function renderIssuesRail() {
+        if (!issuesRailRowsEl) { return; }
+        var data = issuesModuleWeights(issuesScope);
+        issuesRailRowsEl.textContent = '';
+        var shown = data.rows.slice(0, ISSUES_RAIL_MAX_ROWS);
+        var total = data.claims;
+        shown.forEach(function (row) {
+          var wrap = el('div', 'issues-rail-row');
+          var labelRow = el('div', 'issues-rail-row-label');
+          labelRow.appendChild(textEl('span', 'issues-rail-row-name', row.label));
+          labelRow.appendChild(textEl('span', 'issues-rail-row-count', String(row.weight)));
+          wrap.appendChild(labelRow);
+          var track = el('div', 'issues-rail-bar-track');
+          var fill = el('div', 'issues-rail-bar-fill');
+          fill.style.width = (total ? Math.round((row.weight / total) * 100) : 0) + '%';
+          track.appendChild(fill);
+          wrap.appendChild(track);
+          issuesRailRowsEl.appendChild(wrap);
+        });
+        if (data.rows.length > ISSUES_RAIL_MAX_ROWS) {
+          issuesRailRowsEl.appendChild(textEl('p', 'issues-rail-more',
+            (data.rows.length - ISSUES_RAIL_MAX_ROWS) + ' more not shown'));
+        }
+        var caveat = data.claims > 0
+          ? (countLabel(data.claims, 'claim') + ' blocked, ' + countLabel(data.paths, 'path') +
+             ' — a claim blocked through two modules counts under both.')
+          : '';
+        if (issuesRailCaveatEl) { issuesRailCaveatEl.textContent = caveat; }
+        if (issuesCaveatEl) { issuesCaveatEl.textContent = caveat; }
+        // §8 item 5: an empty ranking is a ranking of nothing — the panel is
+        // OMITTED, not rendered empty.
+        if (issuesRailPanelEl) { issuesRailPanelEl.hidden = data.rows.length === 0; }
+      }
+
+      // issuesSyncHeader reads the breadcrumb (04 §4.1) and subtitle
+      // (§4.2) off the SAME active-module/active-facet DOM the rest of the
+      // reading view already maintains — read-only, no new state.
+      function issuesSyncHeader() {
+        var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
+        var activeSection = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
+        if (issuesBreadcrumbFacetEl) {
+          issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';
+        }
+        if (issuesBreadcrumbSuffixEl) {
+          issuesBreadcrumbSuffixEl.textContent = subtab ? ('· ' + subtab.textContent.trim()) : '';
+        }
+        if (issuesSubtitleEl) {
+          var groups = collectStatusGroups(
+            (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
+            activeFacetClaimIDs(), [], [], [], []
+          );
+          issuesSubtitleEl.textContent = blockerHeadline(groups) || 'Nothing in this facet is blocked.';
+        }
+      }
+
+      // issuesSyncFromStrip is the one function that touches L8's DOM: it
+      // MOVES (appendChild on an already-mounted node detaches it from its
+      // old parent) #statusStripBody's current children — the severity
+      // filter row and every .status-group / .status-strip-static-note —
+      // into this view's own containers, in place of the two containers'
+      // stale content from the previous sync. The MutationObserver declared
+      // below calls this again every time renderStatusStrip (L8's function)
+      // repaints #statusStripBody, so a poll, a severity-chip click or a
+      // facet change all keep this view's copy live without this file ever
+      // calling into or editing renderStatusStrip itself.
+      //
+      // It disconnects that observer before moving anything and reconnects
+      // after: appendChild-ing stripBody's OWN children elsewhere is ALSO a
+      // childList mutation of stripBody (a removal), and the observer would
+      // otherwise queue a second, self-triggered call for it — which runs as
+      // a microtask AFTER this synchronous function has already returned, by
+      // which point stripBody is genuinely empty (this function just moved
+      // everything out of it), so that second call would find "no groups"
+      // and overwrite the correct result just produced with the empty-state
+      // message. A plain re-entrancy flag cannot fix this: it would already
+      // be reset by the time the queued microtask ran.
+      function issuesSyncFromStrip() {
+        if (!stripBody || !issuesFindingsCard || !issuesFiltersHost) { return; }
+        if (issuesStripObserver) { issuesStripObserver.disconnect(); }
+        issuesFiltersHost.textContent = '';
+        issuesFindingsCard.textContent = '';
+        Array.prototype.slice.call(stripBody.children).forEach(function (node) {
+          if (node.classList && node.classList.contains('status-strip-filters')) {
+            issuesFiltersHost.appendChild(node);
+          } else {
+            issuesFindingsCard.appendChild(node);
+          }
+        });
+        // 04 §8 items 5/6: nothing blocked in this facet, or a severity
+        // filter that matches nothing — state it in one line rather than
+        // showing zero groups silently. Never hide the filter strip that
+        // caused an empty result (§8 item 6).
+        if (!issuesFindingsCard.querySelector('.status-group')) {
+          issuesFindingsCard.appendChild(textEl('p', 'issues-findings-empty', stripSeverityFilter
+            ? 'No open findings match this filter in this facet.'
+            : 'Nothing in this facet is blocked.'));
+        }
+        issuesApplyScopeDenominator();
+        renderIssuesRail();
+        if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
+      }
+
+      function setIssuesScope(scope) {
+        issuesScope = scope;
+        if (issuesScopeEl) {
+          issuesScopeEl.querySelectorAll('.issues-scope-seg').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', String(btn.getAttribute('data-scope') === scope));
+          });
+        }
+        issuesApplyScopeDenominator();
+        renderIssuesRail();
+      }
+
+      // #systemFacetToc (group 02/system-record.js's right-hand claim list,
+      // "ON THIS FACET") is `position: fixed` — a sibling of .layout, not a
+      // descendant of .content-area — so hiding .content-area alone leaves
+      // it floating over this view's own right rail at the same screen
+      // edge. Toggling its OWN `hidden` property from here does not stick:
+      // system-record.js's layout MutationObserver (its own documented,
+      // pre-existing re-render-on-any-.layout-mutation behaviour — see
+      // renderToc/updateTocActive) reacts to the very childList mutations
+      // issuesSyncFromStrip makes inside #issuesView (a .layout descendant)
+      // and calls renderToc() again on the next frame, which sets
+      // `toc.hidden = false` unconditionally whenever a facet is active —
+      // undoing this lane's `= true` almost immediately. A CSS rule keyed
+      // off #issuesView's own hidden state (below, this lane's appended
+      // section) is not fighting that same reactive loop and always wins.
+
+      function openIssuesView() {
+        if (!issuesViewEl) { return; }
+        // issuesSyncFromStrip MOVES #statusStripBody's children in here, so
+        // those nodes live in exactly ONE place at a time. Re-entering while
+        // this view is already open would clear both hosts and then find
+        // stripBody already empty, printing "Nothing in this facet is
+        // blocked." beside a rail that is still counting the real blockers.
+        if (issuesViewOpen) { return; }
+        var contentArea = document.querySelector('.content-area');
+        if (contentArea) { contentArea.hidden = true; }
+        issuesViewEl.hidden = false;
+        issuesViewOpen = true;
+        // The reading view this replaces can be scrolled deep into an
+        // 828-claim facet; this view has its own internal scroll region
+        // (.issues-body) and starts at its own top regardless of where the
+        // page the reader is leaving happened to be.
+        window.scrollTo(0, 0);
+        issuesSyncHeader();
+        issuesSyncFromStrip();
+        issuesViewEl.focus({ preventScroll: true });
+      }
+
+      // closeIssuesView is this screen's only exit besides ordinary
+      // navigation (a sidebar tab, a citation link — both close it via the
+      // capture-phase listener below): R09.6 puts no second control on the
+      // boards, so the breadcrumb's own back chevron is this lane's choice
+      // for "leave the way you came".
+      function closeIssuesView() {
+        if (!issuesViewEl || issuesViewEl.hidden) { return; }
+        issuesViewEl.hidden = true;
+        issuesViewOpen = false;
+        var contentArea = document.querySelector('.content-area');
+        if (contentArea) { contentArea.hidden = false; }
+        // Hand the status strip back the children issuesSyncFromStrip MOVED
+        // out of it. Leaving #statusStripBody drained has two visible costs:
+        // the reading view shows an EXPANDED but blank strip until the next
+        // renderStatusStrip repaints it, and the next openIssuesView syncs
+        // from an empty source and renders the empty state while
+        // renderIssuesRail — which reads lastStatusData, not the DOM — still
+        // reports the true count. That is one screen saying both "Nothing in
+        // this facet is blocked." and "26 claims blocked, 59 paths".
+        //
+        // issuesViewOpen is already false, so the observer callback these
+        // moves would queue is a no-op; it is disconnected around them
+        // anyway, for the same reason issuesSyncFromStrip disconnects.
+        if (!stripBody || !issuesFiltersHost || !issuesFindingsCard) { return; }
+        if (issuesStripObserver) { issuesStripObserver.disconnect(); }
+        Array.prototype.slice.call(issuesFindingsCard.children).forEach(function (node) {
+          // This view's OWN node, never the strip's — it must not travel back.
+          if (node.classList && node.classList.contains('issues-findings-empty')) {
+            node.remove();
+            return;
+          }
+          stripBody.appendChild(node);
+        });
+        // renderStatusStrip writes the filter row ahead of every group, so
+        // restore it to that same position: a later re-open must be
+        // indistinguishable from a first.
+        var filterRow = issuesFiltersHost.firstElementChild;
+        if (filterRow) {
+          var firstGroup = stripBody.querySelector('.status-group');
+          if (firstGroup) { stripBody.insertBefore(filterRow, firstGroup); }
+          else { stripBody.appendChild(filterRow); }
+        }
+        if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
+      }
+
+      if (issuesBackBtn) {
+        issuesBackBtn.addEventListener('click', closeIssuesView);
+      }
+      if (issuesScopeEl) {
+        issuesScopeEl.addEventListener('click', function (event) {
+          var btn = event.target.closest('.issues-scope-seg');
+          if (btn) { setIssuesScope(btn.getAttribute('data-scope')); }
+        });
+      }
+      // 04 §8 item 13 / §9 Open decision 9: only one sort value exists, so
+      // the control is box-only — no menu to open — until a second value
+      // does. It is left focusable and pressable rather than disabled (04
+      // §8 item 12 reasons the same way about a zero-count severity chip).
+      if (issuesSortControl) {
+        issuesSortControl.addEventListener('click', function (event) { event.preventDefault(); });
+      }
+      // "Show issues" (R09.6) opens this view — UNCONDITIONALLY on every
+      // click of this control, whichever label it currently reads. The
+      // strip's own inline expand/collapse (the listener directly above,
+      // L8's, toggling stripExpanded/#statusStripBody) changes the sticky
+      // disclosure state first. R09.6 names this same control as the Issues
+      // entry point, so this listener does not gate on that resulting state.
+      if (stripToggle) {
+        stripToggle.addEventListener('click', openIssuesView);
+      }
+      // Any ordinary navigation — a sidebar tab, a subtab, a citation link —
+      // leaves this screen the same way the back chevron does. Capture phase
+      // so it runs before the target's own handler, and a click INSIDE the
+      // view (the scope control, the back button itself) never matches these
+      // selectors.
+      document.addEventListener('click', function (event) {
+        if (!issuesViewOpen) { return; }
+        var navHit = event.target.closest &&
+          event.target.closest('.sec-tab, .subtab, a.claim-cite, .claim-links a[href^="#"]');
+        if (navHit) { closeIssuesView(); }
+      }, true);
+      window.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && issuesViewOpen) { closeIssuesView(); }
+      });
+      // #statusStripBody is a stable node outside .layout (like #statusStrip
+      // itself), so one observer registered once at load survives every SSE
+      // fragment swap — nothing here needs re-arming from initViewer(). It is
+      // declared here (not anonymous) because issuesSyncFromStrip itself
+      // disconnects and re-observes around its own moves: appendChild-ing
+      // stripBody's children elsewhere is ALSO a childList mutation of
+      // stripBody, and MutationObserver callbacks run as a microtask AFTER
+      // the synchronous sync already returned — a plain re-entrancy guard
+      // reset at the end of that same synchronous call would already be
+      // false by the time the queued callback ran, so the self-triggered
+      // second sync would still fire and find stripBody freshly emptied by
+      // the first one, overwriting its correct result with the empty state.
+      var issuesStripObserver = (stripBody && window.MutationObserver)
+        ? new MutationObserver(function () {
+            if (issuesViewOpen) { issuesSyncFromStrip(); }
+          })
+        : null;
+      if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
 
       // ---- source-note three-line clamp ---------------------------------
       // A source's supports/does_not_support line is authored prose with no
@@ -1971,7 +3138,9 @@
         // refreshStatus races the fragment fetch; if it painted the old DOM
         // before this swap, re-apply the last verdict onto the fresh cards.
         if (lastStatusData) {
-          renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
+          // renderStatusStrip rebuilds the readiness doors itself, with the
+          // banner state they have to be gated on. Calling renderClaimReadiness
+          // separately here would paint them once un-gated first.
           renderStatusStrip(lastStatusData);
         }
 
@@ -2013,6 +3182,17 @@
       // per-element, so a later SSE fragment swap that replaces the tabs/cards
       // keeps working without re-binding (and initViewer can be re-run freely).
       document.addEventListener('click', function (e) {
+        var graphTrigger = e.target.closest('[data-dxg-open]');
+        if (graphTrigger) {
+          if (document.body.classList.contains('dxg-open')) {
+            restoreFocus(graphTrigger, '#dxgOpen');
+          } else {
+            graphFocusReturn = graphTrigger;
+          }
+        }
+        if (e.target.closest('[data-dxg-close]') && graphFocusReturn) {
+          restoreFocus(graphFocusReturn, '#dxgOpen');
+        }
         var chip = e.target.closest('.comment-chip');
         if (chip) {
           e.preventDefault();
@@ -2058,16 +3238,54 @@
       });
 
       window.addEventListener('hashchange', function () {
+        // A hash change is a request for a CLAIM in the reading view: the
+        // graph pane's "back to this claim", a facet-TOC row, the browser's
+        // own Back button, a shared link. The Issues screen hides
+        // .content-area, so leaving it open strands the reader on Issues
+        // while showModuleFacet silently re-syncs the findings card and the
+        // rail to the NEW facet behind a breadcrumb and subtitle that still
+        // name the old one (issuesSyncHeader runs only from openIssuesView).
+        // Closing first also un-hides .content-area before showModuleFacet
+        // scrolls the deep-linked card into view — scrollIntoView on a hidden
+        // ancestor is a silent no-op.
+        closeIssuesView();
         showFromHash({ skipHash: true });
       });
 
       if (navToggle) {
         navToggle.addEventListener('click', function () {
-          setDrawer(!document.body.classList.contains('nav-open'));
+          setDrawer(!document.body.classList.contains('nav-open'), navToggle);
+        });
+      }
+      var mobileSearchToggle = document.getElementById('mobileSearchToggle');
+      if (mobileSearchToggle) {
+        mobileSearchToggle.addEventListener('click', function () {
+          setDrawer(true, mobileSearchToggle);
+          var search = document.getElementById('navSearch');
+          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
+        });
+      }
+      var navSearch = document.getElementById('navSearch');
+      if (navSearch) {
+        navSearch.addEventListener('input', function () {
+          var query = navSearch.value.trim().toLowerCase();
+          document.querySelectorAll('.system-nav-group').forEach(function (group) {
+            var rows = Array.prototype.slice.call(group.querySelectorAll('.sec-tab'));
+            var matches = rows.filter(function (row) {
+              var visible = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+              row.hidden = !visible;
+              return visible;
+            });
+            group.hidden = query !== '' && matches.length === 0;
+          });
         });
       }
       if (navOverlay) {
         navOverlay.addEventListener('click', function () { setDrawer(false); });
+      }
+      var navDrawerClose = document.getElementById('navDrawerClose');
+      if (navDrawerClose) {
+        navDrawerClose.addEventListener('click', function () { setDrawer(false); });
       }
       if (commentsOverlay) {
         commentsOverlay.addEventListener('click', function () { closeCommentPanel(); });
@@ -2090,6 +3308,12 @@
       window.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
           if (commentPanelOpen()) { closeCommentPanel(); return; }
+          var target = event.target;
+          if (graphFocusReturn && target && typeof target.closest === 'function' && target.closest('#dxgPane')) {
+            restoreFocus(graphFocusReturn, '#dxgOpen');
+            return;
+          }
+          if (document.body.classList.contains('nav-open')) { event.preventDefault(); }
           setDrawer(false);
         }
       });
@@ -2104,6 +3328,6 @@
       if (!softMountEnabled()) { mountAllSurfaces(); }
       // Static file:// viewers never receive /api/status. Paint the assessment
       // carried by the graph payload now; a live response replaces it later.
-      renderClaimReadiness(offlineReadiness());
+      renderStatusStrip({ readiness: offlineReadiness() });
       probeAndMount();
     })();

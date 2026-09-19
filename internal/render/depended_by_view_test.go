@@ -93,8 +93,12 @@ func TestRender_TargetPill_ActionableRestsOnTargetGetsPill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if !strings.Contains(out, `<span class="pill pv">draft</span>`) {
-		t.Fatalf("expected a draft pill on the rests_on target that is itself draft, got:\n%s", out)
+	// 05 §4.10/R-I.2: a rests_on target inside the DEPENDS ON direction block
+	// now carries the always-on lifecycle dot+badge
+	// (.claim-relationship-badge--draft, "DRAFT") rather than the old
+	// actionable-only .pill — see components.writeRelationshipRow.
+	if !strings.Contains(out, `<span class="claim-relationship-badge claim-relationship-badge--draft">DRAFT</span>`) {
+		t.Fatalf("expected a draft lifecycle badge on the rests_on target that is itself draft, got:\n%s", out)
 	}
 }
 

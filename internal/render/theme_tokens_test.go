@@ -1,7 +1,7 @@
 package render
 
-// Structural invariants of the two embedded stylesheets, and the link between
-// them and internal/config's ThemeTokenAllowlist.
+// Structural invariants of the two embedded stylesheets and their built-in
+// token vocabulary. These tokens are internal, not project configuration.
 //
 // These are invariants about how the source produces the output, which is the
 // half a rendered-output check cannot cover: a token that no rule reads renders
@@ -13,15 +13,14 @@ package render
 // file loads the CSS into an engine. It cannot tell you that a rule wins the
 // cascade, only that the declaration exists and that the file's block
 // structure is what the theme mechanism assumes. Cascade outcomes are the
-// browser parity suite's job (viewer-tests/theme_parity_test.go).
+// browser reader-mode tests' job (viewer-tests/theme_modes_test.go).
 
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
-
-	"github.com/BarterX-Tech/dossierx/internal/config"
 )
 
 // embeddedCSS reads one template file through the package's own embed.FS and
@@ -87,19 +86,21 @@ func jsConsumerPattern(token string) string { return "'--" + token + "'" }
 // name seven of them ('--accent', '--faint', '--ink', '--link', '--muted',
 // '--paper', '--warn') for the graph pane's palette read, so the arm is live
 // code rather than dead machinery — but no token depends on it.
+var builtinViewerTokens = []string{"accent", "accent-bg", "ink", "muted", "faint", "paper", "card-bg", "border", "link", "warn", "warn-bg", "font-sans", "font-mono", "radius", "code-inline-bg", "code-bg", "table-head-bg", "image-bg", "hover-bg", "border-strong", "shadow", "shadow-strong", "shadow-cast", "scrim", "selection-bg", "status-draft", "status-draft-bg", "mockup-bg"}
+
 func TestEveryAllowlistedTokenHasAConsumer(t *testing.T) {
 	style := embeddedCSS(t, styleTemplatePath)
 	graph := embeddedCSS(t, graphCSSTemplatePath)
 	js := embeddedCSS(t, graphUITemplatePath)
 	css := style + "\n" + graph
 
-	if got, want := len(config.ThemeTokenAllowlist), 28; got != want {
-		t.Errorf("len(config.ThemeTokenAllowlist) = %d, want %d; "+
+	if got, want := len(builtinViewerTokens), 28; got != want {
+		t.Errorf("len(builtinViewerTokens) = %d, want %d; "+
 			"the allowlist and this file's coverage are meant to move together, "+
 			"so update both deliberately", got, want)
 	}
 
-	for _, token := range config.ThemeTokenAllowlist {
+	for _, token := range builtinViewerTokens {
 		inCSS := consumerPattern(token).MatchString(css)
 		inJS := strings.Contains(js, jsConsumerPattern(token))
 		if !inCSS && !inJS {
@@ -114,7 +115,7 @@ func TestEveryAllowlistedTokenHasAConsumer(t *testing.T) {
 		// This is what licenses the comment above. If a token ever legitimately
 		// moves to JS-only, this subtest is the one to change, and changing it
 		// is the moment to re-read that comment.
-		for _, token := range config.ThemeTokenAllowlist {
+		for _, token := range builtinViewerTokens {
 			if !consumerPattern(token).MatchString(css) {
 				t.Errorf("token %q is not read by any CSS rule; it is JS-only, "+
 					"which is allowed but is no longer what the doc comment on "+
@@ -183,6 +184,22 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 			t.Errorf("found %d unconditional `:root {` blocks in style.css, want 1. "+
 				"Two of them means the palette's winner depends on source order, "+
 				"which is how the dead block deleted in this branch came about.", n)
+		}
+	})
+
+	t.Run("DataThemeDarkLivesUnderScreen", func(t *testing.T) {
+		if !strings.Contains(css, `html[data-theme="dark"]`) {
+			t.Fatal("style.css must paint explicit Dark via html[data-theme=\"dark\"]")
+		}
+		idx := strings.Index(css, `html[data-theme="dark"]`)
+		if idx < 0 {
+			t.Fatal("html[data-theme=\"dark\"] vanished between the Contains check and Index")
+		}
+		before := css[:idx]
+		lastScreen := strings.LastIndex(before, "@media screen")
+		lastPrint := strings.LastIndex(before, "@media print")
+		if lastScreen < 0 || lastPrint > lastScreen {
+			t.Fatal("html[data-theme=\"dark\"] must sit inside a screen media query so print stays light")
 		}
 	})
 
@@ -255,6 +272,57 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		}
 	})
 
+	// The guard above places the print block by BYTE OFFSET, which says nothing
+	// about how deeply nested it is. Integration of wave A landed a style.css
+	// whose last four `}` had been eaten by three successive merges: the file
+	// parsed (CSS auto-closes unterminated blocks at EOF) and every offset guard
+	// here still passed, but `@media print` had become a nested at-rule inside
+	// `.claim-footer-chip` inside `@media (pointer: coarse)` inside `@media
+	// (max-width: 520px)`, so none of its rules reached a desktop printed page —
+	// viewer-tests/reveal_test.go's two print cases were the only thing that saw
+	// it. Braces are what the cascade is actually built out of, so they are
+	// pinned here directly: the file balances, and the print block opens at
+	// depth 0.
+	t.Run("BracesBalanceAndPrintIsTopLevel", func(t *testing.T) {
+		printAt := strings.Index(css, "@media print")
+		if printAt < 0 {
+			t.Fatal("no @media print block in style.css")
+		}
+		depth, minDepth, atPrint := 0, 0, -1
+		for i := 0; i < len(css); i++ {
+			if i == printAt {
+				atPrint = depth
+			}
+			switch css[i] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth < minDepth {
+					minDepth = depth
+				}
+			}
+		}
+		if minDepth < 0 {
+			t.Errorf("style.css closes %d more block(s) than it opens at its worst "+
+				"point; a stray `}` ends a block early and every rule after it "+
+				"changes meaning", -minDepth)
+		}
+		if depth != 0 {
+			t.Errorf("style.css ends with %d unclosed block(s). The CSS parser will "+
+				"close them for you at EOF, which is why this is invisible to every "+
+				"other guard in this file — but everything written after the missing "+
+				"`}` is nested inside whatever was left open, and applies only when "+
+				"that block's condition does.", depth)
+		}
+		if atPrint != 0 {
+			t.Errorf("the `@media print` block opens at brace depth %d, want 0. "+
+				"A nested @media print only matches when its enclosing conditions "+
+				"do as well, so the printed page silently loses every rule in it.",
+				atPrint)
+		}
+	})
+
 	t.Run("PrintPinsLightColorSchemeInItsOwnRoot", func(t *testing.T) {
 		printAt := strings.Index(css, "@media print")
 		if printAt < 0 {
@@ -288,10 +356,50 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 	})
 
 	t.Run("RadiusConsumerCountIsPinned", func(t *testing.T) {
-		// Pinned rather than bounded: --radius is the one length token, and the
-		// four surfaces that honour it (the code block, the comment panel, the
-		// comment chip and the facet card) are a deliberate set. A fifth consumer
-		// changes what `radius: 10px` does to an existing project's viewer.
+		// Pinned rather than bounded: --radius is one of the built-in reader
+		// lengths, and its consumers are deliberate. A new consumer changes the
+		// shared System/Light/Dark geometry.
+		//
+		// The claim card (.card, .claim-tree) dropped out of this set in L3's
+		// pass (docs/design/screens/07a-claim-draft-not-yet-approved.md open
+		// decision D4): the design measures the card's radius at 12px, off both
+		// the engine's --radius default and Paper's own 4/8/999 scale, and rules
+		// "carry 12px as a per-component literal ... do not widen --radius and
+		// do not add a token." tokens.md's Open decisions repeats this as a
+		// general rule for every off-scale radius on the boards. Custom viewer
+		// themes are retired; this count now guards only the built-in modes.
+		// Re-pinned 9 -> 10 by lane L2 (third and final retry, verifier fix
+		// item 7): 02 §4.4 gives the sidebar/System-Record module row
+		// (#dxgOpen, .sec-tab) radius 6px, exactly --radius's value, where
+		// the row previously used --radius-sm (4px, off-spec). --radius-sm
+		// keeps its other consumers (inline code spans, blocker-row slug
+		// chips per tokens.md §3), so this is a literal count change, not a
+		// structural one: the row's radius token, not a new surface.
+		//
+		// L8 (third attempt; G9 count re-pin) drops .status-strip out of this
+		// set: 02 §4.10 "Radius" and 03 §4.5 make the collapsed banner a flush
+		// band with only a bottom hairline, so `border-radius: var(--radius)`
+		// left .status-strip. The 520px inset-card form keeps its own literal
+		// 10px, never a --radius consumer.
+		//
+		// The merged-tree arithmetic, recounted at integration by running this
+		// same regexp over `git show <merge>:…/style.css` for each wave-A merge
+		// (the previous comment here said "L2 +1, L8 -2 against the pilot's 9",
+		// which sums to 8 and never matched the pinned 9):
+		//
+		//   pilot 6b04cd9 (L3)  9
+		//   + L2  ea529d8      +1  #dxgOpen/.sec-tab row, --radius-sm -> --radius
+		//   + L4  bb760a9      +0  (its one new `var(--radius-pill, 999px)` is a
+		//                           different token and this regexp excludes it)
+		//   + L6  0410ceb      +0
+		//   + L8  91fa05f      -1  .status-strip's base rule
+		//   = 9
+		//
+		// L8's own lane notes say -2 because its earlier attempt also deleted a
+		// `.status-strip--open` top-radius override; that override was already
+		// absent from the integration tree before the L8 merge landed, so only
+		// one occurrence was left for the merge to remove. -2 is true of the
+		// lane's own base, not of this file.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
 		if n != 4 {
 			t.Errorf("style.css has %d --radius consumers, want exactly 4", n)
@@ -299,9 +407,268 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------
+// The three mode blocks, and the fourth state nobody had written down
+// ---------------------------------------------------------------------
+
+// ruleBody returns the body of the rule whose opening brace is the LAST `{` of
+// re's first match, with braces balanced from there. It is the block-level
+// counterpart to parseDecls: parseDecls knows a declaration's selector but not
+// which @media it sits inside, and every assertion below is about exactly that
+// distinction — `:root` means three different rules in style.css.
+func ruleBody(t *testing.T, name, css string, re *regexp.Regexp) string {
+	t.Helper()
+	loc := re.FindStringIndex(css)
+	if loc == nil {
+		t.Fatalf("%s: no match for %s; this file's structure moved and every "+
+			"assertion built on it is now checking nothing", name, re)
+	}
+	open := strings.LastIndex(css[:loc[1]], "{")
+	if open < 0 {
+		t.Fatalf("%s: match for %s carries no opening brace", name, re)
+	}
+	depth := 0
+	for i := open; i < len(css); i++ {
+		switch css[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return css[open+1 : i]
+			}
+		}
+	}
+	t.Fatalf("%s: the rule opened at byte %d is never closed", name, open)
+	return ""
+}
+
+// customPropDecl matches one `--name: value;` declaration. Values in these two
+// files never contain a semicolon (the nested ones are var() and color-mix()
+// calls), so the naive terminator is exact here.
+var customPropDecl = regexp.MustCompile(`(--[a-z0-9-]+)\s*:\s*([^;]+);`)
+
+// customProps reads a rule body into name -> value, values whitespace-collapsed
+// so an indentation change cannot read as a value change.
+func customProps(body string) map[string]string {
+	space := regexp.MustCompile(`\s+`)
+	out := map[string]string{}
+	for _, m := range customPropDecl.FindAllStringSubmatch(body, -1) {
+		out[m[1]] = space.ReplaceAllString(strings.TrimSpace(m[2]), " ")
+	}
+	return out
+}
+
+func sortedNames(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// assertSameTokenSet fails naming every token one side declares and the other
+// does not, in both directions. A set difference reported as a count is a
+// failure message nobody can act on.
+func assertSameTokenSet(t *testing.T, aName string, a map[string]string, bName string, b map[string]string) {
+	t.Helper()
+	for _, name := range sortedNames(a) {
+		if _, ok := b[name]; !ok {
+			t.Errorf("%s declares %s and %s does not; the two disagree for a reader "+
+				"who switches between the states they paint", aName, name, bName)
+		}
+	}
+	for _, name := range sortedNames(b) {
+		if _, ok := a[name]; !ok {
+			t.Errorf("%s declares %s and %s does not; the two disagree for a reader "+
+				"who switches between the states they paint", bName, name, aName)
+		}
+	}
+}
+
+// TestModeBlocksDeclareTheSameTokenSet is the guard on the defect this test was
+// added with: style.css had a block for explicit Dark and a block for an OS in
+// dark mode, and NO block for explicit Light. The viewer's theme control has
+// three positions, so the third state — a reader on a dark OS who presses Light
+// — was painted by nothing at all, and the OS-dark query was the last (0,1,0)
+// rule it met. Every token the query re-points stayed DARK under a lit Light
+// control: --paper, --ink, --accent, --link, the lot, for any project that had
+// not themed them itself.
+//
+// The three blocks are therefore held to one token set. The light block's
+// values are additionally required to equal the unconditional :root's, which is
+// what keeps the :root the single source of light truth rather than making the
+// light block a second palette that can drift from it. Hand-duplicated with
+// this equality pinned, rather than generated: CSS has no way to say "the value
+// :root gave", and a test that derived the expectation from :root would pass
+// for a light block that was empty.
+func TestModeBlocksDeclareTheSameTokenSet(t *testing.T) {
+	css := stripComments(embeddedCSS(t, styleTemplatePath))
+
+	root := customProps(ruleBody(t, "style.css :root", css,
+		regexp.MustCompile(`(?m)^:root\s*\{`)))
+	dark := customProps(ruleBody(t, `style.css html[data-theme="dark"]`, css,
+		regexp.MustCompile(`html\[data-theme="dark"\]\s*\{`)))
+	light := customProps(ruleBody(t, `style.css html[data-theme="light"]`, css,
+		regexp.MustCompile(`html\[data-theme="light"\]\s*\{`)))
+	osDark := customProps(ruleBody(t, "style.css OS-dark :root", css,
+		regexp.MustCompile(`@media screen and \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{`)))
+
+	for name, got := range map[string]map[string]string{
+		"the unconditional :root": root, "the explicit-dark block": dark,
+		"the explicit-light block": light, "the OS-dark block": osDark,
+	} {
+		if len(got) == 0 {
+			t.Fatalf("%s parsed to zero custom properties; every comparison below "+
+				"would be vacuous", name)
+		}
+	}
+
+	t.Run("ExplicitLightExists", func(t *testing.T) {
+		// Stated separately from the set comparison so its absence reports as
+		// itself rather than as twenty-three missing tokens.
+		if len(light) == 0 {
+			t.Fatal("style.css declares no html[data-theme=\"light\"] custom properties; " +
+				"a reader on a dark OS who presses Light gets the engine's dark palette")
+		}
+	})
+
+	t.Run("ExplicitDarkMatchesOSDark", func(t *testing.T) {
+		assertSameTokenSet(t, "the explicit-dark block", dark, "the OS-dark block", osDark)
+		for name, want := range osDark {
+			if got, ok := dark[name]; ok && got != want {
+				t.Errorf("%s is %q under the explicit-Dark choice and %q under a dark OS; "+
+					"the Dark control and the OS setting must paint the same viewer",
+					name, got, want)
+			}
+		}
+	})
+
+	t.Run("ExplicitLightMatchesTheDarkBlocksTokenSet", func(t *testing.T) {
+		assertSameTokenSet(t, "the explicit-light block", light, "the OS-dark block", osDark)
+	})
+
+	t.Run("ExplicitLightValuesAreTheRootsOwn", func(t *testing.T) {
+		for _, name := range sortedNames(light) {
+			want, ok := root[name]
+			if !ok {
+				t.Errorf("the explicit-light block declares %s, which the unconditional "+
+					":root does not; every light value must have one source", name)
+				continue
+			}
+			if light[name] != want {
+				t.Errorf("the explicit-light block sets %s to %q; the unconditional :root, "+
+					"which is this sheet's single source of light truth, says %q",
+					name, light[name], want)
+			}
+		}
+	})
+
+	t.Run("ColorSchemeFollowsTheExplicitChoice", func(t *testing.T) {
+		// Not a custom property, so the set comparisons above cannot see it — and
+		// it is the one declaration that must NOT be the same in the two dark
+		// blocks. `color-scheme: light dark` on :root resolves against the OS, so
+		// without these two an explicit choice moved the palette and left the form
+		// controls, the scrollbars and every light-dark() resolution on the OS's
+		// side of the fence.
+		darkBody := ruleBody(t, `style.css html[data-theme="dark"]`, css,
+			regexp.MustCompile(`html\[data-theme="dark"\]\s*\{`))
+		lightBody := ruleBody(t, `style.css html[data-theme="light"]`, css,
+			regexp.MustCompile(`html\[data-theme="light"\]\s*\{`))
+		if !strings.Contains(darkBody, "color-scheme: dark;") {
+			t.Error(`html[data-theme="dark"] does not pin color-scheme: dark`)
+		}
+		if !strings.Contains(lightBody, "color-scheme: light;") {
+			t.Error(`html[data-theme="light"] does not pin color-scheme: light`)
+		}
+	})
+}
+
+// TestGraphModeBlocksDeclareTheSameTokenSet is the same guard for graph.css's
+// ramp, which had the defect twice over: dark-first with a light query and no
+// data-theme rule at all, so BOTH explicit choices were answered by whichever
+// query the OS happened to match. A reader on a dark OS pressing Light got the
+// dark ramp on a light page; a reader on a light OS pressing Dark got the light
+// ramp on a dark one.
+//
+// The --color-graph-* / --color-dark-graph-* design names are the reason each
+// explicit block repeats its whole source block rather than re-pointing the
+// --dxg-* slots alone: the light nine are declared only inside the light query,
+// so on a dark OS a --dxg-* read of one of them would resolve to nothing.
+func TestGraphModeBlocksDeclareTheSameTokenSet(t *testing.T) {
+	css := stripComments(embeddedCSS(t, graphCSSTemplatePath))
+
+	base := customProps(ruleBody(t, "graph.css :root", css,
+		regexp.MustCompile(`(?m)^:root\s*\{`)))
+	lightQuery := customProps(ruleBody(t, "graph.css light query", css,
+		regexp.MustCompile(`@media \(prefers-color-scheme: light\), print\s*\{\s*:root\s*\{`)))
+	dark := customProps(ruleBody(t, `graph.css html[data-theme="dark"]`, css,
+		regexp.MustCompile(`html\[data-theme="dark"\]\s*\{`)))
+	light := customProps(ruleBody(t, `graph.css html[data-theme="light"]`, css,
+		regexp.MustCompile(`html\[data-theme="light"\]\s*\{`)))
+
+	for name, got := range map[string]map[string]string{
+		"the dark base :root": base, "the light query": lightQuery,
+		"the explicit-dark block": dark, "the explicit-light block": light,
+	} {
+		if len(got) == 0 {
+			t.Fatalf("graph.css: %s parsed to zero custom properties; every "+
+				"comparison below would be vacuous", name)
+		}
+	}
+
+	for _, tc := range []struct {
+		copyName, copyOf string
+		copy, src        map[string]string
+	}{
+		{"the explicit-dark block", "the dark base :root", dark, base},
+		{"the explicit-light block", "the light query", light, lightQuery},
+	} {
+		t.Run(strings.ReplaceAll(strings.TrimPrefix(tc.copyName, "the "), " ", ""), func(t *testing.T) {
+			assertSameTokenSet(t, tc.copyName, tc.copy, tc.copyOf, tc.src)
+			for _, name := range sortedNames(tc.src) {
+				if got, ok := tc.copy[name]; ok && got != tc.src[name] {
+					t.Errorf("graph.css: %s sets %s to %q, but %s — the block it answers "+
+						"the reader's explicit choice with — says %q",
+						tc.copyName, name, got, tc.copyOf, tc.src[name])
+				}
+			}
+		})
+	}
+
+	t.Run("BothExplicitBlocksAreScreenScoped", func(t *testing.T) {
+		// Print has no appearance and no reader choice: a printed pane takes the
+		// light query above, exactly as style.css's printed page takes its :root.
+		// An unscoped html[data-theme="dark"] here would put the dark ramp on
+		// paper for every reader sitting on Dark.
+		for _, sel := range []string{`html[data-theme="dark"]`, `html[data-theme="light"]`} {
+			at := strings.Index(css, sel)
+			if at < 0 {
+				t.Fatalf("graph.css declares no %s block; the reader's theme control "+
+					"does not reach the facet ramp", sel)
+			}
+			before := css[:at]
+			lastScreen := strings.LastIndex(before, "@media screen")
+			lastPrint := strings.LastIndex(before, "@media print")
+			if lastScreen < 0 || lastPrint > lastScreen {
+				t.Errorf("graph.css: %s does not sit inside an `@media screen` block, "+
+					"so the ramp it carries can reach a printed page", sel)
+			}
+		}
+	})
+}
+
 // TestGraphCSSModeStructure pins graph.css's own conventions. graph.css keeps
 // the opposite base (dark-first) from style.css deliberately; what the two must
 // agree on is the print outcome.
+//
+// The counts below are about graph.css's OS-facing queries only, and they are
+// unchanged by the explicit-choice fix: the two
+// `@media screen{html[data-theme=…]}` blocks that fix added carry no
+// prefers-color-scheme term at all, so there is still exactly one light query
+// and still no dark one. What those blocks are held to lives in
+// TestGraphModeBlocksDeclareTheSameTokenSet above.
 func TestGraphCSSModeStructure(t *testing.T) {
 	raw := embeddedCSS(t, graphCSSTemplatePath)
 	css := stripComments(raw)
@@ -314,9 +681,13 @@ func TestGraphCSSModeStructure(t *testing.T) {
 				"or a printed graph pane keeps the dark ramp on white paper.", n, want)
 		}
 		assertLightQueriesIncludePrint(t, "graph.css", css, true)
-		// graph.css has no dark media query at all — dark is its unconditional
-		// base — so this call is vacuous BY DESIGN. It is made anyway so that a
-		// dark query added to graph.css later cannot arrive unscoped.
+		// graph.css has no dark media QUERY at all — dark is its unconditional
+		// base, and its explicit-Dark block is a data-theme selector inside a
+		// plain `@media screen`, not a prefers-color-scheme query — so this call
+		// is vacuous BY DESIGN. It is made anyway so that a dark query added to
+		// graph.css later cannot arrive unscoped. The screen-scoping of the two
+		// data-theme blocks is asserted in
+		// TestGraphModeBlocksDeclareTheSameTokenSet/BothExplicitBlocksAreScreenScoped.
 		assertDarkQueriesScreenScoped(t, "graph.css", css)
 	})
 
@@ -514,7 +885,6 @@ var tokenConsumers = map[string][]consumerSite{
 		{".system-nav-group__toggle:hover", "background"},
 		{"#dxgOpen:hover, .sec-tab:hover", "background"},
 		{".facet-toc__item:hover", "background"},
-		{".claim-collapse-toggle:hover", "background"},
 	},
 	"border-strong": {
 		{".system-record-head", "border-bottom"},
@@ -530,8 +900,8 @@ var tokenConsumers = map[string][]consumerSite{
 	},
 	"scrim":           {{".comments-overlay", "background"}},
 	"selection-bg":    {{"::selection", "background"}},
-	"status-draft":    {{".pill.pv, .status-draft", "color"}},
-	"status-draft-bg": {{".pill.pv, .status-draft", "background"}},
+	"status-draft":    {{".pill.pv", "color"}},
+	"status-draft-bg": {{".pill.pv", "background"}},
 	"mockup-bg":       {{".mockup-diagram", "background"}},
 }
 
@@ -569,7 +939,7 @@ func TestConsumerReadWinsCascade(t *testing.T) {
 	}
 	for token := range tokenConsumers {
 		found := false
-		for _, allowed := range config.ThemeTokenAllowlist {
+		for _, allowed := range builtinViewerTokens {
 			if allowed == token {
 				found = true
 				break

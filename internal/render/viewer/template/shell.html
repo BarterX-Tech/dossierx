@@ -20,37 +20,69 @@
        to resolve today — only a documented direction if one ever arises. -->
   <style>{{.GraphCSS}}</style>
   <style>{{.CSS}}</style>
-  <style>{{.ThemeCSS}}</style>
+  <script>
+    (function () {
+      var key = 'dossierx-theme';
+      var choice = 'system';
+      try { choice = localStorage.getItem(key) || 'system'; } catch (e) {}
+      if (choice !== 'light' && choice !== 'dark') { choice = 'system'; }
+      document.documentElement.setAttribute('data-theme', choice);
+      try {
+        if (localStorage.getItem('dossierx-focus') === 'on' && window.innerWidth >= 861) {
+          document.documentElement.setAttribute('data-focus', 'on');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="shell-body">
+  <svg class="dx-icon-sprite" aria-hidden="true">
+    <symbol id="dx-icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="dx-icon-lock-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
+    <symbol id="dx-icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol>
+    <symbol id="dx-icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="dx-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="dx-icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="dx-icon-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="dx-icon-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="dx-icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="dx-icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="dx-icon-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol>
+    <symbol id="dx-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="dx-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+    <symbol id="dx-icon-message-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></symbol>
+    <symbol id="dx-icon-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></symbol>
+    <symbol id="dx-icon-list-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/></symbol>
+    <symbol id="dx-icon-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="dx-icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="dx-icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  </svg>
   <div class="layout">
-    <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false">☰ <span>Sections</span></button>
+    <header class="mobile-app-bar" aria-label="Viewer controls">
+      <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg></button>
+      <span class="mobile-app-bar__wordmark">{{.Title}}</span>
+      <button id="mobileSearchToggle" class="mobile-app-bar__search" type="button" aria-controls="navSearch" aria-label="Search modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg></button>
+      <button id="mobileThemeToggle" class="mobile-theme-toggle" type="button" data-theme-toggle aria-label="Use dark theme" title="Use dark theme"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg></button>
+    </header>
     <button id="navOverlay" class="nav-overlay" type="button" aria-label="Close documentation navigation" tabindex="-1"></button>
-    <aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+    <aside id="sidebar" class="sidebar" aria-label="Documentation navigation"{{if .GeneratedAt}} data-generated-at="{{.GeneratedAt}}"{{end}}>
       <div class="sidebar-header">
         <div class="top">
           <div class="logo"><span></span></div>
-          <div><h1>{{.Title}}</h1>{{if .Eyebrow}}<div class="eyebrow">{{.Eyebrow}}</div>{{end}}</div>
+          <h1>{{.Title}}</h1>
+          <button id="navDrawerClose" class="nav-drawer-close" type="button" aria-label="Close modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
         </div>
-        <button id="sidebarCollapseToggle" class="system-panel-toggle system-panel-toggle--sidebar" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Hide navigation" title="Hide navigation">
-          <span class="system-panel-toggle__chevron" aria-hidden="true"></span>
-        </button>
+{{if .Eyebrow}}        <div class="eyebrow">{{.Eyebrow}}</div>{{end}}
       </div>
       <nav id="nav">
-<!-- The graph trigger. It carries data-dxg-open as an ATTRIBUTE and
-             deliberately NOT the class sec-tab: the delegated click handler
-             further down matches e.target.closest('.sec-tab') and would
-             otherwise also switch the reading view's module on every open.
-             It lives inside the swapped subtree and is destroyed and
-             re-created by every fragment swap, which is why graph-ui.js binds
-             one delegated listener on document rather than a listener here. -->
-        <button id="dxgOpen" type="button" data-dxg-open aria-expanded="false">Claims graph</button>
-        <div class="system-nav-groups">
+        <div class="sidebar-nav-scroll">
+          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg><input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules"></div>
+          <div class="system-nav-groups">
           <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .ModuleGroups}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
 {{- end}}
             </div>
           </details>{{if .Tracks}}
@@ -67,49 +99,47 @@
              view over the same claims. The buttons are ordinary .sec-tab
              elements — a track section is a .module-section to all the
              show/hide machinery below, deliberately (see track_view.go). -->
-          <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+          <details class="system-nav-group">
+            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .Tracks}}
                 <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
 {{- end}}
             </div>
-          </details>{{end}}{{if .BuildOrders.Modules}}
-<!-- The Build order group: a top-level tab of its own, never a facet of
-             any module. Guarded on .BuildOrders.Modules and hugged to the
-             preceding action exactly as the Tracks guard is, so a project with
-             no locked build order emits not one byte here. Its one button is
-             an ordinary .sec-tab whose target is the #dossierx-build-order section
-             (a .module-section to the show/hide machinery below) and whose
-             default facet is the first locked module's .bo-module group. The
-             tab's ids carry the "dossierx-build-order" prefix so they sit
-             outside the space slugify maps module names into: a module named
-             "build-order" gets id="build-order", and the tab must not. -->
-          <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Build order</span><span class="system-nav-group__count">{{len .BuildOrders.Modules}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
-            <div class="system-nav-group__body">
-              <button class="sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-{{.BuildOrders.FirstModuleID}}">Build order</button>
-            </div>
           </details>{{end}}
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <div class="nav-utilities" aria-label="Viewer tools">
+<!-- The graph trigger deliberately does NOT carry class sec-tab: graph-ui.js
+               owns it, while viewer-runtime.js owns reading-view selection. It
+               remains inside #nav so live fragment swaps replace it safely. -->
+            <button id="dxgOpen" class="nav-utility" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>{{if .BuildOrders.Modules}}
+<!-- Build order is a reading-view selection, but Paper places it beside
+               Claims graph in the fixed utility footer rather than in a third
+               accordion group. The section/payload guards remain unchanged. -->
+            <button class="nav-utility sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-{{.BuildOrders.FirstModuleID}}"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-list-tree"/></svg><span>Build order</span></button>{{end}}
+          </div>
+          <div class="theme-control desktop-theme-control" role="group" aria-label="Color theme">
+          <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
+          <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
+          </div>
         </div>
       </nav>
-      <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
-{{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
-      <div id="sidebarResizer" class="system-sidebar-resizer" tabindex="0" role="separator" aria-label="Resize navigation drawer" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="420" aria-valuenow="270" title="Drag to resize · Double-click to reset"></div>
     </aside>
     <main class="content-area">{{if .BuildOrders.Modules}}<script type="application/json" id="dossierx-build-orders">{{.BuildOrderPayload}}</script>{{end}}
 {{if .ModuleGroups}}
 {{range .ModuleGroups}}
-          <section class="module-section" id="{{.ID}}" hidden>
+          <section class="module-section" id="{{.ID}}" hidden data-claim-count="{{.ClaimCount}}" data-locked-count="{{.LockedCount}}" data-facet-count="{{.FacetCount}}">
 {{if .HasSubNav}}
               <div class="sub-nav">
 {{range .Facets}}
-                  <button class="subtab" data-target="#{{.ID}}">{{.TabLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+                  <button class="subtab" data-target="#{{.ID}}"><span class="sec-tab__label">{{.TabLabel}}</span><span class="sec-tab__count">{{.ClaimCount}}</span></button>
 {{end}}
               </div>
 {{end}}
 {{range .Facets}}
-              <section class="claim-group" id="{{.ID}}" hidden{{if $.SoftMount}} data-dossierx-surface="{{.ID}}"{{end}}>
+              <section class="claim-group reading-canvas" id="{{.ID}}" hidden{{if $.SoftMount}} data-dossierx-surface="{{.ID}}"{{end}}>
 {{if $.SoftMount}}                <div class="claim-group-host" data-dossierx-surface-host></div>
                 <template class="dossierx-surface-template">
 {{range .Claims}}{{.}}
@@ -159,7 +189,7 @@
 {{end}}
             </template>
 {{else}}{{range .OwnedClaims}}{{.}}
-{{end}}{{end}}{{if .CitedHTML}}<h4 class="section-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
+{{end}}{{end}}{{if .CitedHTML}}<h4 class="cited-claims-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
 {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
           </section>
         </section>
@@ -191,6 +221,77 @@
 {{- end}}
       </section>{{end}}
     </main>
+
+<!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own
+       chrome: breadcrumb, title/subtitle, scope segmented control, the
+       filter/sort row and the bottom-open findings card with its
+       "WHERE THE BLOCKERS LIVE" rail. R09.6: reached ONLY from the blocked
+       banner's "Show issues" action (#statusStripAction) — there is no nav
+       tab for it, by rule.
+
+       A sibling of <main class="content-area">, not a child of it: a
+       fragment swap replaces <main> and <nav> wholesale (see the comment
+       above #dxgPane), and this view's own DOM state (open/closed, the
+       chosen scope) is exactly the kind of client-only state that pattern
+       already protects #statusStrip and #dxgPane from losing. It occupies
+       the SAME flex slot .content-area does when open (viewer-runtime.js
+       toggles .content-area[hidden] the other way), so the left nav rail
+       stays exactly where 04 §3 draws it, 268px wide, untouched.
+
+       Its body is a skeleton ONLY: every dynamic piece — the breadcrumb
+       text, the subtitle, the counts, the severity chips and the grouped
+       findings list, the rail's bars — is filled in by issues-view JS
+       (viewer-runtime.js) at open time. The chips and the findings list are
+       never re-implemented here: they are lane L8's own
+       #statusStripFilters / .status-group / .status-finding--group nodes,
+       MOVED (never cloned) into #issuesFilters / #issuesFindingsCard so
+       their click handlers and live-poll updates keep working unchanged —
+       composed into this view, not restyled by it.
+
+       This is a document view, not an overlay (04 §7.1's z-index ledger
+       note): no z-index, no scrim, no fixed positioning. -->
+  <section id="issuesView" class="issues-view" hidden tabindex="-1" aria-label="Issues">
+    <header class="issues-header">
+      <nav class="issues-breadcrumb" aria-label="Breadcrumb">
+        <button type="button" id="issuesBack" class="issues-breadcrumb-back" aria-label="Back">
+          <svg class="dx-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span id="issuesBreadcrumbFacet" class="issues-breadcrumb-facet"></span>
+        <span id="issuesBreadcrumbSuffix" class="issues-breadcrumb-suffix"></span>
+      </nav>
+      <div class="issues-title-row">
+        <div class="issues-title-stack">
+          <h1 class="issues-title">Issues</h1>
+          <p id="issuesSubtitle" class="issues-subtitle"></p>
+          <p id="issuesCaveat" class="issues-caveat"></p>
+        </div>
+        <div id="issuesScope" class="issues-scope" role="group" aria-label="Scope">
+          <button type="button" class="issues-scope-seg" data-scope="facet" aria-pressed="true">This facet</button>
+          <button type="button" class="issues-scope-seg" data-scope="module" aria-pressed="false">Module</button>
+          <button type="button" class="issues-scope-seg" data-scope="project" aria-pressed="false">Project</button>
+        </div>
+      </div>
+      <div class="issues-filter-row">
+        <div id="issuesFilters" class="issues-filters"></div>
+        <div class="issues-filter-spacer"></div>
+        <div class="issues-sort">
+          <span class="issues-sort-label">Sort</span>
+          <button type="button" id="issuesSortControl" class="issues-sort-control" aria-haspopup="listbox">
+            <span id="issuesSortValue" class="issues-sort-value">Most claims blocked</span>
+            <svg class="dx-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+    <div class="issues-body">
+      <div id="issuesFindingsCard" class="issues-findings-card"></div>
+      <aside id="issuesRailPanel" class="issues-rail-panel">
+        <p class="issues-rail-heading">WHERE THE BLOCKERS LIVE</p>
+        <p id="issuesRailCaveat" class="issues-rail-caveat"></p>
+        <div id="issuesRailRows" class="issues-rail-rows"></div>
+      </aside>
+    </div>
+  </section>
   </div>
 
 <!-- Comment UI overlay chrome (Phase 5). These live OUTSIDE .layout on purpose:
@@ -208,11 +309,17 @@
        and opening it closes neither. See the z-index ledger in style.css. -->
   <button id="commentsOverlay" class="comments-overlay" type="button" aria-label="Close comments" tabindex="-1" hidden></button>
   <aside id="commentsPanel" class="comments-rail" role="complementary" aria-label="Comments" tabindex="-1" hidden>
+    <div class="comments-rail-grabber" aria-hidden="true"><span class="comments-rail-grabber-bar"></span></div>
     <header class="comments-rail-head">
-      <p id="commentsRailTitle" class="comments-rail-title">Comments</p>
-      <button id="commentsRailClose" class="comments-rail-close" type="button" aria-label="Close comments"><span aria-hidden="true">✕</span></button>
+      <div class="comments-rail-head-text">
+        <p id="commentsRailTitle" class="comments-rail-title">Comments</p>
+        <p id="commentsRailSubtitle" class="comments-rail-subtitle"></p>
+      </div>
+      <span id="commentsRailCount" class="comments-rail-count" aria-hidden="true"></span>
+      <button id="commentsRailClose" class="comments-rail-close" type="button" aria-label="Close comments"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
     </header>
     <div id="commentsRailBody" class="comments-rail-body"></div>
+    <div id="commentsComposerSlot" class="comments-rail-composer-slot"></div>
   </aside>
   <div id="commentsToast" class="comments-toast" role="status" aria-live="polite" hidden></div>
 
@@ -239,11 +346,15 @@
   <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
     <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
       <span id="statusStripSummary" class="status-strip-summary">
-        <strong id="statusStripTitle" class="status-strip-title"></strong>
-        <span id="statusStripNote" class="status-strip-note"></span>
+        <svg class="dx-icon status-strip-icon" aria-hidden="true"><use href="#dx-icon-triangle-alert"/></svg>
+        <span class="status-strip-summary-text">
+          <strong id="statusStripTitle" class="status-strip-title"></strong>
+        </span>
       </span>
-      <span id="statusStripAction" class="status-strip-action">Show issues</span>
-      <span class="status-strip-caret" aria-hidden="true"></span>
+      <span id="statusStripActionRow" class="status-strip-action-row">
+        <span id="statusStripAction" class="status-strip-action">Show issues</span>
+        <svg class="dx-icon status-strip-action-chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+      </span>
     </button>
     <div id="statusStripBody" class="status-strip-body" hidden></div>
   </section>

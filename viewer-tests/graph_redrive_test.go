@@ -382,13 +382,30 @@ func TestGraphDrillDownAndCollapseFitTheCanvas(t *testing.T) {
 // composited sRGB values, so it is the number the guideline names and not a
 // proxy for it.
 const contrastProbe = `(function () {
+	// Re-pinned for screen 13 §4.2 / G13: the ON relation/labels toggle now
+	// paints --link-bg, a color-mix() tint (learnings.md G13's own literal
+	// value), and a browser resolves getComputedStyle's backgroundColor for
+	// that declaration to the CSS Color 4 "color(srgb r g b / a)" function
+	// rather than "rgba(...)" — rgb() channels here are 0-1 floats, not
+	// 0-255 integers. The rgba() arm (and its parser's job) is unchanged;
+	// this only ADDS a second, distinct notation this probe can resolve.
 	function parse(v) {
-		var m = String(v).match(/^rgba?\(([^)]*)\)$/);
-		if (!m) { return null; }
-		var p = m[1].split(/[\s,\/]+/).filter(function (x) { return x !== ''; }).map(Number);
-		if (p.length < 3) { return null; }
-		for (var i = 0; i < p.length; i++) { if (!isFinite(p[i])) { return null; } }
-		return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+		var s = String(v);
+		var m = s.match(/^rgba?\(([^)]*)\)$/);
+		if (m) {
+			var p = m[1].split(/[\s,\/]+/).filter(function (x) { return x !== ''; }).map(Number);
+			if (p.length < 3) { return null; }
+			for (var i = 0; i < p.length; i++) { if (!isFinite(p[i])) { return null; } }
+			return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+		}
+		var cm = s.match(/^color\(srgb\s+([^)]*)\)$/);
+		if (cm) {
+			var q = cm[1].split(/[\s\/]+/).filter(function (x) { return x !== ''; }).map(Number);
+			if (q.length < 3) { return null; }
+			for (var j = 0; j < q.length; j++) { if (!isFinite(q[j])) { return null; } }
+			return { r: q[0] * 255, g: q[1] * 255, b: q[2] * 255, a: q.length > 3 ? q[3] : 1 };
+		}
+		return null;
 	}
 	function show(c) {
 		return 'rgba(' + Math.round(c.r) + ',' + Math.round(c.g) + ',' + Math.round(c.b) + ',' + c.a + ')';

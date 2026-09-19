@@ -18,7 +18,7 @@ import (
 
 const boundedRenderAllocationBudget = 512 << 20
 
-func TestRenderWithThemeBounded_OversizedSingleClaimStopsBeforeFragmentAllocation(t *testing.T) {
+func TestRenderBounded_OversizedSingleClaimStopsBeforeFragmentAllocation(t *testing.T) {
 	// Allocate the authored input before measuring the renderer. The contract is
 	// about projection work, not the caller's already-resident catalog.
 	body := strings.Repeat("x", 32<<20)
@@ -34,10 +34,10 @@ func TestRenderWithThemeBounded_OversizedSingleClaimStopsBeforeFragmentAllocatio
 	var out string
 	var err error
 	allocated := measuredTotalAlloc(func() {
-		out, err = RenderWithThemeBounded(cat, nil, nil, 1<<20)
+		out, err = RenderBounded(cat, nil, 1<<20)
 	})
 	if !errors.Is(err, conformance.ErrCapacityExceeded) {
-		t.Fatalf("RenderWithThemeBounded error = %v, want capacity exceeded", err)
+		t.Fatalf("RenderBounded error = %v, want capacity exceeded", err)
 	}
 	if out != "" {
 		t.Fatalf("bounded render returned %d partial bytes", len(out))
@@ -48,7 +48,7 @@ func TestRenderWithThemeBounded_OversizedSingleClaimStopsBeforeFragmentAllocatio
 	t.Logf("single-claim overflow: input=%d max=%d TotalAlloc=%d", len(body), 1<<20, allocated)
 }
 
-func TestRenderWithThemeBounded_ManyShortGraphRecordsStayContained(t *testing.T) {
+func TestRenderBounded_ManyShortGraphRecordsStayContained(t *testing.T) {
 	// Empty claims isolate graph/shell structural growth from claim-body growth.
 	// Every configured module is emitted into the graph payload, so these short
 	// records overflow the viewer budget without one oversized string.
@@ -62,10 +62,10 @@ func TestRenderWithThemeBounded_ManyShortGraphRecordsStayContained(t *testing.T)
 	var out string
 	var err error
 	allocated := measuredTotalAlloc(func() {
-		out, err = RenderWithThemeBounded(cat, cfg, nil, 1<<20)
+		out, err = RenderBounded(cat, cfg, 1<<20)
 	})
 	if !errors.Is(err, conformance.ErrCapacityExceeded) {
-		t.Fatalf("RenderWithThemeBounded error = %v, want capacity exceeded", err)
+		t.Fatalf("RenderBounded error = %v, want capacity exceeded", err)
 	}
 	if out != "" {
 		t.Fatalf("bounded render returned %d partial bytes", len(out))
@@ -76,7 +76,7 @@ func TestRenderWithThemeBounded_ManyShortGraphRecordsStayContained(t *testing.T)
 	t.Logf("structural overflow: modules=%d max=%d TotalAlloc=%d", len(modules), 1<<20, allocated)
 }
 
-func TestRenderWithThemeBounded_ManyShortClaimFragmentsStayContained(t *testing.T) {
+func TestRenderBounded_ManyShortClaimFragmentsStayContained(t *testing.T) {
 	claims := make([]model.Claim, 20_000)
 	for i := range claims {
 		claims[i] = model.Claim{
@@ -93,10 +93,10 @@ func TestRenderWithThemeBounded_ManyShortClaimFragmentsStayContained(t *testing.
 	var out string
 	var err error
 	allocated := measuredTotalAlloc(func() {
-		out, err = RenderWithThemeBounded(cat, nil, nil, 1<<20)
+		out, err = RenderBounded(cat, nil, 1<<20)
 	})
 	if !errors.Is(err, conformance.ErrCapacityExceeded) {
-		t.Fatalf("RenderWithThemeBounded error = %v, want capacity exceeded", err)
+		t.Fatalf("RenderBounded error = %v, want capacity exceeded", err)
 	}
 	if out != "" {
 		t.Fatalf("bounded render returned %d partial bytes", len(out))
@@ -107,7 +107,7 @@ func TestRenderWithThemeBounded_ManyShortClaimFragmentsStayContained(t *testing.
 	t.Logf("fragment overflow: claims=%d max=%d TotalAlloc=%d", len(claims), 1<<20, allocated)
 }
 
-func TestRenderWithThemeBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
+func TestRenderBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	cat := &catalog.Catalog{Claims: []model.Claim{{
 		ID:     "module.contract.small",
 		Module: "module",
@@ -118,13 +118,13 @@ func TestRenderWithThemeBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	}}}
 	cfg := &config.Config{Modules: []string{"module"}, Facets: []string{"contract"}}
 
-	legacy, err := RenderWithTheme(cat, cfg, nil)
+	legacy, err := Render(cat, cfg)
 	if err != nil {
-		t.Fatalf("RenderWithTheme: %v", err)
+		t.Fatalf("Render: %v", err)
 	}
-	bounded, err := RenderWithThemeBounded(cat, cfg, nil, 8<<20)
+	bounded, err := RenderBounded(cat, cfg, 8<<20)
 	if err != nil {
-		t.Fatalf("RenderWithThemeBounded: %v", err)
+		t.Fatalf("RenderBounded: %v", err)
 	}
 	if got, want := normalizeRenderTimes(bounded), normalizeRenderTimes(legacy); got != want {
 		t.Fatal("bounded render changed under-limit viewer bytes apart from render timestamps")
@@ -212,7 +212,7 @@ func TestBuildTrackSectionsWithBudget_ManyTrackRowsStayContained(t *testing.T) {
 	t.Logf("shell-data overflow: cited rows=%d max=%d TotalAlloc=%d", count, 1<<20, allocated)
 }
 
-func TestRenderWithThemeBounded_CustomShellWorkingSetErrorIsNotOutputCapacity(t *testing.T) {
+func TestRenderBounded_CustomShellWorkingSetErrorIsNotOutputCapacity(t *testing.T) {
 	claim := model.Claim{
 		ID: "m.f.working-set", Module: "m", Facet: "f", Layout: model.LayoutTree,
 		Status: model.StatusDraft, Body: strings.Repeat("x", 129<<20),
@@ -228,7 +228,7 @@ func TestRenderWithThemeBounded_CustomShellWorkingSetErrorIsNotOutputCapacity(t 
 	var out string
 	var err error
 	allocated := measuredTotalAlloc(func() {
-		out, err = RenderWithThemeBounded(cat, cfg, nil, 1<<20)
+		out, err = RenderBounded(cat, cfg, 1<<20)
 	})
 	if !errors.Is(err, ErrIntermediateCapacityExceeded) {
 		t.Fatalf("custom working-set error = %v, want distinct intermediate capacity error", err)
@@ -248,7 +248,7 @@ func TestRenderWithThemeBounded_CustomShellWorkingSetErrorIsNotOutputCapacity(t 
 	t.Logf("custom working-set refusal: input=%d retained-limit=%d TotalAlloc=%d", len(claim.Body), maxBoundedRenderIntermediateBytes, allocated)
 }
 
-func TestRenderWithThemeBounded_CustomShellChargesOnlyExecutedOutput(t *testing.T) {
+func TestRenderBounded_CustomShellChargesOnlyExecutedOutput(t *testing.T) {
 	largeClaim := model.Claim{
 		ID: "module.contract.large", Module: "module", Facet: "contract",
 		Layout: model.LayoutTree, Status: model.StatusDraft, Body: strings.Repeat("x", 2<<20),
@@ -276,11 +276,11 @@ func TestRenderWithThemeBounded_CustomShellChargesOnlyExecutedOutput(t *testing.
 			writeFile(t, dir+"/shell.html", tc.shell)
 			cfg := &config.Config{Title: "Tiny", Viewer: config.Viewer{TemplateOverrides: dir}}
 
-			legacy, err := RenderWithTheme(cat, cfg, nil)
+			legacy, err := Render(cat, cfg)
 			if err != nil {
 				t.Fatalf("legacy render: %v", err)
 			}
-			bounded, err := RenderWithThemeBounded(cat, cfg, nil, 1<<20)
+			bounded, err := RenderBounded(cat, cfg, 1<<20)
 			if err != nil {
 				t.Fatalf("bounded render: %v", err)
 			}
@@ -294,7 +294,7 @@ func TestRenderWithThemeBounded_CustomShellChargesOnlyExecutedOutput(t *testing.
 	}
 }
 
-func TestRenderWithThemeBounded_CustomShellOmittedGraphIsNotCharged(t *testing.T) {
+func TestRenderBounded_CustomShellOmittedGraphIsNotCharged(t *testing.T) {
 	modules := make([]string, 100_000)
 	for i := range modules {
 		modules[i] = fmt.Sprintf("m%06d", i)
@@ -305,7 +305,7 @@ func TestRenderWithThemeBounded_CustomShellOmittedGraphIsNotCharged(t *testing.T
 	writeFile(t, dir+"/shell.html", `<!doctype html>{{range .ModuleGroups}}{{range .Facets}}{{range .Claims}}{{.}}{{end}}{{end}}{{end}}`)
 	cfg := &config.Config{Modules: modules, Viewer: config.Viewer{TemplateOverrides: dir}}
 
-	out, err := RenderWithThemeBounded(cat, cfg, nil, 1<<20)
+	out, err := RenderBounded(cat, cfg, 1<<20)
 	if err != nil {
 		t.Fatalf("claims-only bounded render: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestRenderWithThemeBounded_CustomShellOmittedGraphIsNotCharged(t *testing.T
 	}
 }
 
-func TestRenderWithThemeBounded_CustomShellRepeatedFieldUsesFinalOutputLimit(t *testing.T) {
+func TestRenderBounded_CustomShellRepeatedFieldUsesFinalOutputLimit(t *testing.T) {
 	claim := model.Claim{
 		ID: "m.f.repeated", Module: "m", Facet: "f", Layout: model.LayoutTree,
 		Status: model.StatusDraft, Body: strings.Repeat("x", 600<<10),
@@ -324,7 +324,7 @@ func TestRenderWithThemeBounded_CustomShellRepeatedFieldUsesFinalOutputLimit(t *
 	writeFile(t, dir+"/shell.html", `{{range .ModuleGroups}}{{range .Facets}}{{range .Claims}}{{.}}{{end}}{{end}}{{end}}{{range .ModuleGroups}}{{range .Facets}}{{range .Claims}}{{.}}{{end}}{{end}}{{end}}`)
 	cfg := &config.Config{Viewer: config.Viewer{TemplateOverrides: dir}}
 
-	out, err := RenderWithThemeBounded(cat, cfg, nil, 1<<20)
+	out, err := RenderBounded(cat, cfg, 1<<20)
 	if !errors.Is(err, conformance.ErrCapacityExceeded) {
 		t.Fatalf("repeated emitted field error = %v, want output capacity exceeded", err)
 	}

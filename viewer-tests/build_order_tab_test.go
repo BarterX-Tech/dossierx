@@ -87,17 +87,6 @@ func newBuildOrderProjectWith(t *testing.T, extra []extraClaim) *project {
 	return newBuildOrderProjectFrom(t, buildOrderConfig, extra)
 }
 
-// themedBuildOrderConfig is buildOrderConfig plus a FLAT viewer.theme that
-// re-points the three tokens the diagram's shapes read — the shape of theme
-// a project that predates light:/dark: writes, and the one where a literal
-// and a token read look the same in light mode and diverge only in dark.
-const themedBuildOrderConfig = buildOrderConfig + `viewer:
-  theme:
-    accent-bg: "rgba(201, 58, 129, .3)"
-    card-bg: "#fff4e0"
-    border: "#c08040"
-`
-
 func newBuildOrderProjectFrom(t *testing.T, config string, extra []extraClaim) *project {
 	t.Helper()
 	p := newProjectRaw(t, config)
@@ -343,8 +332,11 @@ func TestBuildOrderTabRendersEveryPhaseBlock(t *testing.T) {
 		t.Fatalf("the single-facet module carries %d .sub-nav elements, want 0", n)
 	}
 
-	if n := evalInt(t, ctx, `document.querySelectorAll('.system-nav-group .sec-tab[data-target="#dossierx-build-order"]').length`); n != 1 {
+	if n := evalInt(t, ctx, `document.querySelectorAll('.sidebar-footer .nav-utility.sec-tab[data-target="#dossierx-build-order"]').length`); n != 1 {
 		t.Fatalf("sidebar Build order entries = %d, want 1", n)
+	}
+	if n := evalInt(t, ctx, `document.querySelectorAll('.system-nav-group .sec-tab[data-target="#dossierx-build-order"]').length`); n != 0 {
+		t.Fatalf("Build order accordion entries = %d, want 0", n)
 	}
 	openBuildOrderTab(t, ctx)
 	waitDiagrams(t, ctx, "widget", widgetSVGs)
@@ -708,27 +700,6 @@ func TestBuildOrderTabColoursFollowTheTokensInBothModes(t *testing.T) {
 	}
 	runCDP(t, ctx, emulation.SetEmulatedMedia().WithMedia(""))
 
-	// Themed project: a flat viewer.theme re-points --accent-bg, --card-bg
-	// and --border for both schemes. The same assertions run in both OS
-	// modes, and the themed --accent-bg must differ from the default
-	// project's in each, so a rule that fell back to the engine literal
-	// (which equals the token in an unthemed light page) fails here by
-	// value rather than passing by coincidence.
-	tp := newBuildOrderProjectFrom(t, themedBuildOrderConfig, nil)
-	tctx, tpe, turl := staticBuildOrderTab(t, tp)
-	defaults := map[string]string{"light": light.AccentBg, "dark": dark.AccentBg}
-	for _, scheme := range []string{"light", "dark"} {
-		emulateColorScheme(t, tctx, scheme)
-		runCDP(t, tctx, chromedp.Navigate(turl+"#dossierx-build-order-widget"))
-		pollTrue(t, tctx, `!!window.mermaid`)
-		waitDiagrams(t, tctx, "widget", widgetSVGs)
-		themed := readDiagramColours(t, tctx, "widget")
-		assertDiagramColours(t, "themed-"+scheme, themed)
-		if themed.AccentBg == defaults[scheme] {
-			t.Errorf("themed %s: --accent-bg resolved to the default %q; viewer.theme did not reach the page", scheme, themed.AccentBg)
-		}
-	}
-	assertNoPageErrors(t, tctx, tpe)
 }
 
 // ---------------------------------------------------------------------

@@ -48,18 +48,19 @@ const (
 	legacyViewer           = "viewer/index.html"
 )
 
-// LegacyFileNames is every fixed legacy base name plus the two per-module
-// prefixes, exported so internal/check's index scan can recognise a legacy
-// store staged half-way through a migration by the same names this package
-// scans for.
+// The three legacy STORE base names, exported so internal/check's staged
+// index scan can recognise a store staged half-way through a migration by the
+// same name this package scans for.
+//
+// Only the stores are exported, and that is the distinction rather than an
+// omission: check classifies a staged path by which store it is, and the four
+// legacy ARTIFACT names (catalog, viewer, build-order, code-links) are
+// regenerated rather than staged, so no caller outside this package has ever
+// had a question they answer. They stay unexported beside the stores above.
 var (
 	LegacyLockStoreName     = legacyLockStore
 	LegacyCommentDigestName = legacyCommentDigest
 	LegacyFlagStoreName     = legacyFlagStore
-	LegacyCatalogName       = legacyCatalog
-	LegacyViewerPath        = legacyViewer
-	LegacyBuildOrderPrefix  = legacyBuildOrderPrefix
-	LegacyCodeLinksPrefix   = legacyCodeLinksPrefix
 )
 
 // Kind names one of the seven legacy kinds a Move is about — or, on an
@@ -596,21 +597,6 @@ func EnsureBuildGitignore(cfg *config.Config) error {
 }
 
 var writeBuildGitignore = atomicfile.Write
-
-// GeneratedConformanceGitignore reports whether the exact engine-generated
-// opted-in form is present. It controls only restoration of the historical
-// ignore bytes; ConformanceStatusOwned is the deletion-authority boundary.
-func GeneratedConformanceGitignore(cfg *config.Config) (bool, error) {
-	path := cfg.BuildGitignorePath()
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("layout: read %s: %w", path, err)
-	}
-	return string(data) == buildGitignoreConformanceContent, nil
-}
 
 // EnsureBuildGitignoreForConformance writes the conformance rule only for an
 // opted-in project. It rewrites only one of DossierX's two exact generated

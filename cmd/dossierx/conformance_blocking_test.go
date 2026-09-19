@@ -261,7 +261,7 @@ func TestConformanceBlockingPreservesLintAndThemePrecedence(t *testing.T) {
 		{name: "lint", mutate: func(claim string) string {
 			return strings.Replace(claim, "governed_by:\n", "rests_on:\n  - widget.contract.missing\ngoverned_by:\n", 1)
 		}, wantCode: "lint_failed", wantStop: "lint"},
-		{name: "theme", mutate: func(claim string) string { return claim }, wantCode: "invalid_config", wantStop: "render"},
+		{name: "theme", mutate: func(claim string) string { return claim }, wantCode: "invalid_config", wantStop: "config"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, cfgPath := blockingCLIProject(t, true, tc.mutate(blockingCompareClaim),

@@ -185,6 +185,20 @@ never resolve) → the human resolves → re-run `dossierx check` until nothing 
 claims in its next-steps block, and `dossierx claim show <id>` reports the open thread ids for one
 claim.
 
+## When the ids or the state move under you
+
+Four refusals, all of them exit 1, all of them meaning "look again, do not retry":
+
+- `thread_not_found` / `reply_not_found` — the id is not on that claim, or not in that thread. The
+  usual cause is an id read out of an older `dossierx comment inbox` run; re-run it rather than
+  guessing, because the inbox cursor is the only thing that tells you the thread still exists.
+- `thread_resolved` — a write against a thread the human resolved while you were working. This is
+  the good outcome, not an error: their Resolve is the approval the lock gate was waiting for.
+  Drop the reply and move to the lock step.
+- `read_only` — a write against a surface that has writes disabled: a `file://` viewer export, or
+  `dossierx serve` started without them. Nothing about the claim is wrong; the surface cannot
+  accept the call. Use the CLI.
+
 ## Portability
 
 Comments add no configuration. The `comments:` field is engine-managed bookkeeping on every claim,

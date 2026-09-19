@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/implink"
@@ -60,6 +61,8 @@ var funcMap = template.FuncMap{
 	"edges":         edgesHTML,
 	"inc":           inc,
 	"pillClass":     pillClass,
+	"statusLabel":   StatusLabel,
+	"statusIcon":    StatusIconHTML,
 	"colClass":      colClass,
 	"mockupHTML":    mockupHTML,
 	"claimLabel":    ClaimLabel,
@@ -257,6 +260,57 @@ func pillClass(status model.Status, reviewPending bool) string {
 	return "pv"
 }
 
+// StatusLabel is the sentence-case word a claim status pill shows.
+func StatusLabel(status model.Status, reviewPending bool) string {
+	if status == model.StatusLocked && reviewPending {
+		return "Review pending"
+	}
+	switch status {
+	case model.StatusLocked:
+		return "Locked"
+	case model.StatusDraft:
+		return "Draft"
+	default:
+		if status == "" {
+			return ""
+		}
+		s := string(status)
+		return strings.ToUpper(s[:1]) + s[1:]
+	}
+}
+
+// StatusIconHTML returns the padlock glyph that rides inside every claim
+// status pill. The components board (section F, "Claim status chip") is
+// explicit that the chip is a closed set of two shapes, not an icon plus a
+// bare-word fallback: "Always a padlock and a word — the padlock is closed
+// when an approval is on record and open when it is not, so the two states
+// differ in shape as well as in colour" and "The chip never appears without
+// its icon. A word alone reads as a label; the padlock is what makes it a
+// state." A locked claim (pillClass "ps") and a locked-but-review_pending one
+// ("pw") both have an approval on record — review_pending is a flag on an
+// already-locked claim, not a withdrawal of its lock — so both get the closed
+// #dx-icon-lock glyph; only a draft claim ("pv") has never been approved, and
+// gets the open #dx-icon-lock-open glyph instead.
+//
+// docs/design/screens/07a-claim-draft-not-yet-approved.md's board (node
+// 4BJ-0) draws the DRAFT chip with the SAME open padlock this returns for
+// StatusDraft — a pixel comparison against the components board confirms the
+// shackle is lifted, not closed, on both. There is no Paper defect here: the
+// open-padlock choice below agrees with 07a as well as with section F. The
+// actual inaccuracy is prose, not a board: docs/design/LANES.md's L3
+// ownership section says "the DRAFT form carries no padlock," which reads
+// narrower than section F's own rule (a closed set of two shapes, never
+// "icon or nothing") and is being corrected there, not here.
+func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
+	if status == model.StatusLocked {
+		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>`)
+	}
+	if status == model.StatusDraft {
+		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock-open"/></svg>`)
+	}
+	return ""
+}
+
 // edgesHTML renders the edge/metadata footer shared by every non-banner
 // component: governed_by, mirrors, rests_on, migrated_from, and a
 // review_pending flag. It is a Go helper rather than template markup so
@@ -316,38 +370,72 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 	if !actionable {
 		return ""
 	}
-	label := string(st.Status)
-	if st.Status == model.StatusLocked && st.ReviewPending {
-		label = "review_pending"
-	}
+	label := StatusLabel(st.Status, st.ReviewPending)
 	return ` <span class="pill ` + pillClass(st.Status, st.ReviewPending) + `">` + html.EscapeString(label) + `</span>`
 }
 
-// EdgesHTMLWithLinks renders the same shared edges footer as edgesHTML,
-// plus one additional "implemented in: file#symbol" line per entry in
-// files — the internal/implink-sourced extension to this footer — and one
-// "depended on by: ..." line listing dependedBy, the reverse of rests_on.
-// A file currently flagged Drifted (internal/implink.ViewFile.Drifted) gets
-// the same warn-styled pill every locked+review_pending claim's status pill
-// already uses (.pill.pw — see components.go's pillClass), reusing that
-// existing token rather than inventing a new color for "this specific
-// linked file may be stale". Exported (unlike edgesHTML) so
-// internal/render can bind it into a per-render "edges" template-func
-// override; see that package's attachEdgesOverride for why a template
-// func override, rather than a second template field, is how this data
-// reaches the existing per-layout partials without editing any of them.
+// EdgesHTMLWithLinks renders the shared evidence-and-relationships footer —
+// docs/design/screens/05-claim-one-expansion-at-a-time.md's "one strip, four
+// doors" redesign (R09.1/R-F.1) — for the two doors this package owns:
+// RELATIONSHIPS (R09.4's three fixed directions, GOVERNED BY / DEPENDS ON /
+// DEPENDED ON BY, plus the mirrors/migrated_from/review_pending/implemented-in
+// facts that ride along after them) and SOURCES, split out into its own peer
+// disclosure per R09.5. The other two doors the board names — readiness and
+// implementation checks — are rendered by sibling components
+// (viewer-runtime.js's renderClaimReadiness and conformance_view.go's
+// ConformanceHTML) that this package does not own; see docs/design/LANES.md's
+// L4 section for the ownership split. The <div class="claim-footer"> this
+// function opens is the shared flex strip those two doors slot into:
+// `.claim-footer > .claim-readiness` (a layout-integration rule this
+// package's style.css section adds, not a rewrite of readiness's own rule)
+// gives the readiness box the strip's full-width row once
+// viewer-runtime.js's renderClaimReadiness inserts it before `.claim-links`
+// (an unchanged call site — see that function) — because
+// `card.querySelector('.claim-links')`'s `.parentNode` becomes this <div>
+// the moment it exists. Implementation checks (`.claim-conformance`) render
+// as their own disclosure immediately after this <div> rather than inside
+// it — internal/render's insertEngineBlockBeforeClose (L7-owned) splices it
+// in after this function's whole return value, so it cannot become a flex
+// child of a container this function has already closed. That is a real gap
+// against R-F.1's single row, left standing as a known gap rather than
+// silently worked around here.
 //
-// The whole footer ships inside a <details class="claim-links"> whose
-// <summary> is a count digest — "N links - N files - N sources - N drifted",
-// the sources and drifted segments present only when they are non-zero. A claim's edges are
-// reference material a reader consults, not something they read on every pass,
-// and expanded on every card they were the bulk of the page. The digest keeps
-// the fact that there ARE edges (and that one of them has drifted) visible
-// while closed. Two signals write the bare ` open` attribute server-side —
-// any linked file Drifted, or the claim locked + review_pending — so the two
-// states a reader must not miss are never hidden behind a click. The comment
-// chip is NOT in here any more: it moved to the claim head (see
-// CommentChipHTML), because a chip inside a collapsed footer is unclickable.
+// Exported (unlike edgesHTML) so internal/render can bind it into a
+// per-render "edges" template-func override; see that package's
+// attachEdgesOverride for why a template func override, rather than a
+// second template field, is how this data reaches the existing per-layout
+// partials without editing any of them.
+//
+// Each door is its own native <details name="claim-footer-{id}">. The shared
+// `name` is what gives R09.2 ("exactly one expansion open at a time") to
+// relationships and sources for free, with no JS: the HTML disclosure-group
+// mechanism closes every other <details> sharing a name the instant one
+// opens, regardless of DOM position, so the day a sibling lane's own
+// <details> (readiness, once it is one; `.claim-conformance` already is)
+// carries the same `name="claim-footer-<id>"` attribute, it joins the same
+// one-at-a-time group at zero cost. The name is per-claim (the id itself) so
+// two different claim cards on one page never cross-close each other.
+//
+// THIRD RETRY FIX (verifier item 2): a door's <details> now contains ONLY its
+// <summary> chip — its `.claim-footer-panel` is a plain <div> written as
+// that <details>'s next SIBLING in this function's output, not its child.
+// This is what lets .claim-footer lay the chip out as an ordinary flex item
+// (always in the strip row, open or closed) while the panel independently
+// takes the full row on its own line once open — see style.css's
+// `.claim-links[open] + .claim-links-panel` rule and the doc comment beside
+// the `.claim-links, .claim-sources` reset for the measured browser bug
+// (`display: contents` on a <details>) that ruled out the alternative of
+// promoting the panel out from INSIDE the <details>. The disclosure-group
+// mechanics above (shared `name`, native `open`) are entirely unaffected:
+// they key off the <details> elements, which are unchanged.
+//
+// Two signals still write the bare ` open` attribute server-side on the
+// relationships door — any linked file Drifted, or the claim locked +
+// review_pending — so the two states a reader must not miss are never
+// hidden behind a click (unchanged from the pre-redesign digest's rule).
+// The comment chip is the footer's final control, outside every details door.
+// Claims no longer collapse, so this placement stays reachable in the default
+// reading view and its live comment APIs retain the canonical claim ID.
 //
 // dependedBy is never authored — it is the reverse index of every other
 // claim's rests_on, computed fresh each Render pass from the whole
@@ -359,211 +447,220 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // single-source-of-truth rule (see rests_on's own doc comment) exists to
 // rule out.
 func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
-	// rows accumulates the <li> bodies and links/drifted counts the <summary>
-	// needs, BEFORE anything is written to b — the whole <details>/<summary>/<ul>
-	// prologue is conditional on there being something to disclose, and the
-	// summary line quotes counts only the completed rows can supply. Emitting
-	// the prologue first and unwinding it on a zero-edge claim would mean
-	// carrying a "did I write anything yet" flag through every branch below.
-	var rows strings.Builder
 	links := 0
 
+	// The three R09.4 direction blocks, built independently of the "extra"
+	// facts below so their fixed order — GOVERNED BY, DEPENDS ON, DEPENDED ON
+	// BY — never depends on which of the six edge kinds a given claim happens
+	// to carry.
+	var governedBody strings.Builder
+	governedHas := false
 	if c.Governed.Type != "" {
+		governedHas = true
 		if c.Governed.Type == string(model.GovernedNone) {
-			// "governed_by: none" DOES NOT COUNT AS A LINK. It is a stated
-			// absence — the claim declaring that no doctrine backs it — not an
-			// edge the reader can follow, and counting it made every claim in
-			// every real project report at least "1 links" (governed_by is
-			// mandatory: see internal/lint's governed-required). That in turn
-			// made the zero-footer case below unreachable in practice, so the
-			// design's promise that a claim with no edges and no files emits no
-			// <details> at all never actually held. A NAMED governed_by target
-			// still counts as one, in the else branch.
-			//
-			// The consequence is deliberate: on a claim whose ONLY footer
-			// content would be this row, the whole <details> is suppressed and
-			// the row (with its Reason) is not rendered. A disclosure control
-			// that opens onto "this claim has no doctrine and nothing else
-			// either" is exactly the empty triangle the suppression rule exists
-			// to prevent. The moment anything else is disclosed — one edge, one
-			// linked file — the row rides along inside as before.
-			rows.WriteString(`<li class="claim-governed governed-none">governed_by: none`)
+			// "governed_by: none" DOES NOT COUNT AS A LINK — see 05 §8 item 15.
+			// It still renders inside GOVERNED BY, as the stated-absence form
+			// 07's board specifies: the word "none", no dot, no badge.
+			governedBody.WriteString(`<li class="claim-governed governed-none claim-relationship-none">none`)
 			if c.Governed.Reason != "" {
-				rows.WriteString(` — `)
-				// Reason is hand-written prose, not viewer chrome (unlike
-				// Claim.Section below), and routinely names a claim id or a
-				// path — so it goes through the same INLINE-ceiling renderer
-				// every other prose field uses (markdown.RenderInline: code
-				// spans and links, no block constructs) rather than a bare
-				// html.EscapeString.
-				rows.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
+				governedBody.WriteString(`<span class="claim-governed-reason"> — `)
+				governedBody.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
+				governedBody.WriteString(`</span>`)
 			}
-			rows.WriteString(`</li>`)
+			governedBody.WriteString(`</li>`)
 		} else {
-			// governed_by names another claim, so it renders through the same
-			// writeClaimRef every other claim-to-claim edge below uses rather
-			// than its own hand-built <a>: a doctrine hub is nearly always in a
-			// different facet from the claim it governs, so this is precisely
-			// the edge whose prefix tier ("Doctrine › Hub") carries information.
-			// A named target IS a link — one claim id the reader can follow —
-			// so it counts, unlike the "none" branch above. review_pending
-			// below counts the same way while carrying no claim id at all:
-			// "links" is per-row-except-the-nested-id-lists, minus the one row
-			// that states an absence.
 			links++
-			rows.WriteString(`<li class="claim-governed">governed_by: `)
-			writeClaimRef(&rows, c.Governed.Type, c.Module, c.Facet, targetStatuses)
-			rows.WriteString(`</li>`)
+			writeRelationshipRow(&governedBody, "claim-governed", c.Governed.Type, c.Module, c.Facet, targetStatuses)
 		}
 	}
 
-	if len(c.Mirrors) > 0 {
-		links += len(c.Mirrors)
-		rows.WriteString(`<li class="claim-mirrors">mirrors:`)
-		writeIDListItems(&rows, c.Module, c.Facet, c.Mirrors, targetStatuses)
-		rows.WriteString(`</li>`)
-	}
-
+	var dependsOnBody strings.Builder
 	if len(c.RestsOn) > 0 {
 		links += len(c.RestsOn)
-		rows.WriteString(`<li class="claim-rests-on">rests_on:`)
-		writeIDListItems(&rows, c.Module, c.Facet, c.RestsOn, targetStatuses)
-		rows.WriteString(`</li>`)
+		for _, id := range c.RestsOn {
+			writeRelationshipRow(&dependsOnBody, "claim-rests-on", id, c.Module, c.Facet, targetStatuses)
+		}
 	}
 
+	var dependedOnByBody strings.Builder
 	if len(dependedBy) > 0 {
 		links += len(dependedBy)
-		rows.WriteString(`<li class="claim-depended-by">depended on by:`)
-		writeIDListItems(&rows, c.Module, c.Facet, dependedBy, targetStatuses)
-		rows.WriteString(`</li>`)
+		for _, id := range dependedBy {
+			writeRelationshipRow(&dependedOnByBody, "claim-depended-by", id, c.Module, c.Facet, targetStatuses)
+		}
 	}
 
+	// Facts that do not fit R09.4's three fixed directions (mirrors,
+	// migrated_from, review_pending, implemented-in/drifted) ride after the
+	// three direction blocks inside the same relationships panel, in the
+	// same hairline-divided row form, rather than inventing a fourth
+	// direction the reference rules do not name. review_pending's proper
+	// home is the readiness door once L5 lands it (05 §8 item 3); until
+	// then it stays here, exactly where a reader could already find it, so
+	// nothing regresses to invisible.
+	var extra strings.Builder
+	if len(c.Mirrors) > 0 {
+		links += len(c.Mirrors)
+		extra.WriteString(`<li class="claim-mirrors claim-relationship-extra">mirrors:`)
+		writeIDListItems(&extra, c.Module, c.Facet, c.Mirrors, targetStatuses)
+		extra.WriteString(`</li>`)
+	}
 	if c.MigratedFrom != "" {
 		links++
-		rows.WriteString(`<li class="claim-migrated">migrated_from: `)
-		rows.WriteString(html.EscapeString(c.MigratedFrom))
-		rows.WriteString(`</li>`)
+		extra.WriteString(`<li class="claim-migrated claim-relationship-extra">migrated_from: `)
+		extra.WriteString(html.EscapeString(c.MigratedFrom))
+		extra.WriteString(`</li>`)
 	}
-
-	// Sources sit beside migrated_from because they answer the same question
-	// it does — where did this come from — and the pairing is the point: one
-	// names a predecessor document in free text, the other names checkable
-	// evidence. They do NOT count as links, and they are not folded into that
-	// count for a reason the summary line below states: a link is a claim id
-	// a reader can follow inside this corpus, and a source is evidence from
-	// outside it. Counting them together would let a claim with no edges and
-	// four citations report "4 links", which is not true of anything.
-	if len(c.Sources) > 0 {
-		writeSourcesRow(&rows, c)
-	}
-
-	// One condition, two consumers: review_pending is both a link in the
-	// summary and (below) one of the two server-written auto-open signals.
-	// They must stay keyed on the identical test.
 	reviewPending := c.Status == model.StatusLocked && c.ReviewPending
 	if reviewPending {
 		links++
-		rows.WriteString(`<li class="claim-review-pending">review_pending</li>`)
+		extra.WriteString(`<li class="claim-review-pending claim-relationship-extra">review_pending</li>`)
 	}
-
-	drifted := 0
 	for _, f := range files {
-		if f.Drifted {
-			drifted++
-		}
-		rows.WriteString(`<li class="claim-implemented-in">implemented in: <code>`)
-		rows.WriteString(html.EscapeString(f.File))
+		extra.WriteString(`<li class="claim-implemented-in claim-relationship-extra">implemented in: <code>`)
+		extra.WriteString(html.EscapeString(f.File))
 		if f.Symbol != "" {
-			rows.WriteString(`#`)
-			rows.WriteString(html.EscapeString(f.Symbol))
+			extra.WriteString(`#`)
+			extra.WriteString(html.EscapeString(f.Symbol))
 		}
-		rows.WriteString(`</code>`)
+		extra.WriteString(`</code>`)
 		if f.Drifted {
-			rows.WriteString(` <span class="pill pw">drifted</span>`)
+			extra.WriteString(` <span class="pill pw">drifted</span>`)
 		}
-		rows.WriteString(`</li>`)
+		extra.WriteString(`</li>`)
 	}
 
 	var b strings.Builder
 
-	// Zero links, zero files and zero sources: emit no <details> at all — not
-	// an empty disclosure reading "0 links - 0 files", which would be a control
-	// that opens onto nothing on every claim with no edges yet. The two fixed
-	// counts DO print as 0 whenever anything else is non-zero; it is only the
-	// all-zero case that suppresses the whole footer. Sources join that test
-	// rather than sitting outside it, because a claim whose only footer content
-	// is its evidence must still be able to disclose it.
+	// RETRY FIX (05 §8 item 5: "An entirely edgeless, sourceless, checkless
+	// claim still shows four zeros and the comment count."; fix-list item
+	// 10). The strip now renders UNCONDITIONALLY: the previous all-zero gate
+	// (`links > 0 || len(files) > 0 || len(c.Sources) > 0`) hid the whole
+	// footer — GOVERNED BY row included — on any claim whose only
+	// relationship fact was a stated `governed_by: none`, since that state
+	// deliberately does not count toward `links` (see above). R-F.1 fixes
+	// the strip's four positions; a reader who has learned "this position is
+	// sources" must not find the position itself missing on the next claim,
+	// only its count at zero.
+	footerName := html.EscapeString("claim-footer-" + c.ID)
+
+	// The relationships door has NO auto-open signal. Paper's placement board
+	// states it outright (node Z7-0: "Never opens by default"), and the
+	// reading view draws all four footer doors closed. The drifted /
+	// review_pending signals that used to force it open contradicted that and
+	// were removed; those states are still carried by the claim's status pill
+	// and by the readiness door.
 	//
-	// Since "governed_by: none" no longer counts (see above), the both-zero
-	// case now covers the claim that states an absence and nothing else, which
-	// is the ordinary shape of an ungoverned claim with no edges yet — this
-	// branch is what makes that claim emit a clean section with no dangling
-	// disclosure triangle under it.
-	if links > 0 || len(files) > 0 || len(c.Sources) > 0 {
-		// Two auto-open signals, OR'd — either alone opens the footer. Both
-		// read data already in scope (files' Drifted flag, the claim's own
-		// status pair), which is why this needs no new parameter.
-		//
-		// There is a THIRD auto-open signal, the deep-link/fragment case, and
-		// it is deliberately absent here: a URL fragment is never sent to the
-		// server and is unknowable at render time. It is implemented as the
-		// CSS rule `.claim:target .claim-links > *:not(summary)` in
-		// viewer/template/style.css, and nothing in this package may try to
-		// infer it.
-		openAttr := ""
-		for _, f := range files {
-			if f.Drifted {
-				openAttr = " open"
-				break
-			}
-		}
-		if reviewPending {
-			openAttr = " open"
-		}
+	// The deep-link/fragment case stays CSS-only (viewer/template/style.css's
+	// `.claim:target .claim-links…` rule) since a URL fragment is never sent
+	// to the server. That is reader-initiated navigation, not a default state.
 
-		// Fixed ASCII words, a " - " separator (HYPHEN-MINUS, not the em dash
-		// this file uses in prose) and plain %d counts — no claim-authored data
-		// reaches this string, so it needs no escaping.
-		//
-		// Each count segment is pluralised: "1 link", "2 links", "1 file",
-		// "0 files". The line used to be deliberately un-pluralised to keep a
-		// fixed mono column, but "1 links" on a claim with exactly one edge is
-		// the single most-read string in the viewer reading as a typo, and the
-		// column argument never survived contact with the drifted segment
-		// appearing and disappearing anyway. "drifted" is an adjective, not a
-		// noun, so it is invariant ("1 drifted", "2 drifted") — nothing to
-		// pluralise there. Separator, term order and the >0 gate on drifted are
-		// exactly as the contract froze them; only the nouns changed.
-		summary := countSegment(links, "link") + " - " + countSegment(len(files), "file")
-		// The sources segment is CONDITIONAL where links and files are fixed,
-		// and that asymmetry is load-bearing rather than an inconsistency: a
-		// project that has never written a source must render byte-identically
-		// to how it did before sources existed, and an unconditional "0
-		// sources" would have changed the single most-read line in the viewer
-		// on every claim in every corpus. It rides ahead of "drifted" because
-		// drifted is an adjective about the FILES count it follows.
-		if len(c.Sources) > 0 {
-			summary += " - " + countSegment(len(c.Sources), "source")
-		}
-		if drifted > 0 {
-			summary += fmt.Sprintf(" - %d drifted", drifted)
-		}
+	b.WriteString(`<div class="claim-footer">`)
 
-		b.WriteString(`<details class="claim-links"`)
-		b.WriteString(openAttr)
-		b.WriteString(`><summary class="claim-links-summary">`)
-		b.WriteString(summary)
-		b.WriteString(`</summary><ul class="claim-edges">`)
-		b.WriteString(rows.String())
-		b.WriteString(`</ul></details>`)
+	// ---- relationships door (R09.4) ----
+	//
+	// THIRD RETRY FIX (verifier item 2). The panel used to be this <details>'s
+	// own child, closed with it inside one `</div></details>` pair. Probed
+	// directly: `display: contents` on a <details> — the mechanism a second
+	// draft of this fix used to promote the summary chip and the panel into
+	// independent flex items of .claim-footer, so the chip stays in the strip
+	// row while only the panel wraps onto its own full-width row below —
+	// measurably breaks in the tested engine (Chrome/Chromium). Two separate
+	// defects, both confirmed by reading getComputedStyle: a CLOSED door's
+	// panel still computed `content-visibility: visible` (the native
+	// closed-<details> hiding the whole point of `display: contents` here
+	// was supposed to leave alone did not fire), and a promoted child's own
+	// percentage `width`/`flex-basis` resolved against the wrong containing
+	// block (a measured 744px against .claim-footer's own, simultaneously
+	// measured, 780px content box — no CSS in this file asks for that
+	// number, and it is not a rounding artifact: it reproduced exactly,
+	// repeatedly, independent of which flex properties this rule set).
+	//
+	// The panel is therefore now a genuine SIBLING of this <details>, not its
+	// child: a plain, always-present <div> immediately following
+	// `</details>`, hidden by default (`.claim-footer-panel { display: none
+	// }`) and revealed purely by CSS sibling selectors keyed off this
+	// <details>'s `open` attribute or a `:target` inside it — see that rule
+	// and the deep-link block below. This sidesteps the display:contents bug
+	// entirely: the <details> here is now a NORMAL, always-content-sized
+	// (chip-only) box, never asked to promote a child or to hide one
+	// natively, and the panel is a NORMAL flex item of .claim-footer from
+	// the start, sized with ordinary CSS (no promoted-child percentage
+	// resolution involved). The `name`-grouped native "close my sibling
+	// <details>" mechanism (R09.2) is unaffected — it keys off the
+	// <details> elements themselves, which still exist, still share
+	// `name="claim-footer-<id>"`, and still carry the real `open` attribute
+	// exactly as before.
+	if links == 0 && !governedHas && extra.Len() == 0 {
+		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--relationships claim-footer-chip--empty"><span class="claim-footer-chip-label">No relationships</span></span>`)
+	} else {
+		b.WriteString(`<details class="claim-links" name="`)
+		b.WriteString(footerName)
+		b.WriteString(`"`)
+		b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
+		b.WriteString(countSegment(links, "relationship"))
+		b.WriteString(`</span>`)
+		b.WriteString(claimFooterChevronHTML)
+		b.WriteString(`</summary></details>`)
+		b.WriteString(`<div class="claim-footer-panel claim-links-panel">`)
+		b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
+		b.WriteString(strconv.Itoa(links))
+		b.WriteString(`</span></div>`)
+
+		// The direction count (2nd param) is 05 §4.10's optional mono count,
+		// omitted for GOVERNED BY (sentinel -1: it always has exactly one
+		// target, so counting it is meaningless) and shown for DEPENDS ON /
+		// DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1", "DEPENDED ON BY · 1").
+		writeRelationshipDirection(&b, "up", "GOVERNED BY", -1, governedBody.String(), governedHas)
+		writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
+		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
+
+		if extra.Len() > 0 {
+			b.WriteString(`<ul class="claim-edges claim-edges-extra">`)
+			b.WriteString(extra.String())
+			b.WriteString(`</ul>`)
+		}
+		b.WriteString(`</div>`)
 	}
 
-	// The baked-in thread panel follows the whole <details> (a <div>, so it
-	// can't be an <li> inside the <ul>) but stays inside the claim's <section>,
+	// ---- sources door (R09.5) ----
+	// RETRY FIX: always rendered now, even at zero sources. 07a §6/§8's
+	// "Sources present" state is explicit that the word changes FROM "No
+	// sources" TO "N sources" once len(c.Sources) > 0 — meaning the zero
+	// state has its own, non-numeral wording, never "0 sources". Per 05 §8
+	// item 5 that zero-state chip is also closed, un-openable and
+	// --color-faint rather than the ordinary --color-muted+chevron chip —
+	// hence claim-footer-chip--empty and the omitted chevron span below.
+	if len(c.Sources) == 0 {
+		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></span>`)
+	} else {
+		b.WriteString(`<details class="claim-sources" name="`)
+		b.WriteString(footerName)
+		b.WriteString(`"><summary class="claim-footer-chip claim-footer-chip--sources"><span class="claim-footer-chip-label">`)
+		b.WriteString(countSegment(len(c.Sources), "source"))
+		b.WriteString(`</span>`)
+		b.WriteString(claimFooterChevronHTML)
+		b.WriteString(`</summary></details>`)
+		b.WriteString(`<div class="claim-footer-panel claim-sources-panel">`)
+		b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
+		b.WriteString(strconv.Itoa(len(c.Sources)))
+		b.WriteString(`</span></div>`)
+		b.WriteString(`<ul class="claim-source-list">`)
+		writeSourcesRow(&b, c)
+		b.WriteString(`</ul>`)
+		b.WriteString(`</div>`)
+	}
+
+	b.WriteString(`<!--dossierx-claim-footer-slot-->`)
+	b.WriteString(string(CommentChipHTML(c)))
+	b.WriteString(`</div>`)
+
+	// The baked-in thread panel follows the whole footer strip (a <div>, so it
+	// can't be an <li> inside a <ul>) but stays inside the claim's <section>,
 	// since {{edges .}} is the last thing every non-banner partial emits before
-	// </section>. It is a SIBLING of the disclosure, never a child: a claim's
+	// </section>. It is a SIBLING of the disclosures, never a child: a claim's
 	// threads must stay readable without expanding its edges, and — crucially —
-	// a claim with comments but no edges at all suppresses the <details> above
+	// a claim with comments but no edges at all suppresses the strip above
 	// while still rendering its panel here. comments.html auto-escapes its
 	// bodies via the shared "markdown" func, so no hand-escaping is needed for
 	// the panel. On the (embedded, tested) template this Execute cannot fail; a
@@ -579,15 +676,140 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	return template.HTML(b.String())
 }
 
-// countSegment renders one segment of the <summary> digest — the count and its
-// noun, pluralised with a plain trailing "s" unless the count is exactly 1
-// ("1 link", "0 links", "2 files", "3 sources"). Only "link", "file" and
-// "source" go through here; "drifted" is an adjective and stays invariant at
-// every count.
+// writeRelationshipDirection writes one of R09.4's three fixed-order
+// direction blocks — GOVERNED BY / DEPENDS ON / DEPENDED ON BY — as its own
+// header (arrow + label + optional count) followed by the rows body already
+// built for it. A direction with nothing to show (has is false) is omitted
+// entirely rather than printed empty: GOVERNED BY is the one direction a
+// claim always has an opinion about (a named target or a stated "none"), so
+// its caller always passes has=true.
 //
-// English irregulars are deliberately not handled: the three nouns are fixed
-// literals in this file's only caller, and a general pluraliser would be
-// machinery for a set of size three.
+// count is 05 §4.10's "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
+// --color-faint" — omitted (no element at all, not a "0") when count is
+// negative, which is the sentinel every GOVERNED BY call passes: "GOVERNED BY
+// carries no count because it has exactly one target". DEPENDS ON and
+// DEPENDED ON BY always pass their real row count, matching 07a §6's pinned
+// "DEPENDS ON · 1" / "DEPENDED ON BY · 1".
+//
+// arrow is a plain glyph rather than an SVG sprite reference — the frozen
+// theme-parity baselines already accept a CSS/glyph chevron for this exact
+// footer (see the .claim-footer__chevron border-triangle), and a bare
+// Unicode arrow in the same Inter run needs no new icon plumbing.
+func writeRelationshipDirection(b *strings.Builder, arrow, label string, count int, rowsHTML string, has bool) {
+	if !has {
+		return
+	}
+	glyph := "→"
+	switch arrow {
+	case "up":
+		glyph = "↑"
+	case "down":
+		glyph = "↓"
+	}
+	b.WriteString(`<div class="claim-relationship-direction">`)
+	b.WriteString(`<div class="claim-relationship-direction-head"><span class="claim-relationship-arrow" aria-hidden="true">`)
+	b.WriteString(glyph)
+	b.WriteString(`</span><span class="claim-relationship-direction-label">`)
+	b.WriteString(label)
+	b.WriteString(`</span>`)
+	if count >= 0 {
+		b.WriteString(`<span class="claim-relationship-direction-count">`)
+		b.WriteString(strconv.Itoa(count))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</div>`)
+	b.WriteString(`<ul class="claim-edges claim-relationship-list">`)
+	b.WriteString(rowsHTML)
+	b.WriteString(`</ul></div>`)
+}
+
+// writeRelationshipRow writes one R09.4 relationship row: a lifecycle dot,
+// the shared writeClaimRef anchor (title only — showPrefix=false, see below),
+// the target's own `module · facet` meta column, and a right-ranged
+// lifecycle badge — 05 §4.10's four columns. Unlike targetPillHTML (which
+// still governs the "extra" mirrors/rests-on-adjacent rows via
+// writeIDListItems), a fixed-direction relationship row ALWAYS carries a
+// badge when the target's lifecycle is known — a healthy locked target gets
+// "LOCKED" rather than nothing, because R-I.2 states the badge is the row's
+// lifecycle fact, not an alert. An unknown target (no catalog lookup — the
+// default, parse-time "edges" binding) renders no dot, no meta and no badge,
+// degrading to the plain link the pre-redesign row already was.
+//
+// The meta column and the badge are wrapped together in a
+// claim-relationship-line2 span, which style.css unwraps with
+// `display: contents` at every width down to the 520px tier — so the four
+// columns still lay out as direct flex children of the <li> on desktop —
+// and turns into a real flex row at 520px, where R-I.2 stacks them together
+// as the relationship row's mobile "line two".
+func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
+	st, known := targetStatuses[targetID]
+	b.WriteString(`<li class="`)
+	b.WriteString(liClass)
+	b.WriteString(` claim-relationship">`)
+	if known {
+		b.WriteString(`<span class="claim-relationship-dot claim-relationship-dot--`)
+		b.WriteString(lifecycleModifier(st))
+		b.WriteString(`" aria-hidden="true"></span>`)
+	}
+	writeClaimRef(b, targetID, fromModule, fromFacet, nil, false)
+	b.WriteString(`<span class="claim-relationship-line2">`)
+	writeRelationshipMeta(b, targetID)
+	if known {
+		b.WriteString(`<span class="claim-relationship-badge claim-relationship-badge--`)
+		b.WriteString(lifecycleModifier(st))
+		b.WriteString(`">`)
+		b.WriteString(html.EscapeString(strings.ToUpper(StatusLabel(st.Status, st.ReviewPending))))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</span>`)
+	b.WriteString(`</li>`)
+}
+
+// writeRelationshipMeta writes 05 §4.10's "module · facet" meta column for a
+// relationship row — the target's OWN module and facet, unconditionally.
+// Unlike writeClaimRef's prefix (elided against the reading claim's own
+// module/facet, and shown inline before the label), this column always
+// shows both segments, because both 05 §4.10 ("Meta Curtainly · Doctrine")
+// and 07 §4.10 ("Row meta … text form Module · Facet") measure it
+// unqualified — there is no same-module/same-facet special case for this
+// column, only for writeClaimRef's own inline prefix on every OTHER edge
+// list this footer renders (mirrors, rests_on-adjacent extras).
+//
+// An unshaped id (splitClaimID fails) has no module/facet to show and
+// writes no meta span at all — the same graceful degradation writeClaimRef's
+// own raw-id fallback uses.
+func writeRelationshipMeta(b *strings.Builder, targetID string) {
+	module, facet, _, ok := splitClaimID(targetID)
+	if !ok {
+		return
+	}
+	b.WriteString(`<span class="claim-relationship-meta">`)
+	b.WriteString(html.EscapeString(DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)))
+	b.WriteString(`</span>`)
+}
+
+// lifecycleModifier maps a target's status to the BEM-style modifier suffix
+// its dot/badge take: "locked" or "draft" — the two lifecycle hues 05 §4.10
+// draws (`--color-locked`, `--color-draft`; tokens.md's G2 mapping makes
+// those this engine's `--accent` and `--status-draft`). A locked-but-
+// review_pending target still reads "locked" here (its own status pill
+// elsewhere already carries the review_pending distinction); nothing in
+// R-I.2 asks the relationship badge to encode a second signal.
+func lifecycleModifier(st TargetStatus) string {
+	if st.Status == model.StatusDraft {
+		return "draft"
+	}
+	return "locked"
+}
+
+// countSegment renders one chip's noun-and-count text — R-F.1's "a noun and
+// a count, never a score" — pluralised with a plain trailing "s" unless the
+// count is exactly 1 ("1 relationship", "0 relationships", "1 source",
+// "3 sources").
+//
+// English irregulars are deliberately not handled: the two nouns are fixed
+// literals in this file's callers, and a general pluraliser would be
+// machinery for a set of size two.
 func countSegment(n int, singular string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, singular)
@@ -595,15 +817,13 @@ func countSegment(n int, singular string) string {
 	return fmt.Sprintf("%d %ss", n, singular)
 }
 
+const claimFooterChevronHTML = `<svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg>`
+
 // CommentChipHTML renders the 💬 comment chip for one claim, as a
 // <span class="claim-comments-slot"> holding the chip <button>. It is bound
-// into funcMap as "commentChip" and called directly from each chip-bearing
-// partial's <div class="k"> heading — {{commentChip .}}, the whole claim — so
-// the chip sits in the claim HEAD rather than in the edges footer, where it
-// used to ride as an <li class="claim-comments"> inside the shared
-// <ul class="claim-edges">. It moved because the footer is now a collapsed
-// <details> (see EdgesHTMLWithLinks): a chip inside it would be invisible, and
-// unclickable, on every claim whose footer starts closed.
+// into funcMap as "commentChip" for compatibility and emitted by
+// EdgesHTMLWithLinks as the footer's final control. It is outside the
+// independently collapsible evidence doors and remains visible when they close.
 //
 // It reads c.Comments directly rather than a per-render lookup, so it needs no
 // config, no allowlist and therefore no override binding in internal/render —
@@ -669,7 +889,7 @@ func CommentChipHTML(c model.Claim) template.HTML {
 	b.WriteString(html.EscapeString(c.ID))
 	b.WriteString(`" aria-controls="commentsPanel" aria-expanded="false" aria-label="`)
 	b.WriteString(html.EscapeString(label))
-	b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
+	b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg></span> <span class="comment-chip-count">`)
 	b.WriteString(fmt.Sprintf("%d", count))
 	b.WriteString(`</span></button></span>`)
 	return template.HTML(b.String())
@@ -797,7 +1017,7 @@ func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []st
 	b.WriteString(`<ul class="claim-edge-id-list">`)
 	for _, id := range ids {
 		b.WriteString(`<li>`)
-		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses)
+		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses, true)
 		b.WriteString(`</li>`)
 	}
 	b.WriteString(`</ul>`)
@@ -925,7 +1145,16 @@ func ClaimLabel(id string) string {
 // function produced before the pill existed. Only internal/render's
 // attachEdgesOverride, which does have the whole catalog, ever supplies a
 // non-nil map.
-func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
+//
+// showPrefix is the RETRY addition: a fixed-direction relationship row (see
+// writeRelationshipRow) now carries the target's module/facet in its own,
+// UNCONDITIONAL meta column (writeRelationshipMeta), so folding the same
+// information into an elided inline prefix here as well would print it
+// twice on those rows. Every other caller — writeIDListItems, for mirrors
+// and rests_on-adjacent "extra" rows, which have no meta column of their
+// own — passes true and keeps this function's original elision behaviour
+// exactly as it was.
+func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus, showPrefix bool) {
 	esc := html.EscapeString(targetID)
 	b.WriteString(`<a class="claim-ref" href="#`)
 	b.WriteString(esc)
@@ -947,11 +1176,13 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, t
 	}
 
 	var prefix string
-	switch {
-	case module != fromModule:
-		prefix = DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)
-	case facet != fromFacet:
-		prefix = DisplayCase(facet)
+	if showPrefix {
+		switch {
+		case module != fromModule:
+			prefix = DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)
+		case facet != fromFacet:
+			prefix = DisplayCase(facet)
+		}
 	}
 	if prefix != "" {
 		b.WriteString(`<span class="claim-ref-prefix">`)

@@ -69,22 +69,8 @@ type Viewer struct {
 	// not exist, LoadConfig returns a hard error.
 	TemplateOverrides string `yaml:"template_overrides,omitempty"`
 
-	// Theme is the viewer's custom-theme block: an optional preset, an
-	// optional theme file to extend, CSS custom-property values that apply
-	// to both colour schemes or to only one, and project-supplied font
-	// faces. See the Theme type for the shape and theme.go for the decoder.
-	//
-	// Token names (without the leading "--") must be drawn from
-	// ThemeTokenAllowlist — this is the only project-specific CSS
-	// vocabulary the engine recognizes, kept as a fixed list for typo
-	// protection. Values are injected verbatim into generated stylesheet
-	// blocks by internal/render, so they are validated as hostile input
-	// (see theme_validate.go) rather than trusted as safe CSS.
-	//
-	// A theme that names only flat token keys — every project that
-	// predates per-mode values, this engine's own fixtures included —
-	// merges to exactly the single :root{...} block it produced before.
-	Theme Theme `yaml:"theme,omitempty"`
+	// DeprecatedTheme is retained only to reject legacy configuration clearly.
+	DeprecatedTheme yaml.Node `yaml:"theme,omitempty"`
 }
 
 // Conformance configures the project-owned normalized observation input. The
@@ -150,93 +136,6 @@ func (c *Conformance) UnmarshalYAML(node *yaml.Node) error {
 	}
 	return nil
 }
-
-// ThemeTokenAllowlist is the fixed, engine-owned set of viewer.theme keys.
-// Any key in viewer.theme not present here is a load-time error. This list
-// is intentionally the only place that defines the engine's theme
-// vocabulary; internal/render's CSS-emitting helper iterates it (in this
-// order) to keep output deterministic.
-var ThemeTokenAllowlist = []string{
-	"accent",
-	"accent-bg",
-	"ink",
-	"muted",
-	"faint",
-	"paper",
-	"card-bg",
-	"border",
-	"link",
-	"warn",
-	"warn-bg",
-	"font-sans",
-	"font-mono",
-	"radius",
-
-	// Added for the custom-theme work: every consumer below is a literal
-	// that internal/render/viewer/template/style.css turns into
-	// var(--<token>, <the same literal>), so an unset token renders
-	// exactly as it did before this list grew. Order is load-bearing —
-	// internal/render emits declarations in it — so new tokens are
-	// appended, never inserted.
-	"code-inline-bg",
-	"code-bg",
-	"table-head-bg",
-	"image-bg",
-	"hover-bg",
-	"border-strong",
-	"shadow",
-	"shadow-strong",
-	"shadow-cast",
-	"scrim",
-	"selection-bg",
-	"status-draft",
-	"status-draft-bg",
-	"mockup-bg",
-}
-
-// themeColorTokens is the subset of ThemeTokenAllowlist that holds
-// color-shaped values and gets a light format sanity check on top of the
-// dangerous-character rejection applied to every token.
-var themeColorTokens = map[string]bool{
-	"accent":    true,
-	"accent-bg": true,
-	"ink":       true,
-	"muted":     true,
-	"faint":     true,
-	"paper":     true,
-	"card-bg":   true,
-	"border":    true,
-	"link":      true,
-	"warn":      true,
-	"warn-bg":   true,
-
-	// All fourteen tokens added for the custom-theme work are colours;
-	// font-sans, font-mono and radius remain the only non-colour tokens.
-	"code-inline-bg":  true,
-	"code-bg":         true,
-	"table-head-bg":   true,
-	"image-bg":        true,
-	"hover-bg":        true,
-	"border-strong":   true,
-	"shadow":          true,
-	"shadow-strong":   true,
-	"shadow-cast":     true,
-	"scrim":           true,
-	"selection-bg":    true,
-	"status-draft":    true,
-	"status-draft-bg": true,
-	"mockup-bg":       true,
-}
-
-// themeTokenAllowed is ThemeTokenAllowlist as a set, built once for O(1)
-// membership checks.
-var themeTokenAllowed = func() map[string]bool {
-	m := make(map[string]bool, len(ThemeTokenAllowlist))
-	for _, k := range ThemeTokenAllowlist {
-		m[k] = true
-	}
-	return m
-}()
 
 // Config is the fully-decoded, fully-validated project.config.yaml.
 type Config struct {
@@ -442,16 +341,6 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 		}
 	}
 
-	// The theme's two path-shaped fields are resolved here and READ
-	// NOWHERE IN THIS FUNCTION. Loading a config stays a pure function of
-	// its bytes plus the directory it was anchored to, which is what lets
-	// "check --staged" decode the index's copy of project.config.yaml and
-	// then resolve the theme against the index's copy of every file it
-	// names, instead of half of each.
-	if err := resolveThemePaths(&cfg.Viewer.Theme, dir); err != nil {
-		return nil, fmt.Errorf("config: %s: %w", path, err)
-	}
-
 	// A configured-and-missing override directory is a hard load-time
 	// error (per SPEC); missing individual partials inside it are fine and
 	// are handled later by internal/render, not here.
@@ -483,7 +372,7 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 }
 
 // validate checks the SHAPE of a decoded config: required fields, duplicates,
-// membership, the theme grammar. It runs BEFORE DecodeConfig resolves the
+// membership, and retired viewer settings. It runs BEFORE DecodeConfig resolves the
 // path-shaped fields, so inside it claims_dir, build_dir and every other path
 // is still the raw YAML string — "claims/x" against "./claims/../x", or "." —
 // and no comparison here can answer whether two of them overlap. Path
@@ -561,11 +450,8 @@ func (c *Config) validate() error {
 		return fmt.Errorf("tracks contains duplicate id %q", dup)
 	}
 
-	// Shape, allowlist and grammar only: nothing here reads a file. The
-	// theme file named by `extends` and every `fonts[].src` are read later,
-	// by ValidateTheme/ResolveTheme, through an injected reader.
-	if err := validateThemeBlock(&c.Viewer.Theme, "viewer.theme"); err != nil {
-		return err
+	if c.Viewer.DeprecatedTheme.Kind != 0 {
+		return fmt.Errorf("viewer.theme is no longer supported; remove viewer.theme from project.config.yaml to use the built-in Light and Dark viewer themes")
 	}
 
 	return nil
@@ -633,10 +519,6 @@ func pathContains(dir, child string) bool {
 		return true
 	}
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func isHexDigit(r rune) bool {
-	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 }
 
 func firstDuplicate(ss []string) (string, bool) {

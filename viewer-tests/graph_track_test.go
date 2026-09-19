@@ -148,7 +148,8 @@ func TestGraphTrackFilterDrawsOneFeaturesSubgraph(t *testing.T) {
 	// groups after it keep the order a reader's hand has learnt.
 	labels := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-controls .dxg-ctl .dxg-ctl-label'))
 		.map(function (e) { return e.textContent; })`)
-	want := []string{"Module", "Facet", "Track", "Granularity", "Highlight overlay", "Relationships", "View"}
+	// Re-pinned for screen 13 §4.2: "RELATIONS", not "Relationships".
+	want := []string{"Module", "Facet", "Track", "Granularity", "Highlight overlay", "Relations", "View"}
 	if fmt.Sprint(labels) != fmt.Sprint(want) {
 		t.Fatalf("control groups = %v, want %v", labels, want)
 	}

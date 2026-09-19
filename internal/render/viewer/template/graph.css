@@ -12,10 +12,15 @@
    base stylesheet contains no graph-adjacent selector at all, so there is no
    collision to resolve today — the prefix is what keeps that true tomorrow.
 
-   BOTH THEMES, ONE FILE. The base stylesheet's convention is dark values in
-   :root with a `prefers-color-scheme: light` block overriding the few that
-   must move. This file follows it exactly, so a reader switching their OS
-   appearance gets a pane that switches with the rest of the viewer.
+   BOTH THEMES, ONE FILE. Dark values live in :root and a
+   `prefers-color-scheme: light` block overrides the ones that must move, so a
+   reader switching their OS appearance gets a pane that switches with the rest
+   of the viewer. (The base stylesheet runs the OPPOSITE way round — light in
+   :root, a screen-scoped dark query over it — and the "DARK IS THE BASE"
+   note below says why the two files differ on purpose.) Beneath both queries
+   sit two `@media screen { html[data-theme=…] }` blocks that answer the
+   viewer's own three-position theme control rather than the OS; see their
+   note above the ramp.
 
    ---------------------------------------------------------------------------
    WHY THIS FILE DECLARES LITERAL COLOURS AT ALL
@@ -153,19 +158,49 @@
    two files DO share is the print outcome — the light query below carries
    `, print`, so paper gets the light ramp whatever the OS appearance is, the
    same result style.css reaches by scoping its dark query to `screen`.
+   And both are answered again, below the ramp, by an explicit-choice pair of
+   `html[data-theme="dark"]` / `html[data-theme="light"]` blocks: the OS is not
+   the only thing that picks a mode here, the reader's theme control does too,
+   and a query keyed on `prefers-color-scheme` cannot see that choice.
    Both sets are complete:
    a categorical ramp has to move in BOTH directions, because the dark values
    are lifted and desaturated to stay legible on --paper's near-black and the
    light values are darkened to stay legible on its near-white. Neither set
    inherits from the other. */
 :root {
+  /* THE NINE THE DESIGN NAMES, declared under their design names first and
+     read into the --dxg-* ramp below. docs/design/tokens.md §2 carries a
+     --color-graph-* / --color-dark-graph-* pair for each of the nine colours
+     the viewer chrome touches, and the ramp's twenty slots have no design
+     name at all beyond slot 5. Naming the nine gives the design vocabulary a
+     declaration in the engine without renaming a single --dxg-* consumer.
+
+     THE VALUES ARE THIS FILE'S OWN, in both modes, and that is a ruling
+     rather than an oversight. Paper's --color-dark-graph-* set disagrees with
+     every one of the nine dark values here, and five of them (facet-2,
+     facet-3, facet-5, other, halo) are the LIGHT hex copied verbatim onto a
+     dark board — a defect, not a value (tokens.md, Disagreements 1 and 2).
+     The dark ramp is also the output of a maximin CIEDE2000 solve seeded on
+     frozen slots 1-5, so accepting a transcription slip in one slot moves the
+     whole ramp's minimum distance. graph.css wins, full stop. */
+
   /* Facet slots 1-5: frozen prototype values. Do not renumber — assignment is
      positional, so renumbering silently recolours every existing project. */
-  --dxg-facet-1: #7C8CE8;
-  --dxg-facet-2: #3FB3A6;
-  --dxg-facet-3: #DE8A62;
-  --dxg-facet-4: #A98CD8;
-  --dxg-facet-5: #8E9AA8;
+  --color-dark-graph-facet-1: #7C8CE8;
+  --color-dark-graph-facet-2: #3FB3A6;
+  --color-dark-graph-facet-3: #DE8A62;
+  --color-dark-graph-facet-4: #A98CD8;
+  --color-dark-graph-facet-5: #8E9AA8;
+  --color-dark-graph-other: #6C7F75;
+  --color-dark-graph-cycle: #F5615C;
+  --color-dark-graph-halo: #EFB44D;
+  --color-dark-graph-governed: #F06A9C;
+
+  --dxg-facet-1: var(--color-dark-graph-facet-1);
+  --dxg-facet-2: var(--color-dark-graph-facet-2);
+  --dxg-facet-3: var(--color-dark-graph-facet-3);
+  --dxg-facet-4: var(--color-dark-graph-facet-4);
+  --dxg-facet-5: var(--color-dark-graph-facet-5);
 
   /* Slots 6-20: solved for maximum perceptual separation against slots 1-5,
      against each other and against every reserved colour. See the method note
@@ -191,15 +226,17 @@
      KEPT AS A FALLBACK, NOT AS THE SHIPPED VALUE: style.css declares
      --dxg-facet-other too and is emitted after this file, so this grey only
      reaches a project whose viewer.template_overrides replaces style.css.
-     Do not delete it — for such a project it is the only declaration. */
-  --dxg-facet-other: #6C7F75;
+     Do not delete it — for such a project it is the only declaration, and it
+     is the reason --color-dark-graph-other above is documentation of a branch
+     that does not paint in the shipped viewer. */
+  --dxg-facet-other: var(--color-dark-graph-other);
 
   /* State colours. Ring, halo and the two structural overlays only. */
-  --dxg-cycle: #F5615C;
-  --dxg-halo: #EFB44D;
+  --dxg-cycle: var(--color-dark-graph-cycle);
+  --dxg-halo: var(--color-dark-graph-halo);
 
   /* Reserved governance hue, outside the ramp. See the block comment above. */
-  --dxg-governed: #F06A9C;
+  --dxg-governed: var(--color-dark-graph-governed);
 }
 
 /* `, print`: paper is light, whatever the OS says. A printed graph pane with
@@ -207,11 +244,24 @@
    dark query prevents for the base palette. */
 @media (prefers-color-scheme: light), print {
   :root {
-    --dxg-facet-1: #4257C4;
-    --dxg-facet-2: #12897F;
-    --dxg-facet-3: #B65A34;
-    --dxg-facet-4: #7050A8;
-    --dxg-facet-5: #67717E;
+    /* The same nine under their light design names. Every one of these nine
+       light values already agreed with Paper exactly; only the dark set
+       disagreed. */
+    --color-graph-facet-1: #4257C4;
+    --color-graph-facet-2: #12897F;
+    --color-graph-facet-3: #B65A34;
+    --color-graph-facet-4: #7050A8;
+    --color-graph-facet-5: #67717E;
+    --color-graph-other: #7D8C85;
+    --color-graph-cycle: #D1201A;
+    --color-graph-halo: #C07E0C;
+    --color-graph-governed: #C11F5B;
+
+    --dxg-facet-1: var(--color-graph-facet-1);
+    --dxg-facet-2: var(--color-graph-facet-2);
+    --dxg-facet-3: var(--color-graph-facet-3);
+    --dxg-facet-4: var(--color-graph-facet-4);
+    --dxg-facet-5: var(--color-graph-facet-5);
 
     /* Solved the same way as the dark ramp, independently: the light band is
        L* 36-62 with chroma 22-68, every slot at least 3:1 against --paper.
@@ -235,14 +285,172 @@
 
     /* Light fallback, same standing as the dark one above: style.css's own
        light value wins for the shipped sheet. */
-    --dxg-facet-other: #7D8C85;
+    --dxg-facet-other: var(--color-graph-other);
 
-    --dxg-cycle: #D1201A;
-    --dxg-halo: #C07E0C;
+    --dxg-cycle: var(--color-graph-cycle);
+    --dxg-halo: var(--color-graph-halo);
 
-    --dxg-governed: #C11F5B;
+    --dxg-governed: var(--color-graph-governed);
   }
 }
+
+/* THE TWO EXPLICIT-CHOICE BLOCKS. Everything above answers the OS; these two
+   answer the READER, who has a three-position theme control in the viewer
+   chrome and whose stored choice shell.html writes onto <html data-theme>
+   before the first paint.
+
+   Without them this file answered only the OS, and the ramp disagreed with the
+   rest of the viewer on both explicit positions: a reader on a DARK OS who
+   pressed Light got style.css's light palette with this file's DARK ramp
+   (`--dxg-facet-1` #7C8CE8 on near-white), and a reader on a LIGHT OS who
+   pressed Dark got the light ramp on near-black, because the light query above
+   matched and nothing undid it. The `--color-graph-*` / `--color-dark-graph-*`
+   design names have the same problem one level down: the light nine are
+   declared ONLY inside that query, so on a dark OS a `--dxg-*` read of one of
+   them resolves to nothing at all.
+
+   So each block repeats its whole ramp, design names included, rather than
+   re-pointing the `--dxg-*` slots alone. `@media screen` keeps both away from
+   print, where the light query above still decides — a printed pane is light
+   whatever the reader chose, which is the same outcome style.css reaches by
+   scoping ITS dark blocks to screen. Specificity (0,1,1) against the queries'
+   (0,1,0) is what makes an explicit choice win in either direction.
+
+   style.css is emitted AFTER this file and re-declares --dxg-facet-other in
+   both of its own explicit blocks, so the shipped viewer still takes its blue
+   there and the greys below stay what they have always been: the fallback for
+   a viewer.template_overrides project that replaced style.css.
+
+   The bodies are copies of the two blocks above, and
+   TestGraphModeBlocksDeclareTheSameTokenSet in
+   internal/render/theme_tokens_test.go fails if either drifts from its source
+   in name set or in value. */
+
+@media screen {
+  html[data-theme="dark"] {
+    /* THE NINE THE DESIGN NAMES, declared under their design names first and
+       read into the --dxg-* ramp below. docs/design/tokens.md §2 carries a
+       --color-graph-* / --color-dark-graph-* pair for each of the nine colours
+       the viewer chrome touches, and the ramp's twenty slots have no design
+       name at all beyond slot 5. Naming the nine gives the design vocabulary a
+       declaration in the engine without renaming a single --dxg-* consumer.
+
+       THE VALUES ARE THIS FILE'S OWN, in both modes, and that is a ruling
+       rather than an oversight. Paper's --color-dark-graph-* set disagrees with
+       every one of the nine dark values here, and five of them (facet-2,
+       facet-3, facet-5, other, halo) are the LIGHT hex copied verbatim onto a
+       dark board — a defect, not a value (tokens.md, Disagreements 1 and 2).
+       The dark ramp is also the output of a maximin CIEDE2000 solve seeded on
+       frozen slots 1-5, so accepting a transcription slip in one slot moves the
+       whole ramp's minimum distance. graph.css wins, full stop. */
+
+    /* Facet slots 1-5: frozen prototype values. Do not renumber — assignment is
+       positional, so renumbering silently recolours every existing project. */
+    --color-dark-graph-facet-1: #7C8CE8;
+    --color-dark-graph-facet-2: #3FB3A6;
+    --color-dark-graph-facet-3: #DE8A62;
+    --color-dark-graph-facet-4: #A98CD8;
+    --color-dark-graph-facet-5: #8E9AA8;
+    --color-dark-graph-other: #6C7F75;
+    --color-dark-graph-cycle: #F5615C;
+    --color-dark-graph-halo: #EFB44D;
+    --color-dark-graph-governed: #F06A9C;
+
+    --dxg-facet-1: var(--color-dark-graph-facet-1);
+    --dxg-facet-2: var(--color-dark-graph-facet-2);
+    --dxg-facet-3: var(--color-dark-graph-facet-3);
+    --dxg-facet-4: var(--color-dark-graph-facet-4);
+    --dxg-facet-5: var(--color-dark-graph-facet-5);
+
+    /* Slots 6-20: solved for maximum perceptual separation against slots 1-5,
+       against each other and against every reserved colour. See the method note
+       above. Lightness band L* 58-82, chroma 20-62, every slot at least 4.5:1
+       against --paper so a 5px disc is still a disc on near-black. */
+    --dxg-facet-6: #AEBF44;
+    --dxg-facet-7: #009CF4;
+    --dxg-facet-8: #978E05;
+    --dxg-facet-9: #F6B8F3;
+    --dxg-facet-10: #2B9F50;
+    --dxg-facet-11: #F3C0BC;
+    --dxg-facet-12: #07E1F0;
+    --dxg-facet-13: #9F8869;
+    --dxg-facet-14: #92D4FE;
+    --dxg-facet-15: #88E17B;
+    --dxg-facet-16: #C3C9FA;
+    --dxg-facet-17: #15E7B3;
+    --dxg-facet-18: #0AA4C1;
+    --dxg-facet-19: #B6B994;
+    --dxg-facet-20: #A9D6C0;
+
+    /* No facet, an unlisted facet, or a collapsed module group.
+       KEPT AS A FALLBACK, NOT AS THE SHIPPED VALUE: style.css declares
+       --dxg-facet-other too and is emitted after this file, so this grey only
+       reaches a project whose viewer.template_overrides replaces style.css.
+       Do not delete it — for such a project it is the only declaration, and it
+       is the reason --color-dark-graph-other above is documentation of a branch
+       that does not paint in the shipped viewer. */
+    --dxg-facet-other: var(--color-dark-graph-other);
+
+    /* State colours. Ring, halo and the two structural overlays only. */
+    --dxg-cycle: var(--color-dark-graph-cycle);
+    --dxg-halo: var(--color-dark-graph-halo);
+
+    /* Reserved governance hue, outside the ramp. See the block comment above. */
+    --dxg-governed: var(--color-dark-graph-governed);
+  }
+
+  html[data-theme="light"] {
+    /* The same nine under their light design names. Every one of these nine
+       light values already agreed with Paper exactly; only the dark set
+       disagreed. */
+    --color-graph-facet-1: #4257C4;
+    --color-graph-facet-2: #12897F;
+    --color-graph-facet-3: #B65A34;
+    --color-graph-facet-4: #7050A8;
+    --color-graph-facet-5: #67717E;
+    --color-graph-other: #7D8C85;
+    --color-graph-cycle: #D1201A;
+    --color-graph-halo: #C07E0C;
+    --color-graph-governed: #C11F5B;
+
+    --dxg-facet-1: var(--color-graph-facet-1);
+    --dxg-facet-2: var(--color-graph-facet-2);
+    --dxg-facet-3: var(--color-graph-facet-3);
+    --dxg-facet-4: var(--color-graph-facet-4);
+    --dxg-facet-5: var(--color-graph-facet-5);
+
+    /* Solved the same way as the dark ramp, independently: the light band is
+       L* 36-62 with chroma 22-68, every slot at least 3:1 against --paper.
+       The two ramps are NOT lightness-flipped copies of each other — a
+       flipped dark colour lands outside the light band as often as not. */
+    --dxg-facet-6: #3E7500;
+    --dxg-facet-7: #B466D5;
+    --dxg-facet-8: #8A8A3B;
+    --dxg-facet-9: #7779EF;
+    --dxg-facet-10: #5F5503;
+    --dxg-facet-11: #1089EB;
+    --dxg-facet-12: #159A51;
+    --dxg-facet-13: #AD7696;
+    --dxg-facet-14: #425B3D;
+    --dxg-facet-15: #694B68;
+    --dxg-facet-16: #135E61;
+    --dxg-facet-17: #AC7A72;
+    --dxg-facet-18: #0B7098;
+    --dxg-facet-19: #6F4D37;
+    --dxg-facet-20: #8782A8;
+
+    /* Light fallback, same standing as the dark one above: style.css's own
+       light value wins for the shipped sheet. */
+    --dxg-facet-other: var(--color-graph-other);
+
+    --dxg-cycle: var(--color-graph-cycle);
+    --dxg-halo: var(--color-graph-halo);
+
+    --dxg-governed: var(--color-graph-governed);
+
+  }
+}
+
 
 /* =========================================================================
    PANE CHROME
@@ -358,15 +566,63 @@ body.dxg-open {
   color: var(--muted);
 }
 
-/* The generation stamp is the mitigation the pane owes a reader in a live
-   session: a fragment swap does not re-deliver the payload, so the shape on
-   screen can be an hour old and this is where it says so. cursor: help
-   advertises the absolute value sitting on the title attribute. */
-.dxg-stamp {
+/* The glyph beside the title (13 §4.1) — a wrapping span (buildHeader sets
+   its innerHTML), sized to the board's 17x17 rather than .dx-icon's global
+   1em default. */
+.dxg-head-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--ink);
+}
+
+.dxg-head-icon .dx-icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* A 1x18px rule between the identity cluster (glyph, title) and the
+   provenance line, exactly like the one beside it in the control bar
+   (.dxg-controls' vertical divider, 13 §3). */
+.dxg-head-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+/* "arrived from <claim>" — present only when the pane was opened from a
+   claim (13 §4.1 / §6). Never quoted, never a link: the claim is named, not
+   cited. */
+.dxg-provenance {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Pushes the freshness stamp and the action buttons to the header's right
+   edge regardless of whether a provenance line is present (13 §4.1's
+   "Spacer" row). */
+.dxg-head-spacer {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* The generation stamp is the mitigation the pane owes a reader in a live
+   session: a fragment swap does not re-deliver the payload, so the shape on
+   screen can be an hour old and this is where it says so. cursor: help
+   advertises the absolute value sitting on the title attribute. Mono, per
+   13 §4.1 — it carries a count and an elapsed unit, the same reason ids and
+   counts elsewhere in this pane take the mono face. */
+.dxg-stamp {
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--muted);
   cursor: help;
@@ -377,6 +633,13 @@ body.dxg-open {
   display: flex;
   flex-shrink: 0;
   gap: 6px;
+}
+
+/* The "Esc" half of "Close Esc" (13 §4.1) — dropped on a phone (M6), where
+   Escape is not a key a touch reader has. Inherits the button's own type;
+   the board draws "Close Esc" as one label run, not two weights. */
+.dxg-close-hint {
+  margin-left: .35em;
 }
 
 .dxg-btn {
@@ -510,15 +773,15 @@ body.dxg-open #dxgOpen {
 }
 
 .dxg-toggle[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-  /* The ON state is carried by the border and the tinted background, NOT by
-     the text colour. An accent tuned to read on a dark ground lands at 2.07:1
-     when it is painted on its own 14% tint over a light surface — below AA for
-     12px text — and the accent is a project-themeable token, so the graph
-     cannot know it is safe. --ink against a faint tint of anything is the one
-     pairing that holds at every accent a project might set. */
-  color: var(--ink);
+  /* A relation/labels toggle is a NAVIGATION control — "which relations am I
+     looking at" changes what is drawn, the same job the sidebar's own nav
+     rows do — so its ON state takes Paper's --color-accent, which is the
+     engine's --link, never --accent (the engine's LOCKED green;
+     tokens.md Disagreement 7 / G2: "never invert link and lock"). 13 §4.2
+     measures the ON label itself as --color-accent, not --color-ink. */
+  border-color: var(--link);
+  background: var(--link-bg, color-mix(in srgb, var(--link) 9%, transparent));
+  color: var(--link);
 }
 
 /* ---- notice strip: dangling edges, auto-collapse, refresh failure ------ */
@@ -632,7 +895,11 @@ body.dxg-open #dxgOpen {
   scrollbar-width: thin;
   scrollbar-color: var(--muted) transparent;
   -webkit-overflow-scrolling: touch;
-  padding: 0 12px 10px;
+  /* 13 §3: readings block padding-inline 24px, matching the SELECTED and
+     property blocks above it in the rail; block padding stays asymmetric
+     because .dxg-rail-head supplies its own top inset (sticky) and the
+     bottom is a scroll gutter, not a measured edge. */
+  padding: 0 24px 20px;
 }
 
 .dxg-gaps::-webkit-scrollbar {
@@ -862,8 +1129,10 @@ body.dxg-open #dxgOpen {
   color: var(--muted);
 }
 
-.dxg-legend-item--governed .dxg-legend-edge,
-.dxg-legend-item--governed .dxg-legend-name {
+/* RETRY fix list item 9 / 13 §4.5: every legend LABEL paints --color-muted
+   — only the 34x12 mark itself carries the governance hue. Dropped
+   .dxg-legend-name from this selector. */
+.dxg-legend-item--governed .dxg-legend-edge {
   color: var(--dxg-governed);
 }
 
@@ -882,6 +1151,15 @@ body.dxg-open #dxgOpen {
   width: 14px;
   height: 14px;
   color: var(--ink);
+}
+
+/* The MARKS group's node samples (13 §4.5) are two-tone — a facet fill plus
+   a state-coloured ring — and paint themselves in explicit var()s rather
+   than currentColor (MARK_SAMPLES, graph-ui.js), so this is a size-only
+   rule. 16x16, matching the board and the mobile row's dot slot (13 §4.13). */
+.dxg-legend-mark--node {
+  width: 16px;
+  height: 16px;
 }
 
 /* Held at full strength during a legend hover, with the edge and overlay
@@ -920,19 +1198,40 @@ body.dxg-open #dxgOpen {
   border-bottom: 1px solid var(--border);
 }
 
+/* 13 §4.9: sans 11/14 w600 tracking .08em --color-faint — not this file's
+   original mono/10px/--muted "Gaps in this view" heading, which the board
+   never drew: WHAT THE LAYOUT FOUND is styled like every other rail eyebrow
+   (.dxg-detail-eyebrow, .dxg-ctl-label), not like a rule id. */
 .dxg-rail-title {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
   text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--muted);
+  letter-spacing: .08em;
+  color: var(--faint);
+}
+
+/* 13 §4.9 / §6 — "N of M rules", right-ranged across the same flex:1 the
+   heading's own margin-left:auto neighbour (.dxg-rail-jump) used to own
+   alone. Sits between the title and the heuristics jump button now, so
+   both survive: the count states what is showing, the button reaches what
+   is not. */
+/* RETRY fix list item 15: line-height was unset, inheriting the rail
+   head's own — pin it to the eyebrow's 14px explicitly. */
+.dxg-rail-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--faint);
 }
 
 /* The cue that the heuristics block exists at all. It is a button rather
    than a caption because "there is more below" is only half an answer. */
 .dxg-rail-jump {
-  margin-left: auto;
   flex-shrink: 0;
   border: 1px solid var(--border);
   background: var(--paper);
@@ -949,8 +1248,34 @@ body.dxg-open #dxgOpen {
   border-color: var(--accent);
 }
 
+/* 13 §6 — one word changes on the two mobile boards ("picture" ->
+   "relationships"); both copies are always in the DOM (renderGaps) and
+   this file picks one by width, never JS, so the swap is exactly a CSS
+   breakpoint like every other mobile rule in this file. */
+.dxg-rail-intro {
+  margin: 0 0 4px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 21px;
+  color: var(--muted);
+}
+
+.dxg-rail-intro--mobile {
+  display: none;
+}
+
+/* 13 §3/§4.9 (RETRY fix list item 15): one reading — padding-block 12px, a
+   top rule, and a clean 5px gap between its parts (head, body, and the
+   affected-ids list when it has one) via flex, rather than the previous
+   indirect combination of rule-head's own row-gap and rule-body's
+   margin-top. */
 .dxg-rule {
-  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
 }
 
 .dxg-rule-head {
@@ -958,16 +1283,49 @@ body.dxg-open #dxgOpen {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 2px 6px;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 19px;
   color: var(--ink);
 }
 
+/* The RULE ID (13 §4.9's mono, right-ranged column) — this file's original
+   .dxg-rule-name held the id already; it now sits opposite the title
+   instead of beside it, via margin-left:auto rather than DOM order, so
+   nothing reading the markup meets the id before the title it belongs to. */
 .dxg-rule-name {
+  margin-left: auto;
+  flex-shrink: 0;
   font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--faint);
 }
 
+/* The READING TITLE (13 §4.9) — sans w600 ink. This file's original
+   .dxg-rule-phrase held RULE_LABELS' bare noun phrase in the same weight
+   the id now takes; ruleTitle() (graph-ui.js) gives it a fuller sentence
+   and this rule gives it the weight the sentence now carries alone. */
 .dxg-rule-phrase {
   min-width: 0;
+  font-weight: 600;
+  /* RETRY fix list item 8: the comment above already says "sans w600 ink"
+     — the colour itself was never written down. Set directly (not left to
+     inherit from .dxg-rule-head) so 13 §8.12's found-vs-found-nothing
+     contrast is a real declaration on both sides — see .dxg-rule--empty
+     .dxg-rule-phrase below, which dims this back to --muted. */
+  color: var(--ink);
+}
+
+/* The READING BODY (13 §4.9) — serif, muted, the descriptive sentence
+   ruleBody() builds from the affected claims' own titles. */
+.dxg-rule-body {
+  /* margin-top is 0, not 5px: .dxg-rule's own flex gap (RETRY fix list
+     item 15) supplies the space between this and rule-head now. */
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
 }
 
 /* A hint row carries one item more than a fact row — the GUESS badge — and in
@@ -983,27 +1341,77 @@ body.dxg-open #dxgOpen {
   flex: 1 0 100%;
 }
 
+/* The numeric bubble is now redundant with the reading title's own "N
+   claims:" opening and the collapsed tail's own count — kept in the DOM
+   (a lane or a test may still want the raw number) but not drawn twice. */
 .dxg-rule-count {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
+  display: none;
 }
 
 /* A rule that found nothing still renders, dimmed. An empty cycle block is
    the correct and honest reading for a corpus that passes check, and hiding
    it would leave a reader unable to tell "no cycles" from "not computed". */
-.dxg-rule--empty .dxg-rule-head {
+.dxg-rule--empty .dxg-rule-head,
+.dxg-rule--empty .dxg-rule-phrase,
+.dxg-rule--empty .dxg-rule-body {
   color: var(--muted);
+}
+
+/* 13 §4.9 / §8.12 — the collapsed "N rules found nothing" tail: a chevron
+   plus a label, in --color-accent (engine --link — this is navigation, the
+   same "reveal more of the rail" job .dxg-rail-jump does two rows up).
+   Rotates open the same way a native <details> marker would, without the
+   browser's own disclosure triangle, which cannot be styled to the board's
+   13x13 chevron. */
+.dxg-rule-tail {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--link);
+  font: 500 13px/16px var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+}
+
+/* tailChevronIcon (graph-ui.js) appends the actual <svg> — a data-URI mask
+   would need the SVG namespace spelled out to be valid standalone XML, and
+   that string reads as a network reference to this repo's offline scanner
+   even though nothing is fetched. */
+.dxg-rule-tail-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform .12s ease;
+}
+
+.dxg-rule-tail[aria-expanded="true"] .dxg-rule-tail-icon {
+  transform: rotate(180deg);
 }
 
 .dxg-rule-ids {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin: 4px 0 0;
+  /* margin-top 0, not 4px: .dxg-rule's flex gap (RETRY fix list item 15)
+     already supplies 5px above this list. */
+  margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* RETRY fix list item 16: a flex item's default min-width is auto, which
+   let a long claim id hold the <li> — and the .dxg-jump button inside it —
+   to its own un-wrapped intrinsic width, clipping past the rail's edge at
+   both 1440 (measured 370px against a 288px interior) and 390. min-width:0
+   lets the item shrink to the rail's real width instead. */
+.dxg-rule-ids li {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .dxg-jump {
@@ -1015,10 +1423,10 @@ body.dxg-open #dxgOpen {
   font: 11px var(--font-mono);
   line-height: 1;
   padding: 4px 6px;
+  min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dxg-jump:hover {
@@ -1083,12 +1491,47 @@ body.dxg-open #dxgOpen {
   color: var(--muted);
 }
 
-.dxg-detail-id {
-  margin: 0 0 6px;
-  font-family: var(--font-mono);
-  font-size: 12px;
+/* 13 §4.6 — SELECTED eyebrow, the claim's own title, then its mono id/slug.
+   Its own block, distinct from the property rows below it (13 §3's SELECTED
+   block vs. property-block padding split). */
+.dxg-detail-selected {
+  border-bottom: 1px solid var(--border);
+}
+
+.dxg-detail-eyebrow {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--faint);
+}
+
+/* 13 §4.6 (RETRY fix list item 13): 23px, not 1.35 (21.6px). */
+.dxg-detail-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 23px;
   color: var(--ink);
   overflow-wrap: anywhere;
+}
+
+/* 13 §4.6 (RETRY fix list item 13): mono 11/17 — line-height was unset
+   (inheriting the pane's own 1.2, ~13px, not the spec's 17px). */
+.dxg-detail-id {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.dxg-detail-props {
+  border-bottom: 1px solid var(--border);
 }
 
 .dxg-detail-rows {
@@ -1107,11 +1550,40 @@ body.dxg-open #dxgOpen {
 /* The value is the thing a reader came for, so it is --ink and the label
    beside it is --muted. Before, both were quiet and the label was quieter
    still; the label kept its distinctness from the mono face rather than from
-   being the least readable text in the pane. */
+   being the least readable text in the pane.
+
+   The four modifiers below are 13 §4.7's "the value colour varies for
+   exactly three reasons — status, navigation, and 'this answer is a quiet
+   no'" (plus D10's fourth: blocked always reads --color-blocked, wherever
+   "blocked by N" appears, even on an otherwise-locked claim). */
 .dxg-detail-rows dd {
   margin: 0;
   color: var(--ink);
   overflow-wrap: anywhere;
+}
+
+.dxg-detail-rows dd.dxg-v-locked { color: var(--accent); }
+.dxg-detail-rows dd.dxg-v-blocked { color: var(--warn); }
+.dxg-detail-rows dd.dxg-v-draft { color: var(--status-draft); }
+.dxg-detail-rows dd.dxg-v-muted { color: var(--muted); }
+
+/* GOVERNED BY's value: one or more clickable claim titles, --color-accent
+   (engine --link) — 13 §4.7's "Value, link". A plain button rather than an
+   <a>: it jumps the canvas to the governor and selects it, the same action
+   every other rail jump target takes, not a navigation to a new document. */
+.dxg-detail-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--link);
+  cursor: pointer;
+  text-align: left;
+}
+
+.dxg-detail-link:hover {
+  text-decoration: underline;
 }
 
 /* A caveat attached to a value — "these numbers belong to the group, not to
@@ -1128,9 +1600,6 @@ body.dxg-open #dxgOpen {
   margin-top: 8px;
   border: 1px solid var(--border);
   background: var(--paper);
-  /* --link is an accent-derived token and inherits the same problem as the
-     toggles above: 2.64:1 on a light surface at 11px. This is a button-shaped
-     control with a border already announcing it, so the text can be --ink. */
   color: var(--ink);
   border-radius: 6px;
   cursor: pointer;
@@ -1143,3 +1612,150 @@ body.dxg-open #dxgOpen {
 .dxg-detail-open:hover {
   border-color: var(--accent);
 }
+
+/* 13 §4.8 / D5 — the REAL "Back to this claim in the reading view" row is a
+   plain link row, not a bordered chip: an arrow, a label, a full-bleed
+   bottom rule, nothing else. Paper's --color-accent is the engine's --link
+   (tokens.md Disagreement 7 / G2) — measured on this project's own theme it
+   clears AA on --paper by a wide margin (7.4:1 light, 7.4:1 dark), so unlike
+   the toggles above this one does not need the --ink fallback.
+   ".dxg-detail-open.dxg-detail-back" (a compound selector) outranks the
+   plain ".dxg-detail-open" and ".dxg-detail-open:hover" rules above on
+   specificity alone, so "expand this group" (the only other consumer of
+   .dxg-detail-open) is untouched. */
+.dxg-detail-open.dxg-detail-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--link);
+  font: 600 14px/1.3 var(--font-sans);
+}
+
+.dxg-detail-open.dxg-detail-back:hover {
+  border-color: transparent;
+  text-decoration: underline;
+}
+
+.dxg-detail-back-arrow {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+/* =========================================================================
+   AROUND THIS CLAIM — the mobile substitute for the canvas (13 §4.13,
+   M1-M3). Built unconditionally (buildNeighborhood, graph-ui.js); hidden
+   here by default and shown only below 520px (see the 520px block near the
+   end of this file), the same build-once/CSS-toggles pattern as the two
+   .dxg-rail-intro copies above.
+   ========================================================================= */
+
+.dxg-neighborhood {
+  display: none;
+}
+
+.dxg-neighborhood-eyebrow {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  /* 13 §4.13: --color-muted here, not the --color-faint every other eyebrow
+     in this pane takes — the one deliberately louder heading on the board. */
+  color: var(--muted);
+}
+
+.dxg-neighborhood-intro {
+  margin: 6px 0 0;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+}
+
+.dxg-neighbor-group {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-top: -1px; /* consecutive groups share one rule, not a double line */
+}
+
+.dxg-neighbor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  background: var(--code-bg);
+}
+
+.dxg-neighbor-count {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--faint);
+}
+
+.dxg-neighbor-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.dxg-neighbor-group .dxg-neighbor-row:first-of-type {
+  border-top: 0;
+}
+
+.dxg-neighbor-dot {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+}
+
+.dxg-neighbor-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 0%;
+}
+
+.dxg-neighbor-title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.dxg-neighbor-sub {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+
+.dxg-neighbor-sub.dxg-v-blocked { color: var(--warn); }
+.dxg-neighbor-sub.dxg-v-draft { color: var(--status-draft); }
+.dxg-neighbor-sub.dxg-v-locked { color: var(--muted); }

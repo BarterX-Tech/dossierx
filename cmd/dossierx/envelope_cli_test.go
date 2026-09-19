@@ -144,8 +144,6 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", trackCfg, "track", "list"},
 		{"--config", trackCfg, "track", "show", "guest-checkout"},
 		{"--config", trackCfg, "track", "status", "guest-checkout"},
-		{"--config", trackCfg, "theme", "list"},
-		{"--config", trackCfg, "theme", "export", "claude"},
 		{"--config", cfgPath, "skills", "export", filepath.Join(root, "skills-out")},
 		{"version"},
 	} {

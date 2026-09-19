@@ -16,6 +16,7 @@ package viewertests
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -87,9 +88,9 @@ governed_by:
 `
 }
 
-// longBodyClaim is a single card whose body is tall enough that the document
-// (the default desktop layout scrolls the WINDOW, not .content-area) exceeds any
-// headless viewport, so window scroll is meaningful.
+// longBodyClaim is a card whose markdown body is many paragraphs. The live
+// reading view clamps a long body to four lines until the reader expands it,
+// so one of these cards is NOT by itself taller than a desktop viewport.
 func longBodyClaim(id, facet string, paragraphs int) string {
 	var b strings.Builder
 	b.WriteString("id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: draft\nbody: |\n")
@@ -213,31 +214,92 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 func TestReloadPreservesScrollPosition(t *testing.T) {
 	p := newProjectRaw(t, defaultConfigYAML)
 	p.writeClaim("tall.yaml", longBodyClaim("widget.contract.tall", "contract", 150))
+	// One clamped card fits inside a desktop viewport (Chrome here measured
+	// window/html/body/.layout/.content-area overflow:visible and a 0px
+	// document range; .reading-canvas is overflow:clip at equal client/scroll
+	// height, so it is not a scroller). Extra cards make the WINDOW — still
+	// the reader-visible scroller — exceed the viewport without expanding
+	// the body. Expansion would not survive a fragment swap (the disclosure
+	// wrapper is recreated), so it cannot be how this fixture earns height.
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("widget.contract.filler-%02d", i)
+		p.writeClaim(id+".yaml", longBodyClaim(id, "contract", 40))
+	}
 	// Seed one comment so the chip reads "1" on load; the reload-trigger below
 	// bumps it to "2", a deterministic signal that sits in the card footer (below
 	// any reasonable scroll line, so nothing above the fold moves).
 	p.run("comment", "add", "widget.contract.tall", "--as", "human", "--body", "seed")
 	ctx := serveAndOpenLive(t, p)
+	desktopViewport(t, ctx)
 
-	// The tall card makes the document exceed the viewport, so the WINDOW scrolls.
-	runCDP(t, ctx, chromedp.Evaluate(`window.scrollTo(0, 300);`, nil))
-	pollTrue(t, ctx, `Math.round(window.pageYOffset) === 300`)
+	// Confirm the reader-visible scroller from computed overflow + range, then
+	// take an offset from what THAT scroller can actually scroll. A hardcoded
+	// 300 that clamps to the maximum would compare the clamp against itself.
+	scroller := evalString(t, ctx, readingScrollerKindJS)
+	rangePx := evalInt(t, ctx, readingScrollerRangeJS)
+	if scroller != "window" {
+		t.Fatalf("reader-visible scroller is %q (overflow/range), not window; restore-view only reapplies window + .content-area — update the product restore path and this assertion together", scroller)
+	}
+	target := rangePx
+	if target > 300 {
+		target = 300
+	}
+	if target < 50 {
+		t.Fatalf("fixture can only scroll %dpx on %s; it is too short to prove scroll is preserved", target, scroller)
+	}
+	runCDP(t, ctx, chromedp.Evaluate(fmt.Sprintf(`window.scrollTo(0, %d);`, target), nil))
+	pollTrue(t, ctx, fmt.Sprintf(`Math.round(window.pageYOffset) === %d`, target))
 
 	// Add a second comment out-of-band -> reload. The chip flips 1 -> 2.
 	p.run("comment", "add", "widget.contract.tall", "--as", "human", "--body", "second")
 	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip .comment-chip-count');return !!c && c.textContent === '2';})()`)
 
-	// The reader's window scroll survived the swap.
-	if got := evalInt(t, ctx, `Math.round(window.pageYOffset)`); got != 300 {
-		t.Fatalf("window scroll = %d after reload, want 300 (restore-view must preserve scroll)", got)
+	if got := evalString(t, ctx, readingScrollerKindJS); got != scroller {
+		t.Fatalf("reader-visible scroller became %q after reload, was %q", got, scroller)
 	}
-	// And .content-area's own scrollTop (0 in the default desktop layout) is
-	// unchanged too — the literal content-area.scrollTop the restore path also
-	// captures and re-applies.
+	if got := evalInt(t, ctx, `Math.round(window.pageYOffset)`); got != target {
+		t.Fatalf("window scroll = %d after reload, want %d (restore-view must preserve scroll)", got, target)
+	}
+	// .content-area is not the scroller (overflow:visible, scrollTop 0). The
+	// restore path still captures and re-applies that value; it must stay 0.
 	if got := evalInt(t, ctx, `Math.round(document.querySelector('.content-area').scrollTop)`); got != 0 {
 		t.Fatalf("content-area scrollTop = %d, want 0 (unchanged across reload)", got)
 	}
 }
+
+// readingScrollerKindJS names the reader-visible vertical scroller: window, or
+// a .content-area descendant whose overflow-y is auto/scroll/overlay and whose
+// scroll range beats the document. overflow:clip is not a scroller.
+const readingScrollerKindJS = `(function(){
+  var winRange = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  var best = {kind:'window', range:winRange};
+  var root = document.querySelector('.content-area');
+  if (!root) return 'missing-content-area';
+  var nodes = [root];
+  var desc = root.querySelectorAll('*');
+  for (var i = 0; i < desc.length; i++) nodes.push(desc[i]);
+  for (var j = 0; j < nodes.length; j++) {
+    var el = nodes[j];
+    var oy = getComputedStyle(el).overflowY;
+    if (oy !== 'auto' && oy !== 'scroll' && oy !== 'overlay') continue;
+    var range = el.scrollHeight - el.clientHeight;
+    if (range > best.range + 1) {
+      if (el.classList.contains('content-area')) { best = {kind:'.content-area', range:range}; continue; }
+      if (el.classList.contains('reading-canvas')) { best = {kind:'.reading-canvas', range:range}; continue; }
+      best = {kind:'nested:'+el.tagName.toLowerCase()+'.'+(el.className||'').toString().split(' ')[0], range:range};
+    }
+  }
+  return best.kind;
+})()`
+
+const readingScrollerRangeJS = `(function(){
+  var kind = ` + readingScrollerKindJS + `;
+  if (kind === 'window') return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  var sel = kind.charAt(0) === '.' ? kind : null;
+  var el = sel ? document.querySelector(sel) : null;
+  if (!el) return 0;
+  return Math.max(0, el.scrollHeight - el.clientHeight);
+})()`
 
 // ---------------------------------------------------------------------
 // A newly added claim id resolves via the rebuilt claimToFacet.
