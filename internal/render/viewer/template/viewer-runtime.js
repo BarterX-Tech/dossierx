@@ -2291,6 +2291,7 @@
         // that built that string, is now dead (no other call site) and is
         // deleted — see learnings/deadcode/L8.md.
         var headline = blockerHeadline(groups);
+        var needsYou = countSeverity(groups, 'needs_you') > 0;
         if (ledger.length) {
           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
         } else if (lintErrors.length && !headline && !needsYou) {

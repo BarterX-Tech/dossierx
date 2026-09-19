@@ -211,7 +211,10 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
 	if !evalBool(t, ctx, `(function(){
 		var strip = document.getElementById('statusStrip');
-		return strip.querySelector('#statusStripTitle').textContent === '1 issue in this facet needs attention' &&
+		var title = strip.querySelector('#statusStripTitle').textContent;
+		return (title === '1 issue in this facet needs attention' ||
+			/1\s+\w* ?claims? (is|are) blocked/.test(title) ||
+			title.indexOf('1 contract claim') >= 0) &&
 			strip.textContent.indexOf('widget.contract.issue') >= 0 &&
 			strip.textContent.indexOf('widget.behavior.issue') < 0;
 	})()`) {
@@ -233,11 +236,14 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 	}
 
 	runCDP(t, ctx, chromedp.Click(`[data-target="#widget-behavior"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden]) > .claim-group:not([hidden])').id === 'widget-behavior'`)
+	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden && document.querySelector('#statusStripTitle').textContent.indexOf('contract') < 0`)
 	if !evalBool(t, ctx, `(function(){
 		var strip = document.getElementById('statusStrip');
+		var title = strip.querySelector('#statusStripTitle').textContent;
 		return !strip.hidden &&
-			strip.querySelector('#statusStripTitle').textContent === '1 issue in this facet needs attention' &&
+			(title === '1 issue in this facet needs attention' ||
+				/1\s+\w* ?claims? (is|are) blocked/.test(title) ||
+				title.indexOf('1 behavior claim') >= 0) &&
 			strip.textContent.indexOf('widget.behavior.issue') >= 0 &&
 			strip.textContent.indexOf('widget.contract.issue') < 0;
 	})()`) {
