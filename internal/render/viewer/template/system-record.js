@@ -91,8 +91,10 @@
   // Focus mode (reference-rules.md §11: R11.1-R11.6). ONE reversible
   // state — html[data-focus="on"] — replaces the engine's former two
   // independent per-rail toggles (the sidebar's #sidebarCollapseToggle and
-  // the facet TOC's renderToc-injected .system-panel-toggle--toc; see
-  // learnings/deadcode/L2.md). State lives on <html>, never inside
+  // the facet TOC's renderToc-injected .system-panel-toggle--toc, neither of
+  // which survives — viewer-tests/claim_collapse_test.go asserts both are
+  // absent and that exactly one .focus-toggle replaces them). State lives on
+  // <html>, never inside
   // <main class="content-area"> or <nav id="nav">, so an SSE fragment swap
   // (shell.html's own comment: those two subtrees are replaced wholesale)
   // can never silently drop a reader out of the mode (R11.5's failure
@@ -105,8 +107,8 @@
   // purpose: html/template's contextual autoescaper re-serializes a
   // literal <script> block's JS and drops line comments, leaving
   // whitespace-only lines TestCommittedFixtureViewersAreNotStale rejects —
-  // the same landmine LEARNINGS.md G10 documents for an HTML comment in
-  // that file's SVG sprite, one script-tag scope over.
+  // the same landmine an HTML comment in that file's SVG sprite hit, one
+  // script-tag scope over.
   // ------------------------------------------------------------------
 
   function isFocusOn() {
@@ -459,8 +461,8 @@
       // node 1EZ-0 inside the facet panel 8P-0) is built here rather than
       // server-rendered inline: it used to be a static child of the left
       // sidebar-footer in shell.html, and this is the third and final
-      // retry attempt landing its move into the right facet panel (see
-      // learnings/inbox/L2.md). #sidebar carries data-generated-at (added
+      // retry attempt landing its move into the right facet panel. #sidebar
+      // carries data-generated-at (added
       // by this lane at shell.html's <aside id="sidebar"> tag) so the
       // instant survives the move without shell.html emitting the whole
       // block twice. A project with no GeneratedAt (offline/dev render)
@@ -854,7 +856,7 @@
   // reverting all of it back to the pre-13 wording — removed here rather
   // than left to fight graph-ui.js on every interaction. Found via
   // graph_redrive_test.go/graph_pane_test.go passing while the rendered
-  // page itself still showed the old strings; see learnings/inbox/L9.md.
+  // page itself still showed the old strings.
   // The #dxgPane MutationObserver that called this on every pane mutation
   // is removed below it, for the same reason.
 

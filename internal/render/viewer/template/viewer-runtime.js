@@ -1750,8 +1750,8 @@
       // title, never the claim id; the id appears only inside the path,
       // where it is machine identity.
       //
-      // RETRY FIX (wave-B2 fix list item 1, IMPLEMENTED WITH A DISPUTE — see
-      // learnings/inbox/L5.md for the probe evidence): record.detail is
+      // RETRY FIX (wave-B2 fix list item 1, IMPLEMENTED WITH A DISPUTE
+      // against the probe evidence): record.detail is
       // rendered only for an `own_flag` review cause. 06 §8 item 3 and
       // R09.8 ("the authored detail is not one of the eight demotions;
       // nothing is deleted from the data") require the reviewer's own
@@ -2309,7 +2309,7 @@
         // ruling — the severity chips above already carry every count this
         // used to repeat as a second string. statusChipLine, the function
         // that built that string, is now dead (no other call site) and is
-        // deleted — see learnings/deadcode/L8.md.
+        // deleted.
         var headline = blockerHeadline(groups);
         var needsYou = countSeverity(groups, 'needs_you') > 0;
         if (ledger.length) {

@@ -300,9 +300,7 @@ func StatusLabel(status model.Status, reviewPending bool) string {
 // actual inaccuracy is prose, not a board: docs/design/LANES.md's L3
 // ownership section says "the DRAFT form carries no padlock," which reads
 // narrower than section F's own rule (a closed set of two shapes, never
-// "icon or nothing") and is being corrected there, not here — see
-// learnings/inbox/L3.md item 2 for the full history of this lane's own
-// first-pass misreading of the board.
+// "icon or nothing") and is being corrected there, not here.
 func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
 	if status == model.StatusLocked {
 		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>`)
@@ -399,8 +397,8 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // it — internal/render's insertEngineBlockBeforeClose (L7-owned) splices it
 // in after this function's whole return value, so it cannot become a flex
 // child of a container this function has already closed. That is a real gap
-// against R-F.1's single row and is recorded in VAULT/learnings/inbox/L4.md
-// as a dependency for L7/the coordinator, not silently worked around here.
+// against R-F.1's single row, left standing as a known gap rather than
+// silently worked around here.
 //
 // Exported (unlike edgesHTML) so internal/render can bind it into a
 // per-render "edges" template-func override; see that package's

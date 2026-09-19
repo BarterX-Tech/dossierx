@@ -2950,8 +2950,8 @@
       // chevron: it is what makes a governance arc readable as directed at
       // a glance among hundreds of undirected-looking dependency lines, and
       // the spec (13 §4.4, node A7D-0) already draws it on every board this
-      // lane verifies; a broader removal is recorded as a dispute in
-      // learnings/inbox/L9.md rather than made unilaterally here.
+      // lane verifies; a broader removal was raised as a dispute rather
+      // than made unilaterally here.
       var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
       if (edge.type === 'governed_by') {
         chevron(ctx, end.x, end.y, angle, 6.5);
@@ -3895,8 +3895,8 @@
   // blockers or not. statusDisplay's own --color-blocked-for-"blocked by N"
   // reading (D10) stays live for the ONE place D10 is actually about — the
   // mobile "AROUND THIS CLAIM" edge rows (13 §4.13, node APB-0) via
-  // neighborRow below — so that call site is untouched. See the D10-vs-fix
-  // list dispute recorded in learnings/inbox/L9.md.
+  // neighborRow below — so that call site is untouched. D10 and the fix list
+  // disagreed here; this is the fix list's reading.
   function railStatusDisplay(claim) {
     var d = statusDisplay(claim);
     if (str(claim.status) === 'locked') {
@@ -4254,9 +4254,8 @@
     // 13 §4.7, coordinator RETRY ruling (2): the rail's property rows are
     // EXACTLY the six the board names, human labels, plus the §8.15 TRACKS
     // row where a project declares tracks. D4's original "keep every engine
-    // row below the six" reading is superseded by this ruling — see
-    // learnings/inbox/L9.md for the dispute record (D4 vs the RETRY fix
-    // list) kept for the coordinator, not re-litigated here.
+    // row below the six" reading is superseded by this ruling. D4 and the
+    // RETRY fix list disagreed; that is settled, not re-litigated here.
     detailRow(rows, 'module', str(claim.module) === '' ? 'no module' : humaniseSlug(str(claim.module)));
     var facet = str(claim.facet);
     detailRow(rows, 'facet', facet === '' ? 'no facet' : humaniseSlug(facet));

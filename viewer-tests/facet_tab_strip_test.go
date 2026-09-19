@@ -17,7 +17,7 @@ package viewertests
 // three tabs. Every other fixture here carries one or two facets, and
 // docs/design/LANES.md's claim that the client corpus supplies a three-facet
 // module was wrong — its "3 facets" is the PROJECT's facet vocabulary, and no
-// module in it carries more than two (vault LEARNINGS.md G20). A two-tab strip
+// module in it carries more than two. A two-tab strip
 // cannot catch a rule that is written against `:first-child`/`:last-child`, a
 // count that reports the module total instead of the facet's own, or a
 // selected-state rule that happens to match every tab: all three read as

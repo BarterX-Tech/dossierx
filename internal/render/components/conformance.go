@@ -24,8 +24,8 @@ import (
 // engine's own nine-key envelope, verbatim, in lowercase mono (06a §4.8/§6).
 // snapshot is the observation pass's provenance hash
 // (catalog.Catalog.ConformanceSnapshot, sourced from conformance.Report.Snapshot
-// — see conformance_view.go's writeConformanceDisclosure doc comment and
-// VAULT/learnings/inbox/L7.md item 3 for why this is a separate parameter
+// — see conformance_view.go's writeConformanceDisclosure doc comment for
+// why this is a separate parameter
 // rather than a field on conformance.Result: Result is also the exact shape
 // catalog.Document embeds per claim into catalog.json and that
 // catalogBudget.addConformance counts bytes against, and duplicating the

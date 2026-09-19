@@ -79,8 +79,7 @@ const conformanceCSS = `
    SAME three-block technique (unconditional light default, explicit-dark
    override, OS-dark override) the engine's own tokens use — so they track
    BOTH the explicit toggle and the OS scheme correctly, same as every
-   other var() read in this file. This is a G13-style dark token; listed in
-   the lane report and VAULT/learnings/inbox/L7.md. */
+   other var() read in this file. This is a G13-style dark token. */
 :root{
   --conformance-blocked-ground:color-mix(in srgb,var(--warn) 4%,var(--card-bg));
   --conformance-owed-ground:color-mix(in srgb,var(--status-draft) 4%,var(--card-bg))

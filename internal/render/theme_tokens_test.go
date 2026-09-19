@@ -374,8 +374,7 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// the row previously used --radius-sm (4px, off-spec). --radius-sm
 		// keeps its other consumers (inline code spans, blocker-row slug
 		// chips per tokens.md §3), so this is a literal count change, not a
-		// structural one (LEARNINGS.md G9): the row's radius token, not a
-		// new surface.
+		// structural one: the row's radius token, not a new surface.
 		//
 		// L8 (third attempt; G9 count re-pin) drops .status-strip out of this
 		// set: 02 §4.10 "Radius" and 03 §4.5 make the collapsed banner a flush

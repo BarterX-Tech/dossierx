@@ -1196,8 +1196,7 @@ th {
    .claim-readiness rule, so this block's full-bleed sizing below is written
    as the compound .claim-readiness.claim-footer-panel — the same two-class
    specificity, and later in source order, so it wins on the tie without
-   editing L4's line. See VAULT/learnings/inbox/L5.md for the cross-lane
-   note (informational only; the placeholder rule is harmless dead weight
+   editing L4's line. (Informational only; the placeholder rule is harmless dead weight
    once this compound selector is in play, not a defect to fix here). */
 .claim-readiness-door {
   order: 0;
@@ -1488,8 +1487,8 @@ th {
   flex: 1 1 auto;
 }
 
-/* RETRY FIX report (verifier item 11; NOT changed here — see
-   learnings/inbox/L5.md and G7): 06 §4.4 measures this pill's dark ground
+/* RETRY FIX report (verifier item 11; NOT changed here): 06 §4.4 measures
+   this pill's dark ground
    as `#EC8A8329` (~16%), explicitly "not the light #9E3B361A" pattern of a
    flat token reuse. --warn-bg is a SHARED, coordinator-held palette token
    (tokens.md's own frozen `--color-dark-blocked-bg` row gives it `rgb(236
@@ -1557,8 +1556,7 @@ th {
    the fourth and lightest of the four hairline hexes, is fit by a lower
    --warn percentage than the eyebrow/collapsed-row family above (14%
    measures within 2 units of #EFE6E5 on every channel and lands closest to
-   #33262A on dark of any single-mix candidate tried — see
-   learnings/inbox/L5.md for the arithmetic). .claim-readiness-more below
+   #33262A on dark of any single-mix candidate tried). .claim-readiness-more below
    shares this exact value: 06 §4.4 names the same `#EFE6E5` / `#33262A`
    pair for its own rule. */
 .claim-readiness-blocker {
@@ -2224,7 +2222,7 @@ th {
    spec for this state in L4's reading list (07 §4.10, which draws a
    competing NONE-badge-plus-serif-sentence form, is outside L4's verified
    region per LANES.md's Screens-verified column, which names 07 §4.7/§4.8
-   only); see VAULT/learnings/inbox/L4.md for the recorded resolution. */
+   only). */
 .claim-relationship-none {
   color: var(--faint);
   font-family: var(--font-sans);
@@ -3462,8 +3460,8 @@ button.comment-chip--active.comment-chip--empty {
    PAGE ground (`--paper` `#0D1117`) — an accepted off-target hex per the
    ruling, not a fresh choice by this lane; a `--paper` value is unreachable
    here without either forcing `color-scheme` on this subtree or a new
-   allowlisted token, both blocked the same way as
-   learnings/inbox/L6.md item 1. */
+   allowlisted token, both blocked the same way as a component-scoped dark
+   query is (see the `light-dark()` note further down). */
 .comment-composer-submit {
   flex-shrink: 0;
   border: 0;
@@ -3534,8 +3532,7 @@ button.comment-chip--active.comment-chip--empty {
    toggles, and nothing sets that class any more, so its variant here could
    never match (the note at the .facet-toc rail below says the same). The
    `body:has(.build-order-section)` combo is out of this lane's scope
-   (comments UI is not reachable from that tab today) — see
-   learnings/inbox/L6.md. */
+   (comments UI is not reachable from that tab today). */
 @media screen and (min-width: 861px) {
   body.comments-open .content-area {
     padding-right: calc(282px + min(360px, 90vw));
@@ -3678,8 +3675,8 @@ button.comment-chip--active.comment-chip--empty {
 /* .status-strip-note (the "Critical 0 · Needs you 3 · ..." tally line) is
    REMOVED per the coordinator's ruling on this retry: no 02/03/04 board
    draws it, and the severity chips already carry every count it repeated.
-   See learnings/deadcode/L8.md for the removal evidence; the element itself
-   is dropped from shell.html and no longer written to by renderStatusStrip. */
+   The element itself is dropped from shell.html and no longer written to by
+   renderStatusStrip, and statusChipLine, which built the string, is deleted. */
 
 /* 02 §4.10/§4.19, 03 §4.5/§7.5, R-H.1: "Show issues"/"Hide issues" is the
    ALARM half of the banner (the body sentence stays --color-ink) and reads
@@ -3730,8 +3727,7 @@ button.comment-chip--active.comment-chip--empty {
    the shared --radius") lived here and is deleted in this lane's third
    attempt: retry fix 19 above removes --radius from the base .status-strip
    rule entirely (02 §4.10's closing prose, "no separate banner card"), so
-   there is no longer a shared radius for the open state to partially keep —
-   see learnings/deadcode/L8.md. */
+   there is no longer a shared radius for the open state to partially keep. */
 
 .status-strip-body[hidden] {
   display: none;
@@ -3751,8 +3747,7 @@ button.comment-chip--active.comment-chip--empty {
 
 /* .status-group-head's pre-band rule (margin/font/letter-spacing/color) lived
    here and is superseded by the banded rule below (retry fix 4) plus
-   .status-group-head-name's own typography (retry fix 3) — see
-   learnings/deadcode/L8.md. */
+   .status-group-head-name's own typography (retry fix 3). */
 
 .status-finding-list {
   margin: 0;
@@ -4168,9 +4163,9 @@ button.comment-chip--active.comment-chip--empty {
     /* R-J.2 / OD14a.7 / M4, verifier RETRY item 4(iii): a dark-only 1px top
        hairline (the light sheet relies on its 16px corners and the scrim
        alone). `light-dark()` expresses "present only under dark" without a
-       second selector-scoped dark query or a new dark-only token — see
-       G13/learnings/inbox/L6.md item 1 for why a component-scoped
-       `@media screen and (prefers-color-scheme: dark)` block is unavailable
+       second selector-scoped dark query or a new dark-only token. A
+       component-scoped `@media screen and (prefers-color-scheme: dark)`
+       block is unavailable
        here (theme_tokens_test.go's ExactlyOneScreenScopedDarkQuery). */
     border-top: 1px solid light-dark(transparent, var(--border));
     border-top-left-radius: 16px;
@@ -4385,8 +4380,8 @@ button.comment-chip--active.comment-chip--empty {
    CSSOM: style.css parsed to 633 top-level rules and no @media print block
    at all before this fix (three separate missing closing braces, fixed at
    their own sites further down, additionally trapped everything after THEM
-   one level deeper once parsing did resync) — see learnings/inbox/L8a.md
-   for the full evidence chain. Rewritten below with the two symbols kept
+   one level deeper once parsing did resync). Rewritten below with the two
+   symbols kept
    apart (a real space, never adjacent) so the comment reads as one comment,
    start to finish — including in this very explanation, which had the same
    bug in an earlier draft of this fix and is why it is worded so
@@ -5163,8 +5158,8 @@ body.shell-body {
    control system-record.js's bindFocusControl renders inside every module
    head (.focus-group, inside .system-record-head__metric) and toggles via
    html[data-focus="on"]. Nothing named .system-panel-toggle survives this
-   lane: it had exactly these two consumers and both are gone (see
-   learnings/deadcode/L2.md).
+   lane: it had exactly these two consumers and both are gone
+   (viewer-tests/claim_collapse_test.go asserts their absence).
 
    Scoped to (min-width: 861px) because the rails it hides do not exist
    below that width by construction — a phone never had them (the M1 rule
@@ -5637,9 +5632,8 @@ body.shell-body {
 /* The measured dark figures (40%/14%, vs. light's 22%/9%) are NOT
    reproduced here for the same reason .facet-toc__item.on's comment gives
    above: TestStyleCSSModeAndPrintStructure/ExactlyOneScreenScopedDarkQuery
-   pins exactly one dark-OS-preference block in the file and
-   LEARNINGS.md's standing rule 2 forbids a third dark block outright.
-   Flagged in learnings/inbox/L2.md. */
+   pins exactly one dark-OS-preference block in the file, which is what
+   forbids a third dark block outright. That test is the rule. */
 
 /* R11.4: the control is keyboard-primary by design — use the engine's
    existing focus-visible treatment (style.css's `:where(button, select,
@@ -5997,11 +5991,12 @@ body.shell-body {
    reproduced here. internal/render/theme_tokens_test.go
    TestStyleCSSModeAndPrintStructure/ExactlyOneScreenScopedDarkQuery pins
    exactly one `@media screen and (prefers-color-scheme: dark)` block in
-   the whole file (the palette's own), and LEARNINGS.md's standing rule 2
-   forbids a lane adding a third dark block outright; a component rule
-   cannot legally differ between modes by any route this engine currently
-   offers. Flagged in learnings/inbox/L2.md as a dependency: either a
-   coordinator-landed twin or accepting one flat percentage in both
+   the whole file (the palette's own), and
+   TestStyleCSSModeAndPrintStructure/ExactlyOneScreenScopedDarkQuery forbids
+   a lane adding a third dark block outright; a component rule cannot legally
+   differ between modes by any route this engine currently offers. The two
+   ways out are a coordinator-landed twin or accepting one flat percentage in
+   both
    modes, which is what ships today. */
 .facet-toc__item.on { background: color-mix(in srgb, var(--link) 9%, transparent); color: var(--ink); }
 .facet-toc__item.on > .facet-toc__blocker-count { color: var(--link); }
@@ -6035,8 +6030,8 @@ body.shell-body {
    section's own inline padding will read: 32px here, re-pinned to 16px in
    this lane's @media (max-width: 520px) block. .card itself is the only
    thing that reads it today (padding-inline), because the footer/readiness/
-   relationships/sources/checks sections do not exist in the engine yet
-   (learnings/inbox/L3.md item 1) — L4/L5/L6/L7 read the same variable from
+   relationships/sources/checks sections do not exist in the engine yet —
+   L4/L5/L6/L7 read the same variable from
    their own section roots once they land, instead of hard-coding 32/16.
    padding-block stays a literal 30px/22px: 07a §4.2 and 07 §3 both measure
    the head block's own padding as 30 top / 22 bottom, and since .k is the
@@ -6582,9 +6577,9 @@ code {
    and Highlight-overlay axes, 13 §4.2's own comment: "neither control
    exists on any board") do not fit one 54px row at 1440 — measured via
    probe at 1440/scoped state: two rows, module+facet+track+granularity+
-   overlay filling the first, relations+view the second. Recorded as a
-   spec amendment against §3 in learnings/inbox/L9.md rather than shipped
-   silently; block padding is still sized so EACH row lands at the
+   overlay filling the first, relations+view the second. Raised as a spec
+   amendment against §3 rather than shipped silently; block padding is still
+   sized so EACH row lands at the
    spec's 54px (13px top/bottom around a 28px-tall control). */
 .dxg-controls {
   display: grid;
@@ -7296,8 +7291,8 @@ code {
   }
 
   /* R11.1 removed the collapse toggle this corner-head trick existed to
-     show (formerly .system-panel-toggle--toc, injected by renderToc — see
-     learnings/deadcode/L2.md). With no toggle to keep visible, the
+     show (formerly .system-panel-toggle--toc, injected by renderToc). With
+     no toggle to keep visible, the
      identity/count stay in normal flow instead of collapsing to a 40px
      absolute box, and the <select> below is this tier's whole facet
      navigation surface. The freshness block (R10.1/02 §4.17) has no room
@@ -7565,8 +7560,8 @@ code {
   /* M1 — the card loses its radius and side borders and runs full-bleed,
      keeping only the top/bottom hairlines the base .card/.claim-tree rule
      already sets. Card gutters (32px -> 16px) are NOT changed here: every
-     section today still shares one padding box with the card (see
-     learnings/inbox/L3.md), so narrowing it before the sections that read it
+     section today still shares one padding box with the card, so narrowing
+     it before the sections that read it
      exist would misalign L4/L5/L6/L7's own padding-inline rather than this
      lane's. */
   .card,
@@ -7650,7 +7645,7 @@ code {
    run full-bleed edge-to-edge (02 §3: "The gutter is 16px and the card has
    no side margin on mobile... the whole scroll region takes --color-card,
    edge-to-edge"). Without this, L3's card-level work is inset by whatever
-   .content-area still charges it (learnings/inbox/L3.md item 5). The 16px
+   .content-area still charges it. The 16px
    gutter itself is not lost: --card-gutter (L3's token, read by the card's
    own padding-inline) already carries it. */
 @media (max-width: 520px) {

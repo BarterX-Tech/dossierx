@@ -232,8 +232,7 @@ func writeSourcesRow(b *strings.Builder, c model.Claim) {
 		// every board (05/06/07/07a) instead right-ranges it on the row
 		// itself, as .claim-source's own third flex child beside the ref and
 		// body columns — see style.css's .claim-source-cite for the layout
-		// half of this fix. KNOWN SIMPLIFICATION, recorded in
-		// VAULT/learnings/inbox/L4.md: it still renders as its own column at
+		// half of this fix. KNOWN SIMPLIFICATION: it still renders as its own column at
 		// every width, rather than merging onto the external source's
 		// publisher line specifically at the ≤520px tier (05 §4.11 mobile /
 		// M10's "publisher and cited once share line two"). The two source
