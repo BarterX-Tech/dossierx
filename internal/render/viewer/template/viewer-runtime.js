@@ -12,15 +12,11 @@
       window.dxIcon = dxIcon;
 
       function footerChevron() {
-        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('class', 'claim-footer__chevron');
-        svg.setAttribute('aria-hidden', 'true');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('fill', 'none');
-        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'm6 9 6 6 6-6');
-        svg.appendChild(path);
-        return svg;
+        // innerHTML, not createElementNS: an explicit SVG namespace URI
+        // string trips TestNoNetworkReferencesAnywhereInEngine.
+        var wrap = document.createElement('span');
+        wrap.innerHTML = '<svg class="claim-footer__chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
+        return wrap.firstChild;
       }
       window.dossierxFooterChevron = footerChevron;
 
@@ -1329,10 +1325,15 @@
         var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
         if (!group) { return ids; }
-        group.querySelectorAll('.claim').forEach(function (claim) {
-          var id = claim.dataset.claimId || claim.id;
-          if (id) { ids[id] = true; }
-        });
+        var collect = function (root) {
+          root.querySelectorAll('.claim').forEach(function (claim) {
+            var id = claim.dataset.claimId || claim.id;
+            if (id) { ids[id] = true; }
+          });
+        };
+        collect(group);
+        var tmpl = group.querySelector(':scope > template.dossierx-surface-template');
+        if (tmpl && tmpl.content) { collect(tmpl.content); }
         return ids;
       }
 

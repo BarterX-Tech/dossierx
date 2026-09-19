@@ -166,7 +166,7 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 		var claims = document.querySelectorAll('.module-section:not([hidden]) .claim-group:not([hidden]) .claim').length;
 		var title = document.getElementById('statusStripTitle').textContent;
 		var chipCount = document.querySelector('.status-severity-chip--blocker .status-severity-chip__count');
-		var blocked = title.match(/(\d+) claims? blocked/);
+		var blocked = title.match(/(\d+)(?:\s+\w+)? claims? (?:are |is )?blocked/);
 		return blocked && chipCount && Number(blocked[1]) <= claims && Number(chipCount.textContent) <= claims;
 	})()`) {
 		t.Fatalf("blocker counts must be unique claims, not summed paths (title=%q chip=%q)",
@@ -189,9 +189,10 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		var header = section && section.querySelector(':scope > .system-record-head');
 		var tabs = section && section.querySelector(':scope > .sub-nav');
 		var strip = document.getElementById('statusStrip');
-		var firstClaims = section && section.querySelector(':scope > .claim-group:not([hidden])');
-		return header && tabs && strip && firstClaims && tabs.nextElementSibling === strip &&
-		  strip.nextElementSibling === firstClaims;
+		var canvas = section && section.querySelector(':scope > .reading-canvas:not([hidden])');
+		var firstClaims = canvas && canvas.querySelector('.claim');
+		return header && tabs && strip && canvas && firstClaims &&
+		  tabs.nextElementSibling === canvas && canvas.firstElementChild === strip;
 	})()`) {
 		t.Fatal("reading order must be module heading, facet tabs, status, then claims")
 	}

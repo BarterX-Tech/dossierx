@@ -521,10 +521,6 @@ func pathContains(dir, child string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func isHexDigit(r rune) bool {
-	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
-}
-
 func firstDuplicate(ss []string) (string, bool) {
 	seen := make(map[string]bool, len(ss))
 	for _, s := range ss {

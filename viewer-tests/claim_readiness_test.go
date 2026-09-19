@@ -81,7 +81,7 @@ func readReadinessScaleMetrics(t *testing.T, ctx context.Context) readinessScale
 			load_ms: nav ? nav.loadEventEnd - nav.startTime : -1,
 			dom_nodes: document.querySelectorAll('*').length,
 			js_heap_bytes: performance.memory ? performance.memory.usedJSHeapSize : -1,
-			readiness_doors: document.querySelectorAll('.claim-readiness-door').length,
+			readiness_doors: document.querySelectorAll('.claim-readiness-door, .claim-readiness-empty').length,
 			visible_rows: document.querySelectorAll('.claim-readiness-blocker').length,
 			raw_facts: raws.reduce(function(total, pre){
 				var raw = JSON.parse(pre.textContent);
@@ -366,7 +366,7 @@ func TestStaticReadinessGroupsFactsByModuleAndPreservesEveryID(t *testing.T) {
 		if (items.length < 3) { return false; }
 		return items.slice(0, 3).every(function(item){
 			var claim = document.getElementById(item.dataset.claimTarget);
-			var door = claim && claim.querySelector('.claim-readiness-door[data-readiness-fact-count]');
+			var door = claim && claim.querySelector('[data-readiness-fact-count]');
 			var count = item.querySelector('.facet-toc__blocker-count');
 			return door && count && Number(count.textContent || 0) === Number(door.dataset.readinessFactCount);
 		});

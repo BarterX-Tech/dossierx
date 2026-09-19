@@ -594,7 +594,12 @@ func TestSourceNoteClampWorksInATrackCopy(t *testing.T) {
 
 	// Arrive at the track. The copy gains a box, is measured, and earns the
 	// same control — through DOM position alone, since it carries no id.
-	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#track-checkout"]`, chromedp.ByQuery))
+	evalVoid(t, ctx, `(function(){
+		var tab = document.querySelector('.sec-tab[data-target="#track-checkout"]');
+		var group = tab && tab.closest('details.system-nav-group');
+		if (group) { group.open = true; }
+		if (tab) { tab.click(); }
+	})()`)
 	pollTrue(t, ctx, `!document.querySelector('.track-section').hidden`)
 	copied := noteAt(`document.querySelector('.track-section')`, 0)
 	runCDP(t, ctx, chromedp.Evaluate(
