@@ -18,13 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dark values reach print.
 - Viewer chrome uses Lucide icons (lock, navigation, theme, comments, nav
   chevrons) instead of mixed emoji and CSS triangles. The evidence-footer
-  chevron stays the CSS border triangle so unthemed claim cards paint as they
-  did. The `claude` preset's type stacks are Geist and Geist Mono (New York
-  pairing); the engine inlines those faces so they resolve offline. Unthemed
-  engine defaults stay Avenir / system mono.
-- Regenerate the six committed fixture viewers and
-  `testdata/render-across-releases.golden.txt` for those presentation changes
-  and for Lucide / Geist chrome.
+  chevron stays the CSS border triangle. System / Light / Dark remains the
+  built-in reader choice; project-defined themes and presets are removed.
+  Legacy `viewer.theme` configuration now fails with a migration message,
+  rather than being silently ignored.
+- Regenerate the committed fixture viewers and
+  `testdata/render-across-releases.golden.txt` for the design-revamp default
+  look. The deprecated theme-preset fixture and theme-parity freeze are
+  removed with the custom-theme feature.
 
 ## [0.7.16] - 2026-09-13
 
