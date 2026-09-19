@@ -28,14 +28,13 @@ import (
 	dxskills "github.com/BarterX-Tech/dossierx/skills"
 )
 
-// The six bundles and the order the router presents them in. Spelled out
+// The five bundles and the order the router presents them in. Spelled out
 // rather than derived so that adding or removing a skill is a deliberate edit
 // to a test, the same way cmd/dossierx/main_test.go pins the leaf surface.
 var wantSkillNames = []string{
 	"dossierx",
 	"dossierx-claims",
 	"dossierx-comments",
-	"dossierx-theme",
 	"dossierx-build-order",
 	"dossierx-code-links",
 }
@@ -63,10 +62,10 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		}
 	}
 
-	// Six bundles plus the generic guide, which is always written — with no
+	// Five bundles plus the generic guide, which is always written — with no
 	// project root to put it in, it lands beside the bundles.
-	if !strings.Contains(stdout, "wrote 7 file(s)") {
-		t.Fatalf("expected stdout to report 7 file(s) written, got:\n%s", stdout)
+	if !strings.Contains(stdout, "wrote 6 file(s)") {
+		t.Fatalf("expected stdout to report 6 file(s) written, got:\n%s", stdout)
 	}
 	if _, statErr := os.Stat(filepath.Join(targetDir, "dossierx-agent-guide.md")); statErr != nil {
 		t.Fatalf("the generic guide must be written even with no project root: %v", statErr)
@@ -143,7 +142,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The nine nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The eight nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -286,7 +285,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The nine nouns, twenty-six leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The eight nouns, twenty-four leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}

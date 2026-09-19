@@ -27,11 +27,13 @@ import (
 // reserved for the Matched verdict) — the inversion G2 warns against.
 const conformanceCSS = `
 /* Added only when this viewer contains structured conformance results. */
-.claim-conformance{margin:.65rem 0 0;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--hover-bg,transparent);font-size:.78rem;font-family:var(--font-sans)}
+.claim-conformance-door{order:0;margin:0;padding:0;border:0;flex:0 0 auto}
+.claim-conformance-door[open]+.claim-conformance{display:block}
+.claim-conformance{display:none;order:1;flex:1 1 100%;width:calc(100% + 2 * var(--card-gutter, 32px));margin:0 calc(-1 * var(--card-gutter, 32px));padding:13px var(--card-gutter, 32px);border:0;border-top:1px solid var(--border);border-radius:0;background:var(--hover-bg,transparent);font-size:.78rem;font-family:var(--font-sans)}
 .claim-conformance[data-implementation-ready="true"]{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
 .claim-conformance[data-implementation-ready="false"]{border-color:color-mix(in srgb,var(--warn) 40%,var(--border))}
 .claim-conformance-head,.claim-conformance-check-head,.claim-conformance-line,.claim-conformance-scope{margin:0}
-.claim-conformance-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;color:var(--ink);cursor:pointer;list-style:none;font-family:var(--font-sans);font-size:13px}
+.claim-conformance-head{display:flex;align-items:center;gap:5px;color:var(--muted);cursor:pointer;list-style:none;font-family:var(--font-sans);font-size:13px}
 .claim-conformance-head::-webkit-details-marker{display:none}
 .claim-conformance-scope{margin-top:.35rem;color:var(--muted);font-size:11.5px}
 

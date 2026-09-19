@@ -20,12 +20,10 @@ package render
 import (
 	"bytes"
 	"embed"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -127,14 +125,6 @@ type shellData struct {
 	// element at all (unlike Title, there is no generic fallback text).
 	Eyebrow string
 	CSS     template.CSS
-	// ThemeCSS is a second, optional :root{...} block built from
-	// cfg.Viewer.Theme (see themeOverrideCSS). shell.html emits it in a
-	// <style> block immediately after the one carrying CSS, and after
-	// style.css's own @media (prefers-color-scheme: light) block, so any
-	// project-supplied token wins over the engine default in both OS color
-	// modes, per-token (unset tokens keep falling back to style.css's own
-	// defaults via normal cascade). Empty when the project sets no theme.
-	ThemeCSS template.CSS
 
 	// GeneratedAt is the same render timestamp stamped into generatedHeader's
 	// leading HTML comment, emitted here as RFC3339 (a machine-readable
@@ -242,7 +232,7 @@ type shellData struct {
 	// SoftMount is true when the corpus is large enough that claim cards should
 	// ship inside inert <template class="dossierx-surface-template"> nodes and
 	// be cloned into a host on first visit (see softMountClaimThreshold). Small
-	// corpora keep the historical eager DOM so theme-parity baselines, print
+	// corpora keep the historical eager DOM so print
 	// probes, and getElementById witnesses see the same box tree they always
 	// have. The client threshold in viewer-runtime.js must stay in lockstep.
 	SoftMount bool
@@ -423,40 +413,18 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 }
 
 func renderAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time) (string, error) {
-	rt, err := config.ResolveTheme(cfg, os.ReadFile)
-	if err != nil {
-		return "", err
-	}
-	return renderWithThemeAt(cat, cfg, rt, generatedAt, 0)
+	return renderBoundedAt(cat, cfg, generatedAt, 0)
 }
 
-// RenderWithTheme is Render with the theme already resolved. It is the real
-// entry point; Render is the convenience wrapper that resolves against the
-// working tree with os.ReadFile.
-//
-// The split exists because two callers must NOT read the working tree.
-// "dossierx check --staged" evaluates the index's bytes, through a reader
-// built on git plumbing, and "dossierx serve" resolves once at startup so
-// that every rebuild in a long-running server emits the same theme rather
-// than re-reading font files that may be half-written under the user's
-// editor. Both call config.ResolveTheme themselves with the reader they
-// need and hand the result here. Keeping Render's signature unchanged keeps
-// every other caller — and every existing test — untouched.
-func RenderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme) (string, error) {
-	return renderWithThemeAt(cat, cfg, rt, time.Now().UTC(), 0)
-}
-
-// RenderWithThemeBounded renders through a capped writer. Opted-in check and
-// serve use it so facet/track copies cannot first build an arbitrarily large
-// in-memory viewer and only then discover the 64 MiB artifact limit.
-func RenderWithThemeBounded(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme, maxBytes int) (string, error) {
+// RenderBounded caps the generated viewer while preserving the shared renderer.
+func RenderBounded(cat *catalog.Catalog, cfg *config.Config, maxBytes int) (string, error) {
 	if maxBytes <= 0 {
 		return "", fmt.Errorf("render: max bytes must be positive")
 	}
-	return renderWithThemeAt(cat, cfg, rt, time.Now().UTC(), maxBytes)
+	return renderBoundedAt(cat, cfg, time.Now().UTC(), maxBytes)
 }
 
-func renderWithThemeAt(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme, generatedAt time.Time, maxBytes int) (string, error) {
+func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time, maxBytes int) (string, error) {
 	if cat == nil {
 		cat = &catalog.Catalog{}
 	}
@@ -497,7 +465,6 @@ func renderWithThemeAt(cat *catalog.Catalog, cfg *config.Config, rt *config.Reso
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
 		generatedAt:              generatedAt,
-		theme:                    rt,
 		mermaidJS:                tmpl.mermaidJS,
 		buildOrderUIJS:           tmpl.buildOrderUI,
 	}
@@ -862,8 +829,6 @@ type shellInputs struct {
 
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
-	// theme is the already-resolved viewer.theme, never re-read here.
-	theme *config.ResolvedTheme
 
 	// buildOrders and buildOrderPayload are buildOrderTabData's two outputs
 	// for cat; mermaidJS and buildOrderUIJS the tab's two client files.
@@ -874,7 +839,7 @@ type shellInputs struct {
 }
 
 // buildShellStaticData assembles the shellData passed to shell.Execute: cfg's
-// title/eyebrow/theme (with the same fallbacks Render has always applied
+// title/eyebrow (with the same fallbacks Render has always applied
 // when cfg is nil or leaves a field blank) and the module/facet groups
 // computed from in.cat via buildGroups/buildModuleGroups, combined with the
 // css/renderedByID inputs loadTemplates and renderClaimsWithBudget already produced.
@@ -911,7 +876,6 @@ func buildShellStaticData(in shellInputs) shellData {
 		Title:                    title,
 		Eyebrow:                  eyebrow,
 		CSS:                      template.CSS(in.css),
-		ThemeCSS:                 themeOverrideCSS(in.theme),
 		GeneratedAt:              in.generatedAt.UTC().Format(time.RFC3339),
 		GraphCSS:                 template.CSS(in.graphCSS),
 		GraphPayload:             in.graphPayload,
@@ -940,174 +904,6 @@ func buildShellStaticData(in shellInputs) shellData {
 // emitting deferred surface templates. Keep in lockstep with
 // SOFT_MOUNT_MIN_CLAIMS in viewer-runtime.js.
 const softMountClaimThreshold = 80
-
-// themeOverrideCSS builds the project's theme stylesheet from an already
-// resolved theme: the @font-face rules for its inlined fonts, then up to
-// three token blocks. Parts are omitted entirely when they would be empty,
-// and a wholly empty theme returns "" rather than an empty ":root{}" rule,
-// so the shell's <style></style> element still exists (an override sheet
-// that expects the element does not break) with nothing in it.
-//
-//  1. one @font-face per font, in the resolved slice's order;
-//  2. ":root{...}" for tokens whose value is the same in both colour schemes;
-//  3. "@media (prefers-color-scheme: light), print{:root{...}}";
-//  4. "html[data-theme=light]{...}" so an explicit Light choice overrides OS;
-//  5. "@media screen{html[data-theme=dark]{...}}" so Dark overrides OS and
-//     cannot reach print;
-//  6. "@media screen and (prefers-color-scheme: dark){:root{...}}"
-//     for System (and unset) following the OS. Kept at :root specificity so
-//     a project's later :root shared tokens still win in both schemes.
-//
-// Blocks 4 and 5 carry the SHARED declarations as well as their own, and each
-// does so whenever either side is non-empty. docs/theming.md promises that "a
-// flat key applies to both" schemes, and for a mode-varying token that promise
-// only holds here: style.css paints the reader's explicit Dark choice from
-// `@media screen{html[data-theme="dark"]{...}}`, a selector of specificity
-// (0,1,1), while a shared key lands on `:root`, specificity (0,1,0). Source
-// order cannot rescue the weaker selector, so before this the engine's own
-// dark default beat the project's flat `paper`, `accent`, `link` — any of the
-// nineteen tokens style.css re-points — for exactly the readers who had
-// pressed Dark. Shared is written first and Dark second, so where a project
-// set a token both flat and under `dark:` the dark value still wins on source
-// order inside the block.
-//
-// Block 4 carries the shared declarations for the mirror-image reason, and
-// only since the engine grew a light half to mirror. style.css used to have
-// none: it is light-first, so its light values lived in the one unconditional
-// `:root` at (0,1,0), a project's shared `:root` tied that and won on source
-// order, and block 4 could be rt.Light alone. That stopped being true when
-// style.css gained `@media screen{html[data-theme="light"]{...}}` — without
-// that block a dark-OS reader who pressed Light kept the engine's DARK palette
-// for every token, because the OS-dark query was the last (0,1,0) rule it met.
-// The fix is at (0,1,1), so it now beats a project's shared `:root` too, and a
-// flat `paper` would be lost on the Light position exactly as it used to be
-// lost on Dark. graph.css gained the same pair for its own --dxg-* ramp.
-// Shared is written first and Light second here as well, so a project that set
-// a token both flat and under `light:` still gets the light value.
-//
-// The two media lists are the whole of the print story (plan v4 A1). A
-// project's light values apply to print as well as to the light scheme; its
-// dark values are scoped to `screen`, so no dark override can reach a
-// printed page even for a token the project only declared under `dark:`.
-// That is why nothing restates the light palette inside an @media print
-// block: under print the dark block simply does not match.
-//
-// Token order inside every block is config.ThemeTokenAllowlist's fixed
-// order, which config.ResolveTheme has already imposed on the slices — not
-// map iteration order, which Go randomizes — so two runs of the same engine
-// over the same config produce byte-identical output.
-func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
-	if rt.IsZero() {
-		return ""
-	}
-
-	var b strings.Builder
-	for _, f := range rt.Fonts {
-		mime, format := fontFormat(f.Ext)
-		if mime == "" {
-			// config.ResolveTheme rejects any other extension; a font that
-			// reached here with one is an engine bug, and emitting a rule
-			// with an empty format() would be a silent one.
-			continue
-		}
-		b.WriteString(`@font-face{font-family:"`)
-		b.WriteString(f.Family)
-		b.WriteString(`";src:url(data:`)
-		b.WriteString(mime)
-		b.WriteString(";base64,")
-		b.WriteString(base64.StdEncoding.EncodeToString(f.Data))
-		b.WriteString(`) format("`)
-		b.WriteString(format)
-		b.WriteString(`");font-weight:`)
-		b.WriteString(f.Weight)
-		b.WriteString(";font-style:")
-		b.WriteString(f.Style)
-		b.WriteString(";font-display:swap;}")
-	}
-
-	writeBlock(&b, "", ":root", rt.Shared)
-	writeBlock(&b, "@media (prefers-color-scheme: light), print", ":root", rt.Light)
-	// Merged for the same reason as the explicit-Dark block below: style.css's
-	// own `html[data-theme="light"]` rule is (0,1,1) and a project's shared
-	// `:root` is (0,1,0), so a flat key needs a copy at the stronger selector
-	// to survive the reader's explicit Light choice.
-	explicitLight := appendThemeDecls(rt.Shared, rt.Light)
-	writeBlock(&b, "", `html[data-theme="light"]`, explicitLight)
-	// Unconditional on purpose: see the "flat key" paragraph above. Merging
-	// is what makes a shared token survive the explicit Dark toggle, and it
-	// has to happen when rt.Dark is EMPTY too — that is the whole defect.
-	// appendThemeDecls returns the non-empty side untouched, so a dark-only
-	// theme still emits exactly its dark declarations and a wholly empty
-	// theme still emits no block at all. Each side is already in
-	// ThemeTokenAllowlist order, so the concatenation is deterministic.
-	explicitDark := appendThemeDecls(rt.Shared, rt.Dark)
-	writeBlock(&b, "@media screen", `html[data-theme="dark"]`, explicitDark)
-	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", ":root", rt.Dark)
-
-	return template.CSS(b.String())
-}
-
-// writeBlock emits ":root{...}" for decls, wrapped in the media query at
-// media when that is non-empty. An empty decls list writes nothing at all,
-// which is what keeps a flat-only theme's output byte-identical to what
-// this engine emitted before per-mode values existed.
-func appendThemeDecls(a, b []config.ThemeDecl) []config.ThemeDecl {
-	if len(a) == 0 {
-		return b
-	}
-	if len(b) == 0 {
-		return a
-	}
-	out := make([]config.ThemeDecl, 0, len(a)+len(b))
-	return append(append(out, a...), b...)
-}
-
-func writeBlock(b *strings.Builder, media, selector string, decls []config.ThemeDecl) {
-	if len(decls) == 0 {
-		return
-	}
-	if media != "" {
-		b.WriteString(media)
-		b.WriteString("{")
-	}
-	if selector == "" {
-		selector = ":root"
-	}
-	b.WriteString(selector)
-	b.WriteString("{")
-	for _, d := range decls {
-		b.WriteString("--")
-		b.WriteString(d.Token)
-		b.WriteString(":")
-		b.WriteString(d.Value)
-		b.WriteString(";")
-	}
-	b.WriteString("}")
-	if media != "" {
-		b.WriteString("}")
-	}
-}
-
-// fontFormat maps a lower-cased font file extension (including the dot) to
-// the MIME type its data: URL carries and the string CSS's format() wants.
-// Note that the two disagree for the sfnt formats — ".ttf" is font/ttf but
-// format("truetype") — which is exactly the kind of pair that is wrong for
-// years without anyone noticing, so both directions are pinned by test.
-// An unknown extension returns two empty strings; config rejects those
-// before emission ever sees them.
-func fontFormat(ext string) (mime, format string) {
-	switch ext {
-	case ".woff2":
-		return "font/woff2", "woff2"
-	case ".woff":
-		return "font/woff", "woff"
-	case ".ttf":
-		return "font/ttf", "truetype"
-	case ".otf":
-		return "font/otf", "opentype"
-	}
-	return "", ""
-}
 
 // buildGroups computes the module -> facet grouping described in NAV_SPEC.
 // It never panics on an empty or nil catalog (returns nil groups) and never
@@ -1231,9 +1027,9 @@ func renderOverviewHTML(overview []model.Claim, renderedByID map[string]template
 // tooltip are not document-unique the way id= is, and the reader of an
 // injected copy still needs the machine id to act on it.
 //
-// v0.4.1 moved the comment chip out of the edges footer and into that same .k
-// header, inside <span class="claim-comments-slot"> (components.CommentChipHTML,
-// bound as the "commentChip" template func). Re-verified against the new
+// The comment chip is the final footer control inside
+// <span class="claim-comments-slot"> (components.CommentChipHTML).
+// Re-verified against the new
 // markup, and the code below is unchanged: the slot span and the chip <button>
 // it wraps carry class / hidden / data-claim-id / aria-* only — no ` id="`
 // sequence anywhere — so the single Replace still lands on the root
@@ -1399,10 +1195,10 @@ func orderClaims(claims []model.Claim) []model.Claim {
 
 // newGroup builds one Group, pulling each claim's already-rendered HTML out
 // of renderedByID (keyed by claim ID) so claims are rendered exactly once
-// regardless of how many places reference them. It also injects a section
-// heading (sectionHeadingHTML) ahead of the first claim of each run of
-// consecutive, same-Section claims — see sectionHeadingHTML's doc comment
-// for the exact detection rule. overviewHTML, if non-empty, is the calling
+// regardless of how many places reference them. A claim's Section remains
+// part of the ordering model, but the Reading View does not repeat that
+// metadata as a visible heading between cards. overviewHTML, if non-empty,
+// is the calling
 // module's already-rendered overview-facet claims (see renderOverviewHTML)
 // and is prepended ahead of any section heading — a module-level
 // orientation note isn't its own tab, so buildGroups renders it once per
@@ -1414,16 +1210,11 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 	htmls = append(htmls, overviewHTML...)
 	allLocked := len(claims) > 0
 	lockedCount := 0
-	prevSection := ""
 	for _, c := range claims {
 		if c.Status == model.StatusLocked {
 			lockedCount++
 		} else {
 			allLocked = false
-		}
-		if c.Section != "" && c.Section != prevSection {
-			htmls = append(htmls, sectionHeadingHTML(c.Section))
-			prevSection = c.Section
 		}
 		htmls = append(htmls, renderedByID[c.ID])
 	}
@@ -1456,28 +1247,16 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 // it as a sibling. The last </section> is the claim root for every default
 // layout; </article> covers a project override that uses a different tag.
 func insertEngineBlockBeforeClose(host, block string) string {
+	const footerSlot = "<!--dossierx-claim-footer-slot-->"
+	if i := strings.LastIndex(host, footerSlot); i >= 0 {
+		return host[:i] + block + host[i+len(footerSlot):]
+	}
 	for _, close := range []string{"</section>", "</article>"} {
 		if i := strings.LastIndex(host, close); i >= 0 {
 			return host[:i] + block + host[i:]
 		}
 	}
 	return host + block
-}
-
-// sectionHeadingHTML renders a claim's optional model.Claim.Section value as
-// a standalone in-content heading marker, injected by newGroup ahead of the
-// first claim of each new section run within a facet's claim sequence — the
-// round-3 QA finding's fix for a flat, undifferentiated card stream on a
-// long document, where the sidebar/sub-nav section identity scrolls out of
-// view. It is deliberately a plain, semantic heading element rather than
-// reusing the reference docs stylesheet's field-level .lbl class (a close visual
-// cousin — mono, uppercase, letter-spaced, muted-color label) because .lbl
-// is sized/spaced to sit inside a single card as a field caption, not to
-// read as a break between many cards; section-heading instead gets its own
-// rule in style.css so it can carry a top border and larger vertical rhythm
-// befitting a document-level section break.
-func sectionHeadingHTML(section string) template.HTML {
-	return template.HTML(`<h4 class="section-heading">` + template.HTMLEscapeString(section) + `</h4>`)
 }
 
 // displayCase renders a raw module/facet value (e.g. "token-ledger" or

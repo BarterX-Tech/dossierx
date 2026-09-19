@@ -248,27 +248,19 @@
           </p>
           <div>
             <h2 class="release__title">
-              Viewer custom themes
+              Viewer rendering fixes
             </h2>
             <p class="release__note">
-              The generated viewer can now be restyled with a project's own
-              colours and fonts through <code>viewer.theme</code>: a built-in
-              <code>claude</code> preset, an optional theme file a project can
-              layer on top of it, per-colour-scheme (light/dark) overrides, and
-              the project's own local font files inlined into the page.
-              <code>dossierx theme list</code> and <code>dossierx theme
-              export</code> discover and start from a preset. Also fixed: a
-              hairline seam that split every line of a multi-line fenced code
+              Fixed a hairline seam that split every line of a multi-line fenced code
               block into its own box, fenced code blocks in step, comment, and
               list-item bodies rendering as unstyled inline-code pills instead
               of code blocks, the viewer's OS dark-mode support for native
               form controls and other browser-drawn surfaces, and printing so
               it always uses the light palette regardless of the reader's
-              system theme or a project's dark-mode overrides. Existing
+              system theme. Existing
               projects should run <code>dossierx check</code> to regenerate
               their viewer and <code>dossierx skills export</code> to refresh
-              the embedded agent guide. No claim schema, command, lint, or
-              lock behaviour changes in this release.
+              the embedded agent guide.
             </p>
           </div>
         </article>

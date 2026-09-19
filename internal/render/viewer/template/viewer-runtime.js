@@ -11,6 +11,19 @@
       }
       window.dxIcon = dxIcon;
 
+      function footerChevron() {
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'claim-footer__chevron');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'm6 9 6 6 6-6');
+        svg.appendChild(path);
+        return svg;
+      }
+      window.dossierxFooterChevron = footerChevron;
+
       // ================================================================
       // Navigation lookup maps + view state (idempotent initViewer)
       // ================================================================
@@ -321,6 +334,26 @@
       // ================================================================
       var navToggle = document.getElementById('navToggle');
       var navOverlay = document.getElementById('navOverlay');
+      var drawerFocusReturn = null;
+      var graphFocusReturn = null;
+      var focusRestoreFrame = 0;
+
+      function cancelFocusRestore() {
+        if (!focusRestoreFrame) { return; }
+        window.cancelAnimationFrame(focusRestoreFrame);
+        focusRestoreFrame = 0;
+      }
+
+      function restoreFocus(target, fallbackSelector) {
+        cancelFocusRestore();
+        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+        focusRestoreFrame = window.requestAnimationFrame(function () {
+          focusRestoreFrame = 0;
+          var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+          if (next && typeof next.focus === 'function') { next.focus(); }
+        });
+      }
 
       // setDrawer owns body.nav-open (sidebar transform + #navOverlay). Opening
       // the nav closes any open comment panel: THOSE TWO overlays are mutually
@@ -334,10 +367,19 @@
       // "fix" that by closing the pane from here. The pane's trigger (#dxgOpen)
       // lives inside <nav id="nav">, so on mobile the drawer has to be open to
       // reach it and nav-open + dxg-open together is a normal state.
-      function setDrawer(open) {
+      function setDrawer(open, opener) {
+        var wasOpen = document.body.classList.contains('nav-open');
+        if (open) {
+          cancelFocusRestore();
+          if (opener) { drawerFocusReturn = opener; }
+        }
         if (open) { closeCommentPanel(); }
         document.body.classList.toggle('nav-open', open);
         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+        if (!open && wasOpen) {
+          restoreFocus(drawerFocusReturn, '#navToggle');
+          drawerFocusReturn = null;
+        }
       }
 
       // ================================================================
@@ -1265,14 +1307,10 @@
       var stripAction = document.getElementById('statusStripAction');
       var stripBody = document.getElementById('statusStripBody');
       var lastStatusData = null;
-      // stripExpanded is sticky across refreshes so a poll (or an SSE tick) never
-      // collapses a list the reader is in the middle of. stripUserToggled records
-      // that the reader has taken control of it: until then an INTEGRITY verdict
-      // opens itself, because a collapsed one-line summary is how a tamper
-      // warning gets ignored. Once they have collapsed it by hand, later polls
-      // respect that.
+      // Paper starts every status strip collapsed. stripExpanded then stays
+      // sticky across refreshes, so a poll (or an SSE tick) never takes the
+      // disclosure state away from the reader.
       var stripExpanded = false;
-      var stripUserToggled = false;
 
       function countLabel(n, word) {
         return n + ' ' + word + (n === 1 ? '' : 's');
@@ -1447,10 +1485,22 @@
           return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
         })[0];
         var n = Object.keys(byKind[topKind]).length;
+        var activeIDs = activeFacetClaimIDs();
+        var total = Object.keys(activeIDs).length;
+        var activeTab = document.querySelector('.module-section:not([hidden]) > .sub-nav .subtab.on .sec-tab__label');
+        var facetLabel = activeTab ? activeTab.textContent.trim().toLowerCase() + ' ' : '';
+        var subject = (total > 0 && n === total ? 'All ' : '') + n + ' ' + facetLabel + 'claim' + (n === 1 ? '' : 's');
         if (topKind === 'dependency_unapproved') {
-          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
+          var activeModule = document.querySelector('.module-section:not([hidden])');
+          var outside = !!activeModule && blockers.filter(function (group) {
+            return group.kind === topKind;
+          }).every(function (group) {
+            var owner = ownerModuleID(group);
+            return owner && owner !== activeModule.id;
+          });
+          return subject + (n === 1 ? ' is' : ' are') + ' blocked by unapproved dependencies' + (outside ? ' outside this module' : '');
         }
-        return n + ' claim' + (n === 1 ? '' : 's') + ' blocked';
+        return subject + (n === 1 ? ' is' : ' are') + ' blocked';
       }
 
       function conformanceNotReadyIDs(claimIDs) {
@@ -1501,6 +1551,11 @@
         if (!section) {
           var content = document.querySelector('.content-area');
           if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
+          return;
+        }
+        var canvas = section.querySelector(':scope > .reading-canvas:not([hidden])');
+        if (canvas) {
+          if (canvas.firstElementChild !== stripEl) { canvas.insertBefore(stripEl, canvas.firstChild); }
           return;
         }
         var subNav = section.querySelector(':scope > .sub-nav');
@@ -1958,17 +2013,27 @@
               : (!assessment.local_approved && assessment.dependency_ready ? 'Approval required' : 'Dependencies not ready'));
 
           var footerName = 'claim-footer-' + id;
-          var door = el('details', 'claim-readiness-door');
-          door.setAttribute('name', footerName);
+          var door = blocked
+            ? el('details', 'claim-readiness-door')
+            : el('span', 'claim-readiness-empty claim-footer-chip claim-footer-chip--readiness claim-footer-chip--empty');
+          if (blocked) { door.setAttribute('name', footerName); }
           door.setAttribute('data-readiness-state', state);
-          var summary = el('summary', 'claim-footer-chip claim-footer-chip--readiness' + (blocked ? ' claim-footer-chip--blocked' : ''));
+          // Preserve the authoritative assessment total on the disclosure
+          // itself. The visible blocker rows are progressively disclosed and
+          // therefore cannot serve as a total for sibling navigation UI.
+          door.setAttribute('data-readiness-fact-count', String(facts.length));
+          var summary = blocked
+            ? el('summary', 'claim-footer-chip claim-footer-chip--readiness claim-footer-chip--blocked')
+            : door;
           if (blocked) {
             summary.appendChild(el('span', 'claim-readiness-chip-dot'));
             summary.appendChild(textEl('span', 'claim-footer-chip-label', 'Blocked'));
+            summary.appendChild(textEl('span', 'claim-footer-chip-count', facts.length + ' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
+            summary.appendChild(footerChevron());
+            door.appendChild(summary);
+          } else {
+            summary.appendChild(textEl('span', 'claim-footer-chip-label', 'No blockers'));
           }
-          summary.appendChild(textEl('span', 'claim-footer-chip-count', facts.length + ' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
-          summary.appendChild(el('span', 'claim-footer__chevron'));
-          door.appendChild(summary);
           if (blocked) {
             // Force-close any sibling in this name group a stale
             // server-rendered `open` attribute left open (the relationships
@@ -2056,15 +2121,23 @@
 
           panel.appendChild(readinessRawDiagnostics(assessment));
 
-          var existingDoor = card.querySelector('.claim-readiness-door');
+          var existingDoor = card.querySelector('.claim-readiness-door, .claim-readiness-empty');
           var existingPanel = card.querySelector('.claim-readiness');
           var links = card.querySelector('.claim-links');
-          // claim-links lives inside the card's collapse-content wrapper,
-          // not directly under the section. A DOM reference must belong to
-          // the parent receiving the insertion; otherwise Comet raises
-          // NotFoundError and no readiness card is rendered.
-          if (existingPanel && existingPanel.parentNode) { existingPanel.replaceWith(panel); } else if (links && links.parentNode) { links.parentNode.insertBefore(panel, links); } else { card.appendChild(panel); }
-          if (existingDoor && existingDoor.parentNode) { existingDoor.replaceWith(door); } else { panel.parentNode.insertBefore(door, panel); }
+          var footer = card.querySelector('.claim-footer');
+          if (!blocked) {
+            if (existingPanel) { existingPanel.remove(); }
+            if (existingDoor && existingDoor.parentNode) { existingDoor.replaceWith(door); }
+            else if (footer) { footer.insertBefore(door, footer.firstChild); }
+            else { card.appendChild(door); }
+            return;
+          }
+          if (existingPanel && existingPanel.parentNode) { existingPanel.replaceWith(panel); }
+          else if (links && links.parentNode) { links.parentNode.insertBefore(panel, links); }
+          else if (footer) { footer.insertBefore(panel, footer.firstChild); }
+          else { card.appendChild(panel); }
+          if (existingDoor && existingDoor.parentNode) { existingDoor.replaceWith(door); }
+          else { panel.parentNode.insertBefore(door, panel); }
         });
       }
 
@@ -2115,8 +2188,6 @@
           return;
         }
 
-        var critical = countSeverity(groups, 'critical');
-        var needsYou = countSeverity(groups, 'needs_you');
         var visible = groups.filter(function (group) {
           return !stripSeverityFilter || group.severity === stripSeverityFilter;
         });
@@ -2231,7 +2302,11 @@
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        if (!stripUserToggled) { stripExpanded = critical > 0 || needsYou > 0; }
+        // Paper's default reading view always starts with the findings body
+        // collapsed. Critical and needs-you counts still determine the
+        // truthful summary/chips above; they do not take control of the
+        // reader's disclosure state. Once the reader opens the strip, the
+        // existing stripExpanded state remains sticky across later polls.
         setStripExpanded(stripExpanded);
         positionStatusStrip();
         stripEl.hidden = false;
@@ -2259,7 +2334,6 @@
 
       if (stripToggle) {
         stripToggle.addEventListener('click', function () {
-          stripUserToggled = true;
           setStripExpanded(!stripExpanded);
         });
       }
@@ -2577,13 +2651,9 @@
       // "Show issues" (R09.6) opens this view — UNCONDITIONALLY on every
       // click of this control, whichever label it currently reads. The
       // strip's own inline expand/collapse (the listener directly above,
-      // L8's, toggling stripExpanded/#statusStripBody) can already be in
-      // either state before this screen existed — an integrity or
-      // needs-you verdict auto-expands it on load (renderStatusStrip
-      // above), so on THAT fixture the very first click actually turns
-      // "Hide issues" back to collapsed. R09.6 names this control as the
-      // entry point regardless, so this listener does not gate on the
-      // toggle's resulting open/closed state the way an earlier draft did.
+      // L8's, toggling stripExpanded/#statusStripBody) changes the sticky
+      // disclosure state first. R09.6 names this same control as the Issues
+      // entry point, so this listener does not gate on that resulting state.
       if (stripToggle) {
         stripToggle.addEventListener('click', openIssuesView);
       }
@@ -2619,26 +2689,6 @@
           })
         : null;
       if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
-
-      // ---- expand-all toolbar (Q2) --------------------------------------
-      // A single global control that sets/clears the `open` PROPERTY on every
-      // details.claim-links currently in the DOM. This is a client-side DOM
-      // mutation only — no localStorage, no URL state — so it never affects
-      // emitted bytes and never survives a reload. It queries fresh at click
-      // time rather than caching a NodeList, since a Phase 5c fragment swap
-      // can replace <main class="content-area"> (and therefore every
-      // details.claim-links in it) between clicks.
-      var expandAllToggle = document.getElementById('expandAllToggle');
-      if (expandAllToggle) {
-        expandAllToggle.addEventListener('click', function () {
-          var footers = document.querySelectorAll('details.claim-links');
-          var anyClosed = false;
-          footers.forEach(function (d) { if (!d.open) { anyClosed = true; } });
-          footers.forEach(function (d) { d.open = anyClosed; });
-          expandAllToggle.setAttribute('aria-pressed', String(anyClosed));
-          expandAllToggle.textContent = anyClosed ? 'Collapse all evidence' : 'Expand all evidence';
-        });
-      }
 
       // ---- source-note three-line clamp ---------------------------------
       // A source's supports/does_not_support line is authored prose with no
@@ -3055,6 +3105,17 @@
       // per-element, so a later SSE fragment swap that replaces the tabs/cards
       // keeps working without re-binding (and initViewer can be re-run freely).
       document.addEventListener('click', function (e) {
+        var graphTrigger = e.target.closest('[data-dxg-open]');
+        if (graphTrigger) {
+          if (document.body.classList.contains('dxg-open')) {
+            restoreFocus(graphTrigger, '#dxgOpen');
+          } else {
+            graphFocusReturn = graphTrigger;
+          }
+        }
+        if (e.target.closest('[data-dxg-close]') && graphFocusReturn) {
+          restoreFocus(graphFocusReturn, '#dxgOpen');
+        }
         var chip = e.target.closest('.comment-chip');
         if (chip) {
           e.preventDefault();
@@ -3105,13 +3166,13 @@
 
       if (navToggle) {
         navToggle.addEventListener('click', function () {
-          setDrawer(!document.body.classList.contains('nav-open'));
+          setDrawer(!document.body.classList.contains('nav-open'), navToggle);
         });
       }
       var mobileSearchToggle = document.getElementById('mobileSearchToggle');
       if (mobileSearchToggle) {
         mobileSearchToggle.addEventListener('click', function () {
-          setDrawer(true);
+          setDrawer(true, mobileSearchToggle);
           var search = document.getElementById('navSearch');
           if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
         });
@@ -3159,6 +3220,12 @@
       window.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
           if (commentPanelOpen()) { closeCommentPanel(); return; }
+          var target = event.target;
+          if (graphFocusReturn && target && typeof target.closest === 'function' && target.closest('#dxgPane')) {
+            restoreFocus(graphFocusReturn, '#dxgOpen');
+            return;
+          }
+          if (document.body.classList.contains('nav-open')) { event.preventDefault(); }
           setDrawer(false);
         }
       });

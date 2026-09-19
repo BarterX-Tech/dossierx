@@ -53,7 +53,7 @@ import (
 // the shape of green this whole file exists to prevent.
 func surfaceTrackedFiles(t *testing.T, root string) []string {
 	t.Helper()
-	cmd := exec.Command("git", "ls-files", "-z")
+	cmd := exec.Command("git", "ls-files", "--cached", "--others", "--exclude-standard", "-z")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
@@ -62,6 +62,12 @@ func surfaceTrackedFiles(t *testing.T, root string) []string {
 	var files []string
 	for _, name := range strings.Split(string(out), "\x00") {
 		if name != "" {
+			// A dirty candidate includes new source and excludes deleted source.
+			if _, err := os.Stat(filepath.Join(root, name)); os.IsNotExist(err) {
+				continue
+			} else if err != nil {
+				t.Fatalf("stat candidate file %s: %v", name, err)
+			}
 			files = append(files, filepath.ToSlash(name))
 		}
 	}
@@ -202,16 +208,16 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsTwentySixLeavesUnderNineNouns treats the leaf count.
+// TestSurfaceIsTwentyFourLeavesUnderEightNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":       9,
-		"commands":    26,
+		"nouns":       8,
+		"commands":    24,
 		"lint_rules":  38,
-		"error_codes": 50,
+		"error_codes": 49,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

@@ -76,68 +76,20 @@ governed_by:
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
-func TestIndividualClaimCanCollapseAndExpand(t *testing.T) {
-	p := newProject(t)
-	p.seedComment("human", "keep comments reachable")
-	ctx := browserContext(t)
+const longClaimYAML = `id: widget.contract.long-body
+facet: contract
+module: widget
+status: draft
+body: |
+  This deliberately long claim body needs more than four rendered lines at desktop width. It preserves complete structured HTML while the reading view initially shows a calm four-line preview. The control must reveal every word without replacing the body node.
 
-	runCDP(t, ctx,
-		chromedp.Navigate(p.renderStatic()),
-		chromedp.WaitVisible(".claim-collapse-toggle", chromedp.ByQuery),
-	)
+  A second paragraph makes the overflow deterministic and verifies that the disclosure works across block markup rather than truncating a string.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`
 
-	if !evalBool(t, ctx, `document.querySelector('.claim-collapse-toggle').getAttribute('aria-expanded') === 'true'`) {
-		t.Fatal("claim disclosure must start expanded")
-	}
-
-	runCDP(t, ctx, chromedp.Click(".claim-collapse-toggle", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelector('.claim-collapse-content').hidden`)
-	if !evalBool(t, ctx, `document.querySelector('.claim-collapse-toggle').getAttribute('aria-expanded') === 'false'`) {
-		t.Fatal("collapsed claim must expose aria-expanded=false")
-	}
-	if !evalBool(t, ctx, `!!document.querySelector('.claim--collapsed .comment-chip')`) {
-		t.Fatal("collapsing a claim must leave its comment control reachable")
-	}
-	if !evalBool(t, ctx, `(function(){
-		var claim = document.querySelector('.claim');
-		var head = claim.querySelector(':scope > .k');
-		var arrow = head.querySelector('.claim-collapse-chevron').getBoundingClientRect();
-		var chip = head.querySelector('.comment-chip').getBoundingClientRect();
-		var edge = head.getBoundingClientRect().right;
-		return arrow.left > chip.right && Math.abs(edge - arrow.right) <= 9;
-	})()`) {
-		t.Fatal("claim disclosure arrow must stay at the extreme right, after comments")
-	}
-
-	runCDP(t, ctx, chromedp.Click(".comment-chip", chromedp.ByQuery))
-	pollTrue(t, ctx, `!document.getElementById('commentsPanel').hidden`)
-	if !evalBool(t, ctx, `document.querySelector('.claim-collapse-content').hidden`) {
-		t.Fatal("opening comments must not unexpectedly expand the claim")
-	}
-
-	runCDP(t, ctx,
-		chromedp.Click("#commentsRailClose", chromedp.ByQuery),
-		chromedp.Click(".claim-collapse-toggle", chromedp.ByQuery),
-	)
-	pollTrue(t, ctx, `!document.querySelector('.claim-collapse-content').hidden`)
-}
-
-func TestClaimDeepLinkRevealsCollapsedContent(t *testing.T) {
-	p := newProject(t)
-	ctx := browserContext(t)
-
-	runCDP(t, ctx,
-		chromedp.Navigate(p.renderStatic()),
-		chromedp.WaitVisible(".claim-collapse-toggle", chromedp.ByQuery),
-		chromedp.Click(".claim-collapse-toggle", chromedp.ByQuery),
-	)
-	pollTrue(t, ctx, `document.querySelector('.claim-collapse-content').hidden`)
-
-	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#widget.contract.overview'`, nil))
-	pollTrue(t, ctx, `document.querySelector('.claim-collapse-toggle').getAttribute('aria-expanded') === 'true'`)
-}
-
-func TestFacetClaimsCanCollapseAndExpandTogether(t *testing.T) {
+func TestClaimAndFacetCollapseControlsAreRemoved(t *testing.T) {
 	p := newProject(t)
 	p.writeClaim("secondary.yaml", secondClaimYAML)
 	ctx := browserContext(t)
@@ -145,23 +97,44 @@ func TestFacetClaimsCanCollapseAndExpandTogether(t *testing.T) {
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
 		chromedp.Navigate(p.renderStatic()),
-		chromedp.WaitVisible(".facet-claims-toggle", chromedp.ByQuery),
+		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 
-	if !evalBool(t, ctx, `document.querySelectorAll('.claim-collapse-toggle').length === 2 && Array.from(document.querySelectorAll('.claim-collapse-toggle')).every(function(toggle){ return toggle.getAttribute('aria-expanded') === 'true'; })`) {
-		t.Fatal("all claims in the active facet must start expanded")
+	if !evalBool(t, ctx, `!document.querySelector('.claim-collapse-toggle, .claim-collapse-content, .facet-claims-toggle, .facet-claim-controls, .section-heading') && Array.from(document.querySelectorAll('.claim')).every(function(claim){ return !!claim.querySelector(':scope > .k + .claim-body-disclosure, :scope > .k + .claim-body-disclosure + *'); })`) {
+		t.Fatal("claims and facets must not render whole-card collapse controls, hidden wrappers, or section headings")
+	}
+}
+
+func TestLongClaimBodyUsesFourLineMoreLessDisclosure(t *testing.T) {
+	p := newProject(t)
+	p.writeClaim("long.yaml", longClaimYAML)
+	p.writeClaim("secondary.yaml", secondClaimYAML)
+	ctx := browserContext(t)
+
+	runCDP(t, ctx,
+		chromedp.EmulateViewport(900, 800),
+		chromedp.Navigate(p.renderStatic()),
+		chromedp.WaitVisible(".claim-body-disclosure__toggle:not([hidden])", chromedp.ByQuery),
+	)
+
+	if !evalBool(t, ctx, `(function(){
+		var claim = document.getElementById('widget.contract.long-body');
+		var body = claim.querySelector('.claim-body');
+		var toggle = claim.querySelector('.claim-body-disclosure__toggle');
+		var line = parseFloat(getComputedStyle(body).lineHeight);
+		return toggle.textContent.trim() === '… more' && toggle.getAttribute('aria-expanded') === 'false' &&
+			Math.abs(body.getBoundingClientRect().height - line * 4) < 2;
+	})()`) {
+		t.Fatal("a long body must start at exactly four lines with an accessible … more control")
 	}
 
-	runCDP(t, ctx, chromedp.Click(".facet-claims-toggle", chromedp.ByQuery))
-	pollTrue(t, ctx, `Array.from(document.querySelectorAll('.claim-collapse-content')).every(function(content){ return content.hidden; })`)
-	if !evalBool(t, ctx, `(function(){ var toggle = document.querySelector('.facet-claims-toggle'); return toggle.getAttribute('aria-pressed') === 'true' && toggle.textContent.trim() === 'Expand all claims'; })()`) {
-		t.Fatal("bulk control must announce that all claims are collapsed and offer expansion")
+	runCDP(t, ctx, chromedp.Click("#widget\\.contract\\.long-body .claim-body-disclosure__toggle", chromedp.ByQuery))
+	pollTrue(t, ctx, `document.querySelector('#widget\\.contract\\.long-body .claim-body-disclosure__toggle').getAttribute('aria-expanded') === 'true'`)
+	if !evalBool(t, ctx, `document.querySelector('#widget\\.contract\\.long-body .claim-body-disclosure__toggle').textContent.trim() === 'less'`) {
+		t.Fatal("the expanded body must offer less")
 	}
-
-	runCDP(t, ctx, chromedp.Click(".facet-claims-toggle", chromedp.ByQuery))
-	pollTrue(t, ctx, `Array.from(document.querySelectorAll('.claim-collapse-content')).every(function(content){ return !content.hidden; })`)
-	if !evalBool(t, ctx, `document.querySelector('.facet-claims-toggle').getAttribute('aria-pressed') === 'false'`) {
-		t.Fatal("bulk control must return to its expanded state")
+	if !evalBool(t, ctx, `document.querySelector('#widget\\.contract\\.secondary .claim-body-disclosure__toggle').hidden`) {
+		t.Fatal("a short body must not show a redundant disclosure")
 	}
 }
 

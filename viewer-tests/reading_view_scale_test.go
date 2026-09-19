@@ -26,7 +26,6 @@ const (
 	readingScaleMaxLoadMS        = 15_000
 	readingScaleMaxEnhanceMS     = 8_000
 	readingScaleMaxFacetSwitchMS = 2_500
-	readingScaleMaxCollapseAllMS = 2_500
 	readingScaleMaxScrollLongMS  = 200
 	readingScaleMaxDOMNodes      = 80_000
 	readingScaleMaxJSHeapBytes   = 512 * 1024 * 1024
@@ -86,7 +85,6 @@ type readingScaleMetrics struct {
 	LoadMS              float64 `json:"load_ms"`
 	EnhanceMS           float64 `json:"enhance_ms"`
 	FacetSwitchMS       float64 `json:"facet_switch_ms"`
-	CollapseAllMS       float64 `json:"collapse_all_ms"`
 	ScrollLongtaskMaxMS float64 `json:"scroll_longtask_max_ms"`
 	ActiveSurfaceID     string  `json:"active_surface_id"`
 }
@@ -111,7 +109,6 @@ func collectReadingScaleMetrics(t *testing.T, ctx context.Context) readingScaleM
 			load_ms: nav ? (nav.loadEventEnd - nav.startTime) : -1,
 			enhance_ms: window.__dossierxEnhanceMS || -1,
 			facet_switch_ms: window.__dossierxFacetSwitchMS || -1,
-			collapse_all_ms: window.__dossierxCollapseAllMS || -1,
 			scroll_longtask_max_ms: window.__dossierxScrollLongtaskMaxMS || 0,
 			active_surface_id: activeGroup ? activeGroup.id : ''
 		};
@@ -190,14 +187,6 @@ func TestReadingViewBrowserScaleBudgets(t *testing.T) {
 	pollTrue(t, ctx, `document.querySelectorAll('[data-dossierx-surface-host] .claim').length > 0`)
 
 	runCDP(t, ctx, chromedp.Evaluate(`(function(){
-		var btn = document.querySelector('.facet-claims-toggle');
-		var start = performance.now();
-		if (btn) { btn.click(); }
-		window.__dossierxCollapseAllMS = performance.now() - start;
-		return true;
-	})()`, nil))
-
-	runCDP(t, ctx, chromedp.Evaluate(`(function(){
 		window.__dossierxScrollLongtaskMaxMS = 0;
 		var max = 0;
 		var observer = null;
@@ -258,9 +247,6 @@ func TestReadingViewBrowserScaleBudgets(t *testing.T) {
 	}
 	if metrics.FacetSwitchMS < 0 || metrics.FacetSwitchMS > readingScaleMaxFacetSwitchMS {
 		t.Fatalf("facet switch %.0fms exceeded %dms budget", metrics.FacetSwitchMS, readingScaleMaxFacetSwitchMS)
-	}
-	if metrics.CollapseAllMS < 0 || metrics.CollapseAllMS > readingScaleMaxCollapseAllMS {
-		t.Fatalf("collapse-all %.0fms exceeded %dms budget", metrics.CollapseAllMS, readingScaleMaxCollapseAllMS)
 	}
 	if metrics.ScrollLongtaskMaxMS > readingScaleMaxScrollLongMS {
 		t.Fatalf("scroll longtask max %.0fms exceeded %dms budget", metrics.ScrollLongtaskMaxMS, readingScaleMaxScrollLongMS)

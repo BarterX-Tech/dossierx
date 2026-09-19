@@ -37,14 +37,10 @@ func resolvedThread(id, body string) model.Comment {
 // CommentChipHTML — the 💬 chip, and EdgesHTMLWithLinks — the baked-in
 // thread panel.
 //
-// As of v0.4.1 these are two separate emitters. The chip used to ride the
-// shared edges footer as an <li class="claim-comments"> inside
-// <ul class="claim-edges">; the footer is now a collapsed
-// <details class="claim-links">, where a chip would be invisible and
-// unclickable, so the chip moved to the claim head as a
-// <span class="claim-comments-slot"> emitted by CommentChipHTML. The panel
-// stayed put, and is still emitted by EdgesHTMLWithLinks — as a SIBLING after
-// </details>, never inside it.
+// The comment chip is emitted by CommentChipHTML and composed into the last
+// slot of the shared footer by EdgesHTMLWithLinks. The thread panel remains a
+// sibling after that footer: comments are available from the claim's footer,
+// without adding controls or state to the claim heading.
 //
 // Note the trap in every assertion below: the panel has its own, unrelated
 // <details class="comments-resolved"> for resolved threads. It is not the new
@@ -96,14 +92,13 @@ func TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault(t *testing.T) {
 		t.Fatalf("the zero-state chip must invite the first comment in its aria-label, got: %s", got)
 	}
 
-	// The chip has LEFT the footer entirely: EdgesHTMLWithLinks emits none of
-	// it, and for this edgeless claim emits nothing at all — still
-	// byte-identical to plain edgesHTML, which is the graceful-degradation
-	// guard the implink footer relies on (see
-	// TestEdgesHTMLWithLinks_NilFiles_MatchesPlainEdgesHTML).
+	// The footer owns the chip position, including the quiet zero state. The
+	// standalone component remains the exact fragment placed in that final
+	// slot, and the plain and link-aware renderers remain byte-identical when
+	// there is no comments panel to append.
 	footer := string(EdgesHTMLWithLinks(c, nil, nil, nil))
-	if strings.Contains(footer, "comment-chip") || strings.Contains(footer, "claim-comments-slot") {
-		t.Fatalf("the chip must no longer be emitted by the edges footer, got: %s", footer)
+	if !strings.HasPrefix(footer, `<div class="claim-footer">`) || !strings.Contains(footer, got) {
+		t.Fatalf("the quiet chip must occupy the footer slot, got: %s", footer)
 	}
 	if footer != string(edgesHTML(c)) {
 		t.Fatalf("a comment-free claim's edges output must match edgesHTML(c)\n got: %s", footer)
@@ -116,8 +111,8 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 		Module: "widget",
 		Facet:  "contract",
 		Status: model.StatusLocked,
-		// One real edge, so the footer actually emits a <details> and the
-		// panel's position relative to it can be asserted below.
+		// One real edge gives the footer a populated relationship door while the
+		// comments chip still remains in its fixed final slot.
 		RestsOn: []string{"widget.contract.dep"},
 		Comments: []model.Comment{
 			openThread("c-aaaaaa", "please clarify the retry bound"),
@@ -127,7 +122,7 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 	}
 	chip := string(CommentChipHTML(c))
 
-	// Chip: accent (open), lives in the slot span, carries the claim id via
+	// Chip: accent (open), carries the claim id via
 	// data-* (never id=), and shows the OPEN count (2), not the total (3).
 	if !strings.HasPrefix(chip, `<span class="claim-comments-slot">`) {
 		t.Fatalf("a chip with threads must sit in a slot carrying no hidden attribute, got: %s", chip)
@@ -172,51 +167,17 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 		}
 	}
 
-	// The panel is a SIBLING of the whole .claim-footer strip (05 §4.6's
-	// <div class="claim-footer"> now wraps the relationships/sources doors),
-	// emitted immediately after it closes — never nested inside it. A
-	// claim's threads must stay readable without expanding its edges.
-	//
-	// THIS ONE STRING IS THE WHOLE ORDERING PROOF. Matching the sources
-	// door's own close, then the strip's close, then the panel's open, as a
-	// single literal asserts the adjacency and the order together: the
-	// panel opens immediately after the strip closes, with nothing between
-	// them.
-	//
-	// RETRY RE-PIN (fix-list item 10; 05 §8 item 5, 07a §6/§8's "Sources
-	// present" state): the sources door now renders UNCONDITIONALLY — this
-	// fixture claim has zero sources, so it gets the "No sources" empty
-	// variant — where it used to be suppressed at zero. The strip's closing
-	// tail therefore now always ends on the sources door's own PANEL close
-	// (three nested `</div>`s: the panel head, the sources panel itself,
-	// then the strip), not on a `</details>` as this string used to assert.
-	//
-	// RETRY RE-PIN, THIRD retry (verifier fix-list item 2). Each door's
-	// panel is now a sibling <div> immediately after its own `</details>`,
-	// not that <details>'s child — see
-	// TestEdgesHTMLWithLinks_DetailsWrapperSeams's doc comment for the
-	// measured display:contents browser bug this works around. The tail
-	// this literal matches is therefore three `</div>` closes, not a
-	// `</details>` followed by two `</div>`s.
-	//
-	// A SECOND, INDEX-BASED PROBE WAS DELETED HERE. It read
-	// `closeIdx := strings.Index(got, "</details>")` and compared it against the
-	// panel's index — but strings.Index takes the FIRST closer in the output,
-	// which is the footer's only because this fixture claim happens to carry a
-	// rests_on edge, so a footer is emitted at all. On a claim with NO edges but
-	// WITH resolved threads the footer is suppressed entirely (correct since
-	// v0.4.1) and the same literal would find the comments panel's own
-	// <details class="comments-resolved"> closer instead — leaving the probe
-	// comparing the panel against itself and passing for the wrong reason. It
-	// proved nothing the adjacency match above does not already prove, and it
-	// could degrade silently as the fixture changed underneath it.
-	if !strings.Contains(got, `</div></div></div><div class="comments-panel"`) {
+	// The panel is a sibling of the whole footer, immediately after the comment
+	// chip's slot. It must not be nested in any relationship or source door.
+	if !strings.Contains(got, `</button></span></div><div class="comments-panel"`) {
 		t.Fatalf("the panel must follow the closed .claim-footer strip as a sibling with no whitespace between, got: %s", got)
 	}
 
-	// The chip is not in the footer's output at all any more.
-	if strings.Contains(got, "comment-chip") {
-		t.Fatalf("the chip must no longer be emitted by the edges footer, got: %s", got)
+	footerStart := strings.Index(got, `<div class="claim-footer">`)
+	panelStart := strings.Index(got, `<div class="comments-panel"`)
+	chipStart := strings.Index(got, "comment-chip")
+	if footerStart < 0 || panelStart < 0 || chipStart < footerStart || chipStart > panelStart {
+		t.Fatalf("the chip must live in the footer before its panel, got: %s", got)
 	}
 }
 
@@ -267,18 +228,13 @@ func TestEdgesHTMLWithLinks_ResolvedOnly_ChipMutedAndDetailsCollapsed(t *testing
 	if !strings.Contains(got, `<summary><svg class="comments-resolved-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg><span>3 resolved</span></summary>`) {
 		t.Fatalf("expected a chevron + '3 resolved' disclosure, got: %s", got)
 	}
-	// RETRY RE-PIN (fix-list item 10; 05 §8 item 5: "An entirely edgeless,
-	// sourceless, checkless claim still shows four zeros and the comment
-	// count."). This claim has no edges and no files, but the footer strip
-	// is no longer suppressed at all-zero — it renders both owned doors at
-	// zero ("0 relationships" / "No sources") rather than vanishing, so a
-	// reader who has learned "this position is sources" does not find the
-	// position itself missing on the next claim.
-	if !strings.Contains(got, `<details class="claim-links" name="claim-footer-widget.contract.r">`) {
-		t.Fatalf("an edgeless claim must still render the relationships door at zero, got: %s", got)
+	// The Paper zero state is explicit but inert: no empty disclosure door and
+	// no numeral pretending a relationship exists.
+	if strings.Contains(got, `<details class="claim-links"`) {
+		t.Fatalf("an edgeless claim must not render a relationships disclosure, got: %s", got)
 	}
-	if !strings.Contains(got, `<span class="claim-footer-chip-label">0 relationships</span>`) {
-		t.Fatalf("expected the zero-relationships chip, got: %s", got)
+	if !strings.Contains(got, `<span class="claim-footer-chip-label">No relationships</span>`) {
+		t.Fatalf("expected the plain zero-relationships label, got: %s", got)
 	}
 	if !strings.Contains(got, `<span class="claim-footer-chip-label">No sources</span>`) {
 		t.Fatalf("expected the zero-sources chip worded \"No sources\", got: %s", got)
@@ -289,14 +245,9 @@ func TestEdgesHTMLWithLinks_ResolvedOnly_ChipMutedAndDetailsCollapsed(t *testing
 // between the strip and a claim's baked comment panel: whatever the strip
 // renders, the panel is never nested inside it and never depends on it.
 //
-// RETRY RE-PIN (fix-list item 10; 05 §8 item 5). This test used to pin the
-// opposite: "a claim with zero edges and zero files emits NO <details> at
-// all". That whole-footer suppression is exactly what this retry removes —
-// R-F.1 fixes the strip's four positions, so an edgeless, sourceless claim
-// now renders both owned doors at zero ("0 relationships" / "No sources")
-// instead of the strip vanishing. What survives from the original test is
-// its real subject: the panel is a SIBLING that follows the strip, never
-// gated by what the strip does or does not contain.
+// An edgeless claim still retains its footer for its stable zero labels and
+// comment entry point. The panel is a sibling after that strip, never gated by
+// a populated relationship or source disclosure.
 func TestEdgesHTMLWithLinks_PanelSurvivesFooterSuppression(t *testing.T) {
 	c := model.Claim{
 		ID:       "widget.contract.overview",
@@ -309,8 +260,8 @@ func TestEdgesHTMLWithLinks_PanelSurvivesFooterSuppression(t *testing.T) {
 	if !strings.HasPrefix(got, `<div class="claim-footer">`) {
 		t.Fatalf("an edgeless claim must still open the footer strip at zero, got: %s", got)
 	}
-	if !strings.Contains(got, `<span class="claim-footer-chip-label">0 relationships</span>`) {
-		t.Fatalf("expected the zero-relationships chip, got: %s", got)
+	if !strings.Contains(got, `<span class="claim-footer-chip-label">No relationships</span>`) {
+		t.Fatalf("expected the zero-relationships label, got: %s", got)
 	}
 	if !strings.Contains(got, `<span class="claim-footer-chip-label">No sources</span>`) {
 		t.Fatalf("expected the zero-sources chip worded \"No sources\", got: %s", got)
@@ -436,14 +387,8 @@ func TestEdgesHTMLWithLinks_AccessibleControls(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Per-layout chip wiring: the chip appears for every layout whose claim head
-// calls {{commentChip .}}, and NOT for banner — banner.html calls neither
-// {{commentChip .}} nor {{edges .}}, so the whole comment surface is excluded
-// from it.
-//
-// Before v0.4.1 that exclusion was a side effect of banner having no edges
-// footer to hang the chip off. It is now a deliberate omission in banner.html
-// itself, which is a weaker guarantee — hence this test asserting it directly.
+// Per-layout chip wiring: the chip appears in the footer of every non-banner
+// layout. Banner remains deliberately excluded from the comment surface.
 // ---------------------------------------------------------------------
 
 func TestCommentChip_AppearsForEveryLayoutExceptBanner(t *testing.T) {
@@ -458,8 +403,8 @@ func TestCommentChip_AppearsForEveryLayoutExceptBanner(t *testing.T) {
 		Facet:  "contract",
 		Status: model.StatusDraft,
 		Body:   "some prose so every layout renders something",
-		// One edge, so the footer disclosure is actually emitted and the
-		// chip's position relative to it can be asserted.
+		// One edge keeps a populated footer door in the fixture; the chip stays
+		// in its final footer slot independently of the door.
 		RestsOn: []string{"widget.contract.dep"},
 		Comments: []model.Comment{
 			openThread("c-aaaaaa", "an open thread"),
@@ -487,21 +432,19 @@ func TestCommentChip_AppearsForEveryLayoutExceptBanner(t *testing.T) {
 				t.Fatalf("layout %q must carry a comment chip, got: %s", layout, out)
 			}
 
-			// The chip now sits in the claim HEAD, inside its slot span — not
-			// in the edges <ul>, where it used to ride as an <li>. Match the
-			// full slot class: "claim-comments" is a strict prefix of
-			// "claim-comments-slot", so the old name still substring-matches
-			// the new markup and cannot discriminate.
+			// The chip occupies the final footer slot, after the relationship and
+			// source controls and before any comments panel.
 			if !strings.Contains(out, `<span class="claim-comments-slot">`) {
 				t.Fatalf("layout %q must wrap its chip in the head's slot span, got: %s", layout, out)
 			}
 			chipIdx := strings.Index(out, "comment-chip")
-			ulIdx := strings.Index(out, `<div class="claim-footer">`)
-			if ulIdx < 0 {
+			footerIdx := strings.Index(out, `<div class="claim-footer">`)
+			panelIdx := strings.Index(out, `<div class="comments-panel"`)
+			if footerIdx < 0 || panelIdx < 0 {
 				t.Fatalf("layout %q should have rendered a footer strip for a claim with a rests_on edge, got: %s", layout, out)
 			}
-			if chipIdx > ulIdx {
-				t.Fatalf("layout %q renders its chip inside/after the edges list; it belongs in the head, before the footer: %s", layout, out)
+			if chipIdx < footerIdx || chipIdx > panelIdx {
+				t.Fatalf("layout %q must render its chip in the footer before the comments panel: %s", layout, out)
 			}
 			// And nothing re-introduced the old <li> form.
 			if strings.Contains(out, `<li class="claim-comments"`) {

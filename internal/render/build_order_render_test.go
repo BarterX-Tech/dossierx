@@ -1,6 +1,6 @@
 // build_order_render_test.go covers the Build order tab's presence contract:
-// present, as a top-level tab of its own, when a module has a LOCKED
-// internal/buildorder.Artifact on disk; entirely absent — the sidebar group,
+// present, as a fixed sidebar utility of its own, when a module has a LOCKED
+// internal/buildorder.Artifact on disk; entirely absent — the sidebar action,
 // the section, the payload block, the module strip and the two script tags
 // — when no module does, which is the common case for every project that has
 // not adopted model.BuildRole/internal/buildorder at all.
@@ -164,9 +164,9 @@ func TestRender_BuildOrderTab_PresentWhenLockedArtifactExists(t *testing.T) {
 	out := renderClaimsFor(t, cfg, claims)
 
 	for _, want := range []string{
-		// the sidebar entry, its own group after Tracks, never under a facet
+		// the sidebar utility, beside Claims graph and never under a facet
 		`<span>Build order</span>`,
-		`<button class="sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-widget">Build order</button>`,
+		`<button class="nav-utility sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-widget">`,
 		// the section, the strip, the module group
 		`<section class="module-section build-order-section" id="dossierx-build-order" hidden>`,
 		`<div class="bo-modules">`,

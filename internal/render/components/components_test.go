@@ -292,20 +292,15 @@ func TestColClass_KnownAndUnknownAndCaseInsensitive(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
-	// RETRY RE-PIN (fix-list item 10; 05 §8 item 5: "An entirely edgeless,
-	// sourceless, checkless claim still shows four zeros and the comment
-	// count."). A claim with zero edges and zero linked files used to emit
-	// nothing at all — the all-zero gate this retry removes. It now renders
-	// the strip with both owned doors at zero: "0 relationships" and
-	// "No sources" (07a §6/§8's zero-sources wording), never a bare "0
-	// sources" numeral and never no footer at all.
+	// A claim with no relationships or sources still has a stable footer: its
+	// zero states use plain language, not empty dropdowns or numeral counts.
 	c := model.Claim{Facet: "contract"}
 	got := string(edgesHTML(c))
 	if !strings.Contains(got, `<div class="claim-footer">`) {
 		t.Fatalf("edgesHTML for an edgeless claim must still open the footer strip, got: %s", got)
 	}
 	for _, want := range []string{
-		`<span class="claim-footer-chip-label">0 relationships</span>`,
+		`<span class="claim-footer-chip-label">No relationships</span>`,
 		`<span class="claim-footer-chip-label">No sources</span>`,
 	} {
 		if !strings.Contains(got, want) {
@@ -484,12 +479,11 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			wantChip: "1 relationship",
 		},
 		{
-			// RETRY RE-PIN: an entirely edgeless, sourceless claim used to
-			// emit no footer at all. It now renders the strip at zero — see
-			// the test's own doc comment.
+			// An entirely edgeless, sourceless claim keeps the fixed footer but
+			// uses its plain, non-dropdown zero state.
 			name:     "nothing_at_all",
 			claim:    model.Claim{Facet: "contract"},
-			wantChip: "0 relationships",
+			wantChip: "No relationships",
 		},
 	}
 
@@ -540,8 +534,8 @@ func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 	if !strings.Contains(got, `</summary></details><div class="claim-footer-panel claim-links-panel">`) {
 		t.Fatalf("the relationships door must close immediately after its summary, with its panel as the very next sibling, got: %s", got)
 	}
-	if !strings.HasSuffix(got, `</div></div>`) {
-		t.Fatalf("the strip must close immediately after the sources door's panel (its own sibling <div>, not a </details>), got: %s", got)
+	if !strings.HasSuffix(got, `</button></span></div>`) {
+		t.Fatalf("the strip must end with its footer comment slot, got: %s", got)
 	}
 	// The GOVERNED BY row is byte-identical to before the redesign; it
 	// simply moved inside the RELATIONSHIPS panel's direction block.
@@ -588,9 +582,9 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 	}
 	// relationships = 1 (governed_by) + 2 (rests_on ids) + 1 (review_pending)
 	// = 4. Open, on the review_pending signal (files' Drifted also qualifies).
-	const want = `<div class="claim-footer">` +
+	want := `<div class="claim-footer">` +
 		`<details class="claim-links" name="claim-footer-widget.contract.retry-policy" open>` +
-		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">4 relationships</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary></details>` +
+		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">4 relationships</span><svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg></summary></details>` +
 		`<div class="claim-footer-panel claim-links-panel">` +
 		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">4</span></div>` +
 		`<div class="claim-relationship-direction"><div class="claim-relationship-direction-head"><span class="claim-relationship-arrow" aria-hidden="true">↑</span><span class="claim-relationship-direction-label">GOVERNED BY</span></div><ul class="claim-edges claim-relationship-list">` +
@@ -605,11 +599,8 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 		`<li class="claim-implemented-in claim-relationship-extra">implemented in: <code>internal/http/retry.go#Do</code> <span class="pill pw">drifted</span></li>` +
 		`<li class="claim-implemented-in claim-relationship-extra">implemented in: <code>internal/http/backoff.go</code></li>` +
 		`</ul></div>` +
-		`<details class="claim-sources" name="claim-footer-widget.contract.retry-policy">` +
-		`<summary class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></summary></details>` +
-		`<div class="claim-footer-panel claim-sources-panel">` +
-		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">0</span></div>` +
-		`</div></div>`
+		`<span class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></span>` +
+		`<!--dossierx-claim-footer-slot-->` + string(CommentChipHTML(c)) + `</div>`
 
 	if got := string(EdgesHTMLWithLinks(c, files, nil, nil)); got != want {
 		t.Fatalf("worked-example footer mismatch\n want: %s\n got:  %s", want, got)
@@ -1469,12 +1460,10 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 		Steps:  []string{"one"},
 	}
 
-	// The whole head, byte for byte, for the six chip-bearing layouts: the
-	// opening <div class="k"> tag is unchanged, the title/pill/id move inside
-	// <span class="label"> with the one space between the title and the pill
-	// preserved, and the chip slot follows with ZERO whitespace on either
-	// side of it. This claim carries no comments, so the slot is the hidden
-	// zero-state variant.
+	// The whole head, byte for byte, for the six non-banner layouts: the
+	// opening <div class="k"> tag is unchanged and the title/pill/id move
+	// inside <span class="label"> with the one space between the title and the
+	// pill preserved. The comment slot belongs to the footer, not the head.
 	//
 	// v0.4.2 (docs/design/screens/07-claim-boundary-no-embodiment.md §4.3/§4.4,
 	// LANES.md's L3 section) wraps the title in its own <span class="k-title">
@@ -1487,12 +1476,7 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 	const wantHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
 		`<span class="label"><span class="k-title">Retry Policy</span> <span class="pill ps">` +
 		`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>Locked</span>` +
-		`<span class="k-id">widget.contract.retry-policy</span></span>` +
-		`<span class="claim-comments-slot" hidden>` +
-		`<button type="button" class="comment-chip comment-chip--empty" data-claim-id="widget.contract.retry-policy" ` +
-		`aria-controls="commentsPanel" aria-expanded="false" aria-label="add the first comment on this claim">` +
-		`<span class="comment-chip-glyph" aria-hidden="true"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg></span> <span class="comment-chip-count">0</span>` +
-		`</button></span></div>`
+		`<span class="k-id">widget.contract.retry-policy</span></span></div>`
 
 	// banner's flat head, unchanged from before v0.4.1 except the same
 	// padlock glyph every other LOCKED chip now carries — banner keeps no
@@ -1523,6 +1507,13 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 			}
 			if layout == model.LayoutBanner && strings.Contains(got, "claim-comments-slot") {
 				t.Errorf("banner must carry no comment chip slot, got: %s", got)
+			}
+			if layout != model.LayoutBanner {
+				footerIdx := strings.Index(got, `<div class="claim-footer">`)
+				chipIdx := strings.Index(got, `claim-comments-slot`)
+				if footerIdx < 0 || chipIdx < footerIdx {
+					t.Errorf("the comment slot must be in the footer, not the heading, got: %s", got)
+				}
 			}
 
 			// The heading label is the BARE label — a claim's own module and

@@ -113,8 +113,7 @@ Consequences a lane agent must respect:
   specificity, so their `var()` must live in the later copy.
   `internal/render/theme_tokens_test.go` asserts this per token and fails if an
   allowlisted token has no consumer in `style.css` or `graph.css`.
-- Print always uses the light palette. A `dark:` value never reaches paper, even
-  for a token declared only under `dark:` (`docs/theming.md`).
+- Print always uses the light palette.
 
 ---
 
@@ -306,20 +305,12 @@ foundations work exposes.
 ```
 
 Sources: `viewer/template/fonts/geist-latin-wght.woff2` and
-`geist-mono-latin-wght.woff2`. Both are variable faces declared `100 900`. They
-exist for the `claude` preset's stacks. A project stylesheet override replaces
-`style.css` wholesale and does **not** receive these faces.
+`geist-mono-latin-wght.woff2`. Both are variable faces declared `100 900`. A
+project stylesheet override replaces `style.css` wholesale and does **not**
+receive these faces.
 
-This is the pattern a serif face would follow: an engine-owned variable woff2,
-inlined as a `data:` URL, named by an engine-owned token.
-
-The *project-supplied* font path is different and is capped:
-`viewer.theme.fonts` inlines a project's own files as base64, every declared
-`family` must appear in the merged `font-sans`/`font-mono` value or the theme is
-refused, and **total raw font bytes across every face are capped at 2 MiB** —
-roughly four variable faces (`docs/theming.md`). `check` reports
-`data.theme_font_count` and `data.theme_font_bytes`, which are *absent* from
-`data`, not zero, when a theme declares no fonts.
+This is the pattern an engine-owned serif face would follow: an engine-owned
+variable woff2, inlined as a `data:` URL, named by an engine-owned token.
 
 ---
 

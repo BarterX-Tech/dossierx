@@ -63,26 +63,26 @@ func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
 	}
 }
 
-func TestServeConformanceCapacityPrecedesInvalidThemeLikeEveryCheckMode(t *testing.T) {
+func TestServeConformanceCapacityReportsFailure(t *testing.T) {
 	files := make(map[string]string)
 	for i := 0; i < 64; i++ {
 		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
-	cfg := baseConfig + "viewer:\n  theme:\n    preset: does-not-exist\nconformance:\n  observations: observations.json\n"
+	cfg := baseConfig + "conformance:\n  observations: observations.json\n"
 	_, base, _ := startServer(t, cfg, files)
 	resp, raw := do(t, http.MethodGet, base+"/api/status", "")
 	var status struct {
-		OK           bool   `json:"ok"`
-		ThemeError   string `json:"theme_error"`
+		OK bool `json:"ok"`
+
 		FailurePhase string `json:"failure_phase"`
 		ErrorCode    string `json:"error_code"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK || status.OK || status.ErrorCode != "conformance_capacity_exceeded" || status.FailurePhase != "conformance" || status.ThemeError != "" {
+	if resp.StatusCode != http.StatusOK || status.OK || status.ErrorCode != "conformance_capacity_exceeded" || status.FailurePhase != "conformance" {
 		t.Fatalf("status=%d projection=%+v body-prefix=%q", resp.StatusCode, status, string(raw[:min(len(raw), 512)]))
 	}
 }

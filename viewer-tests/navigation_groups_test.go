@@ -182,8 +182,8 @@ func TestActiveNavigationGroupsCanStayCollapsed(t *testing.T) {
 	})()`) {
 		t.Fatal("tracked project must render separate Modules and Tracks groups")
 	}
-	if !evalBool(t, ctx, `document.querySelectorAll('.system-nav-group')[0].open && document.querySelectorAll('.system-nav-group')[1].open`) {
-		t.Fatal("navigation groups must start expanded")
+	if !evalBool(t, ctx, `document.querySelectorAll('.system-nav-group')[0].open && !document.querySelectorAll('.system-nav-group')[1].open`) {
+		t.Fatal("Modules must start expanded and Tracks must start collapsed")
 	}
 	if !evalBool(t, ctx, `(function(){
 		var nav = document.getElementById('nav').getBoundingClientRect();
@@ -201,6 +201,13 @@ func TestActiveNavigationGroupsCanStayCollapsed(t *testing.T) {
 	})()`) {
 		t.Fatal("collapsing Modules must bring the Tracks header into the visible navigation area")
 	}
+
+	// Paper's Tracks disclosure starts closed. Activate its native summary by
+	// keyboard and prove both the disclosure and its reader preference changed;
+	// a selector that matched no rows would leave the assertions below false.
+	runCDP(t, ctx, chromedp.SendKeys(".system-nav-group:nth-child(2) > summary", "\n", chromedp.ByQuery))
+	pollTrue(t, ctx, `document.querySelectorAll('.system-nav-group')[1].open &&
+		document.querySelectorAll('.system-nav-group')[1].dataset.readerClosed === 'false'`)
 
 	// The first track owns the initially active module-01 claim, so it already
 	// has .on before any click. Use the second track: waiting for .on then proves

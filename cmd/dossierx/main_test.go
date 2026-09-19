@@ -288,7 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentySixLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
+// TestSurfaceIsTwentyFourLeavesUnderEightNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
@@ -316,16 +316,8 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // the corpus and no new way to change it, which is why the addition does not
 // touch any lifecycle guarantee the other nineteen make.
 //
-// THE FOURTH MOVE IS THE THEME NOUN, taking twenty-two-under-eight to
-// twenty-five-under-nine. It is the first noun whose subject is not the corpus:
-// `viewer.theme` had a twenty-eight-token vocabulary and built-in presets with
-// no way to see either from the CLI, so "which palettes ship?" and "what does
-// the claude preset actually set?" were questions answerable only by reading
-// FORMAT.md or this binary's source. `theme list` and `theme export` answer
-// them. Neither loads a project, neither reads claims_dir, and neither can fail
-// a gate; `theme export <preset> <path>` writes a file, and that file is inert
-// until a human points viewer.theme.extends at it. Same argument as track: a
-// way to LOOK, and no new way to change what the project treats as approved.
+// Custom viewer themes and their CLI noun were removed; the current surface
+// contains twenty-four leaves under eight nouns.
 //
 // THE FIFTH MOVE IS "build-order show", and it is a LEAF rather than a noun:
 // twenty-four-under-nine became twenty-five-under-nine, with the noun count
@@ -346,7 +338,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // narrow migration surface because the policy version and historical receipts
 // must remain visible and recoverable rather than being silently rewritten by
 // lock or unlock.
-func TestSurfaceIsTwentySixLeavesUnderNineNouns(t *testing.T) {
+func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -373,9 +365,6 @@ func TestSurfaceIsTwentySixLeavesUnderNineNouns(t *testing.T) {
 		"track list":   true,
 		"track show":   true,
 		"track status": true,
-
-		"theme list":   true,
-		"theme export": true,
 
 		"serve":         true,
 		"skills export": true,
@@ -425,8 +414,8 @@ func TestSurfaceIsTwentySixLeavesUnderNineNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 26 {
-		t.Errorf("the surface is 26 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 24 {
+		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -523,7 +512,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentySixLeavesUnderNineNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderEightNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

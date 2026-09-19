@@ -844,7 +844,6 @@ type statusDTO struct {
 	ConformanceCode  cliout.Code `json:"conformance_code,omitempty"`
 	CatalogError     string      `json:"catalog_error,omitempty"`
 	RenderError      string      `json:"render_error,omitempty"`
-	ThemeError       string      `json:"theme_error,omitempty"`
 	FailurePhase     string      `json:"failure_phase,omitempty"`
 	ErrorCode        cliout.Code `json:"error_code,omitempty"`
 }
@@ -903,8 +902,6 @@ func statusToDTO(res check.Result) statusDTO {
 		errorCode = cliout.CodeConformanceCapacityExceeded
 	case res.ConformanceError != "" || res.CatalogError != "" || res.RenderError != "":
 		errorCode = cliout.CodeWriteFailed
-	case res.ThemeError != "":
-		errorCode = cliout.CodeInvalidConfig
 	case len(ledger) > 0:
 		errorCode = cliout.CodeIntegrityFailed
 		if failurePhase == "" {
@@ -934,7 +931,6 @@ func statusToDTO(res check.Result) statusDTO {
 		ConformanceCode:            conformanceCode,
 		CatalogError:               res.CatalogError,
 		RenderError:                res.RenderError,
-		ThemeError:                 res.ThemeError,
 		FailurePhase:               failurePhase,
 		ErrorCode:                  errorCode,
 	}

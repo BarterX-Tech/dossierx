@@ -39,13 +39,13 @@ func sourcedClaim(sources ...model.Source) model.Claim {
 // 05 §4.11/R09.5: sources is its own peer door, <details class="claim-
 // sources">, split out of relationships, with its own chip — never a
 // segment of the relationships chip's text.
-func TestEdges_NoSourcesRendersItsOwnEmptyDoor(t *testing.T) {
+func TestEdges_NoSourcesRendersPlainTruthfulZeroState(t *testing.T) {
 	c := sourcedClaim()
 	c.RestsOn = []string{"widget.contract.other"}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
-	if !strings.Contains(got, `<details class="claim-sources" name="claim-footer-widget.contract.retry">`) {
-		t.Fatalf("expected a sources door even at zero sources, got: %s", got)
+	if strings.Contains(got, `<details class="claim-sources"`) {
+		t.Fatalf("zero sources must not render an empty disclosure, got: %s", got)
 	}
 	if want := `<span class="claim-footer-chip-label">No sources</span>`; !strings.Contains(got, want) {
 		t.Errorf("expected the zero-sources chip to read %q, got: %s", want, got)
@@ -56,18 +56,12 @@ func TestEdges_NoSourcesRendersItsOwnEmptyDoor(t *testing.T) {
 	if strings.Contains(got, "0 sources") {
 		t.Errorf("zero sources must read \"No sources\", never the numeral form: %s", got)
 	}
-	const summaryOpen = `<summary class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty">`
-	summaryStart := strings.Index(got, summaryOpen)
-	if summaryStart < 0 {
+	const emptyChip = `<span class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></span>`
+	if !strings.Contains(got, emptyChip) {
 		t.Fatalf("expected the zero-sources chip to carry the --empty modifier, got: %s", got)
 	}
-	summaryEnd := strings.Index(got[summaryStart:], "</summary>")
-	if summaryEnd < 0 {
-		t.Fatalf("the zero-sources summary never closes, got: %s", got)
-	}
-	summary := got[summaryStart : summaryStart+summaryEnd]
-	if strings.Contains(summary, "claim-footer__chevron") {
-		t.Errorf("the zero-sources chip must be chevron-less, got summary: %s", summary)
+	if strings.Contains(got, `claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span><svg`) {
+		t.Errorf("the zero-sources chip must be chevron-less, got: %s", got)
 	}
 	if want := `<span class="claim-footer-chip-label">1 relationship</span>`; !strings.Contains(got, want) {
 		t.Errorf("expected the untouched relationships chip %q, got: %s", want, got)
@@ -88,11 +82,8 @@ func TestEdges_SourcesOpenTheFooterAlone(t *testing.T) {
 	if want := `<span class="claim-footer-chip-label">1 source</span>`; !strings.Contains(got, want) {
 		t.Fatalf("expected the sources chip %q, got: %s", want, got)
 	}
-	// The relationships door still opens (links=0 here), since this claim
-	// has no relationships at all — it renders with a 0 chip per 05 §8 item
-	// 5's "a chip with a count of zero still renders".
-	if want := `<span class="claim-footer-chip-label">0 relationships</span>`; !strings.Contains(got, want) {
-		t.Fatalf("expected the relationships chip to still render at zero, got: %s", got)
+	if want := `<span class="claim-footer-chip-label">No relationships</span>`; !strings.Contains(got, want) {
+		t.Fatalf("expected the truthful plain zero-relationships state, got: %s", got)
 	}
 }
 
@@ -106,6 +97,9 @@ func TestEdges_SourceCountIsPluralisedAndOrdered(t *testing.T) {
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 	if want := `<span class="claim-footer-chip-label">2 sources</span>`; !strings.Contains(got, want) {
 		t.Fatalf("expected %q, got: %s", want, got)
+	}
+	if want := `<svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg>`; !strings.Contains(got, want) {
+		t.Fatalf("populated footer doors must use the Paper 12x12 SVG chevron, got: %s", got)
 	}
 }
 
@@ -256,11 +250,11 @@ func TestEdges_SourceNoteShipsWholeWithAHiddenControl(t *testing.T) {
 	if n := strings.Count(got, `<button class="claim-source-note-toggle"`); n != 2 {
 		t.Fatalf("note controls = %d, want one per authored note: %s", n, got)
 	}
-	if n := strings.Count(got, `aria-expanded="false"`); n != 2 {
-		t.Errorf("controls not shipped collapsed: %s", got)
+	if n := strings.Count(got, `class="claim-source-note-toggle" type="button" aria-expanded="false"`); n != 2 {
+		t.Errorf("source-note controls not shipped collapsed: %s", got)
 	}
-	if n := strings.Count(got, ` hidden>`); n != 2 {
-		t.Errorf("controls not shipped hidden — a page with no script would truncate: %s", got)
+	if n := strings.Count(got, `data-collapse-label="show less" hidden>show more</button>`); n != 2 {
+		t.Errorf("source-note controls not shipped hidden — a page with no script would truncate: %s", got)
 	}
 	if !strings.Contains(got, `data-collapse-label="show less"`) || !strings.Contains(got, `>show more</button>`) {
 		t.Errorf("expected both labels written by this package: %s", got)

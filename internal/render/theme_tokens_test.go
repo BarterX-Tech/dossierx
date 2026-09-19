@@ -1,7 +1,7 @@
 package render
 
-// Structural invariants of the two embedded stylesheets, and the link between
-// them and internal/config's ThemeTokenAllowlist.
+// Structural invariants of the two embedded stylesheets and their built-in
+// token vocabulary. These tokens are internal, not project configuration.
 //
 // These are invariants about how the source produces the output, which is the
 // half a rendered-output check cannot cover: a token that no rule reads renders
@@ -13,7 +13,7 @@ package render
 // file loads the CSS into an engine. It cannot tell you that a rule wins the
 // cascade, only that the declaration exists and that the file's block
 // structure is what the theme mechanism assumes. Cascade outcomes are the
-// browser parity suite's job (viewer-tests/theme_parity_test.go).
+// browser reader-mode tests' job (viewer-tests/theme_modes_test.go).
 
 import (
 	"fmt"
@@ -21,8 +21,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/BarterX-Tech/dossierx/internal/config"
 )
 
 // embeddedCSS reads one template file through the package's own embed.FS and
@@ -88,19 +86,21 @@ func jsConsumerPattern(token string) string { return "'--" + token + "'" }
 // name seven of them ('--accent', '--faint', '--ink', '--link', '--muted',
 // '--paper', '--warn') for the graph pane's palette read, so the arm is live
 // code rather than dead machinery — but no token depends on it.
+var builtinViewerTokens = []string{"accent", "accent-bg", "ink", "muted", "faint", "paper", "card-bg", "border", "link", "warn", "warn-bg", "font-sans", "font-mono", "radius", "code-inline-bg", "code-bg", "table-head-bg", "image-bg", "hover-bg", "border-strong", "shadow", "shadow-strong", "shadow-cast", "scrim", "selection-bg", "status-draft", "status-draft-bg", "mockup-bg"}
+
 func TestEveryAllowlistedTokenHasAConsumer(t *testing.T) {
 	style := embeddedCSS(t, styleTemplatePath)
 	graph := embeddedCSS(t, graphCSSTemplatePath)
 	js := embeddedCSS(t, graphUITemplatePath)
 	css := style + "\n" + graph
 
-	if got, want := len(config.ThemeTokenAllowlist), 28; got != want {
-		t.Errorf("len(config.ThemeTokenAllowlist) = %d, want %d; "+
+	if got, want := len(builtinViewerTokens), 28; got != want {
+		t.Errorf("len(builtinViewerTokens) = %d, want %d; "+
 			"the allowlist and this file's coverage are meant to move together, "+
 			"so update both deliberately", got, want)
 	}
 
-	for _, token := range config.ThemeTokenAllowlist {
+	for _, token := range builtinViewerTokens {
 		inCSS := consumerPattern(token).MatchString(css)
 		inJS := strings.Contains(js, jsConsumerPattern(token))
 		if !inCSS && !inJS {
@@ -115,7 +115,7 @@ func TestEveryAllowlistedTokenHasAConsumer(t *testing.T) {
 		// This is what licenses the comment above. If a token ever legitimately
 		// moves to JS-only, this subtest is the one to change, and changing it
 		// is the moment to re-read that comment.
-		for _, token := range config.ThemeTokenAllowlist {
+		for _, token := range builtinViewerTokens {
 			if !consumerPattern(token).MatchString(css) {
 				t.Errorf("token %q is not read by any CSS rule; it is JS-only, "+
 					"which is allowed but is no longer what the doc comment on "+
@@ -356,10 +356,9 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 	})
 
 	t.Run("RadiusConsumerCountIsPinned", func(t *testing.T) {
-		// Pinned rather than bounded: --radius is the one length token, and the
-		// surfaces that honour it (the code block, the comment panel and the
-		// comment chip) are a deliberate set. A new consumer changes what
-		// `radius: 10px` does to an existing project's viewer.
+		// Pinned rather than bounded: --radius is one of the built-in reader
+		// lengths, and its consumers are deliberate. A new consumer changes the
+		// shared System/Light/Dark geometry.
 		//
 		// The claim card (.card, .claim-tree) dropped out of this set in L3's
 		// pass (docs/design/screens/07a-claim-draft-not-yet-approved.md open
@@ -367,10 +366,8 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// the engine's --radius default and Paper's own 4/8/999 scale, and rules
 		// "carry 12px as a per-component literal ... do not widen --radius and
 		// do not add a token." tokens.md's Open decisions repeats this as a
-		// general rule for every off-scale radius on the boards. A project's
-		// `radius` theme setting still reaches the code block, the comment
-		// panel and the comment chip; the claim card's corner is no longer one
-		// of them, by design.
+		// general rule for every off-scale radius on the boards. Custom viewer
+		// themes are retired; this count now guards only the built-in modes.
 		// Re-pinned 9 -> 10 by lane L2 (third and final retry, verifier fix
 		// item 7): 02 §4.4 gives the sidebar/System-Record module row
 		// (#dxgOpen, .sec-tab) radius 6px, exactly --radius's value, where
@@ -405,8 +402,8 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// one occurrence was left for the merge to remove. -2 is true of the
 		// lane's own base, not of this file.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 5 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 5", n)
+		if n != 4 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 4", n)
 		}
 	})
 }
@@ -889,7 +886,6 @@ var tokenConsumers = map[string][]consumerSite{
 		{".system-nav-group__toggle:hover", "background"},
 		{"#dxgOpen:hover, .sec-tab:hover", "background"},
 		{".facet-toc__item:hover", "background"},
-		{".claim-collapse-toggle:hover", "background"},
 	},
 	"border-strong": {
 		{".system-record-head", "border-bottom"},
@@ -944,7 +940,7 @@ func TestConsumerReadWinsCascade(t *testing.T) {
 	}
 	for token := range tokenConsumers {
 		found := false
-		for _, allowed := range config.ThemeTokenAllowlist {
+		for _, allowed := range builtinViewerTokens {
 			if allowed == token {
 				found = true
 				break

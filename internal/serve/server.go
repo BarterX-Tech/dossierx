@@ -58,8 +58,7 @@ const (
 	// cspValue is the Content-Security-Policy sent with GET /. default-src
 	// 'none' denies everything not explicitly re-allowed; style-src/script-src
 	// 'unsafe-inline' are required because the viewer ships everything inline
-	// and nothing external, ever: three <style> blocks (graph.css, style.css,
-	// the project theme override), a <script type="application/json"> graph
+	// and nothing external, ever: inline graph and viewer styles, a <script type="application/json"> graph
 	// payload, the viewer IIFE, and graph-core.js / graph-ui.js. connect-src
 	// 'self' lets the same-origin /api/* endpoints be reached while blocking
 	// the exfiltration half of any injected script — load-bearing now for two
@@ -79,19 +78,8 @@ const (
 	// The rest of the policy is unchanged; in particular the comment above
 	// about "no external assets, ever" still holds, because 'self' is not
 	// external.
-	// font-src data: IS THE THEME ADDITION, and like img-src the exact token
-	// is the argument. A project theme inlines its own font faces as
-	// base64 data: URLs inside the same <style> block the tokens live in
-	// (internal/render's themeOverrideCSS), so with default-src 'none' and no
-	// font-src at all every one of them is blocked and the viewer silently
-	// falls back to a system face — the feature not working, with nothing but
-	// a console entry to say so. data: is the narrowest re-allowance that
-	// makes it work: it permits exactly the bytes already in the document and
-	// no host, so it opens no outbound channel, which is the property
-	// connect-src 'self' and img-src 'self' were chosen for. In particular it
-	// is NOT 'self' and NOT https:, either of which would let an injected
-	// @font-face fetch from somewhere. The "no external assets, ever" comment
-	// above still holds: a data: URL is not external.
+	// Built-in viewer fonts are inlined as data: URLs. font-src data: permits
+	// those bundled faces without allowing outbound font requests.
 	//
 	// assetCSPValue (claim_assets.go) is unaffected. That policy governs image
 	// RESPONSES, which are never documents and load no fonts; it stays
@@ -110,13 +98,6 @@ const (
 type Server struct {
 	cfg     *config.Config
 	version string
-
-	// theme is the project's viewer theme, resolved ONCE in New and reused by
-	// every rebuild; themeErr is New's resolve failure, held rather than
-	// returned (New has no error) and turned into the render error page by
-	// renderViewer. See New for why re-resolving per rebuild is wrong.
-	theme    *config.ResolvedTheme
-	themeErr error
 
 	// pipe serializes viewer renders (single-flight); see pipeline.go.
 	pipe *pipeline
@@ -195,19 +176,8 @@ type Server struct {
 // mount); the caller resolves it (cmd/dossierx passes resolveVersionInfo's
 // value). New does not bind a port — call Listen next.
 func New(cfg *config.Config, version string) *Server {
-	// The theme is resolved ONCE, here, and every rebuild for the life of
-	// this process emits the result. A long-running server that re-read the
-	// theme file and its fonts on each rebuild would be reading them while
-	// an editor is halfway through writing one, and would answer two requests
-	// a second apart with two different viewers for a project whose config
-	// never changed. Changing a theme means restarting serve, which is
-	// documented; a resolve failure is held and surfaced by renderViewer as
-	// the error page, rather than making the server refuse to start with a
-	// message nobody is looking at a terminal to read.
-	rt, themeErr := config.ResolveTheme(cfg, os.ReadFile)
 	s := &Server{
-		theme:            rt,
-		themeErr:         themeErr,
+
 		cfg:              cfg,
 		version:          version,
 		hub:              newHub(),
@@ -465,14 +435,11 @@ func (s *Server) renderViewer() ([]byte, error) {
 		return nil, fmt.Errorf("serve: conformance: %w", err)
 	}
 	cat.SetConformance(report)
-	if s.themeErr != nil {
-		return nil, fmt.Errorf("serve: theme: %w", s.themeErr)
-	}
 	var html string
 	if report != nil {
-		html, err = render.RenderWithThemeBounded(cat, s.cfg, s.theme, conformance.MaxOutputBytes)
+		html, err = render.RenderBounded(cat, s.cfg, conformance.MaxOutputBytes)
 	} else {
-		html, err = render.RenderWithTheme(cat, s.cfg, s.theme)
+		html, err = render.Render(cat, s.cfg)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("serve: render: %w", err)

@@ -112,6 +112,8 @@
   --shadow-cast: rgba(9, 20, 38, .12);
   --scrim: rgba(0, 0, 0, .22);
   --selection-bg: rgba(28, 78, 140, .20);
+  --nav-selection-bg: rgb(28 78 140 / 9%);
+  --status-strip-bg: rgb(158 59 54 / 6%);
   --status-draft: #9A6A16;
   --status-draft-bg: rgb(154 106 22 / 11%);
   --mockup-bg: #fff;
@@ -123,6 +125,11 @@
      this layer is not making. A project cannot set any of the properties
      below, and nothing validates them, because nothing reads them from
      config. */
+
+  /* A completed lock metric is a product-status confirmation, not a project
+     brand accent. Keep it outside ThemeTokenAllowlist so a Curtainly theme
+     cannot repaint an all-locked result terra-cotta or another brand colour. */
+  --locked-confirmation: #2C6B52;
 
   /* The serif family. docs/design/tokens.md §7 gives the three families a
      role each: sans is what the INTERFACE says, serif is what a HUMAN wrote
@@ -277,6 +284,9 @@
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
+    --locked-confirmation: #63BE9A;
+    --nav-selection-bg: rgb(106 166 232 / 14%);
+    --status-strip-bg: rgb(236 138 131 / 10%);
     /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's 1px top hairline exists
        on dark ONLY. The :root default is `transparent`, so the sheet's
        unconditional border-top paints nothing until this block runs. */
@@ -353,6 +363,9 @@
        token set and values to match the :root's byte-for-byte. */
     --blocked-surface: color-mix(in srgb, var(--warn) 3%, var(--card-bg));
     --blocked-hairline: color-mix(in srgb, var(--warn) 20%, var(--card-bg));
+    --locked-confirmation: #2C6B52;
+    --nav-selection-bg: rgb(28 78 140 / 9%);
+    --status-strip-bg: rgb(158 59 54 / 6%);
     /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's top hairline is a DARK-only
        edge, so explicit Light puts it back to nothing. */
     --sheet-hairline: transparent;
@@ -388,6 +401,9 @@
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
+    --locked-confirmation: #63BE9A;
+    --nav-selection-bg: rgb(106 166 232 / 14%);
+    --status-strip-bg: rgb(236 138 131 / 10%);
     /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's 1px top hairline exists
        on dark ONLY. The :root default is `transparent`, so the sheet's
        unconditional border-top paints nothing until this block runs. */
@@ -429,7 +445,6 @@ button {
 }
 
 .theme-control button,
-.facet-claims-toggle,
 .nav-toggle {
   display: inline-flex;
   align-items: center;
@@ -1229,11 +1244,11 @@ th {
 }
 
 .claim-footer-chip--readiness.claim-footer-chip--blocked .claim-footer__chevron {
-  border-color: var(--warn);
+  color: var(--warn);
 }
 
 .claim-readiness-door[open] .claim-footer__chevron {
-  transform: rotate(225deg) translate(-2px, -2px);
+  transform: rotate(180deg);
 }
 
 /* .claim-readiness is the panel — components.EdgesHTMLWithLinks's own
@@ -3589,13 +3604,13 @@ button.comment-chip--active.comment-chip--empty {
 
 .status-strip--lint {
   border-color: color-mix(in srgb, var(--warn) 36%, var(--border));
-  background: color-mix(in srgb, var(--warn-bg) 34%, var(--card-bg));
+  background: var(--status-strip-bg);
 }
 
 .status-strip--integrity {
-  border-color: color-mix(in srgb, var(--warn) 48%, var(--border));
-  background: color-mix(in srgb, var(--warn-bg) 58%, var(--card-bg));
-  box-shadow: inset 0 2px 0 var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 36%, var(--border));
+  background: var(--status-strip-bg);
+  box-shadow: none;
 }
 
 /* retry fix 20: 02 §4.10 "Padding / gap" and 03 §4.5 measure the desktop
@@ -3690,17 +3705,6 @@ button.comment-chip--active.comment-chip--empty {
 
 .status-strip-action-chevron {
   display: none;
-}
-
-.status-strip-caret {
-  width: 14px;
-  height: 14px;
-  color: var(--muted);
-  transition: transform .15s ease;
-}
-
-.status-strip--open .status-strip-caret {
-  transform: rotate(180deg);
 }
 
 /* The detail list is capped and scrolls internally: a project with forty lint
@@ -4088,7 +4092,7 @@ button.comment-chip--active.comment-chip--empty {
   .comment-composer-submit,
   .comment-composer-input,
   .status-strip-head,
-  .claim-collapse-toggle {
+  .claim-body-disclosure__toggle {
     min-height: 44px;
   }
 
@@ -4233,7 +4237,7 @@ button.comment-chip--active.comment-chip--empty {
     box-sizing: border-box;
   }
   .status-strip-head,
-  .claim-collapse-toggle {
+  .claim-body-disclosure__toggle {
     min-height: 44px;
   }
   .status-strip-head {
@@ -4249,11 +4253,6 @@ button.comment-chip--active.comment-chip--empty {
     grid-column: 1;
     grid-row: 2;
     justify-self: start;
-  }
-  .status-strip-caret {
-    grid-column: 2;
-    grid-row: 1;
-    margin-top: 4px;
   }
 }
 
@@ -4709,12 +4708,11 @@ body.shell-body {
 
 /* Freshness (reference-rules.md §10 / 02-reading-view-default.md §4.17):
    elapsed time computed client-side by system-record.js's enhanceTimestamp
-   from data-generated-at, never a baked-in timestamp (R10.1/R10.4); the
-   phrase becomes "Live" outright under `dossierx serve` (R10.5, read off
-   the reachability probe's own body.comments-live signal). Fresh and
-   Ageing (< 24h, 1-7d) share one neutral presentation; Stale (> 7d) is the
-   only band that takes colour (R10.2), via the --stale modifier
-   enhanceTimestamp toggles. */
+   from data-generated-at, never a baked-in timestamp (R10.1/R10.4). Under
+   `dossierx serve`, a compact Live badge joins the elapsed phrase without
+   replacing it or hiding the Paper caption. Fresh and Ageing (< 24h, 1-7d)
+   share one neutral presentation; Stale (> 7d) is the only band that takes
+   colour (R10.2), via the --stale modifier enhanceTimestamp toggles. */
 /* Third and final retry attempt: 02 §3/§4.17 (node 1EZ-0 inside the facet
    panel 8P-0) and reference-rules.md R10.1 ("the right-rail footer") place
    this block in the RIGHT facet panel, not the left sidebar. It moved —
@@ -4728,7 +4726,7 @@ body.shell-body {
   flex-direction: column;
   gap: 5px;
   margin-top: auto;
-  padding: 14px 8px 20px;
+  padding: 14px 20px 20px 4px;
   border-top: 1px solid var(--border);
 }
 
@@ -4853,13 +4851,9 @@ body.shell-body {
   display: contents;
 }
 
-/* section-heading is an in-content break inside .content-area, injected by
-   render.newGroup ahead of the first claim of each run of consecutive,
-   same-Section claims (model.Claim.Section) — a close visual cousin of the
-   per-card .lbl field label above, but sized and spaced to read as a
-   document-level section break across many cards rather than a caption
-   inside one. */
-.section-heading {
+/* Tracks retain a label before their cited-claim appendix. Reading View no
+   longer repeats model.Claim.Section as headings between claim cards. */
+.cited-claims-heading {
   margin: 1.75rem 0 0.75rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
@@ -4871,14 +4865,11 @@ body.shell-body {
   color: var(--faint);
 }
 
-/* Only the claim-group's first heading (or the first heading inside a
-   soft-mount host that is itself the claim-group's first child) drops the
-   leading rule. A bare .section-heading:first-child would also match a
-   heading that is merely first inside the host while a facet control sits
-   above the host — that wrongly removed the rule and shortened the page. */
-.claim-group > .section-heading:first-child,
-.claim-group > .claim-group-host:first-child > .section-heading:first-child,
-.claim-group > [data-dossierx-surface-host]:first-child > .section-heading:first-child {
+/* Only a cited-claim appendix label at the start of a track drops the
+   leading rule. */
+.claim-group > .cited-claims-heading:first-child,
+.claim-group > .claim-group-host:first-child > .cited-claims-heading:first-child,
+.claim-group > [data-dossierx-surface-host]:first-child > .cited-claims-heading:first-child {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
@@ -5128,45 +5119,12 @@ body.shell-body {
 .layout { align-items: stretch; }
 
 .sidebar {
-  width: var(--system-record-sidebar-width, 270px);
+  width: 268px;
   min-width: 220px;
   max-width: 420px;
   background: var(--card-bg);
   border-right-color: var(--border);
 }
-
-.system-sidebar-resizer {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  right: 0;
-  width: 8px;
-  height: 100%;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.system-sidebar-resizer::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 1px;
-  width: 3px;
-  height: 64px;
-  border-radius: 99px;
-  background: var(--border);
-  transform: translateY(-50%);
-  transition: background-color .15s ease;
-}
-
-.system-sidebar-resizer:hover::after,
-.system-sidebar-resizer:focus-visible::after,
-.system-resizing .system-sidebar-resizer::after {
-  background: var(--accent);
-}
-
-.system-sidebar-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.system-resizing { cursor: col-resize; user-select: none; }
 
 .sidebar-header {
   position: relative;
@@ -5247,9 +5205,11 @@ body.shell-body {
 }
 
 .eyebrow {
-  max-width: 160px;
+  width: 100%;
+  max-width: none;
   margin-top: 3px;
   color: var(--faint);
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 16px;
   font-weight: 400;
@@ -5327,12 +5287,17 @@ body.shell-body {
 }
 
 .claim-footer__chevron {
+  display: block;
   width: 12px;
   height: 12px;
-  border-right: 2px solid var(--faint);
-  border-bottom: 2px solid var(--faint);
-  transform: rotate(45deg) translate(-2px, -2px);
-  transition: transform .16s ease, border-color .16s ease;
+  flex: 0 0 12px;
+  color: var(--faint);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .16s ease, color .16s ease;
 }
 
 .system-nav-group__toggle[aria-expanded="true"] .system-nav-group__chevron,
@@ -5342,8 +5307,8 @@ body.shell-body {
 
 .claim-links[open] .claim-footer__chevron,
 .claim-sources[open] .claim-footer__chevron {
-  border-color: var(--link);
-  transform: rotate(225deg) translate(-2px, -2px);
+  color: var(--link);
+  transform: rotate(180deg);
 }
 
 .system-nav-group__body {
@@ -5357,12 +5322,14 @@ body.shell-body {
 .sec-tab {
   display: flex;
   align-items: center;
+  height: 32px;
   min-height: 32px;
   margin: 1px 0;
   padding: 7px 10px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 6px;
   color: var(--muted);
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 18px;
 }
@@ -5387,6 +5354,18 @@ body.shell-body {
   text-align: right;
 }
 
+.system-nav-group__body .sec-tab .dx-icon--lock {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  margin-left: auto;
+  color: var(--locked-confirmation);
+}
+
+.system-nav-group__body .sec-tab .dx-icon--lock + .sec-tab__count {
+  margin-left: 6px;
+}
+
 /* docs/design/tokens.md §Open decisions / 02-reading-view-default.md §9.11:
    navigation is --color-accent (the engine's --link, navy), never
    --accent-bg (the engine's LOCKED green) — --accent-bg here would say
@@ -5395,8 +5374,8 @@ body.shell-body {
    here — see the comment on .facet-toc__item.on below for why the dark
    figure cannot be a separate rule in this engine today. */
 .sec-tab.on {
-  background: color-mix(in srgb, var(--link) 9%, transparent);
-  box-shadow: inset 2px 0 0 var(--link);
+  background: var(--nav-selection-bg);
+  box-shadow: none;
   color: var(--link);
   font-weight: 600;
 }
@@ -5411,21 +5390,6 @@ body.shell-body {
   color: var(--faint);
   font-size: 9px;
   letter-spacing: .12em;
-}
-
-#expandAllToggle {
-  min-height: 38px;
-  margin: 0 12px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font: 650 10px var(--font-mono);
-}
-
-#expandAllToggle:hover {
-  border-color: var(--accent);
-  color: var(--ink);
 }
 
 .sidebar-footer {
@@ -5537,6 +5501,10 @@ body.shell-body {
      confirmation of the "N of M locked" phrase, so it takes the same
      status colour the numeral's approval state does — never --link. */
   background: var(--accent);
+}
+
+.system-record-head__metric[data-all-locked="true"] .system-record-head__bar-fill {
+  background: var(--locked-confirmation);
 }
 
 /* ---- the one Focus control (reference-rules.md §11, R11.1) --------------
@@ -5876,12 +5844,12 @@ body.shell-body {
   flex-direction: column;
   position: fixed;
   z-index: 9;
-  top: 28px;
-  right: 18px;
-  width: 236px;
-  height: calc(100vh - 56px);
-  max-height: calc(100vh - 56px);
-  border-left: 1px solid var(--border);
+  top: 36px;
+  right: 0;
+  width: 244px;
+  height: calc(100vh - 36px);
+  max-height: calc(100vh - 36px);
+  border-left: 0;
   background: var(--paper);
   color: var(--muted);
   transition: width 180ms ease-out;
@@ -5906,24 +5874,24 @@ body.shell-body {
 .facet-toc__head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 4px 12px 15px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 20px 10px 4px;
+  border-bottom: 0;
   color: var(--ink);
 }
 
 .facet-toc__head small {
   display: block;
-  margin-bottom: 3px;
+  margin-bottom: 0;
   color: var(--faint);
   font: 600 11px/14px var(--font-sans);
   letter-spacing: .09em;
   text-transform: uppercase;
 }
 
-.facet-toc__head strong { font-size: 13px; }
+.facet-toc__mobile-identity { display: none; }
 
 .facet-toc__toggle::marker { content: ""; }
 .facet-toc__toggle::-webkit-details-marker { display: none; }
@@ -5941,9 +5909,10 @@ body.shell-body {
 .facet-toc__total { color: var(--faint); font: 9px/1.2 var(--font-mono); white-space: nowrap; }
 
 .facet-toc__list {
-  max-height: calc(100vh - 112px);
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
-  padding: 8px 0 20px;
+  padding: 0 20px 20px 4px;
   scrollbar-width: thin;
 }
 
@@ -5951,19 +5920,26 @@ body.shell-body {
 
 .facet-toc__item {
   display: grid;
-  grid-template-columns: 25px minmax(0, 1fr);
-  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  gap: 8px;
+  align-items: start;
   width: 100%;
-  padding: 6px 8px 6px 14px;
+  padding: 7px 8px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   text-align: left;
   cursor: pointer;
 }
 
-.facet-toc__item > span { color: var(--faint); font: 9px/1.45 var(--font-mono); }
-.facet-toc__item > strong { font-size: 11px; font-weight: 520; line-height: 1.38; }
+.facet-toc__item > strong { font: 500 13px/19px var(--font-sans); }
+.facet-toc__blocker-count {
+  width: 22px;
+  color: var(--faint);
+  font: 11px/19px var(--font-mono);
+  text-align: right;
+}
 .facet-toc__item:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); color: var(--ink); }
 /* Same navigation-tint correction as .sec-tab.on above (tokens.md §Open
    decisions, 02 §9.11): --link, not the LOCKED-green --accent-bg. The
@@ -5977,49 +5953,12 @@ body.shell-body {
    offers. Flagged in learnings/inbox/L2.md as a dependency: either a
    coordinator-landed twin or accepting one flat percentage in both
    modes, which is what ships today. */
-.facet-toc__item.on { background: color-mix(in srgb, var(--link) 9%, transparent); box-shadow: inset 2px 0 0 var(--link); color: var(--ink); }
-.facet-toc__item.on > span { color: var(--link); }
-
-.facet-claim-controls {
-  display: flex;
-  justify-content: flex-end;
-  margin: 0 0 12px;
-}
-
-.facet-claims-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--card-bg);
-  color: var(--muted);
-  font: 650 10px/1.2 var(--font-mono);
-  cursor: pointer;
-}
-
-.facet-claims-toggle:hover {
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
-  color: var(--ink);
-}
-
-.facet-claims-toggle:disabled { cursor: default; opacity: .5; }
-
-.facet-claims-toggle__icon {
-  width: 14px;
-  height: 14px;
-  transition: transform 150ms ease-out;
-}
-
-.facet-claims-toggle[aria-pressed="true"] .facet-claims-toggle__icon {
-  transform: rotate(180deg);
-}
+.facet-toc__item.on { background: color-mix(in srgb, var(--link) 9%, transparent); color: var(--ink); }
+.facet-toc__item.on > .facet-toc__blocker-count { color: var(--link); }
 
 .claim { scroll-margin-top: 72px; }
 
-.section-heading {
+.cited-claims-heading {
   margin: 34px 0 12px;
   padding-top: 20px;
   border-top-color: var(--border);
@@ -6028,7 +5967,7 @@ body.shell-body {
   letter-spacing: .105em;
 }
 
-.section-heading:first-child { margin-top: 0; }
+.cited-claims-heading:first-child { margin-top: 0; }
 
 /* The claim card's radius is a per-component literal, not --radius: 12px is
    off the engine's radius token and off Paper's own 4/8/999 scale, and
@@ -6122,8 +6061,7 @@ body.shell-body {
    overrides display back to a plain column flex — grid-column/grid-row/
    justify-self on the chip and the title/id below are simply inert there,
    never reset, since a non-grid parent already ignores them. */
-.k > .label,
-.claim-collapse-toggle > .label {
+.k > .label {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: start;
@@ -6145,8 +6083,7 @@ body.shell-body {
    .label comment above. Scoped under .label rather than added to the bare
    .pill rule, which every non-head pill (edges footer, mobile chips, the
    conformance heads) also matches and must not be grid-placed. */
-.k > .label > .pill,
-.claim-collapse-toggle > .label > .pill {
+.k > .label > .pill {
   grid-column: 2;
   grid-row: 1;
   justify-self: end;
@@ -6163,30 +6100,6 @@ body.shell-body {
   overflow-wrap: anywhere;
 }
 
-.claim-collapse-toggle {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  width: 100%;
-  margin: -6px 0 -6px -7px;
-  padding: 6px 32px 6px 7px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.k:has(> .claim-comments-slot:not([hidden])) .claim-collapse-toggle {
-  padding-inline-end: 88px;
-}
-
 .k > .claim-comments-slot:not([hidden]) {
   position: absolute;
   z-index: 1;
@@ -6195,38 +6108,6 @@ body.shell-body {
   margin: 0;
   transform: translateY(-50%);
 }
-
-.claim-collapse-toggle:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); }
-
-/* Only the toggle-specific sizing lives here — display/wrap/gap/alignment for
-   .label are declared once, above, on the combined ".k > .label,
-   .claim-collapse-toggle > .label" selector, so the two parents can never
-   drift into two different arrangements of the same three children. */
-.claim-collapse-toggle > .label {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.claim-collapse-chevron {
-  position: absolute;
-  top: 50%;
-  inset-inline-end: 8px;
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  margin: -8px 0 0;
-  color: var(--faint);
-  transform: rotate(90deg);
-  transition: transform 150ms ease-out;
-}
-
-.claim--collapsed .claim-collapse-chevron {
-  transform: none;
-}
-
-.claim--collapsed > .k { margin-bottom: 0; }
-.claim-collapse-content[hidden] { display: none; }
 
 /* Status chip family — docs/design/screens/07-claim-boundary-no-embodiment.md
    §4.5 and reference-rules.md R-H.2, measured on the LOCKED chip and shared by
@@ -6307,6 +6188,54 @@ body.shell-body {
    block below (M5). */
 .claim-body { width: 100%; max-width: 760px; margin: 0; font-size: 17px; line-height: 28px; }
 .claim-body p { margin: .8em 0; }
+
+.claim-body-disclosure {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+}
+
+.claim-body-disclosure > .claim-body { max-width: none; }
+
+.claim-body-disclosure--collapsed > .claim-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.claim-body-disclosure__toggle {
+  position: absolute;
+  inset-inline-end: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 0 0 28px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--card-bg) 24px);
+  color: var(--link);
+  font: 500 14px/28px var(--font-sans);
+  cursor: pointer;
+}
+
+.claim-body-disclosure__toggle[hidden] { display: none; }
+
+.claim-body-disclosure__toggle:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.claim-body-disclosure__toggle:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.claim-body-disclosure--expanded > .claim-body-disclosure__toggle {
+  position: static;
+  margin-top: 7px;
+  padding: 0;
+  background: transparent;
+}
 
 .claim-body strong,
 .sbody strong { font-weight: 700; }
@@ -7309,7 +7238,7 @@ code {
     top: auto;
     bottom: 16px;
     right: 12px;
-    width: min(260px, calc(100vw - var(--system-record-sidebar-width, 270px) - 58px));
+    width: min(260px, calc(100vw - 326px));
     height: auto;
     max-height: calc(100dvh - 32px);
     border: 1px solid var(--border);
@@ -7362,7 +7291,6 @@ code {
   }
 
   .sidebar { width: min(310px, calc(100vw - 42px)); min-width: 0; max-width: none; }
-  .system-sidebar-resizer { display: none; }
 
   /* 02 §5 M1/M8 and §4.18 (node 4XR-0): the facet panel becomes a bottom
      sheet opened from an "On this facet" trigger at the right end of the
@@ -7581,8 +7509,7 @@ code {
      two-column/two-row chip lane, above) back to a single column — grid-
      column/grid-row/justify-self on .k-title/.pill/.k-id are simply inert
      on a flex parent, so they do not need to be reset here. */
-  .k > .label,
-  .claim-collapse-toggle > .label {
+  .k > .label {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -7599,8 +7526,7 @@ code {
      selector pair matches 20 elements, one per claim head rendered on that
      scroll page, and 0 footer/conformance pills — versus 1492 matches for
      the bare `.pill` selector on the same page. */
-  .k > .label > .pill,
-  .claim-collapse-toggle > .label > .pill {
+  .k > .label > .pill {
     order: -1;
     margin-bottom: 9px;
   }
@@ -7626,6 +7552,8 @@ code {
     font-size: 16px;
     line-height: 26px;
   }
+
+  .claim-body-disclosure { max-width: none; }
 }
 
 /* lane: L2 — shell-chrome. New phone-tier block per docs/design/LANES.md
@@ -7652,14 +7580,9 @@ code {
      "padding: 14px 16px" and the claim-controls row the same 16px inline
      inset, with content width 390 - 32 = 358px. Restore it on every
      .content-area child that is not the full-bleed card: the module head,
-     the facet claim-controls row, and render.newGroup's own in-content
-     .section-heading break (unowned by any lane per docs/design/LANES.md,
-     but flush at x=0 as a direct side effect of the rule above — fixed
-     here, in this lane's own appended block, rather than by editing
-     .section-heading's own rule at style.css:2935). */
+     and a track's cited-claim appendix label. */
   .system-record-head,
-  .facet-claim-controls,
-  .section-heading {
+  .cited-claims-heading {
     padding-inline: 16px;
   }
 
@@ -8723,7 +8646,18 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 #nav {
   display: flex;
   flex-direction: column;
-  padding: 0 12px 18px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.sidebar-nav-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .nav-search {
@@ -8751,7 +8685,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 .nav-search input::placeholder { color: var(--faint); opacity: 1; }
 
-.system-nav-groups { order: 1; margin-top: 0; }
+.system-nav-groups { margin-top: 0; }
 .system-nav-group {
   margin: 0 0 6px;
   border: 0;
@@ -8772,27 +8706,83 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   color: var(--faint);
 }
 .system-nav-group__body { padding: 0 0 5px; border-top: 0; }
-#dxgOpen { order: 2; margin-top: auto; }
-
 .sidebar-footer {
-  padding: 14px 20px 22px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--border);
   background: var(--paper);
 }
+
+.nav-utilities {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#dxgOpen.nav-utility,
+.nav-utility {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0;
+  gap: 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 14px/18px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-utility .dx-icon { width: 15px; height: 15px; }
+
+#dxgOpen.nav-utility:hover,
+.nav-utility:hover {
+  background: transparent;
+  color: var(--ink);
+}
+
+.nav-utility.sec-tab.on {
+  background: transparent;
+  box-shadow: none;
+  color: var(--link);
+}
+
 .theme-control {
   display: flex;
   flex-wrap: nowrap;
   gap: 0;
   margin: 0;
+  padding: 3px;
+  border-radius: 8px;
+  background: light-dark(#E3E7ED, #080B10);
 }
 .theme-control button {
+  flex: 1 1 0;
   justify-content: center;
-  min-height: 30px;
-  border-radius: 0;
-  border-right-width: 0;
-  padding: 4px 9px;
+  gap: 6px;
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 9px;
+  color: var(--muted);
+  font: 13px/16px var(--font-sans);
 }
-.theme-control button:first-child { border-radius: 6px 0 0 6px; }
-.theme-control button:last-child { border-right-width: 1px; border-radius: 0 6px 6px 0; }
+.theme-control button[aria-pressed="true"] {
+  border-color: transparent;
+  background: light-dark(var(--card-bg), var(--border));
+  color: var(--ink);
+  font-weight: 500;
+}
 
 /* Header, tabs, then action state: preserve the module title's reading
    rhythm while leaving the first corpus-driven section heading intact. */
@@ -8805,19 +8795,20 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     z-index: 41;
     inset: 0 0 auto;
     align-items: center;
-    height: 44px;
-    padding: 0 8px;
+    height: 52px;
+    padding: 0 16px;
+    gap: 12px;
     border-bottom: 1px solid var(--border);
     background: var(--paper);
     color: var(--ink);
   }
   .nav-toggle {
-    position: static;
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    min-width: 44px;
+    width: 20px;
+    min-width: 20px;
     min-height: 44px;
     padding: 0;
     border: 0;
@@ -8833,32 +8824,40 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font: 600 16px/22px var(--font-sans);
-    letter-spacing: -.01em;
+    color: var(--muted);
+    font: 500 14px/18px var(--font-sans);
+    letter-spacing: 0;
   }
-  .mobile-app-bar__search {
+  .mobile-app-bar__search,
+  .mobile-theme-toggle {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    min-width: 44px;
+    width: 19px;
+    min-width: 19px;
     min-height: 44px;
     padding: 0;
     border: 0;
     background: transparent;
     color: var(--muted);
   }
-  .mobile-theme-control { flex: 0 0 auto; }
-  .mobile-theme-control button {
-    min-width: 0;
-    min-height: 30px;
-    padding: 3px 6px;
-    font-size: 11px;
+  .nav-toggle::before,
+  .mobile-app-bar__search::before,
+  .mobile-theme-toggle::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
   }
-  .mobile-theme-control .dx-icon { width: 13px; height: 13px; }
-  .content-area { padding-top: 60px; }
+  .mobile-theme-toggle .dx-icon { width: 19px; height: 19px; }
+  .content-area { padding-top: 52px; }
 
   .sidebar {
+    z-index: 42;
     width: min(328px, calc(100vw - 42px));
     background: var(--paper);
   }
@@ -8882,12 +8881,22 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     color: var(--muted);
   }
   .nav-drawer-close .dx-icon { width: 20px; height: 20px; }
-  #nav { padding: 0 12px 12px; }
+  #nav { padding: 0; }
+  .sidebar-nav-scroll { padding: 0 12px; }
   .nav-search { margin: 0 8px 14px; }
   .system-nav-group__toggle { min-height: 36px; }
   .sec-tab { min-height: 44px; }
   .sidebar-footer { padding: 14px 20px 22px; }
-  .sidebar-footer .theme-control button { min-height: 36px; }
+  #dxgOpen.nav-utility,
+  .nav-utility {
+    height: 40px;
+    min-height: 40px;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 20px;
+  }
+  .nav-utility .dx-icon { width: 16px; height: 16px; }
+  .sidebar-footer .theme-control button { height: 32px; min-height: 32px; }
 
   .facet-toc {
     z-index: 40;
@@ -8913,6 +8922,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     padding: 14px 16px 12px;
   }
   .facet-toc__identity small { display: none; }
+  .facet-toc__mobile-identity { display: flex; align-items: center; gap: 8px; }
   .facet-toc__name { font-size: 16px; line-height: 22px; }
   .facet-toc__total { margin-left: auto; font: 12px/16px var(--font-mono); }
   .facet-toc__close {
@@ -8936,10 +8946,116 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 
 @media (pointer: coarse) {
-  .nav-toggle,
-  .mobile-app-bar__search,
   .nav-drawer-close,
   .facet-toc__close { min-width: 44px; min-height: 44px; }
+}
+
+/* Group 02 reading canvas — geometry taken from the current Paper boards.
+   The facet owns the boundary; each adjacent claim is a section within it. */
+.reading-canvas {
+  width: 100%;
+  max-width: 760px;
+  border: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+  overflow: clip;
+  background: var(--card-bg);
+}
+.module-section:has(> .reading-canvas) > .system-record-head {
+  max-width: 760px;
+  margin: 0 0 20px;
+  padding: 36px 0 0;
+  border: 0;
+}
+.module-section:has(> .reading-canvas) > .sub-nav {
+  max-width: 760px;
+  margin: 0 0 24px;
+}
+.reading-canvas .claim {
+  --card-gutter: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 30px 32px 28px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.reading-canvas > .claim:nth-child(1 of .claim),
+.reading-canvas > .claim-group-host > .claim:nth-child(1 of .claim) {
+  padding-top: 34px;
+  border-top: 0;
+}
+.reading-canvas .claim > .k { margin: 0; }
+.reading-canvas .claim > .k > .label { width: 100%; min-width: 0; }
+.reading-canvas .claim-body > :first-child { margin-top: 0; }
+.reading-canvas .claim-body > :last-child { margin-bottom: 0; }
+.reading-canvas > .status-strip {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+.reading-canvas .status-strip-head { padding: 13px 32px; gap: 12px; }
+.reading-canvas .status-strip-summary { gap: 12px; align-items: center; }
+.reading-canvas .status-strip-title { font-size: 14px; line-height: 18px; font-weight: 400; }
+.reading-canvas .claim-footer { margin-top: 8px; padding: 16px 0 0; gap: 20px; }
+.reading-canvas .claim-readiness-door,
+.reading-canvas .claim-readiness-empty { position: relative; margin-right: 21px; }
+.reading-canvas .claim-readiness-door::after,
+.reading-canvas .claim-readiness-empty::after {
+  content: "";
+  position: absolute;
+  right: -21px;
+  top: 50%;
+  width: 1px;
+  height: 12px;
+  transform: translateY(-50%);
+  background: var(--border);
+}
+.reading-canvas .claim-footer-chip--blocked .claim-footer-chip-count { color: var(--muted); font-weight: 400; }
+.reading-canvas .claim-footer > .claim-comments-slot { margin-left: auto; }
+.reading-canvas .claim-footer .comment-chip {
+  opacity: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--faint);
+  font: 13px/16px var(--font-sans);
+}
+.reading-canvas .claim-footer .comment-chip .dx-icon { width: 14px; height: 14px; }
+@media screen and (min-width: 861px) {
+  .reading-canvas .status-strip-action-chevron { display: none; }
+}
+@media screen and (max-width: 520px) {
+  .reading-canvas { max-width: none; border: 0; border-radius: 0; overflow: visible; }
+  .module-section:has(> .reading-canvas) > .system-record-head { padding: 22px 16px 0; margin-bottom: 20px; }
+  .module-section:has(> .reading-canvas) > .sub-nav { margin-bottom: 0; }
+  .reading-canvas .claim { --card-gutter: 16px; padding: 20px 16px 18px; gap: 11px; }
+  .reading-canvas > .claim:nth-child(1 of .claim),
+  .reading-canvas > .claim-group-host > .claim:nth-child(1 of .claim) { padding-top: 22px; }
+  .reading-canvas .status-strip-head { padding: 13px 16px; }
+  .reading-canvas .claim-footer {
+    display: grid;
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+    margin-top: 6px;
+    padding-top: 13px;
+    gap: 8px;
+  }
+  .reading-canvas .claim-readiness-door,
+  .reading-canvas .claim-readiness-empty { grid-column: 1 / 3; grid-row: 1; margin-right: 0; }
+  .reading-canvas .claim-readiness-door::after,
+  .reading-canvas .claim-readiness-empty::after { content: none; }
+  .reading-canvas .claim-footer > .claim-comments-slot { grid-column: 3; grid-row: 1; justify-self: end; }
+  .reading-canvas .claim-footer > .claim-links,
+  .reading-canvas .claim-footer > .claim-sources,
+  .reading-canvas .claim-footer > .claim-conformance-door,
+  .reading-canvas .claim-footer > .claim-footer-chip:not(.claim-readiness-empty) { grid-row: 2; }
+  .reading-canvas .claim-footer > .claim-footer-panel { grid-column: 1 / -1; grid-row: 3; }
+  .reading-canvas .claim-footer-chip--blocked .claim-footer-chip-count { color: var(--warn); }
 }
 
 @media print {
@@ -8969,7 +9085,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   .sidebar,
   .nav-toggle,
   .facet-toc,
-  .facet-claim-controls,
   .comments-rail,
   .status-strip { display: none !important; }
   .content-area { padding: 0; }
@@ -8987,9 +9102,12 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   .issues-rail-panel { display: none !important; }
   .card,
   .claim-tree { break-inside: avoid; }
-  .claim-collapse-toggle { pointer-events: none; }
-  .claim-collapse-chevron { display: none; }
-  .claim-collapse-content[hidden] { display: block !important; }
+  .claim-body-disclosure--collapsed > .claim-body {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+  }
+  .claim-body-disclosure__toggle { display: none !important; }
 
   /* Build order tab. What this buys is honest and small: a phase block is
      not split across a page break. Browsers do not paginate horizontally, so

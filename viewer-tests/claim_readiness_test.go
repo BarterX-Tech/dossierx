@@ -361,6 +361,18 @@ func TestStaticReadinessGroupsFactsByModuleAndPreservesEveryID(t *testing.T) {
 	)
 
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
+	if !evalBool(t, ctx, `(function(){
+		var items = Array.from(document.querySelectorAll('.facet-toc__item'));
+		if (items.length < 3) { return false; }
+		return items.slice(0, 3).every(function(item){
+			var claim = document.getElementById(item.dataset.claimTarget);
+			var door = claim && claim.querySelector('.claim-readiness-door[data-readiness-fact-count]');
+			var count = item.querySelector('.facet-toc__blocker-count');
+			return door && count && Number(count.textContent || 0) === Number(door.dataset.readinessFactCount);
+		});
+	})()`) {
+		t.Fatal("the first three facet-rail counts must match each claim's authoritative readiness fact total")
+	}
 	if got, want := evalString(t, ctx, `document.getElementById('widget.contract.root').querySelector('.claim-readiness-door').getAttribute('data-readiness-state')`), "Dependencies not ready"; got != want {
 		t.Fatalf("readiness state = %q, want %q", got, want)
 	}

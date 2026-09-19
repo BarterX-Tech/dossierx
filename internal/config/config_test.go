@@ -319,157 +319,16 @@ claims_dir: claims
 	}
 }
 
-func TestLoadConfig_ThemeUnknownKeyRejected(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-viewer:
-  theme:
-    accent: "#3fb950"
-    not-a-real-token: "#ffffff"
-`)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected error for unknown theme token, got nil")
-	}
-	if !strings.Contains(err.Error(), "not-a-real-token") {
-		t.Errorf("expected error to name the unknown theme token, got: %v", err)
-	}
-}
-
-func TestLoadConfig_ThemeEmptyValueRejected(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-viewer:
-  theme:
-    accent: ""
-`)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected error for empty theme value, got nil")
-	}
-	if !strings.Contains(err.Error(), "accent") {
-		t.Errorf("expected error to name the offending key accent, got: %v", err)
-	}
-}
-
-func TestLoadConfig_ThemeDangerousCharRejected(t *testing.T) {
-	cases := []struct {
-		name string
-		key  string
-		val  string
-	}{
-		{"semicolon in color", "accent", "#3fb950; background:url(evil)"},
-		{"angle bracket in color", "ink", "<script>"},
-		{"brace in font", "font-sans", "Arial{}"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+func TestLoadConfig_CustomThemesRemoved(t *testing.T) {
+	for _, body := range []string{"{}", "null", "{preset: claude}", "{extends: themes/house.yaml}", "{paper: '#fff'}", "{fonts: []}", "invalid"} {
+		t.Run(body, func(t *testing.T) {
 			dir := t.TempDir()
-			p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-viewer:
-  theme:
-    `+tc.key+`: "`+tc.val+`"
-`)
-			_, err := LoadConfig(p)
-			if err == nil {
-				t.Fatalf("expected error for dangerous character in %s, got nil", tc.key)
-			}
-			if !strings.Contains(err.Error(), tc.key) {
-				t.Errorf("expected error to name the offending key %q, got: %v", tc.key, err)
+			raw := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nviewer:\n  theme: " + body + "\n"
+			_, err := DecodeConfig([]byte(raw), dir, "project.config.yaml")
+			if err == nil || !strings.Contains(err.Error(), "viewer.theme is no longer supported; remove viewer.theme") {
+				t.Fatalf("legacy theme %s: %v", body, err)
 			}
 		})
-	}
-}
-
-func TestLoadConfig_ThemeInvalidColorFormatRejected(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-viewer:
-  theme:
-    accent: "123"
-`)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected error for invalid color format, got nil")
-	}
-	if !strings.Contains(err.Error(), "accent") {
-		t.Errorf("expected error to name the offending key accent, got: %v", err)
-	}
-}
-
-func TestLoadConfig_ThemeValidPartialMapAccepted(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-viewer:
-  theme:
-    accent: "#3fb950"
-    accent-bg: "rgba(63,185,80,.14)"
-    link: "cornflowerblue"
-    font-sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    radius: "12px"
-`)
-	cfg, err := LoadConfig(p)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	want := map[string]string{
-		"accent":    "#3fb950",
-		"accent-bg": "rgba(63,185,80,.14)",
-		"link":      "cornflowerblue",
-		"font-sans": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-		"radius":    "12px",
-	}
-	// Flat keys land in Shared: they apply in both colour schemes, which
-	// is what every theme written before per-mode values existed meant.
-	got := cfg.Viewer.Theme.Shared
-	if len(got) != len(want) {
-		t.Fatalf("Theme.Shared = %v, want %v", got, want)
-	}
-	for k, v := range want {
-		if got[k] != v {
-			t.Errorf("Theme.Shared[%q] = %q, want %q", k, got[k], v)
-		}
-	}
-	if len(cfg.Viewer.Theme.Light) != 0 || len(cfg.Viewer.Theme.Dark) != 0 {
-		t.Errorf("a flat theme must produce no per-mode keys, got light=%v dark=%v",
-			cfg.Viewer.Theme.Light, cfg.Viewer.Theme.Dark)
-	}
-}
-
-func TestLoadConfig_ThemeEmptyMapOmitted(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-`)
-	cfg, err := LoadConfig(p)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if !cfg.Viewer.Theme.IsZero() {
-		t.Errorf("Theme = %+v, want the zero theme when viewer.theme is unset", cfg.Viewer.Theme)
 	}
 }
 

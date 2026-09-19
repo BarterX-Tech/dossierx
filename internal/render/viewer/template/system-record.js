@@ -49,21 +49,9 @@
     return { phrase: 'Updated ' + days + ' day' + (days === 1 ? '' : 's') + ' ago', stale: hours >= 24 * 7 };
   }
 
-  // isLive reads (never writes) viewer-runtime.js's own reachability-probe
-  // signal (probeAndMount adds body.comments-live once /api/ping confirms
-  // `dossierx serve`) — R10.5's hook, without this lane touching that
-  // lane's function.
-  function isLive() {
-    return document.body.classList.contains('comments-live');
-  }
-
   // enhanceTimestamp replaces the freshness footer's placeholder text with
-  // either "Live" (R10.5, under a confirmed live serve) or the elapsed
-  // phrase computed from the machine-readable instant render.go stamps
-  // into data-generated-at (R10.4: "computed in the browser, not baked
-  // into the HTML"). Re-run on an interval and whenever body's class list
-  // changes (the probe resolves asynchronously, after first paint), so it
-  // is idempotent and safe to call from enhance() on every pass too.
+  // the elapsed phrase computed from the machine-readable instant render.go
+  // stamps into data-generated-at. Paper keeps its age and explanatory caption.
   function enhanceTimestamp() {
     var footer = document.querySelector('.freshness-footer');
     var phraseEl = footer && footer.querySelector('.freshness-footer__phrase');
@@ -74,60 +62,16 @@
     if (validDate && !phraseEl.title) {
       phraseEl.title = formatGeneratedTime(generatedAt) + ' · shown in your local time';
     }
-    var caption = footer.querySelector('.freshness-footer__caption');
     // Reassigning .textContent unconditionally replaces the text node
     // even when the string is unchanged, which is a childList mutation
     // inside .layout's own MutationObserver scope — and this function
     // runs on every enhance() pass. Comparing first avoids feeding that
     // observer's enhance()-on-mutation loop (see the matching guard and
     // its measurement note in updateFacetClaimControl above).
-    if (isLive()) {
-      if (phraseEl.textContent !== 'Live') { phraseEl.textContent = 'Live'; }
-      footer.classList.remove('freshness-footer--stale');
-      if (caption) { caption.hidden = true; }
-      return;
-    }
-    if (caption) { caption.hidden = false; }
     if (!validDate) { return; }
     var freshness = freshnessPhrase(generatedAt);
     if (phraseEl.textContent !== freshness.phrase) { phraseEl.textContent = freshness.phrase; }
     footer.classList.toggle('freshness-footer--stale', freshness.stale);
-  }
-
-  function bindResizer() {
-    var sidebar = document.getElementById('sidebar');
-    var handle = document.getElementById('sidebarResizer');
-    if (!sidebar || !handle || handle.dataset.bound === 'true') { return; }
-    handle.dataset.bound = 'true';
-    var startX = 0;
-    var startWidth = 0;
-    function setWidth(width) {
-      var next = Math.max(220, Math.min(420, width));
-      document.documentElement.style.setProperty('--system-record-sidebar-width', next + 'px');
-      handle.setAttribute('aria-valuenow', String(Math.round(next)));
-    }
-    handle.addEventListener('pointerdown', function (event) {
-      startX = event.clientX;
-      startWidth = sidebar.getBoundingClientRect().width;
-      handle.setPointerCapture(event.pointerId);
-      document.body.classList.add('system-resizing');
-    });
-    handle.addEventListener('pointermove', function (event) {
-      if (handle.hasPointerCapture(event.pointerId)) { setWidth(startWidth + event.clientX - startX); }
-    });
-    handle.addEventListener('pointerup', function (event) {
-      if (handle.hasPointerCapture(event.pointerId)) { handle.releasePointerCapture(event.pointerId); }
-      document.body.classList.remove('system-resizing');
-    });
-    handle.addEventListener('dblclick', function () { setWidth(270); });
-    handle.addEventListener('keydown', function (event) {
-      if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(event.key) < 0) { return; }
-      event.preventDefault();
-      var current = sidebar.getBoundingClientRect().width;
-      if (event.key === 'Home') { setWidth(220); }
-      else if (event.key === 'End') { setWidth(420); }
-      else { setWidth(current + (event.key === 'ArrowRight' ? 12 : -12)); }
-    });
   }
 
   // ------------------------------------------------------------------
@@ -245,61 +189,82 @@
   // .claim-relationship-direction*) ships its final vocabulary directly
   // from the server, so no client-side rewrite step is needed any more.
 
-  var claimDisclosureSequence = 0;
+  var claimBodyDisclosureSequence = 0;
+  var claimBodyTabIndexes = new WeakMap();
 
-  function setClaimExpanded(claim, expanded) {
-    var toggle = claim && claim.querySelector(':scope > .k > .claim-collapse-toggle');
-    var content = claim && claim.querySelector(':scope > .claim-collapse-content');
-    if (!toggle || !content) { return; }
-    claim.classList.toggle('claim--collapsed', !expanded);
-    content.hidden = !expanded;
-    toggle.setAttribute('aria-expanded', String(expanded));
-    var title = toggle.dataset.claimTitle || 'claim';
-    toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + title);
-    updateFacetClaimControl();
+  function claimBodyFocusable(body) {
+    return Array.prototype.slice.call(body.querySelectorAll('a[href], button, input, select, textarea, [tabindex]'));
   }
 
-  function enhanceClaimDisclosures() {
-    document.querySelectorAll('.claim').forEach(function (claim) {
-      if (claim.dataset.claimDisclosure === 'true') { return; }
-      var head = claim.querySelector(':scope > .k');
-      if (!head) { return; }
+  function restoreClaimBodyFocus(body) {
+    claimBodyFocusable(body).forEach(function (node) {
+      if (!claimBodyTabIndexes.has(node)) { return; }
+      var previous = claimBodyTabIndexes.get(node);
+      if (previous === null) { node.removeAttribute('tabindex'); }
+      else { node.setAttribute('tabindex', previous); }
+      claimBodyTabIndexes.delete(node);
+    });
+  }
 
-      var title = cleanTitle(claim) || 'claim';
-      var content = document.createElement('div');
-      content.className = 'claim-collapse-content';
-      content.id = 'claim-content-' + (++claimDisclosureSequence);
-      while (head.nextSibling) { content.appendChild(head.nextSibling); }
+  function suppressClippedClaimBodyFocus(body) {
+    restoreClaimBodyFocus(body);
+    var bodyBottom = body.getBoundingClientRect().bottom;
+    claimBodyFocusable(body).forEach(function (node) {
+      var rect = node.getBoundingClientRect();
+      if (rect.top < bodyBottom - 1) { return; }
+      claimBodyTabIndexes.set(node, node.hasAttribute('tabindex') ? node.getAttribute('tabindex') : null);
+      node.setAttribute('tabindex', '-1');
+    });
+  }
 
-      var toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'claim-collapse-toggle';
-      toggle.dataset.claimTitle = title;
-      toggle.setAttribute('aria-controls', content.id);
-      toggle.setAttribute('aria-expanded', 'true');
-      toggle.setAttribute('aria-label', 'Collapse ' + title);
+  function setClaimBodyExpanded(wrapper, expanded) {
+    var body = wrapper && wrapper.querySelector(':scope > .claim-body');
+    var toggle = wrapper && wrapper.querySelector(':scope > .claim-body-disclosure__toggle');
+    if (!body || !toggle || toggle.hidden) { return; }
+    wrapper.classList.toggle('claim-body-disclosure--expanded', expanded);
+    wrapper.classList.toggle('claim-body-disclosure--collapsed', !expanded);
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.textContent = expanded ? 'less' : '… more';
+    wrapper.dataset.readerExpanded = String(expanded);
+    if (expanded) { restoreClaimBodyFocus(body); }
+    else { requestAnimationFrame(function () { suppressClippedClaimBodyFocus(body); }); }
+  }
 
-      var label = head.querySelector(':scope > .label');
-      if (label) {
-        toggle.appendChild(label);
-      } else {
-        Array.prototype.slice.call(head.childNodes).forEach(function (node) {
-          if (!(node.nodeType === 1 && node.classList.contains('claim-comments-slot'))) {
-            toggle.appendChild(node);
-          }
+  function syncClaimBodyDisclosures() {
+    document.querySelectorAll('.claim-body').forEach(function (body) {
+      var wrapper = body.parentElement && body.parentElement.classList.contains('claim-body-disclosure')
+        ? body.parentElement
+        : null;
+      if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'claim-body-disclosure';
+        body.parentNode.insertBefore(wrapper, body);
+        wrapper.appendChild(body);
+        if (!body.id) { body.id = 'claim-body-' + (++claimBodyDisclosureSequence); }
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'claim-body-disclosure__toggle';
+        toggle.setAttribute('aria-controls', body.id);
+        toggle.hidden = true;
+        toggle.addEventListener('click', function () {
+          setClaimBodyExpanded(wrapper, toggle.getAttribute('aria-expanded') !== 'true');
         });
+        wrapper.appendChild(toggle);
       }
-      var chevron = document.createElement('span');
-      chevron.className = 'claim-collapse-chevron';
-      chevron.setAttribute('aria-hidden', 'true');
-      attachIcon(chevron, 'chevron-right');
-      toggle.appendChild(chevron);
-      head.insertBefore(toggle, head.firstChild);
-      claim.appendChild(content);
-      claim.dataset.claimDisclosure = 'true';
-      toggle.addEventListener('click', function () {
-        setClaimExpanded(claim, toggle.getAttribute('aria-expanded') !== 'true');
-      });
+
+      // A display:none module has no usable geometry. It is measured the
+      // first time navigation reveals it, via the document click hook below.
+      if (!body.getClientRects().length) { return; }
+      var lineHeight = parseFloat(getComputedStyle(body).lineHeight) || 28;
+      var needsDisclosure = body.scrollHeight > (lineHeight * 4) + 1;
+      var control = wrapper.querySelector(':scope > .claim-body-disclosure__toggle');
+      control.hidden = !needsDisclosure;
+      if (!needsDisclosure) {
+        wrapper.classList.remove('claim-body-disclosure--collapsed', 'claim-body-disclosure--expanded');
+        restoreClaimBodyFocus(body);
+        return;
+      }
+      setClaimBodyExpanded(wrapper, wrapper.dataset.readerExpanded === 'true');
     });
   }
 
@@ -309,8 +274,56 @@
     var target;
     try { target = document.getElementById(decodeURIComponent(raw)); }
     catch (_) { return; }
-    var claim = target && target.closest('.claim');
-    if (claim) { setClaimExpanded(claim, true); }
+    var wrapper = target && target.closest('.claim-body-disclosure');
+    if (wrapper) { setClaimBodyExpanded(wrapper, true); }
+  }
+
+  function enhanceConformanceFooters() {
+    document.querySelectorAll('details.claim-conformance').forEach(function (original) {
+      if (original.dataset.footerEnhanced === 'true') { return; }
+      var claim = original.closest('.claim');
+      var footer = claim && claim.querySelector('.claim-footer');
+      var summary = original.querySelector(':scope > summary');
+      if (!footer || !summary) { return; }
+      var labelNode = summary.querySelector('strong');
+      var label = labelNode ? labelNode.textContent.trim() : 'Checks';
+      if (label === 'No checks declared') {
+        var empty = document.createElement('span');
+        empty.className = 'claim-footer-chip claim-footer-chip--checks claim-footer-chip--empty';
+        var emptyLabel = document.createElement('span');
+        emptyLabel.className = 'claim-footer-chip-label';
+        emptyLabel.textContent = label;
+        empty.appendChild(emptyLabel);
+        original.replaceWith(empty);
+        footer.insertBefore(empty, footer.querySelector('.claim-comments-slot'));
+        return;
+      }
+
+      var door = document.createElement('details');
+      door.className = 'claim-conformance-door';
+      Array.prototype.slice.call(original.attributes).forEach(function (attribute) {
+        if (attribute.name !== 'class' && attribute.name !== 'open') { door.setAttribute(attribute.name, attribute.value); }
+      });
+      if (original.open) { door.open = true; }
+      summary.className = 'claim-conformance-head claim-footer-chip claim-footer-chip--checks';
+      summary.replaceChildren();
+      var chipLabel = document.createElement('span');
+      chipLabel.className = 'claim-footer-chip-label';
+      chipLabel.textContent = label;
+      summary.append(chipLabel, window.dossierxFooterChevron());
+      door.appendChild(summary);
+
+      var panel = document.createElement('div');
+      panel.className = 'claim-conformance claim-footer-panel';
+      Array.prototype.slice.call(original.attributes).forEach(function (attribute) {
+        if (attribute.name !== 'class' && attribute.name !== 'name' && attribute.name !== 'open') { panel.setAttribute(attribute.name, attribute.value); }
+      });
+      while (original.firstChild) { panel.appendChild(original.firstChild); }
+      original.remove();
+      var comments = footer.querySelector('.claim-comments-slot');
+      footer.insertBefore(door, comments);
+      footer.insertBefore(panel, comments);
+    });
   }
 
   function cleanTitle(claim) {
@@ -350,59 +363,6 @@
     if (!group) { return null; }
     var tab = module.querySelector(':scope > .sub-nav .subtab[data-target="#' + group.id + '"]');
     return { module: module, view: group, label: tabLabel(tab) };
-  }
-
-  function updateFacetClaimControl(active, claims) {
-    active = active || activeFacet();
-    if (!active) { return; }
-    claims = claims || visibleClaims(active.view);
-    var control = active.view.querySelector(':scope > .facet-claim-controls');
-    if (!control) { return; }
-    var toggle = control.querySelector('.facet-claims-toggle');
-    if (!toggle) { return; }
-    var allCollapsed = claims.length > 0 && claims.every(function (claim) {
-      var disclosure = claim.querySelector(':scope > .k > .claim-collapse-toggle');
-      return disclosure && disclosure.getAttribute('aria-expanded') === 'false';
-    });
-    toggle.disabled = claims.length === 0;
-    toggle.setAttribute('aria-pressed', String(allCollapsed));
-    // Idempotency guard (cross-cutting fix, not new behaviour): this ran
-    // unconditionally on every call, and updateFacetClaimControl is
-    // itself called from renderToc on every enhance() pass — reassigning
-    // .textContent replaces the text node even when the string is
-    // unchanged, which is a childList mutation of an ancestor inside
-    // .layout, which re-triggers the .layout MutationObserver that calls
-    // enhance() in the first place. Measured before this fix: an idle
-    // page accrues hundreds of .layout mutation records per second,
-    // forever, entirely from this one line (plus this lane's own
-    // .freshness-footer__phrase, guarded the same way in
-    // enhanceTimestamp). Comparing first breaks the loop with no visible
-    // behaviour change.
-    var label = toggle.querySelector('.facet-claims-toggle__label');
-    var nextLabel = allCollapsed ? 'Expand all claims' : 'Collapse all claims';
-    if (label && label.textContent !== nextLabel) { label.textContent = nextLabel; }
-  }
-
-  function renderFacetClaimControl(active, claims) {
-    var control = active.view.querySelector(':scope > .facet-claim-controls');
-    if (!control) {
-      control = document.createElement('div');
-      control.className = 'facet-claim-controls';
-      control.innerHTML = '<button class="facet-claims-toggle" type="button" aria-pressed="false"><svg class="dx-icon facet-claims-toggle__icon" aria-hidden="true"><use href="#dx-icon-chevron-down"></use></svg><span class="facet-claims-toggle__label">Collapse all claims</span></button>';
-      active.view.insertBefore(control, active.view.firstChild);
-      control.querySelector('.facet-claims-toggle').addEventListener('click', function () {
-        var current = activeFacet();
-        if (!current) { return; }
-        var currentClaims = visibleClaims(current.view);
-        var shouldExpand = currentClaims.length > 0 && currentClaims.every(function (claim) {
-          var disclosure = claim.querySelector(':scope > .k > .claim-collapse-toggle');
-          return disclosure && disclosure.getAttribute('aria-expanded') === 'false';
-        });
-        currentClaims.forEach(function (claim) { setClaimExpanded(claim, shouldExpand); });
-        updateFacetClaimControl(current, currentClaims);
-      });
-    }
-    updateFacetClaimControl(active, claims);
   }
 
   function updateTocActive() {
@@ -458,7 +418,7 @@
       var freshnessHTML = generatedAt
         ? '<div class="freshness-footer"><p class="freshness-footer__line"><svg class="dx-icon freshness-footer__icon" aria-hidden="true"><use href="#dx-icon-clock"/></svg><span class="freshness-footer__phrase" data-generated-at="' + generatedAt + '">Updated recently</span></p><p class="freshness-footer__caption">Claims changed since then are not in this view</p></div>'
         : '';
-      toc.innerHTML = '<div class="facet-toc__grabber" aria-hidden="true"></div><div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span><button class="facet-toc__close" type="button" aria-label="Close facet panel"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
+      toc.innerHTML = '<div class="facet-toc__grabber" aria-hidden="true"></div><div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><span class="facet-toc__mobile-identity"><strong class="facet-toc__name">Claims</strong><span class="facet-toc__total"></span></span></span><button class="facet-toc__close" type="button" aria-label="Close facet panel"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
         var claim = document.getElementById(event.target.value);
         if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -472,13 +432,11 @@
     var claims = visibleClaims(active.view);
     toc.querySelector('.facet-toc__name').textContent = active.label;
     toc.querySelector('.facet-toc__total').textContent = claims.length + (claims.length === 1 ? ' claim' : ' claims');
-    renderFacetClaimControl(active, claims);
     var list = toc.querySelector('.facet-toc__list');
     var select = toc.querySelector('.facet-toc__select');
     list.replaceChildren();
     select.replaceChildren();
-    claims.forEach(function (claim, index) {
-      var number = String(index + 1).padStart(2, '0');
+    claims.forEach(function (claim) {
       var label = cleanTitle(claim);
       var button = document.createElement('button');
       button.type = 'button';
@@ -486,9 +444,21 @@
       button.dataset.claimTarget = claim.id;
       var count = document.createElement('span');
       var strong = document.createElement('strong');
-      count.textContent = number;
       strong.textContent = label;
-      button.append(count, strong);
+      // Read the total stamped from the authoritative readiness assessment.
+      // Counting .claim-readiness-blocker nodes undercounts any claim whose
+      // progressively disclosed list has not been expanded yet.
+      var readinessDoor = claim.querySelector('[data-readiness-fact-count]');
+      var blockerCount = readinessDoor ? parseInt(readinessDoor.dataset.readinessFactCount || '0', 10) : 0;
+      if (!Number.isFinite(blockerCount)) { blockerCount = 0; }
+      count.className = 'facet-toc__blocker-count';
+      count.textContent = blockerCount ? String(blockerCount) : '';
+      if (blockerCount) {
+        count.setAttribute('aria-label', blockerCount + (blockerCount === 1 ? ' blocker' : ' blockers'));
+      } else {
+        count.setAttribute('aria-hidden', 'true');
+      }
+      button.append(strong, count);
       button.addEventListener('click', function () {
         claim.scrollIntoView({ behavior: 'smooth', block: 'start' });
         closeFacetToc();
@@ -496,7 +466,7 @@
       list.appendChild(button);
       var option = document.createElement('option');
       option.value = claim.id;
-      option.textContent = number + ' · ' + label;
+      option.textContent = label;
       select.appendChild(option);
     });
     updateTocActive();
@@ -529,14 +499,35 @@
     return scrim;
   }
 
-  function closeFacetToc() {
+  var facetTocFocusReturn = null;
+  var facetTocFocusFrame = 0;
+
+  function cancelFacetTocFocusRestore() {
+    if (!facetTocFocusFrame) { return; }
+    window.cancelAnimationFrame(facetTocFocusFrame);
+    facetTocFocusFrame = 0;
+  }
+
+  function closeFacetToc(restoreTrigger) {
+    var wasOpen = document.body.classList.contains('facet-toc-open');
+    cancelFacetTocFocusRestore();
     document.body.classList.remove('facet-toc-open');
     document.querySelectorAll('.facet-toc-trigger[aria-expanded="true"]').forEach(function (trigger) {
       trigger.setAttribute('aria-expanded', 'false');
     });
+    if (wasOpen && restoreTrigger !== false && facetTocFocusReturn) {
+      var trigger = facetTocFocusReturn;
+      if (trigger.isConnected && typeof trigger.focus === 'function') { trigger.focus({ preventScroll: true }); }
+      facetTocFocusFrame = window.requestAnimationFrame(function () {
+        facetTocFocusFrame = 0;
+        if (trigger.isConnected && typeof trigger.focus === 'function') { trigger.focus({ preventScroll: true }); }
+      });
+    }
   }
 
   function openFacetToc(trigger) {
+    cancelFacetTocFocusRestore();
+    facetTocFocusReturn = trigger;
     facetTocScrim();
     document.body.classList.add('facet-toc-open');
     document.querySelectorAll('.facet-toc-trigger').forEach(function (other) {
@@ -619,6 +610,7 @@
       eyebrow.textContent = eyebrowText;
       title.textContent = label;
       metric.className = 'system-record-head__metric';
+      metric.dataset.allLocked = String(total > 0 && locked === total);
       // 02 §4.7/§9.13: "31 of 31 locked" — the numeral alone is bold and
       // "claims" is dropped, matching the board over the pre-revamp
       // "<strong>N of M</strong> claims locked" wording. The bar beside it
@@ -645,8 +637,26 @@
     if (choice !== 'light' && choice !== 'dark') { choice = 'system'; }
     document.documentElement.setAttribute('data-theme', choice);
     try { localStorage.setItem('dossierx-theme', choice); } catch (e) {}
+    syncThemeControls(choice);
+  }
+
+  function effectiveTheme(choice) {
+    if (choice === 'light' || choice === 'dark') { return choice; }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function syncThemeControls(choice) {
+    var effective = effectiveTheme(choice);
     document.querySelectorAll('.theme-control [data-theme-choice]').forEach(function (button) {
-      button.setAttribute('aria-pressed', String(button.getAttribute('data-theme-choice') === choice));
+      button.setAttribute('aria-pressed', String(button.getAttribute('data-theme-choice') === effective));
+    });
+    document.querySelectorAll('[data-theme-toggle]').forEach(function (button) {
+      var next = effective === 'dark' ? 'light' : 'dark';
+      var use = button.querySelector('use');
+      button.dataset.themeCurrent = effective;
+      button.setAttribute('aria-label', 'Use ' + next + ' theme');
+      button.setAttribute('title', 'Use ' + next + ' theme');
+      if (use) { use.setAttribute('href', effective === 'dark' ? '#dx-icon-moon' : '#dx-icon-sun'); }
     });
   }
 
@@ -658,10 +668,22 @@
     document.addEventListener('click', function (event) {
       var target = event.target;
       if (!target || typeof target.closest !== 'function') { return; }
+      var toggle = target.closest('[data-theme-toggle]');
+      if (toggle) {
+        applyThemeChoice(toggle.dataset.themeCurrent === 'dark' ? 'light' : 'dark');
+        return;
+      }
       var button = target.closest('[data-theme-choice]');
       if (!button || !button.closest('.theme-control')) { return; }
       applyThemeChoice(button.getAttribute('data-theme-choice'));
     });
+    var scheme = window.matchMedia('(prefers-color-scheme: dark)');
+    var syncSystemChoice = function () {
+      var choice = document.documentElement.getAttribute('data-theme') || 'system';
+      if (choice === 'system') { syncThemeControls(choice); }
+    };
+    if (typeof scheme.addEventListener === 'function') { scheme.addEventListener('change', syncSystemChoice); }
+    else if (typeof scheme.addListener === 'function') { scheme.addListener(syncSystemChoice); }
   }
 
   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
@@ -681,14 +703,28 @@
   // is removed below it, for the same reason.
 
   var running = false;
+  function sentenceCaseReadingLabels() {
+    // Only generated navigation and claim labels; authored body text and IDs
+    // keep their exact spelling. Existing acronyms and mixed-case names stay.
+    document.querySelectorAll('.system-nav-group__body .sec-tab__label, .claim .k-title').forEach(function (label) {
+      if (label.dataset.readingCase === 'true') { return; }
+      var words = label.textContent.trim().split(/\s+/);
+      label.textContent = words.map(function (word, index) {
+        return index > 0 && /^[A-Z][a-z]+$/.test(word) ? word.toLowerCase() : word;
+      }).join(' ');
+      label.dataset.readingCase = 'true';
+    });
+  }
+
   function enhance() {
     if (running) { return; }
     running = true;
+    sentenceCaseReadingLabels();
     bindThemeControl();
-    bindResizer();
     bindFocusControl();
     bindNavigationGroupPreferences();
-    enhanceClaimDisclosures();
+    enhanceConformanceFooters();
+    syncClaimBodyDisclosures();
     revealHashTarget();
     addModuleHeaders();
     if (typeof window.dossierxPositionStatusStrip === 'function') {
@@ -721,11 +757,20 @@
     var navigationChanged = !!event.target.closest('.sec-tab');
     setTimeout(function () {
       if (navigationChanged) { syncNavigation(true); }
+      syncClaimBodyDisclosures();
       renderToc();
     }, 0);
   });
   window.addEventListener('hashchange', function () { setTimeout(function () { revealHashTarget(); syncNavigation(true); renderToc(); }, 0); });
   window.addEventListener('scroll', updateTocActive, { passive: true });
+  var claimBodyResizeFrame = 0;
+  window.addEventListener('resize', function () {
+    if (claimBodyResizeFrame) { cancelAnimationFrame(claimBodyResizeFrame); }
+    claimBodyResizeFrame = requestAnimationFrame(function () {
+      claimBodyResizeFrame = 0;
+      syncClaimBodyDisclosures();
+    });
+  });
   // R10.4: the elapsed phrase is computed in the browser, so it has to be
   // recomputed while the tab stays open, not just once at load. The class
   // observer catches viewer-runtime.js's asynchronous probeAndMount adding

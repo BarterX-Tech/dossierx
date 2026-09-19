@@ -435,15 +435,9 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // relationships door — any linked file Drifted, or the claim locked +
 // review_pending — so the two states a reader must not miss are never
 // hidden behind a click (unchanged from the pre-redesign digest's rule).
-// The comment chip is NOT in here: Overlap 1 (LANES.md) gives its position
-// in the head, next to the collapse chevron, to the existing
-// CommentChipHTML call in every partial's <div class="k"> — moving it into
-// this footer would put it inside claim-collapse-content, which
-// viewer-tests/claim_collapse_test.go's chevron-geometry assertion requires
-// stay reachable (and right-most, after the chip) while a claim is
-// collapsed. See docs/design/screens/05…md §9 Open decisions; this residual
-// gap against R-F.1/R-F.3's "hard right in the strip" wording is recorded in
-// VAULT/learnings/inbox/L4.md.
+// The comment chip is the footer's final control, outside every details door.
+// Claims no longer collapse, so this placement stays reachable in the default
+// reading view and its live comment APIs retain the canonical claim ID.
 //
 // dependedBy is never authored — it is the reverse index of every other
 // claim's rests_on, computed fresh each Render pass from the whole
@@ -605,32 +599,38 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	// <details> elements themselves, which still exist, still share
 	// `name="claim-footer-<id>"`, and still carry the real `open` attribute
 	// exactly as before.
-	b.WriteString(`<details class="claim-links" name="`)
-	b.WriteString(footerName)
-	b.WriteString(`"`)
-	b.WriteString(openAttr)
-	b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
-	b.WriteString(countSegment(links, "relationship"))
-	b.WriteString(`</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary></details>`)
-	b.WriteString(`<div class="claim-footer-panel claim-links-panel">`)
-	b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
-	b.WriteString(strconv.Itoa(links))
-	b.WriteString(`</span></div>`)
+	if links == 0 && !governedHas && extra.Len() == 0 {
+		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--relationships claim-footer-chip--empty"><span class="claim-footer-chip-label">No relationships</span></span>`)
+	} else {
+		b.WriteString(`<details class="claim-links" name="`)
+		b.WriteString(footerName)
+		b.WriteString(`"`)
+		b.WriteString(openAttr)
+		b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
+		b.WriteString(countSegment(links, "relationship"))
+		b.WriteString(`</span>`)
+		b.WriteString(claimFooterChevronHTML)
+		b.WriteString(`</summary></details>`)
+		b.WriteString(`<div class="claim-footer-panel claim-links-panel">`)
+		b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
+		b.WriteString(strconv.Itoa(links))
+		b.WriteString(`</span></div>`)
 
-	// The direction count (2nd param) is 05 §4.10's optional mono count,
-	// omitted for GOVERNED BY (sentinel -1: it always has exactly one
-	// target, so counting it is meaningless) and shown for DEPENDS ON /
-	// DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1", "DEPENDED ON BY · 1").
-	writeRelationshipDirection(&b, "up", "GOVERNED BY", -1, governedBody.String(), governedHas)
-	writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
-	writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
+		// The direction count (2nd param) is 05 §4.10's optional mono count,
+		// omitted for GOVERNED BY (sentinel -1: it always has exactly one
+		// target, so counting it is meaningless) and shown for DEPENDS ON /
+		// DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1", "DEPENDED ON BY · 1").
+		writeRelationshipDirection(&b, "up", "GOVERNED BY", -1, governedBody.String(), governedHas)
+		writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
+		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
 
-	if extra.Len() > 0 {
-		b.WriteString(`<ul class="claim-edges claim-edges-extra">`)
-		b.WriteString(extra.String())
-		b.WriteString(`</ul>`)
+		if extra.Len() > 0 {
+			b.WriteString(`<ul class="claim-edges claim-edges-extra">`)
+			b.WriteString(extra.String())
+			b.WriteString(`</ul>`)
+		}
+		b.WriteString(`</div>`)
 	}
-	b.WriteString(`</div>`)
 
 	// ---- sources door (R09.5) ----
 	// RETRY FIX: always rendered now, even at zero sources. 07a §6/§8's
@@ -640,37 +640,28 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	// item 5 that zero-state chip is also closed, un-openable and
 	// --color-faint rather than the ordinary --color-muted+chevron chip —
 	// hence claim-footer-chip--empty and the omitted chevron span below.
-	b.WriteString(`<details class="claim-sources" name="`)
-	b.WriteString(footerName)
-	b.WriteString(`"><summary class="claim-footer-chip claim-footer-chip--sources`)
 	if len(c.Sources) == 0 {
-		b.WriteString(` claim-footer-chip--empty`)
-	}
-	b.WriteString(`"><span class="claim-footer-chip-label">`)
-	if len(c.Sources) == 0 {
-		b.WriteString(`No sources`)
+		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></span>`)
 	} else {
+		b.WriteString(`<details class="claim-sources" name="`)
+		b.WriteString(footerName)
+		b.WriteString(`"><summary class="claim-footer-chip claim-footer-chip--sources"><span class="claim-footer-chip-label">`)
 		b.WriteString(countSegment(len(c.Sources), "source"))
-	}
-	b.WriteString(`</span>`)
-	if len(c.Sources) > 0 {
-		b.WriteString(`<span class="claim-footer__chevron" aria-hidden="true"></span>`)
-	}
-	// See the relationships door's comment above (THIRD RETRY FIX, verifier
-	// item 2): this door's panel is likewise now a sibling <div>, not a
-	// child of this <details>, closed here right after </summary>.
-	b.WriteString(`</summary></details>`)
-	b.WriteString(`<div class="claim-footer-panel claim-sources-panel">`)
-	b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
-	b.WriteString(strconv.Itoa(len(c.Sources)))
-	b.WriteString(`</span></div>`)
-	if len(c.Sources) > 0 {
+		b.WriteString(`</span>`)
+		b.WriteString(claimFooterChevronHTML)
+		b.WriteString(`</summary></details>`)
+		b.WriteString(`<div class="claim-footer-panel claim-sources-panel">`)
+		b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
+		b.WriteString(strconv.Itoa(len(c.Sources)))
+		b.WriteString(`</span></div>`)
 		b.WriteString(`<ul class="claim-source-list">`)
 		writeSourcesRow(&b, c)
 		b.WriteString(`</ul>`)
+		b.WriteString(`</div>`)
 	}
-	b.WriteString(`</div>`)
 
+	b.WriteString(`<!--dossierx-claim-footer-slot-->`)
+	b.WriteString(string(CommentChipHTML(c)))
 	b.WriteString(`</div>`)
 
 	// The baked-in thread panel follows the whole footer strip (a <div>, so it
@@ -835,15 +826,13 @@ func countSegment(n int, singular string) string {
 	return fmt.Sprintf("%d %ss", n, singular)
 }
 
+const claimFooterChevronHTML = `<svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg>`
+
 // CommentChipHTML renders the 💬 comment chip for one claim, as a
 // <span class="claim-comments-slot"> holding the chip <button>. It is bound
-// into funcMap as "commentChip" and called directly from each chip-bearing
-// partial's <div class="k"> heading — {{commentChip .}}, the whole claim — so
-// the chip sits in the claim HEAD rather than in the edges footer, where it
-// used to ride as an <li class="claim-comments"> inside the shared
-// <ul class="claim-edges">. It moved because the footer is now a collapsed
-// <details> (see EdgesHTMLWithLinks): a chip inside it would be invisible, and
-// unclickable, on every claim whose footer starts closed.
+// into funcMap as "commentChip" for compatibility and emitted by
+// EdgesHTMLWithLinks as the footer's final control. It is outside the
+// independently collapsible evidence doors and remains visible when they close.
 //
 // It reads c.Comments directly rather than a per-render lookup, so it needs no
 // config, no allowlist and therefore no override binding in internal/render —

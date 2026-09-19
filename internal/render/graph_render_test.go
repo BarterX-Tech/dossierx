@@ -410,8 +410,12 @@ func TestGraphTriggerIsNotASecTab(t *testing.T) {
 		t.Errorf("the graph trigger is %q, want a <button>", tag)
 	}
 
-	// It must sit above the module tabs, which is where a reader looks first.
-	if attrAt > strings.Index(nav, `class="sec-tab"`) && strings.Contains(nav, `class="sec-tab"`) {
-		t.Errorf("the graph trigger is emitted after the module tabs; design section 1.2 puts it above them")
+	// Paper's Group 02 navigation puts graph access in the fixed utility
+	// footer, after the scrollable module/track disclosures rather than above
+	// them. It must still live inside #nav so a live fragment swap replaces it.
+	utilitiesAt := strings.Index(nav, `class="nav-utilities"`)
+	groupsAt := strings.Index(nav, `class="system-nav-groups"`)
+	if utilitiesAt < 0 || groupsAt < 0 || attrAt < utilitiesAt || attrAt < groupsAt {
+		t.Errorf("the graph trigger is not inside the fixed utility footer after the navigation groups")
 	}
 }
