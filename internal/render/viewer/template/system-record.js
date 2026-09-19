@@ -40,7 +40,17 @@
   // presentation (R10.2); Stale (> 7d) is flagged for enhanceTimestamp to
   // recolour, never re-worded here.
   function freshnessPhrase(generatedAt) {
-    var hours = Math.max(0, Date.now() - generatedAt.getTime()) / 3600000;
+    var elapsedMs = Math.max(0, Date.now() - generatedAt.getTime());
+    var hours = elapsedMs / 3600000;
+    // R10.2's sub-hour band. Without it `Math.max(1, ...)` below clamped every
+    // age under 90 minutes up to "Updated 1 hour ago", so a viewer opened
+    // seconds after a build claimed to be an hour stale. One unit still, per
+    // R10.1 — minutes never pair with seconds.
+    if (hours < 1) {
+      var minutes = Math.round(elapsedMs / 60000);
+      if (minutes < 1) { return { phrase: 'Updated just now', stale: false }; }
+      return { phrase: 'Updated ' + minutes + ' minute' + (minutes === 1 ? '' : 's') + ' ago', stale: false };
+    }
     if (hours < 24) {
       var wholeHours = Math.max(1, Math.round(hours));
       return { phrase: 'Updated ' + wholeHours + ' hour' + (wholeHours === 1 ? '' : 's') + ' ago', stale: false };
@@ -217,6 +227,33 @@
     });
   }
 
+  // Collapsing a long body removes up to ~1.5 viewports of prose from between
+  // the reader's eye and the rest of the page: measured 845px at 1440 and
+  // 1373px at 390. Nothing compensated, so the card the reader was reading
+  // ended up hundreds of pixels ABOVE the viewport and they were left on a
+  // claim two cards down.
+  //
+  // Paper does not specify this: the file carries fourteen "...more" nodes and
+  // no "less" node, and neither screen 02 nor 05 says what a collapse does to
+  // scroll position. This is a decided convention, not a transcription — the
+  // card the reader was reading stays the thing they are looking at.
+  //
+  // Only when the card's top edge has been left above the deep-link line. If
+  // it is already on screen we leave the page alone; a scroll nobody asked for
+  // is its own surprise.
+  function keepCollapsedClaimInView(claim) {
+    if (!claim) { return; }
+    // `.claim { scroll-margin-top }` already encodes the sticky sub-nav's
+    // clearance and is where a deep link lands. Reading it keeps one number
+    // for both landings.
+    var offset = parseFloat(getComputedStyle(claim).scrollMarginTop) || 0;
+    var top = claim.getBoundingClientRect().top;
+    if (top >= offset - 1) { return; }
+    // `html { scroll-behavior: smooth }` would animate this correction over
+    // ~900px. The collapse is instant, so the catch-up is too.
+    window.scrollTo({ top: Math.max(0, Math.round(window.scrollY + top - offset)), behavior: 'instant' });
+  }
+
   function setClaimBodyExpanded(wrapper, expanded) {
     var body = wrapper && wrapper.querySelector(':scope > .claim-body');
     var toggle = wrapper && wrapper.querySelector(':scope > .claim-body-disclosure__toggle');
@@ -247,7 +284,13 @@
         toggle.setAttribute('aria-controls', body.id);
         toggle.hidden = true;
         toggle.addEventListener('click', function () {
-          setClaimBodyExpanded(wrapper, toggle.getAttribute('aria-expanded') !== 'true');
+          var expand = toggle.getAttribute('aria-expanded') !== 'true';
+          setClaimBodyExpanded(wrapper, expand);
+          // Only on a reader-driven collapse. setClaimBodyExpanded is also
+          // called by syncClaimBodyDisclosures on every navigation and by
+          // revealHashTarget; compensating there would move the page under the
+          // reader for reasons they never triggered.
+          if (!expand) { keepCollapsedClaimInView(wrapper.closest('.claim')); }
         });
         wrapper.appendChild(toggle);
       }
@@ -420,8 +463,7 @@
         : '';
       toc.innerHTML = '<div class="facet-toc__grabber" aria-hidden="true"></div><div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><span class="facet-toc__mobile-identity"><strong class="facet-toc__name">Claims</strong><span class="facet-toc__total"></span></span></span><button class="facet-toc__close" type="button" aria-label="Close facet panel"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
-        var claim = document.getElementById(event.target.value);
-        if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        navigateToClaim(event.target.value);
       });
       toc.querySelector('.facet-toc__close').addEventListener('click', closeFacetToc);
       document.body.appendChild(toc);
@@ -459,10 +501,8 @@
         count.setAttribute('aria-hidden', 'true');
       }
       button.append(strong, count);
-      button.addEventListener('click', function () {
-        claim.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        closeFacetToc();
-      });
+      button.dataset.claimTarget = claim.id;
+      button.addEventListener('click', function () { navigateToClaim(button.dataset.claimTarget); });
       list.appendChild(button);
       var option = document.createElement('option');
       option.value = claim.id;
@@ -535,6 +575,108 @@
     });
   }
 
+  // A tapped claim row NAVIGATES to the claim; it does not scroll a node this
+  // closure happens to be holding. Three things made the old
+  // `claim.scrollIntoView(); closeFacetToc();` unreliable:
+  //
+  //  1. closeFacetToc restores focus to the trigger synchronously AND again in
+  //     a rAF. Both are scroll-affecting, and focus({preventScroll}) is not
+  //     honoured everywhere, so the restore cancelled the smooth scroll that
+  //     had just started and the tap looked inert. Navigation is therefore
+  //     deferred one frame PAST closeFacetToc's own rAF re-focus, which also
+  //     keeps the "close returns focus to the trigger" contract that
+  //     viewer-tests/component_fit_test.go pins.
+  //  2. `claim` was a captured node. renderToc() replaceChildren()s this list
+  //     on every document click, every .layout mutation and every hashchange,
+  //     and SoftMount's mountSurface clones fresh cards into the host — a
+  //     detached node makes scrollIntoView a silent no-op. An id survives all
+  //     of that; a node reference does not.
+  //  3. SoftMount: a claim still living in a <template> is invisible to
+  //     getElementById, so nothing here may resolve it. Assigning
+  //     location.hash is the established cross-file mechanism (graph-ui.js's
+  //     "back to this claim in the reading view" does the same, for the same
+  //     reason): hashchange reaches viewer-runtime.js's showFromHash ->
+  //     showModuleFacet, which mountSurface()es the facet BEFORE resolving the
+  //     id, then scrolls and adds .claim-target-highlight. The hash also makes
+  //     the jump shareable.
+  //
+  // The '!' suffix is the graph pane's half of the hash and is preserved
+  // verbatim, exactly as viewer-runtime.js's hashGraphSuffix does.
+  // The landing is INSTANT, deliberately. `html { scroll-behavior: smooth }`
+  // turns every scrollIntoView in this viewer into an animation whose length
+  // grows with the distance, and a real facet here is 26-33 claims and
+  // 10,000-17,000px tall, so showModuleFacet's scrollIntoView takes ~1.6s to
+  // cross one. Worse, the same hashchange also runs revealHashTarget,
+  // syncNavigation and renderToc plus the .layout observer's enhance() pass,
+  // which hold the main thread for ~1s BEFORE that animation gets its first
+  // frame. Measured on the real corpus: a tapped row does not move the page
+  // for a full second and finishes 2.4s later, which is what a reader reports
+  // as "the navigation items are not clickable". A TOC row is a jump, not a
+  // reading gesture, so land it in one frame, where a deep link lands.
+  function landOnClaim(id) {
+    var claim = document.getElementById(id);
+    if (!claim) { return false; }
+    claim.scrollIntoView({ block: 'start', behavior: 'instant' });
+    return true;
+  }
+
+  function navigateToClaim(id) {
+    if (!id) { return; }
+    var raw = window.location.hash || '';
+    var bang = raw.indexOf('!');
+    var next = '#' + id + (bang < 0 ? '' : raw.slice(bang));
+    var already = raw === next;
+    // LAND FIRST, SYNCHRONOUSLY, before anything else in this handler.
+    // Measured on the real corpus: deferring the landing to the hashchange
+    // left the page motionless for over 600ms — the hash assignment costs a
+    // frame, and the hashchange task then queues behind ~900ms of
+    // renderToc/syncNavigation/enhance() work on the main thread. A reader
+    // gets no feedback in that window and clicks again, which is exactly the
+    // "the rows do nothing" report. renderToc builds these rows from live DOM
+    // nodes (visibleClaims), so the target is ALWAYS already mounted and a
+    // synchronous scroll is safe here; the hashchange landing below stays as
+    // the backstop for the case where it is not.
+    landOnClaim(id);
+    closeFacetToc();
+    window.requestAnimationFrame(function () {
+      if (already) {
+        // Re-assigning an identical hash fires no hashchange, so land it here.
+        landOnClaim(id);
+        return;
+      }
+      // Land as soon as the hashchange has been PROCESSED, not on a guessed
+      // frame. viewer-runtime.js registered its own hashchange listener at
+      // load, so this one — added later — runs after it in the same dispatch,
+      // by which point showModuleFacet has mounted the surface and the id
+      // resolves. A rAF-timed landing raced that task and frequently fired
+      // while the claim was still unmounted, leaving the slow smooth scroll
+      // in charge.
+      window.addEventListener('hashchange', function once() {
+        window.removeEventListener('hashchange', once);
+        landOnClaim(id);
+      });
+      window.location.hash = next;
+      // showModuleFacet re-renders the facet, which rebuilds the sub-nav and
+      // with it the trigger, so closeFacetToc's focus restore lands on a node
+      // that is no longer in the document and focus falls to <body>. Re-assert
+      // it on whatever trigger now exists, once the swap has settled.
+      // preventScroll keeps this from undoing the deep-link scroll that the
+      // hashchange just performed.
+      window.requestAnimationFrame(function () {
+        // The hashchange task has run by now, so showModuleFacet has mounted
+        // the surface and the id resolves. Re-issue the landing without the
+        // animation; this supersedes the smooth scroll showModuleFacet just
+        // started. A claim that still does not resolve leaves that scroll
+        // alone, so this can only make the jump faster, never break it.
+        landOnClaim(id);
+        var active = document.activeElement;
+        if (active && active !== document.body && active !== document.documentElement) { return; }
+        var trigger = document.querySelector('.facet-toc-trigger');
+        if (trigger) { trigger.focus({ preventScroll: true }); }
+      });
+    });
+  }
+
   function ensureFacetTocTrigger(active, count) {
     var subNav = active.module.querySelector(':scope > .sub-nav');
     if (!subNav) { return; }
@@ -545,7 +687,11 @@
       trigger.className = 'facet-toc-trigger';
       trigger.setAttribute('aria-expanded', 'false');
       trigger.setAttribute('aria-controls', 'systemFacetToc');
-      trigger.innerHTML = '<span>On this facet</span><span class="facet-toc-trigger__count"></span>';
+      // Paper node 4XS-0 leads the chip with a 12px list glyph. #dx-icon-menu
+      // is the closest sprite (its third stroke is full-width where Paper's is
+      // short); an exact #dx-icon-list symbol would be the faithful
+      // alternative if one is ever added to the sprite sheet.
+      trigger.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"></use></svg><span>On this facet</span><span class="facet-toc-trigger__count"></span>';
       trigger.addEventListener('click', function () {
         if (document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
         else { openFacetToc(trigger); }

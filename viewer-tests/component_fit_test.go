@@ -135,7 +135,12 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.Navigate(p.renderStatic()+"#widget.contract.root"),
-		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness", chromedp.ByQuery),
+		// The readiness DOOR, not its panel: the panel is the door's next
+		// sibling and is only visible while the door is open, and the door no
+		// longer auto-opens while a facet banner is showing (screens/02
+		// section 9.1). This test is about the status strip, so it only needs
+		// the card rendered.
+		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness-door", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
 	if !evalBool(t, ctx, `document.getElementById('statusStripTitle').textContent.indexOf('blocked by unapproved dependencies') >= 0`) {
@@ -154,8 +159,12 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	if evalBool(t, ctx, `document.getElementById('statusStrip').classList.contains('status-strip--open')`) {
 		t.Fatal("blocker-only strip must stay collapsed")
 	}
+	// The banner no longer expands inline (R09.6 / Paper ZP-0: "its own screen,
+	// not an expansion"); activating it opens the Issues screen instead. The
+	// blocker-count assertion below still resolves, because the severity chips
+	// travel with the findings and textContent reaches a hidden body.
 	runCDP(t, ctx, chromedp.SendKeys("#statusStripToggle", "\n", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.getElementById('statusStripToggle').getAttribute('aria-expanded') === 'true' && document.getElementById('statusStrip').classList.contains('status-strip--open')`)
+	pollTrue(t, ctx, `document.getElementById('issuesView').hidden === false`)
 	// lane L8 (this lane's third attempt; docs/design/screens/
 	// 04-issues-screen.md §8 item 11's coordinator ruling): #statusStripNote
 	// (the "Critical 0 · Needs you 3 · ..." tally) is removed from the
@@ -189,9 +198,23 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		var header = section && section.querySelector(':scope > .system-record-head');
 		var tabs = section && section.querySelector(':scope > .sub-nav');
 		var strip = document.getElementById('statusStrip');
-		var firstClaims = section && section.querySelector(':scope > .claim-group:not([hidden])');
-		return header && tabs && strip && firstClaims && tabs.nextElementSibling === strip &&
-		  strip.nextElementSibling === firstClaims;
+		// Paper 4O0-0/4SX-0 (mobile) and 3B-0 (desktop) all place the banner
+		// INSIDE the reading surface as its first child (56T-0 in 4R8-0,
+		// 574-0 in 4TN-0, 6P-0 in 6O-0), with the facet tabs in a separate
+		// chrome container that is that surface's PRECEDING SIBLING. The
+		// reading order is therefore heading -> tabs -> canvas, and inside the
+		// canvas, strip -> claims. shell.html gives one element both the
+		// .claim-group and .reading-canvas classes, so the strip can never be
+		// the tab strip's next sibling AND the canvas's first child; the old
+		// assertion encoded the pre-canvas flat DOM and contradicted
+		// TestGroup02StatusBelongsToActiveCanvas.
+		var canvas = section && section.querySelector(':scope > .reading-canvas:not([hidden])');
+		var firstClaim = canvas && canvas.querySelector(':scope > .claim');
+		return header && tabs && strip && canvas && firstClaim &&
+		  header.nextElementSibling === tabs &&
+		  tabs.nextElementSibling === canvas &&
+		  strip.parentElement === canvas && canvas.firstElementChild === strip &&
+		  strip.nextElementSibling === firstClaim;
 	})()`) {
 		t.Fatal("reading order must be module heading, facet tabs, status, then claims")
 	}

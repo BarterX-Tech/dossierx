@@ -177,8 +177,15 @@ func TestFocusModeIsOneReversibleControl(t *testing.T) {
 	if !evalBool(t, ctx, `getComputedStyle(document.getElementById('systemFacetToc')).display === 'none'`) {
 		t.Fatal("R11.1/R11.3: focus on must remove the right rail")
 	}
-	if !evalBool(t, ctx, `Math.round(document.querySelector('.content-area').getBoundingClientRect().width) === 1140`) {
-		t.Fatal("R11.3: the freed width goes to the evidence — the page grows to exactly 1140px")
+	// R11.3's 1140px is the CARD's width, not the wrapper's. Paper 13J-0 keeps
+	// the centre column full-bleed (1440 with 48px inline padding) and caps the
+	// reading canvas at 1140. Asserting it on .content-area instead let the
+	// wrapper widen while the canvas stayed at its 760px default, so the width
+	// the rails gave back became whitespace and focus mode looked inert.
+	pollTrue(t, ctx, `getComputedStyle(document.querySelector('.content-area')).paddingRight === '42px'`)
+	if !evalBool(t, ctx, `Math.round(document.querySelector('.reading-canvas:not([hidden])').getBoundingClientRect().width) === 1140`) {
+		t.Fatalf("R11.3: the freed width goes to the evidence — the card grows to exactly 1140px, got %d",
+			evalInt(t, ctx, `Math.round(document.querySelector('.reading-canvas:not([hidden])').getBoundingClientRect().width)`))
 	}
 
 	// R11.5: focus survives a reload via localStorage, never baked into the

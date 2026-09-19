@@ -213,15 +213,24 @@ subtraction."
 
 **Evidence.** `1F7-0`; eyebrow `1F9-0`, heading `1FA-0`, note `1FB-0`.
 
-### R10.2 — Three bands, and only the third takes colour
+### R10.2 — Four bands, and only the last takes colour
 
-**Statement.** Three freshness bands, one presentation rule each.
+**Statement.** Four freshness bands, one presentation rule each.
 
-| Band | Range | Presentation |
-|---|---|---|
-| Fresh | `< 24 h` | `--color-muted` label at weight 500, `--color-faint` clock icon. No colour. |
-| Ageing | `1 – 7 d` | Identical to Fresh. Still neutral. |
-| Stale | `> 7 d` | `--color-draft` label at weight **600**, `--color-draft` icon. |
+| Band | Range | Wording | Presentation |
+|---|---|---|---|
+| Just built | `< 1 h` | "Updated just now" below one minute, else "Updated N minutes ago" | Identical to Fresh. Neutral. |
+| Fresh | `1 – 24 h` | "Updated N hours ago" | `--color-muted` label at weight 500, `--color-faint` clock icon. No colour. |
+| Ageing | `1 – 7 d` | "Updated N days ago" | Identical to Fresh. Still neutral. |
+| Stale | `> 7 d` | "Updated N days ago" | `--color-draft` label at weight **600**, `--color-draft` icon. |
+
+**Amendment note (2026-09-19).** The sub-hour band was added after the viewer was
+observed reporting "Updated 1 hour ago" on a page nineteen seconds old. The
+formatter clamped every age under 90 minutes up to one hour
+(`Math.max(1, Math.round(hours))`) because the board specified no band below
+`< 24 h`, so a reader opening a freshly generated viewer was told the claims were
+an hour staler than they were. The band is still **one unit** (R10.3): minutes
+never pair with seconds, and "just now" replaces "0 minutes ago".
 
 Stale takes the **same amber as a draft, because both mean "not settled"**. This
 is the only freshness state that takes colour.
@@ -277,22 +286,42 @@ independent ones that produce four layouts."
 
 **Evidence.** `1E3-0`; eyebrow `1E5-0`, heading `1E6-0`, note `1E7-0`.
 
-### R11.2 — The measure never changes
+### R11.2 — The measure widens in focus, but stays bounded
 
-**Statement.** Claim prose holds the same width in both modes. The paragraph the
-reader is on is **pixel-identical** before and after entering focus. Focus removes
-what surrounds the text, never the text itself.
+**Statement.** Outside focus, claim prose holds the reading measure (the card's
+694px content box inside the 760px canvas). **In focus the prose widens to a
+bounded 900px** — it takes a share of the width the rails gave back, but never
+relaxes out to the card's full 1074px content box.
 
-**Measure:** the board states 760px. See `tokens.md` § Open decisions — 760 is the
-frozen value and `--container-reading` is corrected to it.
+**Measure:** 760px canvas / 694px prose in the default view; 900px prose in
+focus. See `tokens.md` § Open decisions for the frozen 760 canvas measure, which
+this rule does not change.
 
-**Evidence.** `1E3-0` rule 1 (marker `1EB-0`), title `1ED-0`, body `1EE-0`.
+**AMENDED 2026-09-19 (maintainer decision).** This rule previously froze the
+prose across the toggle — "the paragraph the reader is on is pixel-identical
+before and after" — and R11.3 sent the whole freed width to the evidence. On a
+real corpus that leaves a visible empty column beside every paragraph, in a mode
+whose entire purpose is more room, and the maintainer chose to spend part of it
+on the prose. The consequence the original rule protected is real and accepted:
+prose now re-typesets by roughly 200px when focus is toggled.
+
+The bound is the substance of the rule, not a detail. The card's content box in
+focus is 1074px, which at `--text-body` 17px over `--leading-body` 28px runs
+about 145 characters a line against a 65–75 optimum; 900px is about 115. Long
+doctrine claims are exactly the content that suffers first, so a future change
+that removes the cap and lets prose fill the card is a regression against this
+rule, not a continuation of it.
+
+**Evidence.** `1E3-0` rule 1 (marker `1EB-0`), title `1ED-0`, body `1EE-0` —
+the board still draws the original frozen-measure wording and is superseded here
+until it is redrawn.
 
 ### R11.3 — The freed width goes to the evidence, not to the prose
 
-**Statement.** The page grows to **1140px**. Prose keeps its column; blockers,
-breadcrumb paths, dependency maps, fenced code and conformance sets spread into
-the rest.
+**Statement.** The page grows to **1140px** and the card with it (758 → 1138).
+Blockers, breadcrumb paths, dependency maps, fenced code and conformance sets
+spread into the freed width. Prose takes a bounded share of it too — see R11.2 as
+amended; the original wording of this rule gave prose none of it.
 
 **Intent, verbatim.** "These are the things that were cramped at 760 — the prose
 never was."

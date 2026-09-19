@@ -272,6 +272,16 @@ html[data-theme="light"]{--conformance-blocked-ground:color-mix(in srgb,var(--wa
      '.claim-conformance-check''s own padding-inline, matching R-H.3's
      358px arithmetic. */
   .claim-conformance{margin-inline:calc(-1 * var(--card-gutter, 16px));padding-inline:0;border-inline:0;border-radius:0}
+  /* Paper 702-0 pads the panel itself by 16px and gives every child a 358px
+     measure (390 less two gutters). The panel here goes full-bleed instead,
+     with '.claim-conformance-check' supplying that inset — which leaves the
+     panel's OTHER direct children, the scope line and the eyebrow, running to
+     the screen edge with no side spacing at all. They take the same gutter
+     here rather than re-padding the panel, because two earlier fixes tuned
+     the check's 358px arithmetic against a zeroed panel and re-padding it
+     would have to unwind both. */
+  .claim-conformance-scope,
+  .claim-conformance-eyebrow{padding-inline:var(--card-gutter, 16px)}
   /* B2 RETRY FIX (wave-B2-fixlists/L7.md item 4, 06a §5 M4 '80G-0'): 14px,
      not the desktop 16px. */
   .claim-conformance-check{padding-block:16px 20px;gap:14px}

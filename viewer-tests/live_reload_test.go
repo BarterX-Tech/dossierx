@@ -16,6 +16,7 @@ package viewertests
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -219,17 +220,27 @@ func TestReloadPreservesScrollPosition(t *testing.T) {
 	p.run("comment", "add", "widget.contract.tall", "--as", "human", "--body", "seed")
 	ctx := serveAndOpenLive(t, p)
 
-	// The tall card makes the document exceed the viewport, so the WINDOW scrolls.
-	runCDP(t, ctx, chromedp.Evaluate(`window.scrollTo(0, 300);`, nil))
-	pollTrue(t, ctx, `Math.round(window.pageYOffset) === 300`)
+	// The tall card makes the document exceed the viewport, so the WINDOW
+	// scrolls. The offset is taken from what this fixture can ACTUALLY scroll
+	// rather than hardcoded: the footer's disclosure panels no longer auto-open
+	// (screens/02 section 9.1 suppresses R09.3 while a facet banner shows), so
+	// the document is ~284px shorter than when this test was written. A
+	// hardcoded 300 now clamps to the scroll maximum, and every assertion below
+	// would compare that clamped value against itself and pass vacuously.
+	target := evalInt(t, ctx, `Math.min(300, Math.max(0, document.documentElement.scrollHeight - window.innerHeight))`)
+	if target < 50 {
+		t.Fatalf("fixture can only scroll %dpx; it is too short to prove scroll is preserved", target)
+	}
+	runCDP(t, ctx, chromedp.Evaluate(fmt.Sprintf(`window.scrollTo(0, %d);`, target), nil))
+	pollTrue(t, ctx, fmt.Sprintf(`Math.round(window.pageYOffset) === %d`, target))
 
 	// Add a second comment out-of-band -> reload. The chip flips 1 -> 2.
 	p.run("comment", "add", "widget.contract.tall", "--as", "human", "--body", "second")
 	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip .comment-chip-count');return !!c && c.textContent === '2';})()`)
 
 	// The reader's window scroll survived the swap.
-	if got := evalInt(t, ctx, `Math.round(window.pageYOffset)`); got != 300 {
-		t.Fatalf("window scroll = %d after reload, want 300 (restore-view must preserve scroll)", got)
+	if got := evalInt(t, ctx, `Math.round(window.pageYOffset)`); got != target {
+		t.Fatalf("window scroll = %d after reload, want %d (restore-view must preserve scroll)", got, target)
 	}
 	// And .content-area's own scrollTop (0 in the default desktop layout) is
 	// unchanged too — the literal content-area.scrollTop the restore path also

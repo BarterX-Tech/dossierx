@@ -581,9 +581,12 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 		{File: "internal/http/backoff.go"},
 	}
 	// relationships = 1 (governed_by) + 2 (rests_on ids) + 1 (review_pending)
-	// = 4. Open, on the review_pending signal (files' Drifted also qualifies).
+	// = 4. CLOSED: the door carries no `open` attribute even though this claim
+	// is both review_pending and has a drifted file. Those two signals used to
+	// auto-open it, which contradicted Paper node Z7-0 ("Never opens by
+	// default") and the reading view's all-closed footer; both were removed.
 	want := `<div class="claim-footer">` +
-		`<details class="claim-links" name="claim-footer-widget.contract.retry-policy" open>` +
+		`<details class="claim-links" name="claim-footer-widget.contract.retry-policy">` +
 		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">4 relationships</span><svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg></summary></details>` +
 		`<div class="claim-footer-panel claim-links-panel">` +
 		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">4</span></div>` +
@@ -607,12 +610,17 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 	}
 }
 
-// TestEdgesHTMLWithLinks_OpenAttribute covers the two — and only two —
-// server-written auto-open signals: any linked file Drifted, or the claim
-// locked + review_pending. They are OR'd, so either alone opens the footer.
-// The third signal (a deep link to the claim) is a CSS :target rule in
-// style.css and is deliberately undetectable from here: a URL fragment is
-// never sent to the server.
+// TestEdgesHTMLWithLinks_OpenAttribute pins that there is NO server-written
+// auto-open signal on the relationships door, in the exact cases that used to
+// produce one. A drifted linked file and a locked+review_pending claim each
+// used to open it, OR'd; Paper node Z7-0 says the relationships door "Never
+// opens by default", and the reading view (board 3B-0) draws all four footer
+// doors closed, so both signals were removed. Those states remain visible in
+// the claim's status pill and in the readiness door.
+//
+// The one surviving open path is a deep link to the claim: a CSS :target rule
+// in style.css, deliberately undetectable from here because a URL fragment is
+// never sent to the server. That is reader-initiated, not a default.
 func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 
 	cases := []struct {
@@ -631,18 +639,18 @@ func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 			name:     "drifted_file_alone",
 			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked},
 			files:    []implink.ViewFile{{File: "a.go"}, {File: "b.go", Drifted: true}},
-			wantOpen: true,
+			wantOpen: false,
 		},
 		{
 			name:     "locked_review_pending_alone",
 			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked, ReviewPending: true},
-			wantOpen: true,
+			wantOpen: false,
 		},
 		{
 			name:     "both_signals",
 			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked, ReviewPending: true},
 			files:    []implink.ViewFile{{File: "a.go", Drifted: true}},
-			wantOpen: true,
+			wantOpen: false,
 		},
 		{
 			// ReviewPending is only meaningful on a locked claim; a draft

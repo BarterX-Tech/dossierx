@@ -25,6 +25,26 @@ const (
 	readinessScaleMaxJSHeapBytes = 512 * 1024 * 1024
 )
 
+// openReadinessPanel opens a claim's readiness door and waits for its panel to
+// be on screen.
+//
+// screens/02 section 9.1 suppresses R09.3's auto-open whenever a facet-level
+// blocked banner is showing, and every fixture here raises one, so the door now
+// paints CLOSED. The panel (.claim-readiness) is the door's next sibling and is
+// only visible while the door is open — a bare WaitVisible on it would hang.
+// Tests asserting on panel CONTENT therefore open the door first; what they are
+// about is the content, not the default state, which
+// TestFacetBannerSuppressesReadinessAutoOpen owns.
+func openReadinessPanel(t *testing.T, ctx context.Context, doorSelector string) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.WaitVisible(doorSelector, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){
+		var d = document.querySelector(`+strconv.Quote(doorSelector)+`);
+		if (d && !d.open) { d.querySelector('summary').click(); }
+	})()`, nil))
+	pollTrue(t, ctx, `(function(){ var d = document.querySelector(`+strconv.Quote(doorSelector)+`); return !!d && d.open; })()`)
+}
+
 func readinessScaleProject(t *testing.T, layers, width int) *project {
 	t.Helper()
 	p := newProjectRaw(t, defaultConfigYAML)
@@ -148,8 +168,8 @@ func TestReadinessBrowserScaleBudgets(t *testing.T) {
 			ctx := browserContext(t)
 			runCDP(t, ctx,
 				chromedp.Navigate(p.renderStatic()+"#widget.contract.l000-n00"),
-				chromedp.WaitVisible("#widget\\.contract\\.l000-n00 .claim-readiness", chromedp.ByQuery),
 			)
+			openReadinessPanel(t, ctx, "#widget\\.contract\\.l000-n00 details.claim-readiness-door")
 			pollTrue(t, ctx, `document.readyState === 'complete' && performance.getEntriesByType('navigation')[0].loadEventEnd > 0`)
 
 			before := readReadinessScaleMetrics(t, ctx)
@@ -320,8 +340,8 @@ rests_on:
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.Navigate(p.renderStatic()+"#widget.contract.root"),
-		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness", chromedp.ByQuery),
 	)
+	openReadinessPanel(t, ctx, "#widget\\.contract\\.root details.claim-readiness-door")
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
 	if got, want := evalString(t, ctx, root+`.querySelector('.claim-readiness-scope').textContent.trim()`), "14 across 1 module"; got != want {
 		t.Fatalf("scope text = %q, want %q", got, want)
@@ -357,8 +377,8 @@ func TestStaticReadinessGroupsFactsByModuleAndPreservesEveryID(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.Navigate(p.renderStatic()+"#widget.contract.root"),
-		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness", chromedp.ByQuery),
 	)
+	openReadinessPanel(t, ctx, "#widget\\.contract\\.root details.claim-readiness-door")
 
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
 	if !evalBool(t, ctx, `(function(){
@@ -427,8 +447,8 @@ func TestReadinessTreatsFlagDetailsAsText(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.Navigate(p.renderStatic()+"#"+testClaimID),
-		chromedp.WaitVisible(".claim-readiness", chromedp.ByQuery),
 	)
+	openReadinessPanel(t, ctx, "details.claim-readiness-door")
 	if evalBool(t, ctx, `window.__readinessInjected === true || !!document.querySelector('.claim-readiness img')`) {
 		t.Fatal("authored readiness detail became markup instead of text")
 	}
@@ -451,8 +471,8 @@ func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 	base := p.ensureServe()
 	runCDP(t, ctx,
 		chromedp.Navigate(base+"/#widget.contract.root"),
-		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness", chromedp.ByQuery),
 	)
+	openReadinessPanel(t, ctx, "#widget\\.contract\\.root details.claim-readiness-door")
 	pollTrue(t, ctx, `document.body.classList.contains('comments-sse-open')`)
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
 	runCDP(t, ctx, chromedp.Evaluate(`(function(){ var m = `+root+`.querySelector('.claim-readiness-more'); if (m) { m.click(); } })()`, nil))
@@ -470,10 +490,11 @@ func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 // TestReadinessDoorJoinsTheFooterDisclosureGroup verifies the new door/panel
 // architecture 06 §4.3/R09.1-R09.3 requires: the readiness door is a native
 // <details name="claim-footer-<id>"> sharing its group with the
-// relationships/sources doors components.EdgesHTMLWithLinks renders, it
-// auto-opens because this claim is blocked, and opening a sibling door
-// closes it right back — "exactly one expansion open at a time" (R09.2),
-// with readiness's own auto-open (R09.3) as the sole exception at load.
+// relationships/sources doors components.EdgesHTMLWithLinks renders, and
+// opening a sibling door closes it right back — "exactly one expansion open
+// at a time" (R09.2). It starts CLOSED here: this fixture raises a
+// facet-level banner, and screens/02 section 9.1 suppresses R09.3's auto-open
+// while that banner shows.
 func TestReadinessDoorJoinsTheFooterDisclosureGroup(t *testing.T) {
 	p := newReadinessProject(t)
 	ctx := browserContext(t)
@@ -482,9 +503,18 @@ func TestReadinessDoorJoinsTheFooterDisclosureGroup(t *testing.T) {
 		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness-door", chromedp.ByQuery),
 	)
 	card := `document.getElementById('widget.contract.root')`
-	if !evalBool(t, ctx, card+`.querySelector('.claim-readiness-door').open`) {
-		t.Fatal("a blocked claim's readiness door must auto-open (R09.3)")
+	// This fixture's blocked claims raise a facet-level banner, and
+	// screens/02 section 9.1 suppresses R09.3's auto-open whenever that banner
+	// is showing — "blocked" alone is not a trigger at facet scale. R09.3
+	// binds the single-claim boards (05, 06, 06a, 07, 07a), not 02, so on this
+	// surface the door starts CLOSED. The reader opens it below, which is what
+	// the rest of this test is actually about: the door's membership of the
+	// footer's one-at-a-time group.
+	if evalBool(t, ctx, card+`.querySelector('.claim-readiness-door').open`) {
+		t.Fatal("with a facet banner showing, the readiness door must start closed (screens/02 section 9.1)")
 	}
+	runCDP(t, ctx, chromedp.Evaluate(card+`.querySelector('.claim-readiness-door summary').click()`, nil))
+	pollTrue(t, ctx, card+`.querySelector('.claim-readiness-door').open === true`)
 	if !evalBool(t, ctx, `(function(){
 		var door = `+card+`.querySelector('.claim-readiness-door');
 		var links = `+card+`.querySelector('.claim-links');

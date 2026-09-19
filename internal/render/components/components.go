@@ -546,22 +546,16 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	// only its count at zero.
 	footerName := html.EscapeString("claim-footer-" + c.ID)
 
-	// Two auto-open signals, OR'd — either alone opens the relationships
-	// door. Both read data already in scope (files' Drifted flag, the
-	// claim's own status pair), which is why this needs no new parameter.
-	// The THIRD auto-open signal, the deep-link/fragment case, stays
-	// CSS-only (viewer/template/style.css's `.claim:target .claim-links…`
-	// rule) since a URL fragment is never sent to the server.
-	openAttr := ""
-	for _, f := range files {
-		if f.Drifted {
-			openAttr = " open"
-			break
-		}
-	}
-	if reviewPending {
-		openAttr = " open"
-	}
+	// The relationships door has NO auto-open signal. Paper's placement board
+	// states it outright (node Z7-0: "Never opens by default"), and the
+	// reading view draws all four footer doors closed. The drifted /
+	// review_pending signals that used to force it open contradicted that and
+	// were removed; those states are still carried by the claim's status pill
+	// and by the readiness door.
+	//
+	// The deep-link/fragment case stays CSS-only (viewer/template/style.css's
+	// `.claim:target .claim-links…` rule) since a URL fragment is never sent
+	// to the server. That is reader-initiated navigation, not a default state.
 
 	b.WriteString(`<div class="claim-footer">`)
 
@@ -605,7 +599,6 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 		b.WriteString(`<details class="claim-links" name="`)
 		b.WriteString(footerName)
 		b.WriteString(`"`)
-		b.WriteString(openAttr)
 		b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
 		b.WriteString(countSegment(links, "relationship"))
 		b.WriteString(`</span>`)

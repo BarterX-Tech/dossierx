@@ -1525,8 +1525,21 @@
         var text = el('span', 'status-finding-text');
         text.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
         var ids = Object.keys(group.claimIDs).sort();
-        if (ids.length === 1) {
-          text.appendChild(textEl('span', 'status-finding-claim', ids[0]));
+        // Paper 1KX-0: every row carries a second, demoted line under its
+        // title holding the dotted claim id of the claim the reader must go
+        // FIX — not one of the claims it blocks. For a blocker/needs_you
+        // group that claim is group.ownerModuleClaimID (the dependency_id or
+        // review owner the group key is built from, so it is exact for the
+        // whole group however many claims it blocks). Lint groups key on the
+        // lint rule rather than a claim, so their ownerModuleClaimID is only
+        // whichever claim created them; those keep the narrower single-claim
+        // reading. Mobile hides this line entirely — Paper 5XH-0 draws no
+        // slug at phone width.
+        var ownerID = (group.severity === 'blocker' || group.severity === 'needs_you')
+          ? group.ownerModuleClaimID
+          : (ids.length === 1 ? ids[0] : '');
+        if (ownerID) {
+          text.appendChild(textEl('span', 'status-finding-claim', ownerID));
         }
         row.appendChild(text);
         // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
@@ -1991,7 +2004,13 @@
       // before opening itself, because R09.3's auto-open — reserved for a
       // BLOCKED claim — outranks the relationships door's own
       // drifted/review_pending auto-open signal.
-      function renderClaimReadiness(assessments) {
+      // bannerShowing is supplied by renderStatusStrip, which is the only
+      // caller that knows whether the facet-level banner will be on screen
+      // this pass. R09.3's auto-open is per-claim and is suppressed while
+      // that banner shows (screens/02 section 9.1): on a facet where every
+      // claim is blocked the banner already says so once, and opening a door
+      // on every card buries the prose it is meant to annotate.
+      function renderClaimReadiness(assessments, bannerShowing) {
         // Project by the rendered card's canonical id. Claim ids also occur
         // on graph links, comment controls, and edge references, so
         // heading/link scans are not a reliable card inventory after the
@@ -2034,12 +2053,13 @@
           } else {
             summary.appendChild(textEl('span', 'claim-footer-chip-label', 'No blockers'));
           }
-          if (blocked) {
+          if (blocked && !bannerShowing) {
             // Force-close any sibling in this name group a stale
-            // server-rendered `open` attribute left open (the relationships
-            // door's drifted/review_pending signal, components.go's
-            // openAttr) before this claim's own blocked state claims the
-            // group, per R09.3's priority over that signal.
+            // server-rendered `open` attribute left open before this claim's
+            // own blocked state claims the group, per R09.3's priority over
+            // that signal. components.go no longer emits its own open
+            // attribute (Z7-0: relationships never opens by default), so this
+            // now only guards against a deep-linked sibling.
             document.querySelectorAll('details[name="' + footerName.replace(/"/g, '\\"') + '"][open]').forEach(function (other) { other.open = false; });
             door.open = true;
           }
@@ -2166,7 +2186,6 @@
       function renderStatusStrip(data) {
         if (!stripEl || !stripBody || !stripSummary || !stripTitle) { return; }
         lastStatusData = data || {};
-        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -2181,6 +2200,13 @@
         );
 
         var actionable = groups.some(function (group) { return group.severity !== 'later'; });
+        // The banner's own visibility decides whether R09.3's readiness
+        // auto-open is suppressed (screens/02 section 9.1). It is computed
+        // here, BEFORE the doors are built, and passed down: reading
+        // stripEl.hidden inside renderClaimReadiness would sample the
+        // PREVIOUS pass's state, since this function only writes it below.
+        var bannerShowing = groups.length > 0 && actionable;
+        renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
         if (!groups.length || !actionable) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
@@ -2332,11 +2358,26 @@
         }, function () { /* keep the last verdict; the next tick recovers */ });
       }
 
-      if (stripToggle) {
-        stripToggle.addEventListener('click', function () {
-          setStripExpanded(!stripExpanded);
-        });
-      }
+      // R09.6 (Paper ZP-0): "Issues is its own screen, not an expansion. The
+      // banner is the only way in." Paper backs that with node evidence:
+      // 56T-0, 574-0 and 6P-0 draw ONE state — the sentence plus "Show
+      // issues" — the desktop banner is a single flex ROW with no slot for a
+      // body, the string "Hide issues" does not exist anywhere in the design
+      // file, and 04 section 4 records that no board in the group draws an
+      // expanded state. The inline expand listener that lived here is gone;
+      // the toggle's only job is opening the Issues screen.
+      //
+      // setStripExpanded is deliberately KEPT: renderStatusStrip still calls
+      // it every poll with a permanently-false stripExpanded, and that is
+      // what holds #statusStripBody hidden, aria-expanded="false" and the
+      // action reading "Show issues".
+      //
+      // #statusStripBody is never emptied, removed or left unpopulated:
+      // renderStatusStrip still builds into it, issuesSyncFromStrip still
+      // MOVES its children into the Issues screen, and closeIssuesView still
+      // moves them back. Only its visibility to the reader is withdrawn — the
+      // children now return into a hidden body instead of an expanded one,
+      // which is the defect this removes.
 
       // ================================================================
       // Issues view (04-issues-screen.md) — lane L8a
@@ -2605,6 +2646,12 @@
 
       function openIssuesView() {
         if (!issuesViewEl) { return; }
+        // issuesSyncFromStrip MOVES #statusStripBody's children in here, so
+        // those nodes live in exactly ONE place at a time. Re-entering while
+        // this view is already open would clear both hosts and then find
+        // stripBody already empty, printing "Nothing in this facet is
+        // blocked." beside a rail that is still counting the real blockers.
+        if (issuesViewOpen) { return; }
         var contentArea = document.querySelector('.content-area');
         if (contentArea) { contentArea.hidden = true; }
         issuesViewEl.hidden = false;
@@ -2630,6 +2677,38 @@
         issuesViewOpen = false;
         var contentArea = document.querySelector('.content-area');
         if (contentArea) { contentArea.hidden = false; }
+        // Hand the status strip back the children issuesSyncFromStrip MOVED
+        // out of it. Leaving #statusStripBody drained has two visible costs:
+        // the reading view shows an EXPANDED but blank strip until the next
+        // renderStatusStrip repaints it, and the next openIssuesView syncs
+        // from an empty source and renders the empty state while
+        // renderIssuesRail — which reads lastStatusData, not the DOM — still
+        // reports the true count. That is one screen saying both "Nothing in
+        // this facet is blocked." and "26 claims blocked, 59 paths".
+        //
+        // issuesViewOpen is already false, so the observer callback these
+        // moves would queue is a no-op; it is disconnected around them
+        // anyway, for the same reason issuesSyncFromStrip disconnects.
+        if (!stripBody || !issuesFiltersHost || !issuesFindingsCard) { return; }
+        if (issuesStripObserver) { issuesStripObserver.disconnect(); }
+        Array.prototype.slice.call(issuesFindingsCard.children).forEach(function (node) {
+          // This view's OWN node, never the strip's — it must not travel back.
+          if (node.classList && node.classList.contains('issues-findings-empty')) {
+            node.remove();
+            return;
+          }
+          stripBody.appendChild(node);
+        });
+        // renderStatusStrip writes the filter row ahead of every group, so
+        // restore it to that same position: a later re-open must be
+        // indistinguishable from a first.
+        var filterRow = issuesFiltersHost.firstElementChild;
+        if (filterRow) {
+          var firstGroup = stripBody.querySelector('.status-group');
+          if (firstGroup) { stripBody.insertBefore(filterRow, firstGroup); }
+          else { stripBody.appendChild(filterRow); }
+        }
+        if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
       }
 
       if (issuesBackBtn) {
@@ -3063,7 +3142,9 @@
         // refreshStatus races the fragment fetch; if it painted the old DOM
         // before this swap, re-apply the last verdict onto the fresh cards.
         if (lastStatusData) {
-          renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
+          // renderStatusStrip rebuilds the readiness doors itself, with the
+          // banner state they have to be gated on. Calling renderClaimReadiness
+          // separately here would paint them once un-gated first.
           renderStatusStrip(lastStatusData);
         }
 
@@ -3161,6 +3242,17 @@
       });
 
       window.addEventListener('hashchange', function () {
+        // A hash change is a request for a CLAIM in the reading view: the
+        // graph pane's "back to this claim", a facet-TOC row, the browser's
+        // own Back button, a shared link. The Issues screen hides
+        // .content-area, so leaving it open strands the reader on Issues
+        // while showModuleFacet silently re-syncs the findings card and the
+        // rail to the NEW facet behind a breadcrumb and subtitle that still
+        // name the old one (issuesSyncHeader runs only from openIssuesView).
+        // Closing first also un-hides .content-area before showModuleFacet
+        // scrolls the deep-linked card into view — scrollIntoView on a hidden
+        // ancestor is a silent no-op.
+        closeIssuesView();
         showFromHash({ skipHash: true });
       });
 
