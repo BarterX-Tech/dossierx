@@ -311,7 +311,14 @@
       // first time navigation reveals it, via the document click hook below.
       if (!body.getClientRects().length) { return; }
       var lineHeight = parseFloat(getComputedStyle(body).lineHeight) || 28;
-      var needsDisclosure = body.scrollHeight > (lineHeight * 4) + 1;
+      // A steps claim always needs the control, however short its prose: its
+      // `.step` siblings are hidden while collapsed (style.css), so without a
+      // toggle they would be unreachable. Paper's collapsed card for one of
+      // these (6KC-0) carries the truncated body and the "...more" control and
+      // nothing else.
+      var stepsHost = body.closest('.claim');
+      var hasSteps = !!(stepsHost && stepsHost.querySelector(':scope > .step'));
+      var needsDisclosure = hasSteps || body.scrollHeight > (lineHeight * 4) + 1;
       var control = wrapper.querySelector(':scope > .claim-body-disclosure__toggle');
       control.hidden = !needsDisclosure;
       if (!needsDisclosure) {

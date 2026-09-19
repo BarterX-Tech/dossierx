@@ -4805,11 +4805,16 @@ body.shell-body {
   line-height: 1.4;
 }
 
+/* The 2px accent left-marker this rule used to tint, and the 20px - 2px = 18px
+   padding that compensated for it, are both gone: the shipping row is flush
+   (.sec-tab `border: 0` plus `padding: 7px 10px` further down). Because
+   .sec-tab.on outranks .sec-tab, that orphaned padding-left survived and
+   pushed the SELECTED label 8px right of every other row, in the module rail
+   and in the Tracks list alike. Paper 4A-0 keeps selected and unselected on
+   one 10px lane and marks selection with ground and weight only. */
 .sec-tab.on {
   color: var(--ink);
   background: var(--accent-bg);
-  border-left-color: var(--accent);
-  padding-left: 18px;
 }
 
 /* nav-group-label separates the Tracks run from the modules above it. The
@@ -5112,8 +5117,9 @@ body.shell-body {
   }
 
   .sec-tab.on {
-    padding-left: 18px;
-    border-left-color: var(--accent);
+    /* One lane with the unselected rows — see .sec-tab.on above. The drawer
+       measured the same 18px/10px split, and Paper 4Y3-0 keeps the 10px lane
+       here too. */
     border-bottom: 0;
   }
 }
@@ -6275,6 +6281,17 @@ body.shell-body {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
+}
+
+/* A steps claim renders its `.step` blocks as SIBLINGS of .claim-body
+   (components/steps.html), outside the disclosure wrapper, so the clamp
+   above reached the prose and nothing else: a collapsed steps claim still
+   stood thousands of pixels tall with every step on screen, which made its
+   own "...more" meaningless. Paper's collapsed card for one of these
+   (6KC-0) is 80px and holds exactly two things — the truncated body and the
+   "...more" control — so the steps belong behind the same disclosure. */
+.claim-body-disclosure--collapsed ~ .step {
+  display: none;
 }
 
 .claim-body-disclosure__toggle {
@@ -9418,6 +9435,8 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     overflow: visible;
     -webkit-line-clamp: unset;
   }
+  /* Print carries the whole claim, steps included. */
+  .claim-body-disclosure--collapsed ~ .step { display: flex; }
   .claim-body-disclosure__toggle { display: none !important; }
 
   /* Build order tab. What this buys is honest and small: a phase block is
