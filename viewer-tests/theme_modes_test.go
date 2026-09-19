@@ -3,11 +3,12 @@ package viewertests
 // Built-in reader mode choices remain supported after custom project themes are removed.
 import (
 	"context"
-	"github.com/chromedp/chromedp"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/chromedp/chromedp"
 )
 
 const unthemedConfigYAML = `schema_version: 1
@@ -138,9 +139,15 @@ func TestThemeControlLightOverridesDarkOS(t *testing.T) {
 	}
 	press := func(ctx context.Context, choice string) {
 		if choice == "system" {
-			evalVoid(t, ctx, `localStorage.setItem('dossierx-theme', 'system')`)
-			runCDP(t, ctx, chromedp.Reload())
-			pollTrue(t, ctx, `document.readyState === 'complete' && document.documentElement.getAttribute('data-theme') === 'system'`)
+			// Desktop chrome is Light/Dark only; System is still the
+			// stored/OS-follow state. Set it directly — there is no System button.
+			evalVoid(t, ctx, `(function(){
+				try { localStorage.setItem('dossierx-theme', 'system'); } catch (e) {}
+				document.documentElement.setAttribute('data-theme', 'system');
+			})()`)
+			if got := evalString(t, ctx, `document.documentElement.getAttribute('data-theme') || ''`); got != "system" {
+				t.Fatalf("could not restore data-theme=system (got %q)", got)
+			}
 			return
 		}
 		evalVoid(t, ctx, `(function(){

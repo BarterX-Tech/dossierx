@@ -78,11 +78,12 @@ func assertNoSeam(t *testing.T, browser, url, scheme string) {
 		// Gaps are the y-positions, relative to the pre's border box, where two
 		// line-box fragments of the <code> meet: the bottom of fragment i and
 		// the top of fragment i+1.
-		Gaps    []float64 `json:"gaps"`
-		NRects  int       `json:"nRects"`
-		BG      string    `json:"bg"`
-		Alpha   float64   `json:"alpha"`
-		PadLeft float64   `json:"padLeft"`
+		Gaps      []float64 `json:"gaps"`
+		NRects    int       `json:"nRects"`
+		BG        string    `json:"bg"`
+		Alpha     float64   `json:"alpha"`
+		PadLeft   float64   `json:"padLeft"`
+		BorderTop float64   `json:"borderTop"`
 	}
 	evalInto(t, ctx, `(function(){
 		var pre = document.querySelector('.claim-body pre');
@@ -108,7 +109,8 @@ func assertNoSeam(t *testing.T, browser, url, scheme string) {
 		return {
 			rect: {X: pr.left + window.scrollX, Y: pr.top + window.scrollY, W: pr.width, H: pr.height},
 			gaps: gaps, nRects: rects.length, bg: resolved, alpha: alpha,
-			padLeft: parseFloat(cs.paddingLeft)
+			padLeft: parseFloat(cs.paddingLeft),
+			borderTop: parseFloat(cs.borderTopWidth)
 		};
 	})()`, &m)
 
@@ -168,7 +170,10 @@ func assertNoSeam(t *testing.T, browser, url, scheme string) {
 		t.Fatalf("%s: the fenced block screenshot is empty (%v)", scheme, b)
 	}
 
-	wantR, wantG, wantB := pixelAt(t, img, b.Min.X+b.Dx()/2, b.Min.Y+2)
+	// Skip the 1px border (2 device rows at scale 2). Y+2 used to land in
+	// the border and compare seams to --border instead of the pre fill.
+	padY := b.Min.Y + int(m.BorderTop*scale) + 2
+	wantR, wantG, wantB := pixelAt(t, img, b.Min.X+b.Dx()/2, padY)
 	t.Logf("%s: fenced block %.0fx%.0f, %d line-box fragment(s), %d gap(s), background %s "+
 		"(sampled rgb(%d,%d,%d) in the top padding)",
 		scheme, m.Rect.W, m.Rect.H, m.NRects, len(m.Gaps), m.BG, wantR, wantG, wantB)

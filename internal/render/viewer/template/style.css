@@ -4773,6 +4773,12 @@ body.shell-body {
   line-height: 15px;
 }
 
+.freshness-footer__live {
+  margin-left: 6px;
+  color: var(--accent);
+  font: 600 11px/14px var(--font-sans);
+}
+
 .freshness-footer--stale .freshness-footer__line,
 .freshness-footer--stale .freshness-footer__icon {
   color: var(--status-draft, #976600);
@@ -6330,6 +6336,19 @@ code {
   border-radius: 7px;
   background: var(--code-bg, color-mix(in srgb, var(--paper) 82%, var(--card-bg)));
   font-size: 12px;
+}
+
+/* Repeat the fenced <code> reset AFTER the live `code` pill. Equal
+   specificity would otherwise let that later `code { border; background }`
+   win on source order and slice a --border seam between line boxes. */
+.claim-body pre code,
+.claim-list-items pre code,
+.sbody pre code,
+.comment-body pre code {
+  background: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 /* THIRD RETRY FIX (verifier item 1). The rule this comment replaces —

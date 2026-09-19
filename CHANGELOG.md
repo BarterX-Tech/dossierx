@@ -18,14 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dark values reach print.
 - Viewer chrome uses Lucide icons (lock, navigation, theme, comments, nav
   chevrons) instead of mixed emoji and CSS triangles. The evidence-footer
-  chevron stays the CSS border triangle. System / Light / Dark remains the
-  built-in reader choice; project-defined themes and presets are removed.
+  chevron stays the CSS border triangle. Light / Dark is the built-in reader
+  choice (System follows the OS when no explicit choice is stored);
+  project-defined themes and presets are removed.
   Legacy `viewer.theme` configuration now fails with a migration message,
   rather than being silently ignored.
 - Regenerate the committed fixture viewers and
   `testdata/render-across-releases.golden.txt` for the design-revamp default
   look. The deprecated theme-preset fixture and theme-parity freeze are
-  removed with the custom-theme feature.
+  removed with the custom-theme feature. A follow-up keeps the fenced-code
+  pill reset after the live `code` rule, restores the Live freshness badge,
+  and avoids an SVG namespace URI in the footer chevron.
 
 ## [0.7.16] - 2026-09-13
 

@@ -85,6 +85,7 @@ type readinessScaleMetrics struct {
 	DOMNodes       int     `json:"dom_nodes"`
 	JSHeapBytes    float64 `json:"js_heap_bytes"`
 	ReadinessDoors int     `json:"readiness_doors"`
+	ReadyChips     int     `json:"ready_chips"`
 	VisibleRows    int     `json:"visible_rows"`
 	RawFacts       int     `json:"raw_facts"`
 	RawPanels      int     `json:"raw_panels"`
@@ -101,7 +102,8 @@ func readReadinessScaleMetrics(t *testing.T, ctx context.Context) readinessScale
 			load_ms: nav ? nav.loadEventEnd - nav.startTime : -1,
 			dom_nodes: document.querySelectorAll('*').length,
 			js_heap_bytes: performance.memory ? performance.memory.usedJSHeapSize : -1,
-			readiness_doors: document.querySelectorAll('.claim-readiness-door').length,
+			readiness_doors: document.querySelectorAll('.claim-readiness-door, .claim-readiness-empty').length,
+			ready_chips: document.querySelectorAll('.claim-readiness-empty').length,
 			visible_rows: document.querySelectorAll('.claim-readiness-blocker').length,
 			raw_facts: raws.reduce(function(total, pre){
 				var raw = JSON.parse(pre.textContent);
@@ -185,8 +187,12 @@ func TestReadinessBrowserScaleBudgets(t *testing.T) {
 			if before.ReadinessDoors != claimCount {
 				t.Fatalf("readiness doors = %d, want every one of %d claims", before.ReadinessDoors, claimCount)
 			}
-			if before.RawPanels != claimCount || before.RawFacts != factCount {
-				t.Fatalf("raw diagnostics have %d panels and %d facts, want %d panels and all %d facts", before.RawPanels, before.RawFacts, claimCount, factCount)
+			if before.RawFacts != factCount {
+				t.Fatalf("raw diagnostics have %d facts, want all %d", before.RawFacts, factCount)
+			}
+			if before.RawPanels+before.ReadyChips != claimCount {
+				t.Fatalf("raw panels %d + ready chips %d != %d claims (ready claims no longer keep a raw panel)",
+					before.RawPanels, before.ReadyChips, claimCount)
 			}
 			if before.MapElements != 0 {
 				t.Fatalf("06 §R09.9: found %d .claim-readiness-map/-trace/-route element(s), want zero — the inline dependency map is retired", before.MapElements)
@@ -386,7 +392,7 @@ func TestStaticReadinessGroupsFactsByModuleAndPreservesEveryID(t *testing.T) {
 		if (items.length < 3) { return false; }
 		return items.slice(0, 3).every(function(item){
 			var claim = document.getElementById(item.dataset.claimTarget);
-			var door = claim && claim.querySelector('.claim-readiness-door[data-readiness-fact-count]');
+			var door = claim && claim.querySelector('[data-readiness-fact-count]');
 			var count = item.querySelector('.facet-toc__blocker-count');
 			return door && count && Number(count.textContent || 0) === Number(door.dataset.readinessFactCount);
 		});

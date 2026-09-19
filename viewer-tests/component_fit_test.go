@@ -175,7 +175,7 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 		var claims = document.querySelectorAll('.module-section:not([hidden]) .claim-group:not([hidden]) .claim').length;
 		var title = document.getElementById('statusStripTitle').textContent;
 		var chipCount = document.querySelector('.status-severity-chip--blocker .status-severity-chip__count');
-		var blocked = title.match(/(\d+) claims? blocked/);
+		var blocked = title.match(/(\d+)(?:\s+\w+)? claims? (?:are |is )?blocked/);
 		return blocked && chipCount && Number(blocked[1]) <= claims && Number(chipCount.textContent) <= claims;
 	})()`) {
 		t.Fatalf("blocker counts must be unique claims, not summed paths (title=%q chip=%q)",
@@ -208,13 +208,19 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		// the tab strip's next sibling AND the canvas's first child; the old
 		// assertion encoded the pre-canvas flat DOM and contradicted
 		// TestGroup02StatusBelongsToActiveCanvas.
+		//
+		// The claim is looked up as a DESCENDANT, not a direct child: under
+		// SoftMount the cards live inside .claim-group-host, so the strip's
+		// next sibling is that host rather than a .claim. Document order is
+		// what this test is actually about, so it is asserted directly.
 		var canvas = section && section.querySelector(':scope > .reading-canvas:not([hidden])');
-		var firstClaim = canvas && canvas.querySelector(':scope > .claim');
-		return header && tabs && strip && canvas && firstClaim &&
-		  header.nextElementSibling === tabs &&
+		var firstClaim = canvas && canvas.querySelector('.claim');
+		if (!(header && tabs && strip && canvas && firstClaim)) return false;
+		var stripBeforeClaim = !!(strip.compareDocumentPosition(firstClaim) & Node.DOCUMENT_POSITION_FOLLOWING);
+		return header.nextElementSibling === tabs &&
 		  tabs.nextElementSibling === canvas &&
 		  strip.parentElement === canvas && canvas.firstElementChild === strip &&
-		  strip.nextElementSibling === firstClaim;
+		  stripBeforeClaim;
 	})()`) {
 		t.Fatal("reading order must be module heading, facet tabs, status, then claims")
 	}

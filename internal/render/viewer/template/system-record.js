@@ -82,6 +82,18 @@
     var freshness = freshnessPhrase(generatedAt);
     if (phraseEl.textContent !== freshness.phrase) { phraseEl.textContent = freshness.phrase; }
     footer.classList.toggle('freshness-footer--stale', freshness.stale);
+    var live = footer.querySelector('.freshness-footer__live');
+    if (document.body.classList.contains('comments-live')) {
+      if (!live) {
+        live = document.createElement('span');
+        live.className = 'freshness-footer__live';
+        live.textContent = 'Live';
+        phraseEl.parentNode.appendChild(live);
+      }
+      live.hidden = false;
+    } else if (live) {
+      live.hidden = true;
+    }
   }
 
   // ------------------------------------------------------------------
