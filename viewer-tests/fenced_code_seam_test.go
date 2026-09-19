@@ -78,12 +78,12 @@ func assertNoSeam(t *testing.T, browser, url, scheme string) {
 		// Gaps are the y-positions, relative to the pre's border box, where two
 		// line-box fragments of the <code> meet: the bottom of fragment i and
 		// the top of fragment i+1.
-		Gaps    []float64 `json:"gaps"`
-		NRects  int       `json:"nRects"`
-		BG      string    `json:"bg"`
-		Alpha   float64   `json:"alpha"`
-		PadLeft   float64 `json:"padLeft"`
-		BorderTop float64 `json:"borderTop"`
+		Gaps      []float64 `json:"gaps"`
+		NRects    int       `json:"nRects"`
+		BG        string    `json:"bg"`
+		Alpha     float64   `json:"alpha"`
+		PadLeft   float64   `json:"padLeft"`
+		BorderTop float64   `json:"borderTop"`
 	}
 	evalInto(t, ctx, `(function(){
 		var pre = document.querySelector('.claim-body pre');
