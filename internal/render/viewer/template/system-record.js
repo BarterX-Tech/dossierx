@@ -10,15 +10,6 @@
     return copy.textContent.replace(/🔒/g, '').trim() || 'Claims';
   }
 
-  function attachIcon(host, name) {
-    if (!host || host.querySelector('.dx-icon')) { return host; }
-    var make = window.dxIcon;
-    if (typeof make === 'function') {
-      host.appendChild(make(name));
-    }
-    return host;
-  }
-
   function ordinal(day) {
     var mod100 = day % 100;
     if (mod100 >= 11 && mod100 <= 13) { return day + 'th'; }

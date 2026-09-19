@@ -901,8 +901,8 @@ var tokenConsumers = map[string][]consumerSite{
 	},
 	"scrim":           {{".comments-overlay", "background"}},
 	"selection-bg":    {{"::selection", "background"}},
-	"status-draft":    {{".pill.pv, .status-draft", "color"}},
-	"status-draft-bg": {{".pill.pv, .status-draft", "background"}},
+	"status-draft":    {{".pill.pv", "color"}},
+	"status-draft-bg": {{".pill.pv", "background"}},
 	"mockup-bg":       {{".mockup-diagram", "background"}},
 }
 

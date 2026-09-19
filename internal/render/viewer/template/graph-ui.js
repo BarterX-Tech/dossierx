@@ -1234,16 +1234,6 @@
     return overlay;
   }
 
-  function hasUnslottedFacet(facets) {
-    var c = core();
-    for (var i = 0; i < payload.nodes.length; i++) {
-      if (!c || c.facetSlot(facets, str(payload.nodes[i].facet)) < 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   function bindLegendHover(item, name) {
     item.addEventListener('mouseenter', function () {
       hoverFacet = name;
@@ -4413,17 +4403,6 @@
       var e = payload.edges[i];
       if (str(e.type) === 'governed_by' && str(e.from) === id) {
         out.push(str(e.to));
-      }
-    }
-    return out;
-  }
-
-  function governedOf(id) {
-    var out = [];
-    for (var i = 0; i < payload.edges.length; i++) {
-      var e = payload.edges[i];
-      if (str(e.type) === 'governed_by' && str(e.to) === id) {
-        out.push(str(e.from));
       }
     }
     return out;

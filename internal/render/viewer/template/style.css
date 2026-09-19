@@ -438,8 +438,10 @@ button {
   vertical-align: -0.125em;
 }
 
-.dx-icon--lock,
-.dx-icon--sm {
+/* .dx-icon--sm was dropped from this group: no template, renderer or runtime
+   ever writes it. .dx-icon--lock, shell.html's all-locked padlock, is the only
+   13px icon. */
+.dx-icon--lock {
   width: 13px;
   height: 13px;
 }
@@ -495,16 +497,6 @@ body {
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
   background: var(--card-bg);
-}
-
-/* status-draft/status-locked map to the pill family below: locked -> accent,
-   review_pending -> warn. draft -> amber is the engine's own concept and not
-   part of the fixed color allowlist; its one live rule sits with the pills in
-   the System Record layer further down (`.pill.pv, .status-draft`), which is
-   why there is no .status-draft rule here. */
-.status-locked {
-  color: var(--accent);
-  background: var(--accent-bg);
 }
 
 /* Claim prose is THE serif role, and the only consumer of --font-serif.
@@ -3536,17 +3528,17 @@ button.comment-chip--active.comment-chip--empty {
    needs no reflow. This is a comments-state rule scoped by `body.comments
    -open`, not an edit to `.content-area` itself (L2/shell owns that rule);
    the two known base-padding states it must add the rail's 360px on top of
-   (the plain default and `body.system-toc-collapsed`, `style.css` ~3921 and
-   ~3930) are covered explicitly since a bare `calc()` cannot reference
-   another rule's winning value. The `body:has(.build-order-section)` combo
-   is out of this lane's scope (comments UI is not reachable from that tab
-   today) — see learnings/inbox/L6.md. */
+   is the plain default, covered explicitly since a bare `calc()` cannot
+   reference another rule's winning value. The second state this used to
+   cover, `body.system-toc-collapsed`, is GONE: R11.1 removed the two per-rail
+   toggles, and nothing sets that class any more, so its variant here could
+   never match (the note at the .facet-toc rail below says the same). The
+   `body:has(.build-order-section)` combo is out of this lane's scope
+   (comments UI is not reachable from that tab today) — see
+   learnings/inbox/L6.md. */
 @media screen and (min-width: 861px) {
   body.comments-open .content-area {
     padding-right: calc(282px + min(360px, 90vw));
-  }
-  body.comments-open.system-toc-collapsed .content-area {
-    padding-right: calc(86px + min(360px, 90vw));
   }
 }
 
@@ -5936,20 +5928,12 @@ body.shell-body {
 
 .facet-toc[hidden] { display: none; }
 
-.facet-toc__toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 4px 12px 15px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-}
-
+/* .facet-toc__toggle's five rules are gone. renderToc builds __grabber,
+   __head, __identity, __mobile-identity, __name, __total, __close, __list and
+   __select — there has never been a __toggle in the markup it writes, and the
+   rules were the pre-R11.1 collapse control's, retired with the rail toggles
+   themselves (see the R11.1 note in the 1180px block below). __head, which
+   does exist, follows. */
 .facet-toc__head {
   display: flex;
   justify-content: space-between;
@@ -5972,19 +5956,6 @@ body.shell-body {
 
 .facet-toc__mobile-identity { display: none; }
 
-.facet-toc__toggle::marker { content: ""; }
-.facet-toc__toggle::-webkit-details-marker { display: none; }
-
-.facet-toc__toggle small {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--faint);
-  font: 700 9px/1.2 var(--font-mono);
-  letter-spacing: .09em;
-  text-transform: uppercase;
-}
-
-.facet-toc__toggle strong { font-size: 13px; }
 .facet-toc__total { color: var(--faint); font: 9px/1.2 var(--font-mono); white-space: nowrap; }
 
 .facet-toc__list {
@@ -6228,14 +6199,17 @@ body.shell-body {
    draws the DRAFT chip with the same open padlock — a pixel comparison
    against the components board confirms the shackle is lifted, not closed,
    on both. See components.go's StatusIconHTML for the full reasoning. */
-.pill.ps,
-.status-locked {
+/* .status-locked and .status-draft are dropped from these two groups and the
+   early .status-locked layer is deleted outright: components.go's pillClass
+   only ever emits ps / pv / pw, so no element in any rendered viewer has
+   carried a status-* class. The CSS VARIABLE --status-draft below is a
+   different thing and is live — conformance_view.go reads it. */
+.pill.ps {
   background: var(--accent-bg);
   color: var(--accent);
 }
 
-.pill.pv,
-.status-draft {
+.pill.pv {
   background: var(--status-draft-bg, rgba(151, 102, 0, .12));
   color: var(--status-draft, #976600);
 }
@@ -6387,41 +6361,18 @@ code {
    Nothing here needs to replace it: the primary-layer reset three sections
    up is the whole rule for this selector now. */
 
-.claim-links-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 56px;
-  padding: 11px 13px;
-  color: var(--muted);
-  font: 650 10px/1.35 var(--font-mono);
-}
-
-.claim-links-summary::marker { content: ""; }
-.claim-links-summary::-webkit-details-marker { display: none; }
-/* NOT --hover-bg, and deliberately so. This row is much larger than the other
-   hover targets and takes a fainter wash: .07, not .08. Reading the token here
-   would compute .08, because :root always declares --hover-bg and the fallback
-   would never fire — the row would silently change. It is not themable through
-   --hover-bg; a project that wants it themable needs its own token. */
-.claim-links-summary:hover { background: rgba(125, 137, 154, .07); color: var(--ink); }
-
-.claim-footer__identity { display: flex; gap: 10px; align-items: center; min-width: 0; }
-
-.claim-footer__title { display: block; color: var(--ink); font-family: var(--font-sans); font-size: 12px; }
-.claim-footer__identity small { display: block; margin-top: 2px; color: var(--faint); font: 9px/1.35 var(--font-mono); }
-
-.claim-footer__counts { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
-.claim-footer__counts > span:not(.claim-footer__chevron) {
-  padding: 5px 7px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--card-bg);
-  color: var(--faint);
-  white-space: nowrap;
-}
-.claim-footer__counts strong { color: var(--ink); }
+/* THE MONO DIGEST BAR'S OWN RULES ARE GONE, and this note is what is left of
+   them. .claim-links-summary (with its ::marker resets and hover wash),
+   .claim-footer__identity, __title, __identity small and __counts x3 all
+   styled markup that system-record.js's enhanceFooters used to build and that
+   components.EdgesHTMLWithLinks stopped emitting at the redesign; enhanceFooters
+   itself was retired in that file (see its note beside setClaimExpanded). The
+   two @media containers further down already say the same thing about their
+   halves of this component. .claim-footer__chevron survives — the live chips
+   still carry it — but only its margin rule lived here, and that margin is a
+   fossil of this bar's spacing, which is why the 520px block below has to undo
+   it with `margin: 0`. Re-pin it against Paper before giving it back a desktop
+   margin; do not restore this one. */
 .claim-footer__chevron { margin: 0 4px 0 6px; }
 
 .claim-links > .claim-edges {
@@ -6447,19 +6398,14 @@ code {
   break-inside: auto;
 }
 
-.claim-links > .claim-edges > li::before,
-.claim-relation-label::before {
+/* .claim-relation-label went with the digest bar: it was the GOVERNED BY /
+   RESTS ON eyebrow on the old flat <li>, and the relationship rows now ship
+   their direction from the server as .claim-relationship-direction*. Its
+   ::before reset is dropped from this group with it; the surviving selector
+   is the live one. */
+.claim-links > .claim-edges > li::before {
   content: none;
   display: none;
-}
-
-.claim-relation-label {
-  display: block;
-  margin: 0 0 7px;
-  color: var(--faint);
-  font: 700 9px/1.3 var(--font-mono);
-  letter-spacing: .07em;
-  text-transform: uppercase;
 }
 
 .claim-edges,
@@ -7357,7 +7303,6 @@ code {
      navigation surface. The freshness block (R10.1/02 §4.17) has no room
      in this compact popover form — it stays a desktop-rail feature; states
      to render lists it against the >=1181px rail, not this tier's select. */
-  .facet-toc__disclosure,
   .facet-toc__list,
   .facet-toc .freshness-footer { display: none; }
   .facet-toc__head {
@@ -7425,7 +7370,6 @@ code {
 
   body.facet-toc-open .facet-toc { display: flex; }
 
-  .facet-toc__disclosure { display: none; }
   .facet-toc__list {
     display: block;
     max-height: none;

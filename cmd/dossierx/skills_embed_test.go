@@ -434,7 +434,7 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 			if resolve(m[1]) {
 				continue
 			}
-			t.Errorf("%s names %q, which is not a command in the v0.3.0 surface (dossierx lint/stale/coverage/deps/implink and comment resolve/reopen/edit/delete are gone). If this is prose, write \"DossierX\" with a capital D.", path, strings.TrimSpace(m[0]))
+			t.Errorf("%s names %q, which is not a command in the current surface — eight nouns, and dossierx lint/stale/coverage/deps/implink/migrate and comment resolve/reopen/edit/delete do not exist. If this is prose, write \"DossierX\" with a capital D.", path, strings.TrimSpace(m[0]))
 		}
 		return nil
 	})
@@ -502,19 +502,22 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // schema change and three not moving is still the surface signature; four
 // growing together would not be, and that is the thing to look for next time.
 //
-// NOT RAISED FOR THE SIXTH BUNDLE, and that is the census this release adds
-// rather than a raise. dossierx-theme arrives at 235, under the ceiling as
-// written, and the router took ONE line for it: a row in the companion table.
-// The router did not grow because theming does not touch the contract — no
-// noun an agent must know about mid-lifecycle, no new failure it can meet
-// without asking for it, nothing an agent that never themes anything needs
-// resident. That is the difference from the `track`/`sources` release, which
-// added a noun and a schema field an agent meets whether or not it went
-// looking, and it is why the same evidence reads the opposite way here: five
-// companions unmoved (claims 255, comments 192, code-links 136,
-// build-order 110) plus one new bundle under the ceiling is a surface addition
-// that cost the always-on budget one line, which is the shape a raise would
-// have to be argued against.
+// THE SIXTH BUNDLE CAME AND WENT, and the census is back to five. A
+// dossierx-theme bundle was added here at 235 lines, under the ceiling, costing
+// the router one line — a row in the companion table — and it was removed again
+// with custom themes themselves. Nothing was raised for it and nothing had to be
+// lowered when it left, which is the budget behaving as a MAXIMUM rather than a
+// ratchet, exactly as the `--staged` paragraph above says it should.
+//
+// CURRENT CENSUS: router 263 of 265, claims 255, comments 206, code-links 136,
+// build-order 142. Two of these moved without a raise and for opposite reasons.
+// comments went 192 -> 206 for a surface fact the guide was missing outright —
+// the four refusals an agent meets when a thread id goes stale or the human
+// resolves underneath it — which is a coverage fix, the shape a companion is
+// SUPPOSED to grow in. build-order went 110 -> 142 with no such event attached,
+// and that is the number to look at next time: a companion growing 30% while
+// the others sit still is the shape of prose creep, and it is worth reading
+// that file before this budget is argued about again.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 265
 

@@ -1346,12 +1346,6 @@
         });
       }
 
-      function readinessWarningsForActiveFacet(readiness, claimIDs) {
-        return collectStatusGroups(readiness, claimIDs, [], [], [], []).filter(function (group) {
-          return group.severity === 'blocker' || group.severity === 'needs_you';
-        });
-      }
-
       var STATUS_SEVERITIES = [
         { id: 'critical', label: 'Critical' },
         { id: 'needs_you', label: 'Needs you' },
