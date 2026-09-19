@@ -193,7 +193,7 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 	)
 	pollTrue(t, ctx, `!!(document.querySelector('.mobile-app-bar') && document.querySelector('.facet-toc-trigger'))`)
 	runCDP(t, ctx, chromedp.Evaluate(`window.dossierxPositionStatusStrip()`, nil))
-	if !evalBool(t, ctx, `(function () {
+	requireAll(t, ctx, "reading order must be module heading, facet tabs, status, then claims", `
 		var section = document.querySelector('.module-section:not([hidden])');
 		var header = section && section.querySelector(':scope > .system-record-head');
 		var tabs = section && section.querySelector(':scope > .sub-nav');
@@ -215,55 +215,74 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		// what this test is actually about, so it is asserted directly.
 		var canvas = section && section.querySelector(':scope > .reading-canvas:not([hidden])');
 		var firstClaim = canvas && canvas.querySelector('.claim');
-		if (!(header && tabs && strip && canvas && firstClaim)) return false;
-		var stripBeforeClaim = !!(strip.compareDocumentPosition(firstClaim) & Node.DOCUMENT_POSITION_FOLLOWING);
-		return header.nextElementSibling === tabs &&
-		  tabs.nextElementSibling === canvas &&
-		  strip.parentElement === canvas && canvas.firstElementChild === strip &&
-		  stripBeforeClaim;
-	})()`) {
-		t.Fatal("reading order must be module heading, facet tabs, status, then claims")
-	}
-	if !evalBool(t, ctx, `(function () {
+	`, [][2]string{
+		{"the module heading exists", `header`},
+		{"the facet tab strip exists", `tabs`},
+		{"the status strip exists", `strip`},
+		{"the reading canvas exists and is not hidden", `canvas`},
+		{"the canvas holds at least one claim", `firstClaim`},
+		{"the tabs follow the heading", `header.nextElementSibling === tabs`},
+		{"the canvas follows the tabs", `tabs.nextElementSibling === canvas`},
+		{"the strip lives inside the canvas", `strip.parentElement === canvas`},
+		{"the strip is the canvas's first child", `canvas.firstElementChild === strip`},
+		{"the strip precedes the first claim", `!!(strip.compareDocumentPosition(firstClaim) & Node.DOCUMENT_POSITION_FOLLOWING)`},
+	})
+	requireAll(t, ctx, "mobile app bar must match Paper's 52px menu/title/search/single-theme-control structure", `
 		var bar = document.querySelector('.mobile-app-bar');
 		var menu = document.getElementById('navToggle');
 		var search = document.getElementById('mobileSearchToggle');
 		var theme = document.getElementById('mobileThemeToggle');
 		var style = bar && getComputedStyle(bar);
-		return bar && menu && search && theme && menu.getAttribute('aria-label') === 'Open modules' &&
-		  theme.hasAttribute('data-theme-toggle') && !theme.hasAttribute('data-theme-choice') &&
-		  /^Use (light|dark) theme$/.test(theme.getAttribute('aria-label')) &&
-		  document.querySelectorAll('.mobile-app-bar [data-theme-toggle]').length === 1 &&
-		  document.querySelectorAll('.mobile-app-bar [data-theme-choice]').length === 0 &&
-		  !/Sections/.test(menu.textContent) && getComputedStyle(menu).minHeight === '44px' &&
-		  style.height === '52px' && style.paddingLeft === '16px' && style.paddingRight === '16px' && style.gap === '12px';
-	})()`) {
-		t.Fatal("mobile app bar must match Paper's 52px menu/title/search/single-theme-control structure")
-	}
+	`, [][2]string{
+		{"bar exists", `bar`},
+		{"menu exists", `menu`},
+		{"search exists", `search`},
+		{"theme control exists", `theme`},
+		{"menu aria-label is 'Open modules'", `menu.getAttribute('aria-label') === 'Open modules'`},
+		{"theme control is the toggle form", `theme.hasAttribute('data-theme-toggle')`},
+		{"theme control is not a choice form", `!theme.hasAttribute('data-theme-choice')`},
+		{"theme aria-label reads 'Use light/dark theme'", `/^Use (light|dark) theme$/.test(theme.getAttribute('aria-label'))`},
+		{"exactly one [data-theme-toggle] in the bar", `document.querySelectorAll('.mobile-app-bar [data-theme-toggle]').length === 1`},
+		{"no [data-theme-choice] in the bar", `document.querySelectorAll('.mobile-app-bar [data-theme-choice]').length === 0`},
+		{"menu carries no 'Sections' label", `!/Sections/.test(menu.textContent)`},
+		{"menu min-height is 44px", `getComputedStyle(menu).minHeight === '44px'`},
+		{"bar height is 52px", `style.height === '52px'`},
+		{"bar padding-left is 16px", `style.paddingLeft === '16px'`},
+		{"bar padding-right is 16px", `style.paddingRight === '16px'`},
+		{"bar gap is 12px", `style.gap === '12px'`},
+	})
 	initialTheme := evalString(t, ctx, `document.getElementById('mobileThemeToggle').dataset.themeCurrent`)
 	runCDP(t, ctx, chromedp.Click("#mobileThemeToggle", chromedp.ByQuery))
-	if !evalBool(t, ctx, `(function () {
+	requireAll(t, ctx, "single mobile theme control must toggle the explicit theme and its current-state icon", `
 		var b = document.getElementById('mobileThemeToggle');
 		var now = b.dataset.themeCurrent;
 		var href = b.querySelector('use').getAttribute('href');
-		return now !== `+fmt.Sprintf("%q", initialTheme)+` && document.documentElement.getAttribute('data-theme') === now &&
-		  href === (now === 'dark' ? '#dx-icon-moon' : '#dx-icon-sun');
-	})()`) {
-		t.Fatal("single mobile theme control must toggle the explicit theme and its current-state icon")
-	}
+		var was = `+fmt.Sprintf("%q", initialTheme)+`;
+	`, [][2]string{
+		{"themeCurrent changed from the pre-click value", `now !== was`},
+		{"html[data-theme] matches the control", `document.documentElement.getAttribute('data-theme') === now`},
+		{"the icon matches the new state", `href === (now === 'dark' ? '#dx-icon-moon' : '#dx-icon-sun')`},
+	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('navSearch')`)
-	if !evalBool(t, ctx, `(function(){
+	requireAll(t, ctx, "mobile drawer must keep collapsed Tracks and both 40px utility actions above its fixed footer theme control", `
 		var footer = document.querySelector('.sidebar-footer');
 		var utilities = footer && footer.querySelector('.nav-utilities');
 		var tracks = document.querySelectorAll('.system-nav-group')[1];
-		return getComputedStyle(document.querySelector('.sidebar')).width === '328px' && !!document.getElementById('navDrawerClose') &&
-		  footer && getComputedStyle(footer).flexShrink === '0' && utilities && utilities.children.length === 2 &&
-		  utilities.children[0].id === 'dxgOpen' && utilities.children[1].dataset.target === '#dossierx-build-order' &&
-		  getComputedStyle(utilities.children[0]).height === '40px' && tracks && !tracks.open;
-	})()`) {
-		t.Fatal("mobile drawer must keep collapsed Tracks and both 40px utility actions above its fixed footer theme control")
-	}
+		var sidebar = document.querySelector('.sidebar');
+	`, [][2]string{
+		{"drawer width is 328px", `getComputedStyle(sidebar).width === '328px'`},
+		{"the drawer close control exists", `!!document.getElementById('navDrawerClose')`},
+		{"the sidebar footer exists", `footer`},
+		{"the footer does not shrink", `getComputedStyle(footer).flexShrink === '0'`},
+		{"the utilities row exists", `utilities`},
+		{"the utilities row has two actions", `utilities.children.length === 2`},
+		{"the first action is #dxgOpen", `utilities.children[0].id === 'dxgOpen'`},
+		{"the second action targets the build order", `utilities.children[1].dataset.target === '#dossierx-build-order'`},
+		{"the first action is 40px tall", `getComputedStyle(utilities.children[0]).height === '40px'`},
+		{"a Tracks group exists", `tracks`},
+		{"the Tracks group is collapsed", `!tracks.open`},
+	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('navDrawerClose').focus(); document.getElementById('navDrawerClose').click()`, nil))
 	pollTrue(t, ctx, `!document.body.classList.contains('nav-open')`)
 	if !evalBool(t, ctx, `document.activeElement === document.getElementById('mobileSearchToggle')`) {
@@ -280,16 +299,19 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.facet-toc-trigger').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('facet-toc-open') && !!document.querySelector('.facet-toc__grabber') && !!document.querySelector('.facet-toc__close')`)
-	if !evalBool(t, ctx, `(function () {
+	requireAll(t, ctx, "facet index must use the accessible, bounded bottom-sheet shell", `
 		var sheet = document.getElementById('systemFacetToc');
-		var close = sheet.querySelector('.facet-toc__close');
-		var sheetStyle = getComputedStyle(sheet);
-		return sheet && close && close.getAttribute('aria-label') === 'Close facet panel' &&
-		  parseFloat(sheetStyle.height) <= 660 && sheetStyle.borderTopWidth === '1px' &&
-		  sheetStyle.borderLeftWidth === '0px' && getComputedStyle(close).minHeight === '44px';
-	})()`) {
-		t.Fatal("facet index must use the accessible, bounded bottom-sheet shell")
-	}
+		var close = sheet && sheet.querySelector('.facet-toc__close');
+		var sheetStyle = sheet && getComputedStyle(sheet);
+	`, [][2]string{
+		{"the sheet exists", `sheet`},
+		{"the close control exists", `close`},
+		{"the close control is labelled", `close.getAttribute('aria-label') === 'Close facet panel'`},
+		{"the sheet is bounded at 660px", `parseFloat(sheetStyle.height) <= 660`},
+		{"the sheet has a 1px top border", `sheetStyle.borderTopWidth === '1px'`},
+		{"the sheet has no left border", `sheetStyle.borderLeftWidth === '0px'`},
+		{"the close control is a 44px target", `getComputedStyle(close).minHeight === '44px'`},
+	})
 	runCDP(t, ctx, chromedp.Focus(".facet-toc__close", chromedp.ByQuery), chromedp.Click(".facet-toc__close", chromedp.ByQuery))
 	pollTrue(t, ctx, `!document.body.classList.contains('facet-toc-open') && document.activeElement === document.querySelector('.facet-toc-trigger')`)
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.facet-toc-trigger').click()`, nil))

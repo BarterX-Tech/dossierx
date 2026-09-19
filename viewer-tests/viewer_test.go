@@ -3,6 +3,9 @@ package viewertests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +35,44 @@ func pollTrue(t *testing.T, ctx context.Context, expr string) {
 	))
 	if err != nil {
 		t.Fatalf("condition never became true within timeout:\n  %s\n  err: %v", expr, err)
+	}
+}
+
+// requireAll asserts a compound condition and, on failure, names EVERY clause
+// that was false instead of the whole thing being one opaque boolean.
+//
+// It exists because of an intermittent failure in
+// TestGroup02MobileNavigationAndFacetSheet that could not be reproduced: the
+// test said only "mobile app bar must match Paper's ... structure", which is
+// fourteen ANDed clauses, so the one run that failed left no evidence of which
+// one did. A compound `evalBool` is a fine assertion and a useless witness. The
+// clauses are unchanged and still ANDed — this is strictly about what the
+// failure prints.
+//
+// Every clause is evaluated in ONE round trip against ONE snapshot of the page,
+// so a slow re-render cannot make the diagnosis disagree with the assertion:
+// re-querying the DOM per clause would report a state that never existed. A
+// clause that throws is reported as a failure carrying its error, which is how
+// a null dereference (the shape a not-yet-rendered element takes) names itself.
+func requireAll(t *testing.T, ctx context.Context, what, prelude string, clauses [][2]string) {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("(function(){\n")
+	b.WriteString(prelude)
+	b.WriteString("\nvar out=[];\n")
+	for _, c := range clauses {
+		name, _ := json.Marshal(c[0])
+		fmt.Fprintf(&b, "try{ if(!(%s)){ out.push(%s); } }catch(e){ out.push(%s+\" threw \"+e.message); }\n",
+			c[1], name, name)
+	}
+	b.WriteString("return out.join(\" | \");\n})()")
+
+	var failed string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(b.String(), &failed)); err != nil {
+		t.Fatalf("%s: evaluating the assertion failed: %v", what, err)
+	}
+	if failed != "" {
+		t.Fatalf("%s\n  failing clauses: %s", what, failed)
 	}
 }
 
