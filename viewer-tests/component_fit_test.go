@@ -291,7 +291,11 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 
 	// Native keyboard activation opens from the menu control, and Escape returns
 	// focus to that exact opener rather than dropping it on <body>.
-	runCDP(t, ctx, chromedp.SendKeys("#navToggle", "\n", chromedp.ByQuery))
+	// Focus then Enter (not SendKeys "\n"): CI Chrome did not treat a newline
+	// insert as button activation, so Escape closed a drawer whose opener was
+	// still the previous search toggle — or restored onto <body> after the
+	// in-drawer node was hidden.
+	runCDP(t, ctx, chromedp.Focus("#navToggle", chromedp.ByQuery), chromedp.KeyEvent(kb.Enter))
 	pollTrue(t, ctx, `document.body.classList.contains('nav-open')`)
 	runCDP(t, ctx, chromedp.KeyEvent(kb.Escape))
 	pollTrue(t, ctx, `!document.body.classList.contains('nav-open')`)

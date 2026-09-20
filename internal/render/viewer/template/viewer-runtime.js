@@ -333,6 +333,7 @@
       var drawerFocusReturn = null;
       var graphFocusReturn = null;
       var focusRestoreFrame = 0;
+      var searchFocusFrame = 0;
 
       function cancelFocusRestore() {
         if (!focusRestoreFrame) { return; }
@@ -340,14 +341,28 @@
         focusRestoreFrame = 0;
       }
 
+      function cancelSearchFocus() {
+        if (!searchFocusFrame) { return; }
+        window.cancelAnimationFrame(searchFocusFrame);
+        searchFocusFrame = 0;
+      }
+
       function restoreFocus(target, fallbackSelector) {
         cancelFocusRestore();
-        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
-        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
-        focusRestoreFrame = window.requestAnimationFrame(function () {
-          focusRestoreFrame = 0;
+        function apply() {
           var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
           if (next && typeof next.focus === 'function') { next.focus(); }
+        }
+        apply();
+        // Closing a drawer can hide the previously focused node; Chrome then
+        // moves focus to <body> after this turn. Re-apply on the next two
+        // frames so Escape lands on the opener instead of the document body.
+        focusRestoreFrame = window.requestAnimationFrame(function () {
+          apply();
+          focusRestoreFrame = window.requestAnimationFrame(function () {
+            focusRestoreFrame = 0;
+            apply();
+          });
         });
       }
 
@@ -373,6 +388,12 @@
         document.body.classList.toggle('nav-open', open);
         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
         if (!open && wasOpen) {
+          cancelSearchFocus();
+          var sidebarEl = document.getElementById('sidebar') || document.querySelector('.sidebar');
+          var active = document.activeElement;
+          if (sidebarEl && active && sidebarEl.contains(active) && typeof active.blur === 'function') {
+            active.blur();
+          }
           restoreFocus(drawerFocusReturn, '#navToggle');
           drawerFocusReturn = null;
         }
@@ -3262,7 +3283,13 @@
         mobileSearchToggle.addEventListener('click', function () {
           setDrawer(true, mobileSearchToggle);
           var search = document.getElementById('navSearch');
-          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
+          if (search) {
+            cancelSearchFocus();
+            searchFocusFrame = window.requestAnimationFrame(function () {
+              searchFocusFrame = 0;
+              if (document.body.classList.contains('nav-open')) { search.focus(); }
+            });
+          }
         });
       }
       var navSearch = document.getElementById('navSearch');
