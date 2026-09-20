@@ -36,62 +36,372 @@
 #
 # An empty report is the expected steady state immediately after a release.
 
-baseline   v0.7.16 (67bf322de77f1a98d2b18c96549693d185e66164)
+baseline   v0.7.17 (c53b1607679632c7cd173ce90d19b0729c1d3749)
 compared   153 rendered artifacts present at both revisions
 added      0
-removed    2
-silent     4 rendered differently from byte-identical inputs
-explained  1 rendered differently after their own inputs changed
+removed    0
+silent     5 rendered differently from byte-identical inputs
+explained  0 rendered differently after their own inputs changed
 
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (rewritten)
-    size            18003 lines / 4116665 bytes -> 21986 lines / 1176486 bytes
-    more than 3000 lines differ, so these two are not variants of one
-    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
-    artifact IS reported, with its sizes, and it still rendered differently. Read it
-    against the baseline directly:
-        git diff v0.7.16 -- testdata/fixture-basic/build/viewer/index.html
+testdata/fixture-basic/build/viewer/index.html  (+32 -5)
+    size            21959 lines / 1175554 bytes -> 21986 lines / 1176486 bytes
+@@ -11730,6 +11730,7 @@
+       var drawerFocusReturn = null;
+       var graphFocusReturn = null;
+       var focusRestoreFrame = 0;
++      var searchFocusFrame = 0;
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (rewritten)
-    size            14179 lines / 544528 bytes -> 22311 lines / 1230631 bytes
-    more than 3000 lines differ, so these two are not variants of one
-    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
-    artifact IS reported, with its sizes, and it still rendered differently. Read it
-    against the baseline directly:
-        git diff v0.7.16 -- testdata/fixture-conformance-v1/build/viewer/index.html
+       function cancelFocusRestore() {
+         if (!focusRestoreFrame) { return; }
+@@ -11737,14 +11738,28 @@
+         focusRestoreFrame = 0;
+       }
 
-testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
-    size            18717 lines / 4264431 bytes -> 22700 lines / 1439097 bytes
-    more than 3000 lines differ, so these two are not variants of one
-    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
-    artifact IS reported, with its sizes, and it still rendered differently. Read it
-    against the baseline directly:
-        git diff v0.7.16 -- testdata/fixture-graph-demo/build/viewer/index.html
++      function cancelSearchFocus() {
++        if (!searchFocusFrame) { return; }
++        window.cancelAnimationFrame(searchFocusFrame);
++        searchFocusFrame = 0;
++      }
++
+       function restoreFocus(target, fallbackSelector) {
+         cancelFocusRestore();
+-        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+-        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+-        focusRestoreFrame = window.requestAnimationFrame(function () {
+-          focusRestoreFrame = 0;
++        function apply() {
+           var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+           if (next && typeof next.focus === 'function') { next.focus(); }
++        }
++        apply();
++        // Closing a drawer can hide the previously focused node; Chrome then
++        // moves focus to <body> after this turn. Re-apply on the next two
++        // frames so Escape lands on the opener instead of the document body.
++        focusRestoreFrame = window.requestAnimationFrame(function () {
++          apply();
++          focusRestoreFrame = window.requestAnimationFrame(function () {
++            focusRestoreFrame = 0;
++            apply();
++          });
+         });
+       }
 
-testdata/fixture-portability/build/viewer/index.html  (rewritten)
-    size            17994 lines / 4119076 bytes -> 21977 lines / 1180989 bytes
-    more than 3000 lines differ, so these two are not variants of one
-    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
-    artifact IS reported, with its sizes, and it still rendered differently. Read it
-    against the baseline directly:
-        git diff v0.7.16 -- testdata/fixture-portability/build/viewer/index.html
+@@ -11770,6 +11785,12 @@
+         document.body.classList.toggle('nav-open', open);
+         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+         if (!open && wasOpen) {
++          cancelSearchFocus();
++          var sidebarEl = document.getElementById('sidebar') || document.querySelector('.sidebar');
++          var active = document.activeElement;
++          if (sidebarEl && active && sidebarEl.contains(active) && typeof active.blur === 'function') {
++            active.blur();
++          }
+           restoreFocus(drawerFocusReturn, '#navToggle');
+           drawerFocusReturn = null;
+         }
+@@ -14659,7 +14680,13 @@
+         mobileSearchToggle.addEventListener('click', function () {
+           setDrawer(true, mobileSearchToggle);
+           var search = document.getElementById('navSearch');
+-          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
++          if (search) {
++            cancelSearchFocus();
++            searchFocusFrame = window.requestAnimationFrame(function () {
++              searchFocusFrame = 0;
++              if (document.body.classList.contains('nav-open')) { search.focus(); }
++            });
++          }
+         });
+       }
+       var navSearch = document.getElementById('navSearch');
 
-EXPLAINED BY AN INPUT CHANGE
-----------------------------
+testdata/fixture-conformance-v1/build/viewer/index.html  (+32 -5)
+    size            22284 lines / 1229699 bytes -> 22311 lines / 1230631 bytes
+@@ -12055,6 +12055,7 @@
+       var drawerFocusReturn = null;
+       var graphFocusReturn = null;
+       var focusRestoreFrame = 0;
++      var searchFocusFrame = 0;
 
-testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
-    inputs changed  testdata/fixture-theme-flat/README.md
-                    testdata/fixture-theme-flat/project.config.yaml
-    size            18281 lines / 4158701 bytes -> 26113 lines / 4819893 bytes
-    more than 3000 lines differ, so these two are not variants of one
-    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
-    artifact IS reported, with its sizes, and it still rendered differently. Read it
-    against the baseline directly:
-        git diff v0.7.16 -- testdata/fixture-theme-flat/build/viewer/index.html
+       function cancelFocusRestore() {
+         if (!focusRestoreFrame) { return; }
+@@ -12062,14 +12063,28 @@
+         focusRestoreFrame = 0;
+       }
 
-REMOVED SINCE THE BASELINE
---------------------------
-testdata/fixture-theme-preset/build/catalog/catalog.json
-testdata/fixture-theme-preset/build/viewer/index.html
++      function cancelSearchFocus() {
++        if (!searchFocusFrame) { return; }
++        window.cancelAnimationFrame(searchFocusFrame);
++        searchFocusFrame = 0;
++      }
++
+       function restoreFocus(target, fallbackSelector) {
+         cancelFocusRestore();
+-        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+-        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+-        focusRestoreFrame = window.requestAnimationFrame(function () {
+-          focusRestoreFrame = 0;
++        function apply() {
+           var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+           if (next && typeof next.focus === 'function') { next.focus(); }
++        }
++        apply();
++        // Closing a drawer can hide the previously focused node; Chrome then
++        // moves focus to <body> after this turn. Re-apply on the next two
++        // frames so Escape lands on the opener instead of the document body.
++        focusRestoreFrame = window.requestAnimationFrame(function () {
++          apply();
++          focusRestoreFrame = window.requestAnimationFrame(function () {
++            focusRestoreFrame = 0;
++            apply();
++          });
+         });
+       }
+
+@@ -12095,6 +12110,12 @@
+         document.body.classList.toggle('nav-open', open);
+         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+         if (!open && wasOpen) {
++          cancelSearchFocus();
++          var sidebarEl = document.getElementById('sidebar') || document.querySelector('.sidebar');
++          var active = document.activeElement;
++          if (sidebarEl && active && sidebarEl.contains(active) && typeof active.blur === 'function') {
++            active.blur();
++          }
+           restoreFocus(drawerFocusReturn, '#navToggle');
+           drawerFocusReturn = null;
+         }
+@@ -14984,7 +15005,13 @@
+         mobileSearchToggle.addEventListener('click', function () {
+           setDrawer(true, mobileSearchToggle);
+           var search = document.getElementById('navSearch');
+-          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
++          if (search) {
++            cancelSearchFocus();
++            searchFocusFrame = window.requestAnimationFrame(function () {
++              searchFocusFrame = 0;
++              if (document.body.classList.contains('nav-open')) { search.focus(); }
++            });
++          }
+         });
+       }
+       var navSearch = document.getElementById('navSearch');
+
+testdata/fixture-graph-demo/build/viewer/index.html  (+32 -5)
+    size            22673 lines / 1438165 bytes -> 22700 lines / 1439097 bytes
+@@ -12444,6 +12444,7 @@
+       var drawerFocusReturn = null;
+       var graphFocusReturn = null;
+       var focusRestoreFrame = 0;
++      var searchFocusFrame = 0;
+
+       function cancelFocusRestore() {
+         if (!focusRestoreFrame) { return; }
+@@ -12451,14 +12452,28 @@
+         focusRestoreFrame = 0;
+       }
+
++      function cancelSearchFocus() {
++        if (!searchFocusFrame) { return; }
++        window.cancelAnimationFrame(searchFocusFrame);
++        searchFocusFrame = 0;
++      }
++
+       function restoreFocus(target, fallbackSelector) {
+         cancelFocusRestore();
+-        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+-        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+-        focusRestoreFrame = window.requestAnimationFrame(function () {
+-          focusRestoreFrame = 0;
++        function apply() {
+           var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+           if (next && typeof next.focus === 'function') { next.focus(); }
++        }
++        apply();
++        // Closing a drawer can hide the previously focused node; Chrome then
++        // moves focus to <body> after this turn. Re-apply on the next two
++        // frames so Escape lands on the opener instead of the document body.
++        focusRestoreFrame = window.requestAnimationFrame(function () {
++          apply();
++          focusRestoreFrame = window.requestAnimationFrame(function () {
++            focusRestoreFrame = 0;
++            apply();
++          });
+         });
+       }
+
+@@ -12484,6 +12499,12 @@
+         document.body.classList.toggle('nav-open', open);
+         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+         if (!open && wasOpen) {
++          cancelSearchFocus();
++          var sidebarEl = document.getElementById('sidebar') || document.querySelector('.sidebar');
++          var active = document.activeElement;
++          if (sidebarEl && active && sidebarEl.contains(active) && typeof active.blur === 'function') {
++            active.blur();
++          }
+           restoreFocus(drawerFocusReturn, '#navToggle');
+           drawerFocusReturn = null;
+         }
+@@ -15373,7 +15394,13 @@
+         mobileSearchToggle.addEventListener('click', function () {
+           setDrawer(true, mobileSearchToggle);
+           var search = document.getElementById('navSearch');
+-          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
++          if (search) {
++            cancelSearchFocus();
++            searchFocusFrame = window.requestAnimationFrame(function () {
++              searchFocusFrame = 0;
++              if (document.body.classList.contains('nav-open')) { search.focus(); }
++            });
++          }
+         });
+       }
+       var navSearch = document.getElementById('navSearch');
+
+testdata/fixture-portability/build/viewer/index.html  (+32 -5)
+    size            21950 lines / 1180057 bytes -> 21977 lines / 1180989 bytes
+@@ -11721,6 +11721,7 @@
+       var drawerFocusReturn = null;
+       var graphFocusReturn = null;
+       var focusRestoreFrame = 0;
++      var searchFocusFrame = 0;
+
+       function cancelFocusRestore() {
+         if (!focusRestoreFrame) { return; }
+@@ -11728,14 +11729,28 @@
+         focusRestoreFrame = 0;
+       }
+
++      function cancelSearchFocus() {
++        if (!searchFocusFrame) { return; }
++        window.cancelAnimationFrame(searchFocusFrame);
++        searchFocusFrame = 0;
++      }
++
+       function restoreFocus(target, fallbackSelector) {
+         cancelFocusRestore();
+-        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+-        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+-        focusRestoreFrame = window.requestAnimationFrame(function () {
+-          focusRestoreFrame = 0;
++        function apply() {
+           var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+           if (next && typeof next.focus === 'function') { next.focus(); }
++        }
++        apply();
++        // Closing a drawer can hide the previously focused node; Chrome then
++        // moves focus to <body> after this turn. Re-apply on the next two
++        // frames so Escape lands on the opener instead of the document body.
++        focusRestoreFrame = window.requestAnimationFrame(function () {
++          apply();
++          focusRestoreFrame = window.requestAnimationFrame(function () {
++            focusRestoreFrame = 0;
++            apply();
++          });
+         });
+       }
+
+@@ -11761,6 +11776,12 @@
+         document.body.classList.toggle('nav-open', open);
+         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+         if (!open && wasOpen) {
++          cancelSearchFocus();
++          var sidebarEl = document.getElementById('sidebar') || document.querySelector('.sidebar');
++          var active = document.activeElement;
++          if (sidebarEl && active && sidebarEl.contains(active) && typeof active.blur === 'function') {
++            active.blur();
++          }
+           restoreFocus(drawerFocusReturn, '#navToggle');
+           drawerFocusReturn = null;
+         }
+@@ -14650,7 +14671,13 @@
+         mobileSearchToggle.addEventListener('click', function () {
+           setDrawer(true, mobileSearchToggle);
+           var search = document.getElementById('navSearch');
+-          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
++          if (search) {
++            cancelSearchFocus();
++            searchFocusFrame = window.requestAnimationFrame(function () {
++              searchFocusFrame = 0;
++              if (document.body.classList.contains('nav-open')) { search.focus(); }
++            });
++          }
+         });
+       }
+       var navSearch = document.getElementById('navSearch');
+
+testdata/fixture-theme-flat/build/viewer/index.html  (+32 -5)
+    size            26086 lines / 4818961 bytes -> 26113 lines / 4819893 bytes
+@@ -11994,6 +11994,7 @@
+       var drawerFocusReturn = null;
+       var graphFocusReturn = null;
+       var focusRestoreFrame = 0;
++      var searchFocusFrame = 0;
+
+       function cancelFocusRestore() {
+         if (!focusRestoreFrame) { return; }
+@@ -12001,14 +12002,28 @@
+         focusRestoreFrame = 0;
+       }
+
++      function cancelSearchFocus() {
++        if (!searchFocusFrame) { return; }
++        window.cancelAnimationFrame(searchFocusFrame);
++        searchFocusFrame = 0;
++      }
++
+       function restoreFocus(target, fallbackSelector) {
+         cancelFocusRestore();
+-        var immediate = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+-        if (immediate && typeof immediate.focus === 'function') { immediate.focus(); }
+-        focusRestoreFrame = window.requestAnimationFrame(function () {
+-          focusRestoreFrame = 0;
++        function apply() {
+           var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+           if (next && typeof next.focus === 'function') { next.focus(); }
++        }
++        apply();
++        // Closing a drawer can hide the previously focused node; Chrome then
++        // moves focus to <body> after this turn. Re-apply on the next two
++        // frames so Escape lands on the opener instead of the document body.
++        focusRestoreFrame = window.requestAnimationFrame(function () {
++          apply();
++          focusRestoreFrame = window.requestAnimationFrame(function () {
++            focusRestoreFrame = 0;
++            apply();
++          });
+         });
+       }
+
+@@ -12034,6 +12049,12 @@
+         document.body.classList.toggle('nav-open', open);
+         if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+         if (!open && wasOpen) {
++          cancelSearchFocus();
++          var sidebarEl = document.getElementById('sidebar') || document.querySelector('.sidebar');
++          var active = document.activeElement;
++          if (sidebarEl && active && sidebarEl.contains(active) && typeof active.blur === 'function') {
++            active.blur();
++          }
+           restoreFocus(drawerFocusReturn, '#navToggle');
+           drawerFocusReturn = null;
+         }
+@@ -14923,7 +14944,13 @@
+         mobileSearchToggle.addEventListener('click', function () {
+           setDrawer(true, mobileSearchToggle);
+           var search = document.getElementById('navSearch');
+-          if (search) { window.requestAnimationFrame(function () { search.focus(); }); }
++          if (search) {
++            cancelSearchFocus();
++            searchFocusFrame = window.requestAnimationFrame(function () {
++              searchFocusFrame = 0;
++              if (document.body.classList.contains('nav-open')) { search.focus(); }
++            });
++          }
+         });
+       }
+       var navSearch = document.getElementById('navSearch');

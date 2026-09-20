@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.18] - 2026-09-20
+
 ### Added
 
 - Code Links scan recognizes `dossierx-step: <id> #<n> <sha256-hex>` tags
@@ -15,11 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `#n`, claims with no `steps`, and hash mismatches are hard scan errors.
   `claim show` `implemented_in` may include `step` and `step_hash`.
 
-<<<<<<< HEAD
 ### Changed
 
 - Closing the mobile navigation drawer with Escape restores keyboard focus to
   `#navToggle` instead of leaving it on a node Chrome has hidden.
+
+### Fixed
+
+- README and `docs/structured-claim-conformance.md` no longer advertise the
+  removed `dossierx theme` CLI or name "theme" as a `check` pipeline phase.
+  Built-in Light / Dark / System viewer modes are unchanged.
 
 ### Maintenance
 
@@ -29,13 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fixture-graph-demo` 1438165 -> 1439097; `fixture-portability` 1180057 ->
   1180989; `fixture-theme-flat` 4818961 -> 4819893. This range does not
   change engine graph, readiness, lock, or build-order behavior.
-=======
-### Fixed
 
-- README and `docs/structured-claim-conformance.md` no longer advertise the
-  removed `dossierx theme` CLI or name “theme” as a `check` pipeline phase.
-  Built-in Light / Dark / System viewer modes are unchanged.
->>>>>>> b245504 (docs: scrub leftover theme CLI marketing)
+Existing projects should rerun `dossierx check` after upgrading to regenerate
+their self-contained viewer. Code Links `dossierx-step` tags are additive;
+`dossierx-claim` is unchanged.
 
 ## [0.7.17] - 2026-09-19
 
