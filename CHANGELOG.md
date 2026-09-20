@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `#n`, claims with no `steps`, and hash mismatches are hard scan errors.
   `claim show` `implemented_in` may include `step` and `step_hash`.
 
+### Fixed
+
+- README and `docs/structured-claim-conformance.md` no longer advertise the
+  removed `dossierx theme` CLI or name “theme” as a `check` pipeline phase.
+  Built-in Light / Dark / System viewer modes are unchanged.
+
 ## [0.7.17] - 2026-09-19
 
 ### Changed

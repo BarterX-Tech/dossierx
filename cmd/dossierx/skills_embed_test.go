@@ -505,9 +505,10 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // THE SIXTH BUNDLE CAME AND WENT, and the census is back to five. A
 // dossierx-theme bundle was added here at 235 lines, under the ceiling, costing
 // the router one line — a row in the companion table — and it was removed again
-// with custom themes themselves. Nothing was raised for it and nothing had to be
-// lowered when it left, which is the budget behaving as a MAXIMUM rather than a
-// ratchet, exactly as the `--staged` paragraph above says it should.
+// with custom themes themselves. It is not in skills.Order and is not exported.
+// Nothing was raised for it and nothing had to be lowered when it left, which is
+// the budget behaving as a MAXIMUM rather than a ratchet, exactly as the
+// `--staged` paragraph above says it should.
 //
 // CURRENT CENSUS: router 263 of 265, claims 255, comments 206, code-links 136,
 // build-order 142. Two of these moved without a raise and for opposite reasons.
