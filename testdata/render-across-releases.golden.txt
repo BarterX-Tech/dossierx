@@ -47,7 +47,7 @@ SILENT RENDER CHANGES
 ---------------------
 
 testdata/fixture-basic/build/viewer/index.html  (rewritten)
-    size            18003 lines / 4116665 bytes -> 21959 lines / 1175554 bytes
+    size            18003 lines / 4116665 bytes -> 21986 lines / 1176486 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -55,7 +55,7 @@ testdata/fixture-basic/build/viewer/index.html  (rewritten)
         git diff v0.7.16 -- testdata/fixture-basic/build/viewer/index.html
 
 testdata/fixture-conformance-v1/build/viewer/index.html  (rewritten)
-    size            14179 lines / 544528 bytes -> 22284 lines / 1229699 bytes
+    size            14179 lines / 544528 bytes -> 22311 lines / 1230631 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -63,7 +63,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (rewritten)
         git diff v0.7.16 -- testdata/fixture-conformance-v1/build/viewer/index.html
 
 testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
-    size            18717 lines / 4264431 bytes -> 22673 lines / 1438165 bytes
+    size            18717 lines / 4264431 bytes -> 22700 lines / 1439097 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -71,7 +71,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
         git diff v0.7.16 -- testdata/fixture-graph-demo/build/viewer/index.html
 
 testdata/fixture-portability/build/viewer/index.html  (rewritten)
-    size            17994 lines / 4119076 bytes -> 21950 lines / 1180057 bytes
+    size            17994 lines / 4119076 bytes -> 21977 lines / 1180989 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -84,7 +84,7 @@ EXPLAINED BY AN INPUT CHANGE
 testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
     inputs changed  testdata/fixture-theme-flat/README.md
                     testdata/fixture-theme-flat/project.config.yaml
-    size            18281 lines / 4158701 bytes -> 26086 lines / 4818961 bytes
+    size            18281 lines / 4158701 bytes -> 26113 lines / 4819893 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -118,16 +117,17 @@ func TestRenderBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	}}}
 	cfg := &config.Config{Modules: []string{"module"}, Facets: []string{"contract"}}
 
-	legacy, err := Render(cat, cfg)
+	generatedAt := time.Unix(1_700_000_000, 0).UTC()
+	legacy, err := renderAt(cat, cfg, generatedAt)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	bounded, err := RenderBounded(cat, cfg, 8<<20)
+	bounded, err := renderBoundedAt(cat, cfg, generatedAt, 8<<20)
 	if err != nil {
 		t.Fatalf("RenderBounded: %v", err)
 	}
-	if got, want := normalizeRenderTimes(bounded), normalizeRenderTimes(legacy); got != want {
-		t.Fatal("bounded render changed under-limit viewer bytes apart from render timestamps")
+	if bounded != legacy {
+		t.Fatal("bounded render changed under-limit viewer bytes")
 	}
 }
 
@@ -276,18 +276,19 @@ func TestRenderBounded_CustomShellChargesOnlyExecutedOutput(t *testing.T) {
 			writeFile(t, dir+"/shell.html", tc.shell)
 			cfg := &config.Config{Title: "Tiny", Viewer: config.Viewer{TemplateOverrides: dir}}
 
-			legacy, err := Render(cat, cfg)
+			generatedAt := time.Unix(1_700_000_000, 0).UTC()
+			legacy, err := renderAt(cat, cfg, generatedAt)
 			if err != nil {
 				t.Fatalf("legacy render: %v", err)
 			}
-			bounded, err := RenderBounded(cat, cfg, 1<<20)
+			bounded, err := renderBoundedAt(cat, cfg, generatedAt, 1<<20)
 			if err != nil {
 				t.Fatalf("bounded render: %v", err)
 			}
 			if len(bounded) >= 1<<20 {
 				t.Fatalf("actual custom-shell output = %d, want <1MiB", len(bounded))
 			}
-			if got, want := normalizeRenderTimes(bounded), normalizeRenderTimes(legacy); got != want {
+			if bounded != legacy {
 				t.Fatal("bounded custom-shell output differs from legacy output")
 			}
 		})
@@ -340,16 +341,4 @@ func measuredTotalAlloc(fn func()) uint64 {
 	fn()
 	runtime.ReadMemStats(&after)
 	return after.TotalAlloc - before.TotalAlloc
-}
-
-var (
-	headerTimeRE = regexp.MustCompile(`dossierx check at [0-9TZ:+-]+`)
-	graphTimeRE  = regexp.MustCompile(`"generated_at":"[^"]+"`)
-	footerTimeRE = regexp.MustCompile(`Generated [0-9-]+ [0-9:]+ UTC`)
-)
-
-func normalizeRenderTimes(s string) string {
-	s = headerTimeRE.ReplaceAllString(s, "dossierx check at <time>")
-	s = graphTimeRE.ReplaceAllString(s, `"generated_at":"<time>"`)
-	return footerTimeRE.ReplaceAllString(s, "Generated <time>")
 }

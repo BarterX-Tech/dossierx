@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `#n`, claims with no `steps`, and hash mismatches are hard scan errors.
   `claim show` `implemented_in` may include `step` and `step_hash`.
 
+### Changed
+
+- Closing the mobile navigation drawer with Escape restores keyboard focus to
+  `#navToggle` instead of leaving it on a node Chrome has hidden.
+
+### Maintenance
+
+- Regenerate the committed fixture viewers for the nav-focus restore in
+  `viewer-runtime.js`. Byte sizes move as follows: `fixture-basic` 1175554 ->
+  1176486; `fixture-conformance-v1` 1229699 -> 1230631;
+  `fixture-graph-demo` 1438165 -> 1439097; `fixture-portability` 1180057 ->
+  1180989; `fixture-theme-flat` 4818961 -> 4819893. This range does not
+  change engine graph, readiness, lock, or build-order behavior.
+
 ## [0.7.17] - 2026-09-19
 
 ### Changed
