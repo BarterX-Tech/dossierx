@@ -4,10 +4,11 @@ description: >-
   Grounding finished code in the DossierX claims it implements, and what to do
   when a later code change means a locked claim is no longer true. Use this
   WHENEVER you finish implementing or modifying code against a locked claim,
-  whenever you add a "dossierx-claim: <id>" comment to source, whenever
-  dossierx check reports a drifted or unlinked claim, and whenever a maintenance
-  change makes a claim's stated behavior stop matching reality. Covers the
-  dossierx-claim tag convention scanned by dossierx check, dossierx claim link
+  whenever you add a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
+  comment to source, whenever dossierx check reports a drifted or unlinked claim,
+  and whenever a maintenance change makes a claim's stated behavior stop matching
+  reality. Covers the dossierx-claim and dossierx-step tag conventions scanned by
+  dossierx check, dossierx claim link
   for the cases scanning cannot reach, the fully-autonomous vs. human-gated
   decision rule, and dossierx claim flag for reporting a spec mismatch. Load
   the DossierX router skill first, and dossierx-claims for the lock basics.
@@ -39,6 +40,22 @@ The everyday case, and the only thing most implementation work needs.
    def _drop_for_saturation(self):
        ...
    ```
+
+   For a claim that carries `steps:`, pin each implemented step with a **1-based**
+   index and the sha256-hex of **that YAML step string** (not the source file):
+
+   ```python
+   # dossierx-step: widget.contract.walkthrough #2 <64-char-sha256>
+   def _step_two():
+       ...
+   ```
+
+   Compute the digest over the claim's `steps[n-1]` text as loaded (`dossierx`
+   uses the same sha256-hex). A bare `dossierx-step: <id>` without `#n` and hash
+   is a hard scan error. `dossierx-claim:` still grounds a whole claim (including
+   claims that have no `steps`). Both markers may appear; they add links, they
+   do not replace each other. Unknown id, not-locked, `#n` out of range, a claim
+   with no `steps`, or a hash mismatch all fail `dossierx check` (`implink_refused`).
 
 2. Run `dossierx check`. If the project's `project.config.yaml` sets `source_dirs`, the scan finds
    the tag and links it — no separate command. A claim may have any number of tagged files; a file
@@ -74,7 +91,7 @@ linked) and the unlinked count (locked `schema`/`behavior`/`api`/`verification` 
 linked files). `dossierx claim show <id>` gives the same thing for one claim, per file:
 
 ```json
-"implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true}]
+"implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]
 ```
 
 ## Channel A — when a code change reveals the spec is wrong

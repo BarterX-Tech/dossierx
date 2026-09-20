@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.7.18] - 2026-09-20
+
+### Added
+
+- Code Links scan recognizes `dossierx-step: <id> #<n> <sha256-hex>` tags
+  (1-based `n`, hash of that claim's YAML step text) alongside
+  `dossierx-claim: <id>`. Illegal grammar, unknown/unlocked claims, out-of-range
+  `#n`, claims with no `steps`, and hash mismatches are hard scan errors.
+  `claim show` `implemented_in` may include `step` and `step_hash`.
+
+### Changed
+
+- Closing the mobile navigation drawer with Escape restores keyboard focus to
+  `#navToggle` instead of leaving it on a node Chrome has hidden.
+
+### Fixed
+
+- README and `docs/structured-claim-conformance.md` no longer advertise the
+  removed `dossierx theme` CLI or name "theme" as a `check` pipeline phase.
+  Built-in Light / Dark / System viewer modes are unchanged.
+
+### Maintenance
+
+- Regenerate the committed fixture viewers for the nav-focus restore in
+  `viewer-runtime.js`. Byte sizes move as follows: `fixture-basic` 1175554 ->
+  1176486; `fixture-conformance-v1` 1229699 -> 1230631;
+  `fixture-graph-demo` 1438165 -> 1439097; `fixture-portability` 1180057 ->
+  1180989; `fixture-theme-flat` 4818961 -> 4819893. This range does not
+  change engine graph, readiness, lock, or build-order behavior.
+
+Existing projects should rerun `dossierx check` after upgrading to regenerate
+their self-contained viewer. Code Links `dossierx-step` tags are additive;
+`dossierx-claim` is unchanged.
+
 ## [0.7.17] - 2026-09-19
 
 ### Changed

@@ -153,9 +153,14 @@ func linkViewsFor(cfg *config.Config, claim model.Claim) []claimLinkView {
 	}
 	out := make([]claimLinkView, 0, len(views))
 	for _, v := range views {
-		out = append(out, claimLinkView{File: v.File, Symbol: v.Symbol, Drifted: v.Drifted})
+		out = append(out, claimLinkView{File: v.File, Symbol: v.Symbol, Drifted: v.Drifted, Step: v.Step, StepHash: v.StepHash})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].File < out[j].File })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].File != out[j].File {
+			return out[i].File < out[j].File
+		}
+		return out[i].Step < out[j].Step
+	})
 	return out
 }
 
@@ -166,9 +171,11 @@ func linkViewsFor(cfg *config.Config, claim model.Claim) []claimLinkView {
 // claimLinkView is one implementing file with its current drift verdict —
 // implink.ViewFile in snake_case (that type carries no JSON tags).
 type claimLinkView struct {
-	File    string `json:"file"`
-	Symbol  string `json:"symbol,omitempty"`
-	Drifted bool   `json:"drifted"`
+	File     string `json:"file"`
+	Symbol   string `json:"symbol,omitempty"`
+	Drifted  bool   `json:"drifted"`
+	Step     int    `json:"step,omitempty"`
+	StepHash string `json:"step_hash,omitempty"`
 }
 
 // claimSourceView is one cited source in snake_case — model.Source projected

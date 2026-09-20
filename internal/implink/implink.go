@@ -68,6 +68,13 @@ type FileLink struct {
 	File     string `json:"file"`
 	Symbol   string `json:"symbol,omitempty"`
 	FileHash string `json:"file_hash"`
+	// Step is the 1-based index of a claim `steps:` entry when this row came
+	// from a dossierx-step tag. Zero (omitted in JSON) is a whole-claim link
+	// from dossierx-claim or `claim link`.
+	Step int `json:"step,omitempty"`
+	// StepHash is sha256-hex of that YAML step string, recorded so claim show
+	// can surface what the tag attested. Scan already refused a mismatch.
+	StepHash string `json:"step_hash,omitempty"`
 }
 
 // Link is one claim's full set of linked files. LinkedAt is refreshed by
@@ -164,14 +171,10 @@ func WriteArtifact(a *Artifact, path string) error {
 
 // Set links file (optionally at/around symbol) to claimID inside module's
 // implementation-link artifact, creating the artifact if this is the
-// module's first ever link. It is an upsert keyed on (claimID, file): if
-// claimID already has an entry for file, that entry's Symbol/FileHash are
-// refreshed in place and the claim's Link.LinkedAt is bumped; if file is
-// new for that claim, it is appended to the claim's Files list instead
-// (claim.LinkedAt is still bumped, since a claim gaining a new linked file
-// is exactly the kind of event LinkedAt exists to record). Nothing about a
-// different claim's links, or a different file's entry under the same
-// claim, is touched.
+// module's first ever link. It is an upsert keyed on (claimID, file, step):
+// a dossierx-claim / claim-link row uses step 0; a dossierx-step row uses
+// the 1-based step index. Matching rows refresh Symbol/FileHash/StepHash and
+// bump LinkedAt; a new pair is appended.
 //
 // Set validates, in order: claimID names a real claim in claims; that
 // claim belongs to module; that claim is status: locked (you cannot ground
@@ -201,7 +204,7 @@ func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol
 		}
 		artifact = &Artifact{Module: strings.TrimSpace(module)}
 	}
-	if err := applyLink(artifact, claims, cfg, module, claimID, file, symbol); err != nil {
+	if err := applyLink(artifact, claims, cfg, module, ScanMatch{ClaimID: claimID, File: file, Symbol: symbol}); err != nil {
 		return nil, err
 	}
 	if err := WriteArtifact(artifact, path); err != nil {
@@ -224,13 +227,14 @@ func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol
 // in this tree hold lock.AcquireFileLock(ArtifactPath(cfg, module)) across their
 // load-mutate-write: cmd/dossierx's claim link takes it around Set, and Scan
 // takes it once per module around the whole batch.
-func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, module, claimID, file, symbol string) error {
+func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, module string, m ScanMatch) error {
 	if cfg == nil {
 		return fmt.Errorf("implink: cfg must not be nil")
 	}
 	module = strings.TrimSpace(module)
-	claimID = strings.TrimSpace(claimID)
-	file = strings.TrimSpace(file)
+	claimID := strings.TrimSpace(m.ClaimID)
+	file := strings.TrimSpace(m.File)
+	symbol := m.Symbol
 	if module == "" {
 		return fmt.Errorf("implink: module must not be empty")
 	}
@@ -285,19 +289,19 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 
 	fidx := -1
 	for i, f := range link.Files {
-		if f.File == file {
+		if f.File == file && f.Step == m.Step {
 			fidx = i
 			break
 		}
 	}
+	row := FileLink{File: file, Symbol: symbol, FileHash: hash, Step: m.Step, StepHash: m.StepHash}
 	if fidx == -1 {
-		link.Files = append(link.Files, FileLink{File: file, Symbol: symbol, FileHash: hash})
+		link.Files = append(link.Files, row)
 	} else {
-		link.Files[fidx].Symbol = symbol
-		link.Files[fidx].FileHash = hash
+		link.Files[fidx] = row
 	}
 
-	// Sorted (Links by ClaimID, each Link's Files by File) so the artifact
+	// Sorted (Links by ClaimID, each Link's Files by File then Step) so the artifact
 	// is byte-deterministic regardless of the order Set calls arrived in —
 	// the same "generated JSON should read the same way twice for the same
 	// content" reasoning as catalog.Document's alphabetical-by-id claim
@@ -310,8 +314,21 @@ func sortArtifact(a *Artifact) {
 	sort.Slice(a.Links, func(i, j int) bool { return a.Links[i].ClaimID < a.Links[j].ClaimID })
 	for i := range a.Links {
 		files := a.Links[i].Files
-		sort.Slice(files, func(x, y int) bool { return files[x].File < files[y].File })
+		sort.Slice(files, func(x, y int) bool {
+			if files[x].File != files[y].File {
+				return files[x].File < files[y].File
+			}
+			return files[x].Step < files[y].Step
+		})
 	}
+}
+
+// StepContentHash is the sha256-hex of one claim `steps:` entry as loaded
+// (the YAML string, not the source file). dossierx-step tags must carry this
+// digest; Scan refuses a mismatch rather than linking silently.
+func StepContentHash(step string) string {
+	sum := sha256.Sum256([]byte(step))
+	return hex.EncodeToString(sum[:])
 }
 
 // hashFile returns the hex-encoded sha256 of path's whole file content.

@@ -505,9 +505,10 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // THE SIXTH BUNDLE CAME AND WENT, and the census is back to five. A
 // dossierx-theme bundle was added here at 235 lines, under the ceiling, costing
 // the router one line — a row in the companion table — and it was removed again
-// with custom themes themselves. Nothing was raised for it and nothing had to be
-// lowered when it left, which is the budget behaving as a MAXIMUM rather than a
-// ratchet, exactly as the `--staged` paragraph above says it should.
+// with custom themes themselves. It is not in skills.Order and is not exported.
+// Nothing was raised for it and nothing had to be lowered when it left, which is
+// the budget behaving as a MAXIMUM rather than a ratchet, exactly as the
+// `--staged` paragraph above says it should.
 //
 // CURRENT CENSUS: router 263 of 265, claims 255, comments 206, code-links 136,
 // build-order 142. Two of these moved without a raise and for opposite reasons.
@@ -551,7 +552,7 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		{"dossierx-claims", "unlock → fix → lock", "the only path through a locked claim"},
 		{"dossierx-claims", "not_review_pending", "reaudit refuses a non-drifting claim"},
 		{"dossierx-claims", "edit its file freely", "a draft claim needs no ceremony"},
-		{"dossierx-comments", "agent_can_resolve", "the rights rule is data, not memory"},
+		{"dossierx-code-links", "dossierx-step:", "step tags are scanned with claim tags"},
 		{"dossierx-comments", "you never resolve", "the agent replies and waits"},
 		{"dossierx-comments", "inclusive", "the inbox cursor re-reports its boundary second"},
 	} {

@@ -156,9 +156,11 @@ func Status(claims []model.Claim, cfg *config.Config, module string) (*StatusRep
 // otherwise have to build for itself by duplicating Status's hash-recompute
 // logic.
 type ViewFile struct {
-	File    string
-	Symbol  string
-	Drifted bool
+	File     string
+	Symbol   string
+	Drifted  bool
+	Step     int
+	StepHash string
 }
 
 // ViewsByClaim returns, for every claim id in module's implementation-link
@@ -184,7 +186,7 @@ func ViewsByClaim(cfg *config.Config, module string) (map[string][]ViewFile, err
 		for _, f := range link.Files {
 			current, statErr := hashFile(filepath.Join(cfg.Dir(), f.File))
 			drifted := statErr != nil || current != f.FileHash
-			views = append(views, ViewFile{File: f.File, Symbol: f.Symbol, Drifted: drifted})
+			views = append(views, ViewFile{File: f.File, Symbol: f.Symbol, Drifted: drifted, Step: f.Step, StepHash: f.StepHash})
 		}
 		out[link.ClaimID] = views
 	}

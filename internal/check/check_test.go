@@ -7,6 +7,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -356,6 +357,33 @@ func TestRun_ImplinkScanAndStatus(t *testing.T) {
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
 		"src/impl.go":        "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
+	})
+
+	res, err := check.Run(claims, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.ScanFilesScanned != 1 {
+		t.Fatalf("expected 1 file scanned, got %d", res.ScanFilesScanned)
+	}
+	if res.ScanSummary != "impl-links: scanned 1 file(s), found 1 tag(s), reconciled 1 link(s) (0 error(s))" {
+		t.Fatalf("scan summary drift: %q", res.ScanSummary)
+	}
+	if len(res.ScanErrors) != 0 {
+		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
+	}
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 unlinked-in-schema/behavior/api/verification-phases" {
+		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
+	}
+}
+
+func TestRun_StepTagScanAndStatus(t *testing.T) {
+	hash := implink.StepContentHash("do the thing")
+	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
+			"steps:\n  - do the thing\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
 	res, err := check.Run(claims, cfg)

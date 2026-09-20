@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/implink"
 )
 
 func writeLockedFixtureClaim(t *testing.T, claimsDir, id, module, body string) string {
@@ -390,6 +392,123 @@ func TestCLI_Check_ScansSourceDirs_UnknownClaimIsHardFailure(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "widget.contract.mian") {
 		t.Fatalf("expected the error to name the bad claim id, got stderr: %s", errOut)
+	}
+}
+
+func writeLockedStepsFixtureClaim(t *testing.T, claimsDir, id, module string, steps []string) {
+	t.Helper()
+	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
+	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: steps\nbuild_role: behavior\nsteps:\n"
+	for _, s := range steps {
+		src += "  - " + s + "\n"
+	}
+	src += "governed_by:\n  type: none\n  reason: fixture\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatalf("write claim %s: %v", id, err)
+	}
+}
+
+func TestCLI_Check_ScansSourceDirs_ReconcilesValidStepTag(t *testing.T) {
+	root := t.TempDir()
+	claimsDir := filepath.Join(root, "claims")
+	srcDir := filepath.Join(root, "src")
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatalf("mkdir claims: %v", err)
+	}
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
+	cfgPath := filepath.Join(root, "project.config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
+	armLedgerFixture(t, cfgPath)
+	hash := implink.StepContentHash("do the thing")
+	if err := os.WriteFile(filepath.Join(srcDir, "main.py"),
+		[]byte("# dossierx-step: widget.contract.main #1 "+hash+"\ndef do_thing():\n    pass\n"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	out, _, err := execCLI(t, "--config", cfgPath, "check")
+	if err != nil {
+		t.Fatalf("expected check to succeed for a valid step tag, got: %v (out: %s)", err, out)
+	}
+	if !strings.Contains(out, "impl-links: scanned 1 file(s), found 1 tag(s), reconciled 1 link(s) (0 error(s))") {
+		t.Fatalf("expected a scan summary line, got: %s", out)
+	}
+	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 unlinked-in-schema/behavior/api/verification-phases") {
+		t.Fatalf("expected the status line to reflect the step link, got: %s", out)
+	}
+}
+
+func TestCLI_Check_ScansSourceDirs_StepHashMismatchIsHardFailure(t *testing.T) {
+	root := t.TempDir()
+	claimsDir := filepath.Join(root, "claims")
+	srcDir := filepath.Join(root, "src")
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatalf("mkdir claims: %v", err)
+	}
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
+	cfgPath := filepath.Join(root, "project.config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
+	armLedgerFixture(t, cfgPath)
+	bad := strings.Repeat("0", 64)
+	if err := os.WriteFile(filepath.Join(srcDir, "main.py"),
+		[]byte("# dossierx-step: widget.contract.main #1 "+bad+"\ndef do_thing():\n    pass\n"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	out, errOut, err := execCLI(t, "--config", cfgPath, "check")
+	if err == nil {
+		t.Fatalf("expected check to fail for a step hash mismatch, got success (out: %s)", out)
+	}
+	if !strings.Contains(errOut, "dossierx-step") || !strings.Contains(errOut, "hash mismatch") {
+		t.Fatalf("expected a dossierx-step hash mismatch on stderr, got: %s", errOut)
+	}
+}
+
+func TestCLI_ClaimShow_ExposesStepLink(t *testing.T) {
+	root := t.TempDir()
+	claimsDir := filepath.Join(root, "claims")
+	srcDir := filepath.Join(root, "src")
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatalf("mkdir claims: %v", err)
+	}
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
+	cfgPath := filepath.Join(root, "project.config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
+	armLedgerFixture(t, cfgPath)
+	hash := implink.StepContentHash("do the thing")
+	if err := os.WriteFile(filepath.Join(srcDir, "main.py"),
+		[]byte("# dossierx-step: widget.contract.main #1 "+hash+"\ndef do_thing():\n    pass\n"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	out, _, err := execCLI(t, "--config", cfgPath, "--format", "json", "claim", "show", "widget.contract.main")
+	if err != nil {
+		t.Fatalf("claim show: %v (out: %s)", err, out)
+	}
+	if !strings.Contains(out, `"step": 1`) {
+		t.Fatalf("expected implemented_in to carry step 1, got: %s", out)
+	}
+	if !strings.Contains(out, `"step_hash": "`+hash+`"`) {
+		t.Fatalf("expected step_hash in claim show, got: %s", out)
 	}
 }
 
