@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Code Links scan recognizes `dossierx-step: <id> #<n> <sha256-hex>` tags
+  (1-based `n`, hash of that claim's YAML step text) alongside
+  `dossierx-claim: <id>`. Illegal grammar, unknown/unlocked claims, out-of-range
+  `#n`, claims with no `steps`, and hash mismatches are hard scan errors.
+  `claim show` `implemented_in` may include `step` and `step_hash`.
+
 ## [0.7.17] - 2026-09-19
 
 ### Changed

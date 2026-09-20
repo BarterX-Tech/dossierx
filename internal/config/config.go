@@ -190,7 +190,7 @@ type Config struct {
 
 	// SourceDirs is the optional list of directories (relative to this
 	// config file's own directory, like ClaimsDir) the engine scans for
-	// "dossierx-claim: <id>" comments — the code side of internal/implink's
+	// "dossierx-claim: <id>" and "dossierx-step: <id> #<n> <hash>" comments —
 	// claim-to-code linking. Unset/empty means "do not scan" — "dossierx
 	// check" behaves exactly as it did before this field existed, the same
 	// zero-cost-when-unused contract every other optional feature in this

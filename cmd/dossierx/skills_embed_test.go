@@ -551,7 +551,7 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		{"dossierx-claims", "unlock → fix → lock", "the only path through a locked claim"},
 		{"dossierx-claims", "not_review_pending", "reaudit refuses a non-drifting claim"},
 		{"dossierx-claims", "edit its file freely", "a draft claim needs no ceremony"},
-		{"dossierx-comments", "agent_can_resolve", "the rights rule is data, not memory"},
+		{"dossierx-code-links", "dossierx-step:", "step tags are scanned with claim tags"},
 		{"dossierx-comments", "you never resolve", "the agent replies and waits"},
 		{"dossierx-comments", "inclusive", "the inbox cursor re-reports its boundary second"},
 	} {

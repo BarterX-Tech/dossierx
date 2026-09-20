@@ -491,7 +491,8 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		}
 	}
 
-	// 4. Impl-link scan: reconcile every "dossierx-claim: <id>" source tag.
+	// 4. Impl-link scan: reconcile every "dossierx-claim: <id>" and
+	// "dossierx-step: <id> #<n> <hash>" source tag.
 	// A scan I/O error stops the run; per-tag reconciliation errors are
 	// reported (to stderr, by the caller) and also fail the run, but only
 	// after every one is recorded so the reporter can print them all.

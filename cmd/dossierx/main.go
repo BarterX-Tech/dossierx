@@ -1059,6 +1059,7 @@ type scanErrorData struct {
 	File    string `json:"file"`
 	Line    int    `json:"line"`
 	ClaimID string `json:"claim_id"`
+	Marker  string `json:"marker,omitempty"`
 	Message string `json:"message"`
 }
 
@@ -1147,7 +1148,7 @@ func newCheckData(res check.Result) checkData {
 	}
 	scanErrors := make([]scanErrorData, 0, len(res.ScanErrors))
 	for _, e := range res.ScanErrors {
-		scanErrors = append(scanErrors, scanErrorData{File: e.File, Line: e.Line, ClaimID: e.ClaimID, Message: e.Message})
+		scanErrors = append(scanErrors, scanErrorData{File: e.File, Line: e.Line, ClaimID: e.ClaimID, Marker: e.Marker, Message: e.Message})
 	}
 	return checkData{
 		GitignoreCheck:             res.GitignoreCheck,
@@ -1850,7 +1851,11 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	// Impl-link scan errors print (to stderr) whether or not the run then
 	// failed — they preceded the wrapped "check:" error in the old RunE too.
 	for _, e := range res.ScanErrors {
-		fmt.Fprintf(errOut, "impl-links: scan error in %s:%d: dossierx-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
+		marker := e.Marker
+		if marker == "" {
+			marker = "dossierx-claim"
+		}
+		fmt.Fprintf(errOut, "impl-links: scan error in %s:%d: %s references %q: %s\n", e.File, e.Line, marker, e.ClaimID, e.Message)
 	}
 
 	// The lock-ledger gate is check.Run's last step, so its block prints last —

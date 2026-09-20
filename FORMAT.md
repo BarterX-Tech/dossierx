@@ -1430,7 +1430,9 @@ conformance:                     # optional; read only with declared embodiment
                                   # mismatch, or uncheckable check fails check
 doctrine_facet: string           # optional; omitted disables hub-gating entirely
 source_dirs: [path, ...]         # optional; directories scanned for
-                                  # "dossierx-claim: <id>" comments, resolved
+                                  # "dossierx-claim: <id>" and
+                                  # "dossierx-step: <id> #<n> <sha256-hex>"
+                                  # comments, resolved
                                   # relative to this file's own directory like
                                   # claims_dir. Unset/empty means DO NOT SCAN —
                                   # `check` behaves as it did before the field

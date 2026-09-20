@@ -1,7 +1,8 @@
 // scan.go implements the automatic, tag-driven half of claim-to-code
 // linking: instead of an agent (or human) explicitly running "dossierx implink
 // set" once per claim, Scan walks a project's declared cfg.SourceDirs
-// looking for a "dossierx-claim: <id>" comment anywhere in a text file and, for
+// looking for a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
+// comment anywhere in a text file and, for
 // every one it finds, calls the exact same Set logic every explicit link
 // already goes through — same validation, same artifact, same drift
 // detection. Nothing about Set or the on-disk artifact format changes for
@@ -32,6 +33,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -45,6 +47,15 @@ import (
 // string, which is what keeps it working identically across any source
 // language a project happens to use.
 var tagPattern = regexp.MustCompile(`dossierx-claim:\s*([A-Za-z0-9_.\-]+)`)
+
+// stepMarker is the literal used to catch malformed dossierx-step lines that
+// fail stepTagPattern (bare id, missing hash, short digest).
+const stepMarker = "dossierx-step:"
+
+// stepTagPattern is the only legal dossierx-step grammar: claim id, 1-based
+// step index, and sha256-hex of that YAML step string (64 hex chars).
+var stepTagPattern = regexp.MustCompile(`dossierx-step:\s*([A-Za-z0-9_.\-]+)\s+#([0-9]+)\s+([0-9a-fA-F]{64})(?:\s|$)`)
+var stepIDPattern = regexp.MustCompile(`dossierx-step:\s*([A-Za-z0-9_.\-]+)`)
 
 // symbolPatterns is a small, deliberately shallow set of "the next line
 // looks like it declares a named symbol" heuristics across a handful of
@@ -70,24 +81,26 @@ var symbolPatterns = []*regexp.Regexp{
 // cfg.SourceDirs; a real source file is never this large in practice.
 const maxScanFileSize = 5 << 20 // 5 MiB
 
-// ScanMatch is one "dossierx-claim: <id>" tag Scan found, whether or not it
+// ScanMatch is one tag Scan found, whether or not it
 // resolved to a valid, linkable claim (see ScanReport.Errors for the
-// invalid ones).
+// invalid ones). Step is 0 for a dossierx-claim tag.
 type ScanMatch struct {
-	ClaimID string
-	File    string // project-relative, slash-separated
-	Line    int    // 1-based line number the tag itself was found on
-	Symbol  string // best-effort; may be empty
+	ClaimID  string
+	File     string // project-relative, slash-separated
+	Line     int    // 1-based line number the tag itself was found on
+	Symbol   string // best-effort; may be empty
+	Step     int    // 1-based; 0 = whole-claim tag
+	StepHash string
 }
 
 // ScanError is one tag Scan found that could not be reconciled into a
-// link — the claim id it names does not exist at all, or exists but is not
-// yet locked. Both are reported, never silently skipped: an unbacked or
-// premature tag is exactly the "mess" this feature exists to prevent.
+// link — unknown id, not locked, or an illegal dossierx-step grammar /
+// step index / step-text hash. Never silently skipped.
 type ScanError struct {
 	File    string
 	Line    int
 	ClaimID string
+	Marker  string // "dossierx-claim" or "dossierx-step"
 	Message string
 }
 
@@ -110,13 +123,12 @@ func (r *ScanReport) Summary() string {
 }
 
 // Scan walks every directory in cfg.SourceDirs, finds every "dossierx-claim:
-// <id>" tag in every text file under them, and — for each tag naming a
-// claim that exists and is locked — calls Set with that claim's own Module
-// (never a caller-supplied one: a scanned tag names only a claim id, so its
-// module is looked up, not asserted by the caller the way explicit
-// "implink set --module" requires). A tag naming an unknown or not-yet-
-// locked claim is recorded in ScanReport.Errors instead of being silently
-// dropped.
+// <id>" and legal "dossierx-step: <id> #<n> <sha256>" tag in every text file
+// under them, and — for each tag naming a claim that exists and is locked —
+// reconciles a code link under that claim's own Module. Step tags also
+// require a 1-based n in range of claim.Steps and a matching StepContentHash.
+// Unknown, unlocked, malformed, out-of-range, or hash-mismatched tags go in
+// ScanReport.Errors instead of being silently dropped.
 //
 // Scan is a no-op (a zero-value, all-zero ScanReport, nil error) when
 // cfg.SourceDirs is empty — the zero-cost-when-unused contract every
@@ -182,33 +194,17 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 
 			lines := strings.Split(string(data), "\n")
 			for i, line := range lines {
+				lineNo := i + 1
+				symbol := captureSymbol(lines, i)
+				if strings.Contains(line, stepMarker) {
+					scanStepLine(report, pending, claims, relFile, line, lineNo, symbol)
+					continue
+				}
 				m := tagPattern.FindStringSubmatch(line)
 				if m == nil {
 					continue
 				}
-				claimID := m[1]
-				lineNo := i + 1
-				symbol := captureSymbol(lines, i)
-
-				claim, ok := findByID(claims, claimID)
-				if !ok {
-					report.Errors = append(report.Errors, ScanError{
-						File: relFile, Line: lineNo, ClaimID: claimID,
-						Message: "no such claim (check for a typo)",
-					})
-					continue
-				}
-				if claim.Status != model.StatusLocked {
-					report.Errors = append(report.Errors, ScanError{
-						File: relFile, Line: lineNo, ClaimID: claimID,
-						Message: fmt.Sprintf("claim is not locked (status %q)", claim.Status),
-					})
-					continue
-				}
-
-				pending[claim.Module] = append(pending[claim.Module], ScanMatch{
-					ClaimID: claimID, File: relFile, Line: lineNo, Symbol: symbol,
-				})
+				recordClaimTag(report, pending, claims, relFile, m[1], lineNo, symbol)
 			}
 			return nil
 		})
@@ -288,9 +284,13 @@ func reconcileModule(report *ScanReport, module string, matches []ScanMatch, cla
 
 	applied := 0
 	for _, m := range matches {
-		if err := applyLink(artifact, claims, cfg, module, m.ClaimID, m.File, m.Symbol); err != nil {
+		if err := applyLink(artifact, claims, cfg, module, m); err != nil {
+			marker := "dossierx-claim"
+			if m.Step > 0 {
+				marker = "dossierx-step"
+			}
 			report.Errors = append(report.Errors, ScanError{
-				File: m.File, Line: m.Line, ClaimID: m.ClaimID, Message: err.Error(),
+				File: m.File, Line: m.Line, ClaimID: m.ClaimID, Marker: marker, Message: err.Error(),
 			})
 			continue
 		}
@@ -343,6 +343,92 @@ func captureSymbol(lines []string, tagLineIdx int) string {
 // first chunk of a file is a reliable enough signal that it isn't source
 // text worth regex-scanning, without needing a MIME/content-type library
 // dependency for what is otherwise a plain text search.
+func recordClaimTag(report *ScanReport, pending map[string][]ScanMatch, claims []model.Claim, relFile, claimID string, lineNo int, symbol string) {
+	claim, ok := findByID(claims, claimID)
+	if !ok {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-claim",
+			Message: "no such claim (check for a typo)",
+		})
+		return
+	}
+	if claim.Status != model.StatusLocked {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-claim",
+			Message: fmt.Sprintf("claim is not locked (status %q)", claim.Status),
+		})
+		return
+	}
+	pending[claim.Module] = append(pending[claim.Module], ScanMatch{
+		ClaimID: claimID, File: relFile, Line: lineNo, Symbol: symbol,
+	})
+}
+
+func scanStepLine(report *ScanReport, pending map[string][]ScanMatch, claims []model.Claim, relFile, line string, lineNo int, symbol string) {
+	m := stepTagPattern.FindStringSubmatch(line)
+	if m == nil {
+		claimID := ""
+		if idm := stepIDPattern.FindStringSubmatch(line); idm != nil {
+			claimID = idm[1]
+		}
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: "tag must be `dossierx-step: <id> #<n> <sha256-hex>` (1-based n, 64 hex chars of the YAML step text)",
+		})
+		return
+	}
+	claimID := m[1]
+	n, err := strconv.Atoi(m[2])
+	if err != nil {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: fmt.Sprintf("invalid step index %q", m[2]),
+		})
+		return
+	}
+	gotHash := strings.ToLower(m[3])
+	claim, ok := findByID(claims, claimID)
+	if !ok {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: "no such claim (check for a typo)",
+		})
+		return
+	}
+	if claim.Status != model.StatusLocked {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: fmt.Sprintf("claim is not locked (status %q)", claim.Status),
+		})
+		return
+	}
+	if len(claim.Steps) == 0 {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: "claim has no steps",
+		})
+		return
+	}
+	if n < 1 || n > len(claim.Steps) {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: fmt.Sprintf("step %d is out of range (claim has %d steps)", n, len(claim.Steps)),
+		})
+		return
+	}
+	want := StepContentHash(claim.Steps[n-1])
+	if gotHash != want {
+		report.Errors = append(report.Errors, ScanError{
+			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
+			Message: fmt.Sprintf("step %d hash mismatch (want %s)", n, want),
+		})
+		return
+	}
+	pending[claim.Module] = append(pending[claim.Module], ScanMatch{
+		ClaimID: claimID, File: relFile, Line: lineNo, Symbol: symbol, Step: n, StepHash: want,
+	})
+}
+
 func isProbablyText(data []byte) bool {
 	n := len(data)
 	if n > 8192 {
