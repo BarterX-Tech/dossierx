@@ -91,6 +91,16 @@ Review causes remain independent:
   upstream review boundary, readiness emits a deterministic representative path
   (the shortest path with a lexicographical tie-break) as diagnostic witness
   evidence rather than enumerating every route.
+* `unapproved_edit` means this claim held an approval, that approval was
+  released by an honest `claim unlock`, and the wording has since moved away
+  from what was approved. It is the only cause a claim that is not locked owns
+  on its own content, and it is deliberately distinct from
+  `approval_content_drift`: drift names a claim that is still `locked` whose
+  bytes no longer match a STANDING approval, which is the integrity finding the
+  ledger gate refuses on. This names the ordinary, intended act — unlock,
+  rewrite, re-lock — observed part-way through. A draft holding an UNRELEASED
+  record is neither: that is the `lock-ledger-orphan` tamper finding, and this
+  cause stays silent on it.
 * A claim's own open thread or flag remains its own direct cause. Clearing one
   inherited path does not clear another dependency path, a direct change, or
   the claim's own cause.
@@ -151,6 +161,21 @@ dossierx claim migrate-lock-policy \
 Migration preserves existing approvals, dependency baselines, receipts and
 review causes. It does not lock or unlock claims, refresh a baseline, or make a
 historical approval mean that an unseen draft dependency was approved.
+
+## What was approved, and what is written now
+
+A lock-ledger record carries the claim it approved, not only the hash of it.
+The hash answers whether what is written still matches what was approved; the
+retained content is what lets a consumer answer the question a reviewer asks
+next, which is what changed. The text survives `claim unlock` for exactly the
+window in which it is needed — between the unlock and the next lock, when the
+current wording is drifting away from it — and the next approval replaces it.
+
+A record written before this content was retained carries a hash and no text.
+That case is reported as such. A consumer must not treat a missing approved
+text as an empty one: diffing against nothing renders the whole claim as newly
+added, which is a confident wrong answer to a question the record cannot
+answer.
 
 ## What readiness does not prove
 

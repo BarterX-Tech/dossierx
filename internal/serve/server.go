@@ -36,6 +36,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
@@ -423,11 +424,12 @@ func (s *Server) renderViewer() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serve: build catalog: %w", err)
 	}
-	assessment, err := s.readinessFor(claims)
+	assessment, approvedEdits, err := s.readinessFor(claims)
 	if err != nil {
 		return nil, fmt.Errorf("serve: readiness: %w", err)
 	}
 	cat.SetReadiness(assessment)
+	cat.SetApprovedEdits(approvedEdits)
 	report, err := conformance.Evaluate(claims, s.cfg.Conformance.Observations, func(path string) ([]byte, error) {
 		return conformance.ReadFileOutside(path, s.cfg.BuildDirPath())
 	})
@@ -447,16 +449,24 @@ func (s *Server) renderViewer() ([]byte, error) {
 	return []byte(html), nil
 }
 
-func (s *Server) readinessFor(claims []model.Claim) (map[string]readiness.Assessment, error) {
+// readinessFor computes both read-only claim projections that need the lock
+// store: the readiness assessment and the "what moved since approval" diff.
+//
+// They are returned together, from one store load, deliberately. A request
+// that read the store twice could observe two different versions of it across
+// a concurrent lock, and the two projections would then disagree about which
+// claims have an unapproved edit — one listing a row the other draws no panel
+// for. Sharing the load makes that disagreement unrepresentable.
+func (s *Server) readinessFor(claims []model.Claim) (assessments map[string]readiness.Assessment, approvedEdits map[string]approvaledit.Change, err error) {
 	store, err := lock.LoadStore(s.storePath())
 	if err != nil {
-		return nil, fmt.Errorf("load lock store: %w", err)
+		return nil, nil, fmt.Errorf("load lock store: %w", err)
 	}
 	flags, err := reaudit.LoadFlagStore(s.flagStorePath())
 	if err != nil {
-		return nil, fmt.Errorf("load flag store: %w", err)
+		return nil, nil, fmt.Errorf("load flag store: %w", err)
 	}
-	return readiness.Compute(claims, store, flags), nil
+	return readiness.Compute(claims, store, flags), approvaledit.Compute(claims, store), nil
 }
 
 // disarmUngatedMockups returns claims with RawHTMLReviewed cleared on every

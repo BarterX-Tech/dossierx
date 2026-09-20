@@ -259,8 +259,20 @@
     window.scrollTo({ top: Math.max(0, Math.round(window.scrollY + top - offset)), behavior: 'instant' });
   }
 
+  // BODY_LIKE is what the four-line disclosure clamps: a claim's own body, and
+  // the passage-by-passage diff that stands in for it while the reader is
+  // looking at what changed since approval.
+  //
+  // The diff is in this set because it IS the body, shown a passage at a time
+  // — so a claim that clamps to four lines with "... more" in one state and
+  // runs to full height in the other is the same claim behaving as two
+  // different components. Sharing the mechanism rather than copying it also
+  // means the toggle's label, its aria wiring and its scroll compensation
+  // cannot drift between the two.
+  var BODY_LIKE = '.claim-body, .claim-edit-diff';
+
   function setClaimBodyExpanded(wrapper, expanded) {
-    var body = wrapper && wrapper.querySelector(':scope > .claim-body');
+    var body = wrapper && wrapper.querySelector(':scope > .claim-body, :scope > .claim-edit-diff');
     var toggle = wrapper && wrapper.querySelector(':scope > .claim-body-disclosure__toggle');
     if (!body || !toggle || toggle.hidden) { return; }
     wrapper.classList.toggle('claim-body-disclosure--expanded', expanded);
@@ -273,13 +285,19 @@
   }
 
   function syncClaimBodyDisclosures() {
-    document.querySelectorAll('.claim-body').forEach(function (body) {
+    document.querySelectorAll(BODY_LIKE).forEach(function (body) {
       var wrapper = body.parentElement && body.parentElement.classList.contains('claim-body-disclosure')
         ? body.parentElement
         : null;
       if (!wrapper) {
         wrapper = document.createElement('div');
         wrapper.className = 'claim-body-disclosure';
+        // The diff's wrapper is marked, because the card hides the claim's
+        // own body while the changes are showing and must not hide the diff
+        // along with it — both are a .claim-body-disclosure by then.
+        if (body.classList.contains('claim-edit-diff')) {
+          wrapper.classList.add('claim-body-disclosure--edit');
+        }
         body.parentNode.insertBefore(wrapper, body);
         wrapper.appendChild(body);
         if (!body.id) { body.id = 'claim-body-' + (++claimBodyDisclosureSequence); }

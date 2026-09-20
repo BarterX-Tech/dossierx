@@ -51,7 +51,11 @@ func TestMobileCardGroundStartsAtTheHeadBand(t *testing.T) {
   var head = sec.querySelector(':scope > .system-record-head');
   var nav = sec.querySelector(':scope > .sub-nav');
   var canvas = sec.querySelector(':scope > .reading-canvas:not([hidden])');
-  var strip = document.getElementById('statusStrip');
+  // The BANNER CARD, not the strip that holds it: the strip stopped being
+  // the painted surface when the head became a card with a row per finding
+  // (Paper EH1-0) and is now the card's gutter, so its own top IS the
+  // canvas top and measuring it could no longer see the 14px at all.
+  var strip = document.getElementById('statusStripCard');
   if (!head || !canvas || !strip) return false;
   var bandBottom = Math.round((nav || head).getBoundingClientRect().bottom);
   var canvasTop = Math.round(canvas.getBoundingClientRect().top);
@@ -70,7 +74,7 @@ func TestMobileCardGroundStartsAtTheHeadBand(t *testing.T) {
    var head=sec.querySelector(':scope > .system-record-head');
    var nav=sec.querySelector(':scope > .sub-nav');
    var canvas=sec.querySelector(':scope > .reading-canvas:not([hidden])');
-   var strip=document.getElementById('statusStrip');
+   var strip=document.getElementById('statusStripCard');
    var b=function(e){return e?Math.round(e.getBoundingClientRect().bottom):null};
    var r=function(e){return e?Math.round(e.getBoundingClientRect().top):null};
    return JSON.stringify({hasNav:!!nav, headBottom:b(head), navBottom:b(nav),

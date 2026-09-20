@@ -429,3 +429,43 @@ func PersistedYAMLName(sf reflect.StructField) (string, bool) {
 	}
 	return name, true
 }
+
+// SignedFieldsDiffering returns the on-disk names of the persisted claim
+// fields LockedClaimHash signs whose values differ between a and b, sorted.
+//
+// It exists so a reader can be told WHAT moved, not merely that the hash no
+// longer matches. The viewer's "edited since approval" panel renders a body
+// diff; when a claim's hash has changed and its body has not, a panel with an
+// empty diff in it is worse than no panel — it asserts a change and then shows
+// nothing. This is what fills that gap: "the wording is unchanged; rests_on
+// and build_role moved".
+//
+// It reuses lockedClaimHashExcluded rather than restating it. A field the hash
+// does not sign cannot be the reason the hash changed, and a second hand-kept
+// copy of that list is how the two would come to disagree. lockedClaimHashOmitWhenEmpty
+// is deliberately NOT consulted: it decides what a hash INPUT is for backward
+// compatibility, and a field that went from empty to set did change, which is
+// exactly what a reader needs told.
+//
+// Comparison is reflect.DeepEqual on the field values, which is stricter than
+// the hash in one harmless direction: two values that hash the same are equal
+// here too, because the hash encoding is injective over the shapes model.Claim
+// holds. A nil slice and an empty slice compare unequal under DeepEqual and
+// hash identically under lockedClaimHashOmitWhenEmpty's rule — so callers
+// intersect this list with "the hash actually changed" before showing it,
+// which every caller in this repository does.
+func SignedFieldsDiffering(a, b model.Claim) []string {
+	var out []string
+	at, av, bv := reflect.TypeOf(a), reflect.ValueOf(a), reflect.ValueOf(b)
+	for i := 0; i < at.NumField(); i++ {
+		name, persisted := PersistedYAMLName(at.Field(i))
+		if !persisted || lockedClaimHashExcluded[name] {
+			continue
+		}
+		if !reflect.DeepEqual(av.Field(i).Interface(), bv.Field(i).Interface()) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}

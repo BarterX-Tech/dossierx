@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A claim that was locked, unlocked, and then rewritten now says so. The lock
+  ledger retains the claim it approved alongside the hash of it, so the viewer
+  can show what moved instead of replacing the old text in place with nothing
+  to compare it against. The claim's chip reads `EDITED · WAS APPROVED` rather
+  than `DRAFT`, which was true of this state and of a claim nobody ever
+  approved, and a bar above the body switches between `Changes` and `Current`.
+- The diff is passage by passage, rendered as prose, with the words that moved
+  marked inside each passage. The unit is a passage and not a line because a
+  claim body is markdown hard-wrapped by the author's editor: diffed by line,
+  changing one word showed as one line each way or three, depending on nothing
+  but whether the paragraph re-wrapped. It renders as prose, not source,
+  because a reader comparing two passages of `**like this**` is reading a
+  second document in a notation nobody asked them to read. Marking a word
+  never changes the prose around it — the rendering is compared with and
+  without the marks, and a passage that would change renders unmarked.
+- `readiness` emits a new independent review cause, `unapproved_edit`, for a
+  draft claim holding a released approval whose content has since changed. This
+  closes a gap: such a claim previously emitted no cause of its own, so one
+  that nothing depended on appeared in no Issues list at all. It is distinct
+  from `approval_content_drift` (a still-locked claim whose bytes left a
+  standing approval, which is an integrity finding) and stays silent on a draft
+  holding an unreleased record (which is the `lock-ledger-orphan` finding).
+
+### Changed
+
+- On phones the facet banner is a card with a row per finding. The desktop
+  band is unchanged: one summary sentence with "Show issues" beside it, which
+  a 1440px row carries comfortably. The narrower column does not — a sentence
+  holds one statement, and a facet routinely has two kinds of thing waiting
+  (claims blocked by unapproved dependencies AND claims rewritten since they
+  were approved), which at 375px could only be shown as a second band stacked
+  underneath. The card is tinted while every row shares a hue and goes neutral
+  the moment two rows disagree, with the dots carrying the colour. Each row
+  opens the Issues screen filtered to its own severity; the desktop band opens
+  it unfiltered, because its sentence names one finding while the band stands
+  for the whole facet. Both forms are in the DOM and CSS picks one.
+- The implementation-checks panel no longer opens itself when a check is
+  failing. R09.3 suppresses a claim-level auto-open whenever a facet-level
+  blocked banner is showing, and a facet with failing checks always has one, so
+  the auto-open fired precisely in the case the rule excludes. The footer chip
+  still carries the count and the panel still carries the verdict; what changed
+  is that the reader no longer has to close it to read the claim.
+- `lock-store.json` ledger records carry a `content` field holding the approved
+  claim. Records written by earlier versions have no such field and are read as
+  "the approved text was not retained" — they keep working, and the viewer says
+  the text is unavailable rather than showing an empty or all-new diff.
+
 ## [0.7.18] - 2026-09-20
 
 ### Added

@@ -29,6 +29,27 @@ const (
 	CauseApprovalMissing          CauseKind = "approval_missing"
 	CauseApprovalReleased         CauseKind = "approval_released"
 	CauseApprovalUnknown          CauseKind = "approval_unknown"
+
+	// CauseUnapprovedEdit: this claim held an approval, that approval was
+	// released by an honest unlock, and the text has since moved away from what
+	// was approved. It is the ONLY cause a non-locked claim can own on its own
+	// content, and it exists because the engine could previously not see this
+	// state at all.
+	//
+	// The gap it closes: localSummary returns early for a claim that is not
+	// locked, so an unlocked-and-rewritten claim emitted no cause of its own.
+	// Its DEPENDENTS still flipped review_pending (their baseline for it
+	// drifted), so the state was visible from the outside — but a claim nothing
+	// depends on produced no cause anywhere, and therefore no Issues row. The
+	// viewer counted it and could not list it.
+	//
+	// It is deliberately NOT CauseApprovalContentDrift. Drift names a LOCKED
+	// claim whose bytes no longer match a STANDING approval, which is the
+	// tamper finding audit.go refuses on. This names a claim that was released
+	// on the record and is being rewritten in the open — the ordinary,
+	// intended way to change approved wording. Same shape, opposite meaning,
+	// and collapsing them would make an honest edit read as tampering.
+	CauseUnapprovedEdit CauseKind = "unapproved_edit"
 )
 
 // ConditionKind identifies a condition that prevents the required dependency
@@ -512,6 +533,12 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 		}
 	}
 	if c.Status != model.StatusLocked {
+		// A draft claim owns no dependency facts — it has no approval for a
+		// dependency change to invalidate — but it can own the one fact above:
+		// that its own text has left the approval it was released from.
+		if cause, ok := unapprovedEdit(c, store); ok {
+			out.causes = append(out.causes, cause)
+		}
 		return out
 	}
 	for _, depID := range lock.BaselineDependencyIDs(c) {
@@ -562,6 +589,43 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 		}
 	}
 	return out
+}
+
+// unapprovedEdit reports CauseUnapprovedEdit for a draft claim whose content
+// has moved away from the approval an unlock released.
+//
+// Every clause is load-bearing:
+//
+//   - StatusDraft, not "not locked": a retired claim is out of the lifecycle
+//     and its wording is nobody's outstanding review.
+//   - Released(): an UNRELEASED record on a draft claim is the lock-ledger-orphan
+//     tamper finding (someone hand-flipped locked -> draft). That has its own
+//     gate in audit.go with its own words, and reporting it here as an ordinary
+//     edit would offer a reviewer the softer of two available readings.
+//   - Hash != "": a record with no hash cannot say the text moved. Silence is
+//     the honest answer, not a cause asserted from nothing.
+//   - LockedClaimHash, the same function RecordApproval signed with, so "differs
+//     from the approval" is decided by one implementation rather than two that
+//     agree by inspection.
+//
+// It reads the store and mutates nothing, per this package's read-only
+// contract.
+func unapprovedEdit(c model.Claim, store *lock.Store) (Cause, bool) {
+	if c.Status != model.StatusDraft || store == nil {
+		return Cause{}, false
+	}
+	record, ok := store.Record(c.ID)
+	if !ok || record.Subject != lock.SubjectClaim || !record.Released() {
+		return Cause{}, false
+	}
+	if record.Hash == "" || record.Hash == lock.LockedClaimHash(c) {
+		return Cause{}, false
+	}
+	return Cause{
+		Kind: CauseUnapprovedEdit, SourceKind: CauseUnapprovedEdit,
+		Path: Path{c.ID}, Direct: true,
+		Detail: "this claim was approved, then unlocked and rewritten; what is written differs from what was approved",
+	}, true
 }
 
 func baseline(store *lock.Store, dependent, dependency string) (string, bool) {

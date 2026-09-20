@@ -201,12 +201,31 @@
           if (typeof window.dossierxEnhanceSystemRecord === 'function') {
             window.dossierxEnhanceSystemRecord();
           }
+          // The edited-since-approval chips and panels are attached HERE, at
+          // mount, and BEFORE the clamps below — not left to the next
+          // renderStatusStrip pass.
+          //
+          // They insert a node above each edited claim's body, so attaching
+          // them later moves everything under them. Two things read that
+          // height and cannot be allowed to read it early: a deep link has
+          // already scrolled to its claim, so the panels appearing afterwards
+          // slid the page out from under the sticky header; and the
+          // source-note clamps measure scrollHeight against clientHeight, so
+          // a mid-measurement insertion decides "show more" from a layout
+          // that is about to change. Decorating first means the surface is at
+          // its final height before anything measures or scrolls it.
+          renderApprovedEdits();
           // Source-note clamps observe live nodes only; re-arm after every
           // first-time mount so a freshly revealed surface is measured.
           if (typeof mountSourceNoteClamps === 'function') {
             mountSourceNoteClamps();
           }
         }
+        // The no-template path (an eagerly rendered surface) never enters the
+        // block above, and still has claims to decorate. renderApprovedEdits
+        // is idempotent — every node it creates is either replaced wholesale
+        // or guarded — so the second call costs nothing on the path that did.
+        renderApprovedEdits();
         mountedSurfaceID = surfaceID;
       }
 
@@ -1313,21 +1332,30 @@
       // claim has no edges".
 
       var stripEl = document.getElementById('statusStrip');
-      var stripToggle = document.getElementById('statusStripToggle');
-      var stripSummary = document.getElementById('statusStripSummary');
-      var stripTitle = document.getElementById('statusStripTitle');
       // retry fix 21 (this lane's third attempt): #statusStripNote (the
       // "Critical 0 · Needs you 3 · ..." tally) is REMOVED per the
       // coordinator's ruling — no 02/03/04 board draws it, the chips
       // already carry every count it repeated — and dropped from shell.html
       // along with its element lookup here.
-      var stripAction = document.getElementById('statusStripAction');
+      //
+      // THE HEAD HAS TWO FORMS, ONE PER WIDTH, and both are written on every
+      // paint. #statusStripToggle is the desktop band — one summary sentence
+      // with "Show issues" beside it — and #statusStripCard is the phone form
+      // (Paper EH1-0), a card with one ROW PER FINDING. CSS shows one; see
+      // shell.html for why the choice is a media query and not a width read
+      // in here.
+      //
+      // Both are filled unconditionally rather than behind a matchMedia
+      // check. The cost is a few DOM nodes nobody sees; the alternative is a
+      // resize listener and a breakpoint duplicated out of the stylesheet,
+      // which is one more thing to keep in step for no gain.
+      var stripToggle = document.getElementById('statusStripToggle');
+      var stripTitle = document.getElementById('statusStripTitle');
+      var stripCard = document.getElementById('statusStripCard');
+      var stripCardCount = document.getElementById('statusStripCardCount');
+      var stripFindings = document.getElementById('statusStripFindings');
       var stripBody = document.getElementById('statusStripBody');
       var lastStatusData = null;
-      // Paper starts every status strip collapsed. stripExpanded then stays
-      // sticky across refreshes, so a poll (or an SSE tick) never takes the
-      // disclosure state away from the reader.
-      var stripExpanded = false;
 
       function countLabel(n, word) {
         return n + ' ' + word + (n === 1 ? '' : 's');
@@ -1687,7 +1715,12 @@
           approval_content_drift: 'This claim changed after approval',
           approval_missing: 'This claim has no approval record',
           approval_released: 'This claim\'s approval was released',
-          approval_unknown: 'This claim\'s approval state is unknown'
+          approval_unknown: 'This claim\'s approval state is unknown',
+          // Deliberately not "changed after approval" (approval_content_drift's
+          // wording): that names a LOCKED claim whose bytes no longer match a
+          // STANDING approval, which is the tamper finding. This names the
+          // honest, intended act — unlock, rewrite, re-lock — caught mid-way.
+          unapproved_edit: 'This claim was approved, then rewritten'
         };
         return labels[record.kind] || String(record.kind || 'Readiness obstacle').replace(/_/g, ' ');
       }
@@ -2195,12 +2228,285 @@
         } catch (_) { return {}; }
       }
 
+      // ---- Unapproved edits -------------------------------------------------
+      //
+      // The state these three functions draw is the ordinary one, and it was
+      // the one the viewer could not show. A claim is locked; someone unlocks
+      // it, rewrites it, and has not locked it again yet. The new wording
+      // replaced the old in the file, so the reading view showed text with
+      // nothing to compare it against and a chip reading DRAFT — the same chip
+      // a claim nobody ever approved carries. "Never written" and "approved,
+      // then moved" are different jobs for a reviewer, and one word was being
+      // used for both.
+      //
+      // The engine now answers both questions: readiness emits an
+      // `unapproved_edit` cause (so the claim reaches the Issues screen on its
+      // own, without needing a dependent to notice for it), and the graph
+      // payload carries the line diff from the approved body to the current
+      // one. Everything below is presentation of those two facts. It computes
+      // nothing about whether an edit is allowed, and never writes.
+
+      // offlineApprovedEdits reads the per-claim approvaledit.Change records
+      // off the SAME rendered graph payload offlineReadiness reads. There is
+      // deliberately no /api/status path for this: a checked-in file:// export
+      // has no endpoint to ask, and a panel that appeared only under
+      // "dossierx serve" would be missing exactly where a reviewer reads a
+      // repository they did not build.
+      function offlineApprovedEdits() {
+        var node = document.getElementById('dossierx-graph');
+        if (!node) { return {}; }
+        try {
+          var payload = JSON.parse(node.textContent || '{}');
+          var out = {};
+          (payload.nodes || []).forEach(function (graphNode) {
+            if (graphNode.id && graphNode.approved_edit) { out[graphNode.id] = graphNode.approved_edit; }
+          });
+          return out;
+        } catch (_) { return {}; }
+      }
+
+      // editDateLabel turns an RFC3339 instant into the board's own short
+      // form ("12 Sep"). It is deliberately not a full date: the panel's job
+      // is to place the approval in the reader's recent memory, and a
+      // four-part date would be the widest thing on a row that is otherwise
+      // a sentence.
+      function editDateLabel(iso) {
+        if (!iso) { return ''; }
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) { return String(iso).slice(0, 10); }
+        return d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+      }
+
+      // approvedEditHasDiff reports whether there is a second wording to show
+      // at all.
+      //
+      // Two states look like an edit and have nothing to put behind a
+      // "Changes" tab. A record written before the approved wording was kept
+      // proves the text moved and does not carry what it moved from. A claim
+      // whose hash moved because its rests_on or build_role moved has an
+      // approved wording identical to its current one. In both, the panel has
+      // one sentence to say and no second version of the claim — so there is
+      // no switch, and the claim's own body stays on screen.
+      //
+      // Offering the switch anyway is what this replaces, and it was worse
+      // than a useless control: choosing "Changes" hid the body and put the
+      // sentence in its place, so the claim rendered with no content at all.
+      function approvedEditHasDiff(change) {
+        return !!(change.content_retained &&
+          (change.hunks || []).length &&
+          (change.changed_passages || 0) > 0);
+      }
+
+      // approvedEditDiff builds the passage-by-passage view: unchanged
+      // passages as ordinary prose, and each changed one as the approved
+      // passage above the current one, tinted and ruled.
+      //
+      // The HTML is produced by the ENGINE (internal/approvaledit), not here,
+      // because internal/render/markdown is this project's only markdown
+      // renderer and the viewer has none. Shipping the source and parsing it
+      // in the browser would mean growing a second renderer that could
+      // disagree with the first about the same claim, on the same page.
+      function approvedEditDiff(change) {
+        var body = el('div', 'claim-edit-diff');
+        (change.hunks || []).forEach(function (hunk) {
+          var cls = hunk.op === 'remove' ? 'claim-edit-passage claim-edit-passage--removed'
+            : hunk.op === 'add' ? 'claim-edit-passage claim-edit-passage--added'
+            : 'claim-edit-passage';
+          var block = el('div', cls);
+          // innerHTML, and only here. The value came from
+          // internal/render/markdown, which is the escaping boundary every
+          // other claim body in this viewer crosses — the same function, over
+          // the same author bytes, reached through the same payload as the
+          // readiness projection beside it. It is exactly as trusted as the
+          // body it sits above, and no more.
+          block.innerHTML = hunk.html || '';
+          if ((hunk.changed || []).length) {
+            block.setAttribute('aria-label',
+              (hunk.op === 'remove' ? 'Removed since approval: ' : 'Added since approval: ') +
+              hunk.changed.join(', '));
+          }
+          body.appendChild(block);
+        });
+        if ((change.other_fields || []).length) {
+          body.appendChild(textEl('p', 'claim-edit-fields',
+            'Also changed: ' + change.other_fields.join(', ') + '.'));
+        }
+        return body;
+      }
+
+      // approvedEditNote is what a claim with no second wording says instead of
+      // offering a switch. It sits under the bar, beside the claim's own body
+      // rather than in place of it.
+      function approvedEditNote(change) {
+        if (!change.content_retained) {
+          return textEl('p', 'claim-edit-note',
+            'This claim was approved before the approved wording was kept on the record, so there is nothing to compare against. The approval is released and the text has since changed.');
+        }
+        var fields = change.other_fields || [];
+        return textEl('p', 'claim-edit-note', fields.length
+          ? 'The wording is unchanged since approval. What moved: ' + fields.join(', ') + '.'
+          : 'The wording is unchanged since approval.');
+      }
+
+      // approvedEditBar is the control the board draws in place of the old
+      // disclosure: a tinted row above the body that says what the reader is
+      // looking at, and a two-segment switch between the two states.
+      //
+      // It is a BAR AND NOT A DISCLOSURE, and the difference is which state
+      // is the default. A disclosure says the diff is an aside a reader opens
+      // if they want it; the board says the opposite — a claim that was
+      // approved and then rewritten opens SHOWING what moved, because that is
+      // the thing about it a reader has to know before they read a word of
+      // it. "Current" is the escape hatch, not the resting state.
+      function approvedEditBar(card, change, showingChanges) {
+        var bar = el('div', 'claim-edit-bar');
+        var approved = editDateLabel(change.approved_at);
+        var hasDiff = approvedEditHasDiff(change);
+        bar.appendChild(textEl('span', 'claim-edit-bar-title',
+          !hasDiff || showingChanges ? 'Edited since it was approved' : 'Showing the current wording'));
+
+        var meta;
+        if (!hasDiff || showingChanges) {
+          meta = 'approved ' + approved + (change.approved_by ? ' \u00b7 ' + change.approved_by : '');
+        } else {
+          var passages = change.changed_passages || 0;
+          meta = passages === 1
+            ? '1 passage differs from the approval of ' + approved
+            : passages + ' passages differ from the approval of ' + approved;
+        }
+        bar.appendChild(textEl('span', 'claim-edit-bar-meta', meta));
+
+        // No second wording, no switch. A control whose two states show the
+        // same thing is not a control, and the one that used to be here did
+        // worse than nothing: picking "Changes" hid the claim's body to make
+        // room for a diff that did not exist.
+        if (!hasDiff) { return bar; }
+
+        var group = el('div', 'claim-edit-switch');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Which wording to show');
+        [['Changes', true], ['Current', false]].forEach(function (pair) {
+          var seg = el('button', 'claim-edit-switch-seg');
+          seg.type = 'button';
+          seg.textContent = pair[0];
+          seg.setAttribute('aria-pressed', String(showingChanges === pair[1]));
+          seg.addEventListener('click', function (event) {
+            event.preventDefault();
+            paintApprovedEdit(card, change, pair[1]);
+          });
+          group.appendChild(seg);
+        });
+        bar.appendChild(group);
+        return bar;
+      }
+
+      // paintApprovedEdit puts one claim card into one of the two states, and
+      // is the only thing that writes either of them, so the bar and the body
+      // can never disagree about which one is showing.
+      function paintApprovedEdit(card, change, showingChanges) {
+        var hasDiff = approvedEditHasDiff(change);
+        showingChanges = hasDiff && showingChanges;
+        var existingBar = card.querySelector(':scope > .claim-edit-bar');
+        // The diff may already be wrapped: the four-line disclosure wraps it
+        // exactly as it wraps a claim body (system-record.js's BODY_LIKE), so
+        // what has to be taken out is the wrapper when there is one.
+        var existingDiff = card.querySelector(
+          ':scope > .claim-edit-diff, :scope > .claim-edit-note, :scope > .claim-body-disclosure--edit');
+
+        var bar = approvedEditBar(card, change, showingChanges);
+        if (existingBar) { existingBar.replaceWith(bar); }
+        else {
+          var head = card.querySelector(':scope > .k');
+          if (head && head.parentNode) { head.parentNode.insertBefore(bar, head.nextSibling); }
+          else { card.insertBefore(bar, card.firstChild); }
+        }
+        if (existingDiff) { existingDiff.remove(); }
+        if (!hasDiff) {
+          bar.parentNode.insertBefore(approvedEditNote(change), bar.nextSibling);
+        } else if (showingChanges) {
+          bar.parentNode.insertBefore(approvedEditDiff(change), bar.nextSibling);
+          // Hand the new diff to the disclosure so it is measured and clamped
+          // like any other body. Without this the diff renders at full height
+          // while the claim beside it truncates at four lines, which is the
+          // same claim behaving as two components.
+          if (typeof window.dossierxEnhanceSystemRecord === 'function') {
+            window.dossierxEnhanceSystemRecord();
+          }
+        }
+        // The claim's own body is hidden by a class ON THE CARD, and not by
+        // setting `hidden` on the body itself.
+        //
+        // Which element the body IS moves: the long-body disclosure wraps
+        // .claim-body inside .claim-body-disclosure after first paint, so a
+        // handle taken before the wrap and a handle taken after it are
+        // different nodes. Hiding whichever one a selector matched at the
+        // time left the first one hidden and the second one shown, and the
+        // switch stopped working on exactly the claims long enough to be
+        // wrapped. A class on the card is one state, in one place, whatever
+        // the body is wearing.
+        //
+        // It is also why the body is hidden rather than removed: it carries
+        // the source-note clamps and that disclosure, and tearing it out
+        // would take their state with it every time the reader flipped.
+        card.classList.toggle('claim--showing-changes', showingChanges);
+      }
+
+      // renderApprovedEdits upgrades each edited claim's chip and puts its
+      // card into the Changes state. It is driven from mountSurface (so the
+      // surface reaches its final height before anything measures or scrolls
+      // it) and again from renderStatusStrip, so everything it creates is
+      // either guarded or left alone on a repaint.
+      function renderApprovedEdits() {
+        var edits = offlineApprovedEdits();
+        Object.keys(edits).forEach(function (id) {
+          var card = document.getElementById(id);
+          if (!card) { return; }
+          var change = edits[id];
+
+          // The chip. It stays .pill.pv — the claim IS a draft, and inventing
+          // a fourth colour for it would say the state is unrelated to the
+          // one the reader already knows. Only the word changes, because only
+          // the word was wrong: DRAFT is true and incomplete, and a reviewer
+          // deciding what to open next needs the part it leaves out.
+          var pill = card.querySelector('.k .label .pill');
+          if (pill && pill.getAttribute('data-dx-edited') !== '1') {
+            pill.setAttribute('data-dx-edited', '1');
+            pill.setAttribute('title', 'This claim held an approval, which was released when it was unlocked. What is written now differs from what was approved.');
+            var icon = pill.querySelector('.dx-icon');
+            pill.textContent = '';
+            if (icon) { pill.appendChild(icon); }
+            pill.appendChild(textEl('span', '', 'Edited \u00b7 was approved'));
+          }
+
+          // The bar and the body state, painted only when the bar is not
+          // already there: a repaint must not take the reader's own "Current"
+          // choice away from them on the next poll.
+          if (!card.querySelector(':scope > .claim-edit-bar')) {
+            paintApprovedEdit(card, change, true);
+          }
+        });
+      }
+
+      // approvedEditIDsIn returns the claims in the id set that have been
+      // rewritten since the approval their unlock released.
+      //
+      // It is scoped to the facet on screen, by the SAME id set the rest of
+      // the strip scopes itself with — a count of claims on a page the reader
+      // is not looking at is a count they cannot act on. The set is a
+      // null-prototype object keyed by id (activeFacetClaimIDs), so this
+      // indexes it rather than calling Set or Array methods it does not have.
+      function approvedEditIDsIn(claimIDs) {
+        var ids = claimIDs || {};
+        return Object.keys(offlineApprovedEdits()).filter(function (id) { return ids[id]; });
+      }
+
       // renderStatusStrip paints one /api/status payload. An empty verdict hides
       // the strip entirely rather than showing a green badge: the viewer already
       // reads as "fine" by default, and a persistent all-clear chip would be one
       // more thing to stop noticing.
       function renderStatusStrip(data) {
-        if (!stripEl || !stripBody || !stripSummary || !stripTitle) { return; }
+        if (!stripEl || !stripBody || !stripCard || !stripFindings || !stripTitle) { return; }
         lastStatusData = data || {};
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
@@ -2223,6 +2529,7 @@
         // PREVIOUS pass's state, since this function only writes it below.
         var bannerShowing = groups.length > 0 && actionable;
         renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
+        renderApprovedEdits();
         if (!groups.length || !actionable) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
@@ -2331,36 +2638,125 @@
         // used to repeat as a second string. statusChipLine, the function
         // that built that string, is now dead (no other call site) and is
         // deleted.
-        var headline = blockerHeadline(groups);
-        var needsYou = countSeverity(groups, 'needs_you') > 0;
-        if (ledger.length) {
-          stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-        } else if (lintErrors.length && !headline && !needsYou) {
-          stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
-        } else if (headline) {
-          stripTitle.textContent = headline;
-        } else {
-          stripTitle.textContent = countLabel(groups.length, 'grouped issue') + ' in this facet';
-        }
+        //
+        // Both forms of the head, every paint. The desktop band carries the
+        // single headline sentence it always did; the phone card carries one
+        // row per finding. They are derived from the SAME groups, ledger and
+        // lint lists a line apart, so the two can differ in shape and never
+        // in what they say.
+        var rows = statusStripRows(groups, ledger, lintErrors, claimIDs);
+        renderStatusStripCard(rows);
+        // The sentence is the first row's — the rows are already in the order
+        // that puts the most serious finding first, so the band leads with
+        // the same fact the card's top row does.
+        stripTitle.textContent = rows[0].text;
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        // Paper's default reading view always starts with the findings body
-        // collapsed. Critical and needs-you counts still determine the
-        // truthful summary/chips above; they do not take control of the
-        // reader's disclosure state. Once the reader opens the strip, the
-        // existing stripExpanded state remains sticky across later polls.
-        setStripExpanded(stripExpanded);
+        // #statusStripBody is populated above and stays hidden: the Issues
+        // screen MOVES its children into itself (issuesSyncFromStrip), so it
+        // must exist and must not be shown here.
+        if (stripBody) { stripBody.hidden = true; }
         positionStatusStrip();
         stripEl.hidden = false;
       }
 
-      function setStripExpanded(expanded) {
-        stripExpanded = !!expanded;
-        if (stripBody) { stripBody.hidden = !stripExpanded; }
-        if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
-        if (stripAction) { stripAction.textContent = stripExpanded ? 'Hide issues' : 'Show issues'; }
-        if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
+      // statusStripRows turns the facet's findings into the card's rows —
+      // one row per KIND of thing waiting, never one per claim.
+      //
+      // The rows are the summary sentences the strip already computed, each
+      // now carrying its own hue instead of four of them competing to be the
+      // one headline. `tone` is the row's colour family, and it is the only
+      // thing the card's tint rule reads: 'alarm' for anything the approval
+      // record or the dependency chain is refusing, 'draft' for work in
+      // progress that nobody has approved yet.
+      function statusStripRows(groups, ledger, lintErrors, claimIDs) {
+        var rows = [];
+        if (ledger.length) {
+          rows.push({
+            tone: 'alarm', severity: 'critical',
+            text: countLabel(ledger.length, 'approval record issue') + ' in this facet need' +
+              (ledger.length === 1 ? 's' : '') + ' attention'
+          });
+        }
+        var headline = blockerHeadline(groups);
+        if (headline) {
+          rows.push({ tone: 'alarm', severity: 'blocker', text: headline });
+        }
+        if (lintErrors.length) {
+          rows.push({
+            tone: 'alarm', severity: 'critical',
+            text: countLabel(lintErrors.length, 'issue') + ' in this facet need' +
+              (lintErrors.length === 1 ? 's' : '') + ' attention'
+          });
+        }
+        // Claims rewritten since approval. This is the row the old
+        // single-sentence head had no space for, and the reason it became a
+        // card: it is amber where everything above it is red, and one tinted
+        // surface cannot make two severity claims at once.
+        var edited = approvedEditIDsIn(claimIDs);
+        if (edited.length) {
+          rows.push({
+            tone: 'draft', severity: 'needs_you',
+            text: countLabel(edited.length, 'claim') + ' ' + (edited.length === 1 ? 'has' : 'have') +
+              ' edits that have not been approved'
+          });
+        }
+        if (!rows.length) {
+          rows.push({
+            tone: 'alarm', severity: '',
+            text: countLabel(groups.length, 'grouped issue') + ' in this facet'
+          });
+        }
+        return rows;
+      }
+
+      // renderStatusStripCard paints the head. Tinted while every row shares
+      // a tone, neutral the moment they disagree — Paper EH1-0's own rule,
+      // and the reason it is a rule: a tinted surface IS a severity claim,
+      // so a card holding a red fact and an amber one has to stop making it
+      // and let the dots carry the colour instead.
+      function renderStatusStripCard(rows) {
+        if (!stripCard || !stripFindings) { return; }
+        var tones = {};
+        rows.forEach(function (row) { tones[row.tone] = true; });
+        var toneKeys = Object.keys(tones);
+        var tinted = toneKeys.length === 1 ? toneKeys[0] : '';
+        stripCard.classList.toggle('status-strip-card--alarm', tinted === 'alarm');
+        stripCard.classList.toggle('status-strip-card--draft', tinted === 'draft');
+        stripCard.classList.toggle('status-strip-card--neutral', !tinted);
+        if (stripCardCount) { stripCardCount.textContent = String(rows.length); }
+
+        stripFindings.textContent = '';
+        rows.forEach(function (row) {
+          // A button, not a div with a handler: each row is a way into the
+          // Issues screen and has to be reachable by keyboard and named to a
+          // screen reader like the one control it is.
+          var el_ = el('button', 'status-strip-finding');
+          el_.type = 'button';
+          el_.setAttribute('data-tone', row.tone);
+          var dot = el('span', 'status-strip-finding-dot');
+          dot.setAttribute('aria-hidden', 'true');
+          el_.appendChild(dot);
+          el_.appendChild(textEl('span', 'status-strip-finding-text', row.text));
+          var chev = el('span', 'status-strip-finding-chevron');
+          chev.setAttribute('aria-hidden', 'true');
+          chev.appendChild(dxIcon('chevron-right'));
+          el_.appendChild(chev);
+          el_.addEventListener('click', function (event) {
+            event.preventDefault();
+            // Filtered to the row's own severity. On a real corpus the
+            // unfiltered screen is hundreds of dependency rows and the thing
+            // this row named is somewhere inside them; a way in that lands a
+            // reader in a list they then have to search has not answered the
+            // question it asked. Same stripSeverityFilter the chips set, so
+            // the chip is pressed on arrival and one more click clears it.
+            stripSeverityFilter = row.severity || '';
+            renderStatusStrip(lastStatusData);
+            openIssuesView();
+          });
+          stripFindings.appendChild(el_);
+        });
       }
 
       // refreshStatus polls the endpoint. A FAILED poll deliberately leaves the
@@ -2376,25 +2772,20 @@
       }
 
       // R09.6 (Paper ZP-0): "Issues is its own screen, not an expansion. The
-      // banner is the only way in." Paper backs that with node evidence:
-      // 56T-0, 574-0 and 6P-0 draw ONE state — the sentence plus "Show
-      // issues" — the desktop banner is a single flex ROW with no slot for a
-      // body, the string "Hide issues" does not exist anywhere in the design
-      // file, and 04 section 4 records that no board in the group draws an
-      // expanded state. The inline expand listener that lived here is gone;
-      // the toggle's only job is opening the Issues screen.
+      // banner is the only way in." No board in the group draws an expanded
+      // banner, and the string "Hide issues" does not exist anywhere in the
+      // design file, so the strip has no inline disclosure at all.
       //
-      // setStripExpanded is deliberately KEPT: renderStatusStrip still calls
-      // it every poll with a permanently-false stripExpanded, and that is
-      // what holds #statusStripBody hidden, aria-expanded="false" and the
-      // action reading "Show issues".
+      // EH1-0 then replaced the one sentence with one row per finding, and
+      // the entry point went with it: each row opens the Issues screen,
+      // filtered to that row's own severity. "The banner is the only way in"
+      // still holds — the banner simply has more than one door now, because
+      // a facet routinely has more than one kind of thing waiting.
       //
       // #statusStripBody is never emptied, removed or left unpopulated:
       // renderStatusStrip still builds into it, issuesSyncFromStrip still
       // MOVES its children into the Issues screen, and closeIssuesView still
-      // moves them back. Only its visibility to the reader is withdrawn — the
-      // children now return into a hidden body instead of an expanded one,
-      // which is the defect this removes.
+      // moves them back. It is simply never shown in place.
 
       // ================================================================
       // Issues view (04-issues-screen.md) — lane L8a
@@ -2403,9 +2794,8 @@
       // The screen's own chrome around lane L8's status-strip vocabulary:
       // breadcrumb, title/subtitle, scope and sort controls, the findings
       // card and the "WHERE THE BLOCKERS LIVE" rail (04 §3, §4.1-4.3, §4.5,
-      // §4.6, §4.9). R09.6: reached ONLY from "Show issues" — the listener
-      // just below runs AFTER the one directly above (source order), so by
-      // the time it fires `stripExpanded` already holds L8's own new value.
+      // §4.6, §4.9). R09.6: reached ONLY from a row of the banner card, each
+      // of which wires openIssuesView itself as it is built.
       //
       // #issuesFilters and #issuesFindingsCard never build their own copy of
       // the severity chips or the grouped findings list: issuesSyncFromStrip
@@ -2744,14 +3134,22 @@
       if (issuesSortControl) {
         issuesSortControl.addEventListener('click', function (event) { event.preventDefault(); });
       }
-      // "Show issues" (R09.6) opens this view — UNCONDITIONALLY on every
-      // click of this control, whichever label it currently reads. The
-      // strip's own inline expand/collapse (the listener directly above,
-      // L8's, toggling stripExpanded/#statusStripBody) changes the sticky
-      // disclosure state first. R09.6 names this same control as the Issues
-      // entry point, so this listener does not gate on that resulting state.
+      // R09.6's "the banner is the only way in" holds for both forms. The
+      // desktop band has one door, bound here; the phone card has one per
+      // finding, each wired as it is built (see renderStatusStripCard)
+      // because each carries its own severity filter.
+      //
+      // The band's door opens the screen UNFILTERED, and that is not an
+      // oversight: its sentence names one finding but the band stands for the
+      // whole facet, so narrowing to that one row's severity would hide the
+      // others behind a filter the reader did not choose. A card row names
+      // exactly what it filters to, which is what earns it the filter.
       if (stripToggle) {
-        stripToggle.addEventListener('click', openIssuesView);
+        stripToggle.addEventListener('click', function () {
+          stripSeverityFilter = '';
+          renderStatusStrip(lastStatusData);
+          openIssuesView();
+        });
       }
       // Any ordinary navigation — a sidebar tab, a subtab, a citation link —
       // leaves this screen the same way the back chevron does. Capture phase

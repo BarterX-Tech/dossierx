@@ -120,6 +120,62 @@ type LedgerRecord struct {
 	ReleasedAt     string `json:"released_at,omitempty"`
 	ReleasedBy     string `json:"released_by,omitempty"`
 	ReleasedReason string `json:"released_reason,omitempty"`
+
+	// Content is the claim exactly as it was approved — the TEXT behind Hash,
+	// not a second copy of the signature.
+	//
+	// Hash alone can answer "does what is written still match what was
+	// approved". It cannot answer the question a reviewer actually asks next:
+	// "then what changed?". Before this field, an unlock-edit-relock cycle
+	// overwrote the approved wording in place and the only surviving evidence
+	// of the prior text was git — which the viewer cannot read, and which does
+	// not know which commit carried the approval. Keeping the approved claim
+	// beside its hash is what lets the viewer show the removed wording next to
+	// the new wording instead of asserting that something moved.
+	//
+	// It is a pointer, and omitempty, for one reason: a record written by a
+	// build that predates this field decodes as nil, and nil must stay
+	// distinguishable from "approved an empty claim". Every consumer reads it
+	// through Store.ApprovedContent, which reports that distinction rather than
+	// handing back a zero Claim that would diff as "the whole body was added".
+	//
+	// Cost is one claim copy per LOCKED claim: O(V) claim-bytes in
+	// lock-store.json. That is strictly below what the store already carries,
+	// since DependencyReceipt has stored a full model.Claim per dependent ->
+	// dependency EDGE — O(E) claim-bytes — since receipts were introduced. It
+	// adds no path-dependent term.
+	//
+	// model.Claim carries yaml tags and no json tags, so this serialises under
+	// Go field names. That is not an oversight and not a thing to fix here:
+	// DependencyReceipt.Content is a model.Claim in this same file already, so
+	// the store has written claims in exactly this shape since receipts
+	// existed. Adding json tags to model.Claim to prettify this one field
+	// would silently re-key every receipt already on disk in every project,
+	// which decodes as a zero claim and loses the reviewed dependency
+	// boundaries — a far worse trade than a verbose block in a file readers
+	// mostly ask questions of through the CLI.
+	Content *model.Claim `json:"content,omitempty"`
+}
+
+// ApprovedContent returns the claim content a standing or released ledger
+// record was written against, and whether that content is on the record at
+// all.
+//
+// The second return is not a convenience. A record minted before the Content
+// field existed carries a hash and no text, and a consumer that treated the
+// missing text as an empty claim would render "everything in this claim is
+// new" — a confident, wrong answer to a question the record cannot answer.
+// Callers are expected to branch on it and say the approved text is not
+// retained, rather than diff against nothing.
+func (s *Store) ApprovedContent(claimID string) (model.Claim, bool) {
+	if s == nil {
+		return model.Claim{}, false
+	}
+	r, ok := s.Record(claimID)
+	if !ok || r.Subject != SubjectClaim || r.Content == nil {
+		return model.Claim{}, false
+	}
+	return *r.Content, true
 }
 
 // Released reports whether this record has been legitimately released by an
@@ -208,12 +264,19 @@ func RecordApproval(store *Store, claim model.Claim, ap Approval) {
 	if store == nil {
 		return
 	}
+	// approved is a copy of the value parameter, so the pointer stored below
+	// cannot alias anything the caller goes on to mutate. Slice fields inside
+	// it still share backing arrays with the caller's claim; nothing on the
+	// lock path rewrites a claim's slices in place after approval, and the
+	// store is serialised to JSON on Save, which snapshots them regardless.
+	approved := claim
 	store.putRecord(claim.ID, LedgerRecord{
 		Subject: SubjectClaim,
 		Hash:    LockedClaimHash(claim),
 		At:      nowFunc().UTC().Format(time.RFC3339Nano),
 		Actor:   ap.Actor,
 		Reason:  ap.Reason,
+		Content: &approved,
 	})
 
 	// The claim's COMMENT DIGEST is recorded at the same instant, and that is

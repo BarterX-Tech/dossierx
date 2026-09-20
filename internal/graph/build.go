@@ -79,6 +79,10 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 			assessmentCopy := assessment
 			node.Readiness = &assessmentCopy
 		}
+		if change, ok := cat.ApprovedEdits[c.ID]; ok {
+			changeCopy := change
+			node.ApprovedEdit = &changeCopy
+		}
 		p.Nodes = append(p.Nodes, node)
 	}
 
