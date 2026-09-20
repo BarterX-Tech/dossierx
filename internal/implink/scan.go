@@ -4,9 +4,8 @@
 // looking for a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
 // comment anywhere in a text file and, for
 // every one it finds, calls the exact same Set logic every explicit link
-// already goes through — same validation, same artifact, same drift
-// detection. Nothing about Set or the on-disk artifact format changes for
-// this: Scan is purely a second, automatic caller of it.
+// already goes through — same validation, same artifact file, same file-hash
+// drift detection. Step tags add optional step/step_hash fields on FileLink.
 //
 // Design intent (this is the point the whole feature exists for): a tag
 // written in source, alone, is meant to be sufficient for the
@@ -198,7 +197,6 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 				symbol := captureSymbol(lines, i)
 				if strings.Contains(line, stepMarker) {
 					scanStepLine(report, pending, claims, relFile, line, lineNo, symbol)
-					continue
 				}
 				m := tagPattern.FindStringSubmatch(line)
 				if m == nil {
@@ -365,8 +363,8 @@ func recordClaimTag(report *ScanReport, pending map[string][]ScanMatch, claims [
 }
 
 func scanStepLine(report *ScanReport, pending map[string][]ScanMatch, claims []model.Claim, relFile, line string, lineNo int, symbol string) {
-	m := stepTagPattern.FindStringSubmatch(line)
-	if m == nil {
+	matches := stepTagPattern.FindAllStringSubmatch(line, -1)
+	if len(matches) == 0 {
 		claimID := ""
 		if idm := stepIDPattern.FindStringSubmatch(line); idm != nil {
 			claimID = idm[1]
@@ -377,6 +375,12 @@ func scanStepLine(report *ScanReport, pending map[string][]ScanMatch, claims []m
 		})
 		return
 	}
+	for _, m := range matches {
+		recordStepTag(report, pending, claims, relFile, m, lineNo, symbol)
+	}
+}
+
+func recordStepTag(report *ScanReport, pending map[string][]ScanMatch, claims []model.Claim, relFile string, m []string, lineNo int, symbol string) {
 	claimID := m[1]
 	n, err := strconv.Atoi(m[2])
 	if err != nil {

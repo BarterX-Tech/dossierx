@@ -848,7 +848,7 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 			stdout = append(stdout, fmt.Sprintf("  unlinked: %s", id))
 		}
 		if len(report.UnlinkedIDs) > 0 {
-			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim tag or dossierx claim link", len(report.UnlinkedIDs), module))
+			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim or dossierx-step tag or dossierx claim link", len(report.UnlinkedIDs), module))
 		}
 	}
 	return stdout, stderr, hints

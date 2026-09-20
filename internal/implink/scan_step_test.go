@@ -172,6 +172,52 @@ func TestScan_DraftStepClaim_IsAScanError(t *testing.T) {
 	}
 }
 
+func TestScan_ZeroStepIndex_IsAScanError(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{"a"})}
+	want := StepContentHash("a")
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #0 "+want+"\nfunc Foo() {}\n")
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Errors) != 1 || !strings.Contains(report.Errors[0].Message, "out of range") {
+		t.Fatalf("expected #0 out of range, got %+v", report.Errors)
+	}
+}
+
+func TestScan_TwoStepTagsOnOneLine_BothReconcile(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{"a", "b"})}
+	h1 := StepContentHash("a")
+	h2 := StepContentHash("b")
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+h1+" dossierx-step: widget.contract.main #2 "+h2+"\nfunc Foo() {}\n")
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Errors) != 0 || len(report.Matches) != 2 {
+		t.Fatalf("expected 2 matches, got matches=%+v errors=%+v", report.Matches, report.Errors)
+	}
+}
+
+func TestScan_ClaimAndStepOnOneLine_AreAdditive(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{"a"})}
+	h1 := StepContentHash("a")
+	writeScanFile(t, srcDir, "main.go", "// dossierx-claim: widget.contract.main dossierx-step: widget.contract.main #1 "+h1+"\nfunc Foo() {}\n")
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Errors) != 0 || len(report.Matches) != 2 {
+		t.Fatalf("expected claim+step matches, got matches=%+v errors=%+v", report.Matches, report.Errors)
+	}
+}
+
 func TestStatus_StepTagClearsUnlinked(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{"alpha"})}
