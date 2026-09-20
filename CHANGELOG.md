@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `#n`, claims with no `steps`, and hash mismatches are hard scan errors.
   `claim show` `implemented_in` may include `step` and `step_hash`.
 
+<<<<<<< HEAD
 ### Changed
 
 - Closing the mobile navigation drawer with Escape restores keyboard focus to
@@ -28,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fixture-graph-demo` 1438165 -> 1439097; `fixture-portability` 1180057 ->
   1180989; `fixture-theme-flat` 4818961 -> 4819893. This range does not
   change engine graph, readiness, lock, or build-order behavior.
+=======
+### Fixed
+
+- README and `docs/structured-claim-conformance.md` no longer advertise the
+  removed `dossierx theme` CLI or name “theme” as a `check` pipeline phase.
+  Built-in Light / Dark / System viewer modes are unchanged.
+>>>>>>> b245504 (docs: scrub leftover theme CLI marketing)
 
 ## [0.7.17] - 2026-09-19
 

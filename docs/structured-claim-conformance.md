@@ -231,7 +231,7 @@ For a project that has never declared `embodiment`, DossierX does not read an
 observation file, does not write `build/conformance/status.json`, and does not
 add a conformance field, viewer markup, or conformance-only style bytes.
 Existing generated output remains unchanged. Its read-only validation path also
-stays unchanged: lint, theme, and ledger checks run, but no catalog or viewer is
+stays unchanged: lint and ledger checks run, but no catalog or viewer is
 built merely to validate a feature the project did not opt into. The in-memory
 catalog/viewer agreement and capacity checks begin only when at least one claim
 declares `embodiment`. On the one transition from an
