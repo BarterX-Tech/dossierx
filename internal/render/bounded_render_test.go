@@ -118,14 +118,7 @@ func TestRenderBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	}}}
 	cfg := &config.Config{Modules: []string{"module"}, Facets: []string{"contract"}}
 
-	legacy, err := Render(cat, cfg)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	bounded, err := RenderBounded(cat, cfg, 8<<20)
-	if err != nil {
-		t.Fatalf("RenderBounded: %v", err)
-	}
+	legacy, bounded := mustRenderSameInstant(t, cat, cfg, 8<<20)
 	if got, want := normalizeRenderTimes(bounded), normalizeRenderTimes(legacy); got != want {
 		t.Fatal("bounded render changed under-limit viewer bytes apart from render timestamps")
 	}
@@ -276,14 +269,7 @@ func TestRenderBounded_CustomShellChargesOnlyExecutedOutput(t *testing.T) {
 			writeFile(t, dir+"/shell.html", tc.shell)
 			cfg := &config.Config{Title: "Tiny", Viewer: config.Viewer{TemplateOverrides: dir}}
 
-			legacy, err := Render(cat, cfg)
-			if err != nil {
-				t.Fatalf("legacy render: %v", err)
-			}
-			bounded, err := RenderBounded(cat, cfg, 1<<20)
-			if err != nil {
-				t.Fatalf("bounded render: %v", err)
-			}
+			legacy, bounded := mustRenderSameInstant(t, cat, cfg, 1<<20)
 			if len(bounded) >= 1<<20 {
 				t.Fatalf("actual custom-shell output = %d, want <1MiB", len(bounded))
 			}
@@ -345,11 +331,32 @@ func measuredTotalAlloc(fn func()) uint64 {
 var (
 	headerTimeRE = regexp.MustCompile(`dossierx check at [0-9TZ:+-]+`)
 	graphTimeRE  = regexp.MustCompile(`"generated_at":"[^"]+"`)
+	attrTimeRE   = regexp.MustCompile(`data-generated-at="[^"]+"`)
 	footerTimeRE = regexp.MustCompile(`Generated [0-9-]+ [0-9:]+ UTC`)
 )
+
+// mustRenderSameInstant compares the public Render / RenderBounded pair at one
+// generatedAt. Each public entry stamps time.Now(); under -race on a slow
+// runner those two calls can straddle a second and disagree on
+// data-generated-at, which normalizeRenderTimes used not to strip.
+func mustRenderSameInstant(t *testing.T, cat *catalog.Catalog, cfg *config.Config, maxBytes int) (legacy, bounded string) {
+	t.Helper()
+	at := time.Unix(1_700_000_000, 0).UTC()
+	var err error
+	legacy, err = renderAt(cat, cfg, at)
+	if err != nil {
+		t.Fatalf("legacy render: %v", err)
+	}
+	bounded, err = renderBoundedAt(cat, cfg, at, maxBytes)
+	if err != nil {
+		t.Fatalf("bounded render: %v", err)
+	}
+	return legacy, bounded
+}
 
 func normalizeRenderTimes(s string) string {
 	s = headerTimeRE.ReplaceAllString(s, "dossierx check at <time>")
 	s = graphTimeRE.ReplaceAllString(s, `"generated_at":"<time>"`)
+	s = attrTimeRE.ReplaceAllString(s, `data-generated-at="<time>"`)
 	return footerTimeRE.ReplaceAllString(s, "Generated <time>")
 }
