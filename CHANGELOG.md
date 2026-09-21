@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.19] - 2026-09-22
+
 ### Added
 
 - A claim that was locked, unlocked, and then rewritten now says so. The lock
@@ -65,17 +67,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- On phones the facet banner is a card with a row per finding. The desktop
-  band is unchanged: one summary sentence with "Show issues" beside it, which
-  a 1440px row carries comfortably. The narrower column does not — a sentence
-  holds one statement, and a facet routinely has two kinds of thing waiting
-  (claims blocked by unapproved dependencies AND claims rewritten since they
-  were approved), which at 375px could only be shown as a second band stacked
-  underneath. The card is tinted while every row shares a hue and goes neutral
-  the moment two rows disagree, with the dots carrying the colour. Each row
-  opens the Issues screen filtered to its own severity; the desktop band opens
-  it unfiltered, because its sentence names one finding while the band stands
-  for the whole facet. Both forms are in the DOM and CSS picks one.
+- The facet banner carries one row per kind of thing waiting, in both forms.
+  A facet routinely has two: claims blocked by unapproved dependencies AND
+  claims rewritten since they were approved, and a banner that held one
+  sentence showed only the first. On the desktop the band is now a stack of
+  full-bleed rows, hairline-divided, each with its own tint, icon and action —
+  a blocked row is red with the triangle and "Show issues", an edited row is
+  amber with a dot and "Review changes". On phones the same rows are a card
+  with a header counting them, tinted while every row shares a hue and
+  neutral the moment two rows disagree, with the dots carrying the colour. A
+  blocked row opens the Issues screen unfiltered, because it stands for the
+  whole facet; an edited row opens it filtered to the claims waiting on the
+  reader. Both forms are in the DOM and CSS picks one.
+- The edited-since-approval surface follows the design board it was drawn
+  from. The `EDITED · WAS APPROVED` chip is the word alone, without the open
+  padlock that is DRAFT's glyph. The bar above the body takes the draft tint
+  and a hairlined two-segment switch. The passages that moved are tinted rows
+  with the rule inside them and the prose in the row's hue — the approved
+  passage struck through in the blocked hue, the current one in the locked
+  hue — and the individual words that moved are no longer painted, because
+  the struck passage beside the coloured one is the comparison. `Current` no
+  longer un-hides the claim's own body: it renders the same passages with
+  the one that differs carrying an amber rule, so a reader can see where the
+  seam is without opening the diff.
+- On the Issues screen a claim rewritten since approval says so wherever it
+  appears. Under the Needs-you filter its row reads "<Title> was approved and
+  is being rewritten", names its cause kind in mono (`unapproved_edit`),
+  says what moved and when the approval was given, and carries "See changes"
+  in place of a count — which lands on the claim with the changes showing.
+  Every other Needs-you row names its cause kind the same way and carries
+  "Open claim". A blocker row whose owner is such a claim gains the chip,
+  the summary and the same link under the row it already had. With the
+  filter on, the subtitle counts the claims waiting on the reader, each
+  group's note reads "n of N need you here", and the rail becomes "WHAT IS
+  WAITING": one row per cause kind, its bar in the kind's hue, with a caveat
+  that a claim waiting for two reasons is counted under each.
 - The implementation-checks panel no longer opens itself when a check is
   failing. R09.3 suppresses a claim-level auto-open whenever a facet-level
   blocked banner is showing, and a facet with failing checks always has one, so
