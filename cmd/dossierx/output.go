@@ -534,10 +534,11 @@ func exitStatusFor(err error) int {
 // adding its entry here is handled below rather than left to print the old wrong
 // shape.
 var reasonInvocations = map[string]string{
-	"claim lock":       "dossierx claim lock <id>",
-	"claim unlock":     "dossierx claim unlock <id>",
-	"claim reaudit":    "dossierx claim reaudit <id> --confirm",
-	"build-order lock": "dossierx build-order lock --module <module>",
+	"claim lock":                     "dossierx claim lock <id>",
+	"claim recover-approved-content": "dossierx claim recover-approved-content",
+	"claim unlock":                   "dossierx claim unlock <id>",
+	"claim reaudit":                  "dossierx claim reaudit <id> --confirm",
+	"build-order lock":               "dossierx build-order lock --module <module>",
 }
 
 func requireReason(verb, reason string) error {

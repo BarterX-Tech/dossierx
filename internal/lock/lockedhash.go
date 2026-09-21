@@ -469,3 +469,24 @@ func SignedFieldsDiffering(a, b model.Claim) []string {
 	sort.Strings(out)
 	return out
 }
+
+// SignedFieldValue returns the value of the persisted, signed claim field with
+// the given on-disk name.
+//
+// It is the read half of SignedFieldsDiffering: that one says WHICH fields
+// moved, this one hands over what they hold, so a caller showing a reader what
+// moved does not have to switch over field names and go stale the next time
+// model.Claim grows one. Both walk the same reflection and consult the same
+// exclusion list, so a field the hash does not sign is not reachable here
+// either.
+func SignedFieldValue(c model.Claim, name string) (any, bool) {
+	t, v := reflect.TypeOf(c), reflect.ValueOf(c)
+	for i := 0; i < t.NumField(); i++ {
+		field, persisted := PersistedYAMLName(t.Field(i))
+		if !persisted || lockedClaimHashExcluded[field] || field != name {
+			continue
+		}
+		return v.Field(i).Interface(), true
+	}
+	return nil, false
+}

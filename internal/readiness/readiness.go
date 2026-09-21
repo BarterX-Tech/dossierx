@@ -611,14 +611,7 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 // It reads the store and mutates nothing, per this package's read-only
 // contract.
 func unapprovedEdit(c model.Claim, store *lock.Store) (Cause, bool) {
-	if c.Status != model.StatusDraft || store == nil {
-		return Cause{}, false
-	}
-	record, ok := store.Record(c.ID)
-	if !ok || record.Subject != lock.SubjectClaim || !record.Released() {
-		return Cause{}, false
-	}
-	if record.Hash == "" || record.Hash == lock.LockedClaimHash(c) {
+	if _, ok := lock.EditedSinceApproval(c, store); !ok {
 		return Cause{}, false
 	}
 	return Cause{

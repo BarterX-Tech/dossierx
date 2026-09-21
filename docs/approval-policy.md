@@ -177,6 +177,55 @@ text as an empty one: diffing against nothing renders the whole claim as newly
 added, which is a confident wrong answer to a question the record cannot
 answer.
 
+### Recovering wording a record never kept
+
+`dossierx claim recover-approved-content` completes those older records from
+the project's own git history. It is a one-time migration, run deliberately,
+and it is not part of `check`.
+
+The search is settled by the hash, never by a date or a commit message. A
+record already signs `LockedClaimHash` of the claim as approved, so a revision
+whose `LockedClaimHash` equals that hash IS the approved claim, byte for byte
+over every persisted field. Two consequences follow, and both are load-bearing:
+
+* **It cannot widen an approval.** The only content it can store is content the
+  record's existing hash already certifies. The write goes through
+  `lock.Store.RetainApprovedContent`, which re-checks the hash itself and
+  refuses otherwise (`lock.ErrContentMismatch`), so no caller can substitute
+  different words behind an existing approval however it obtained them. Nothing
+  else on the record moves: not the hash, the approval's time, actor or reason,
+  nor the release fields. A record that already carries its wording is never
+  replaced — the engine's own record is the better evidence.
+* **It cannot fail upward.** A claim whose history holds no matching revision —
+  a corpus imported without history, an approval taken over an uncommitted
+  working tree, a rewritten history — is reported by name and left alone, and
+  its panel goes on saying the wording was not retained. There is no nearest
+  match, and a walk that stops early discloses that it did rather than
+  reporting that nothing was found.
+
+Approvals taken after the ledger began retaining content need none of this, so
+the verb has nothing to do on a corpus it has already swept.
+
+### What moved, when the wording did not
+
+A claim's hash covers every field it persists, so a claim can be honestly
+edited since its approval with its prose untouched: its embodiment retargeted,
+an edge added, an audit note written. `lock.SignedFieldsDiffering` names those
+fields and `lock.SignedFieldValue` reads them, both over the same reflection
+and the same exclusion list the hash itself uses, so a field added to the schema
+tomorrow is covered without a second hand-kept list. A consumer showing a
+reader what changed must show these too: naming a field without showing it
+reports a change the reader has no way to see.
+
+### One predicate
+
+Whether a claim is edited since its approval is `lock.EditedSinceApproval`, and
+it has one implementation. Readiness raises `unapproved_edit` from it, the
+viewer's panel is built from it, and recovery selects its candidates with it.
+Separate copies would agree only by inspection, and both failure modes are
+silent: a row on the Issues screen with no panel under it, or a panel for a
+claim nothing reported.
+
 ## What readiness does not prove
 
 The number of locked claims, a complete build order, passing fixture tests, or

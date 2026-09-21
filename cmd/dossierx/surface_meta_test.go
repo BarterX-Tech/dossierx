@@ -215,9 +215,9 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 
 	want := map[string]int{
 		"nouns":       8,
-		"commands":    24,
+		"commands":    25,
 		"lint_rules":  38,
-		"error_codes": 49,
+		"error_codes": 50,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

@@ -71,6 +71,14 @@ type Change struct {
 	// and whose wording did not has an empty Hunks and a populated
 	// OtherFields, and the renderer has something true to say.
 	OtherFields []string `json:"other_fields,omitempty"`
+
+	// FieldChanges is those same fields, diffed. OtherFields says WHICH
+	// moved and this says WHAT moved in each, so a claim whose prose never
+	// changed still shows a reader the change they are being asked about
+	// rather than only its name. The two are always about the same set, in
+	// the same order; OtherFields stays because a consumer that only wants
+	// the names should not have to walk the diffs to get them.
+	FieldChanges []FieldChange `json:"field_changes,omitempty"`
 }
 
 // Hunk is one passage of the diff, rendered.
@@ -106,12 +114,10 @@ func (c Change) BodyChanged() bool { return c.ChangedPassages > 0 }
 // Compute returns one Change per claim that was approved, released by an
 // honest unlock, and has since been edited away from that approval.
 //
-// The predicate is deliberately the same one readiness.CauseUnapprovedEdit
-// uses, in the same order and for the same reasons — draft status, a released
-// claim record, a non-empty hash, and a hash that no longer matches. A claim
-// this returns nothing for is a claim the Issues screen lists no unapproved
-// edit for, and vice versa; two predicates that agreed only by inspection
-// would eventually produce a panel with no row or a row with no panel.
+// The predicate is lock.EditedSinceApproval — the same call readiness makes
+// to raise CauseUnapprovedEdit, so a claim this returns nothing for is a claim
+// the Issues screen lists no unapproved edit for, and vice versa. See that
+// function for why the question has one implementation and not three.
 //
 // Cost is one LockedClaimHash and, for the claims that qualify, one bounded
 // line diff (see textdiff.MaxLines) per claim: O(V) hashes and O(V) diffs of
@@ -123,14 +129,8 @@ func Compute(claims []model.Claim, store *lock.Store) map[string]Change {
 	}
 	out := make(map[string]Change)
 	for _, c := range claims {
-		if c.Status != model.StatusDraft {
-			continue
-		}
-		record, ok := store.Record(c.ID)
-		if !ok || record.Subject != lock.SubjectClaim || !record.Released() {
-			continue
-		}
-		if record.Hash == "" || record.Hash == lock.LockedClaimHash(c) {
+		record, ok := lock.EditedSinceApproval(c, store)
+		if !ok {
 			continue
 		}
 		change := Change{
@@ -177,6 +177,7 @@ func Compute(claims []model.Claim, store *lock.Store) map[string]Change {
 				change.OtherFields = append(change.OtherFields, name)
 			}
 			sort.Strings(change.OtherFields)
+			change.FieldChanges = fieldChanges(approved, c, change.OtherFields)
 		}
 		out[c.ID] = change
 	}

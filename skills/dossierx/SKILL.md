@@ -17,14 +17,14 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 24 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads, and its top-level **Build order** tab (a module strip inside it, not a per-module sub-tab) |
+| Surface | the CLI — all 25 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads, and its top-level **Build order** tab (a module strip inside it, not a per-module sub-tab) |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The eight nouns, twenty-four leaves
+## The eight nouns, twenty-five leaves
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
-dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy
+dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy recover-approved-content
 dossierx comment inbox list add reply
 dossierx build-order propose status lock show
 dossierx track list show status            # read-only: the cross-cutting feature axis
@@ -35,6 +35,13 @@ dossierx version
 
 A claim joins a track via `tracks:` in its own YAML, so changing membership on a **locked** claim is
 `unlock → fix → lock`. `track` never edits anything and `track status` never gates a lock.
+
+`claim recover-approved-content` is a ONE-TIME migration for a project that locked before the ledger
+kept the approved WORDING — those records signed a hash, not the text, so a claim edited after one shows
+"the approved wording was not kept on the record" and no comparison. It finds each approval's own revision
+in the project's git history by hashing it against the hash the record already signed. It creates no
+approval: a non-matching revision is refused and an unfindable claim is named and left alone. `--dry-run`
+previews, the write takes `--reason`; show the human the dry run first — it edits their approval file.
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.

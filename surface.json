@@ -140,6 +140,16 @@
       ]
     },
     {
+      "path": "claim recover-approved-content",
+      "short": "Recover approved wording from git history for approvals recorded before the ledger kept it",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
       "path": "claim show",
       "short": "Report one claim's full state in a single call: lifecycle, both edge directions, code links, discussion, and the legal next actions",
       "flags": [
@@ -327,6 +337,7 @@
     "conformance_failed",
     "dependency_not_locked",
     "empty_body",
+    "git_unavailable",
     "implink_refused",
     "integrity_failed",
     "internal",
@@ -517,37 +528,39 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:54e11d7967bae1844b5bd55be0127dec9415efe9d861f184074fd581db39fb6a",
+  "render_fingerprint": "sha256:542e5573d1c3d2580c0edb43df67651d3ecb438241539c2d408a45334ca696a4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:afad4a7ec787547b5db77247143a7d3d826463c72f4267a3442365d4a72bfd73",
-    "internal/approvaledit": "sha256:424102fded1d8f95284299f6eb7eb847755828775c1ba0c533e6196b258a9b2f",
+    "cmd/dossierx": "sha256:2fdd176c9f0ed62d7d5049771cf5714576149cb345d2b920a94134848e25d685",
+    "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
+    "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/buildorder": "sha256:bf557239a85d4da9c7c40a4e0cdf2036eef0a0f104be3dfd14aa74506f64568f",
     "internal/catalog": "sha256:358d9aa06b14b14f5a9b52686cc328e005be4596e0fa89770ac32530f4629d31",
-    "internal/check": "sha256:fd8d328dad081f93f3159631ab7d49d84cc4ef80f108f3ddb6273545befb1685",
-    "internal/cliout": "sha256:17884f43e6889cf5fd52c647bcd5146a5e3f871acbf994b66b0ab7a6f3dd76fe",
+    "internal/check": "sha256:6212c8747e7ab54875aa435063254be8f30ae993e513792496b6b97ed6577cce",
+    "internal/cliout": "sha256:891c91b3c31ab231e376afe3addffe9189ab9aa0942efd0977ebfe7fcbc714f9",
     "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
     "internal/config": "sha256:3b6ed912d2fe5b4cd622e0d49af32c3705a5960cb907f06ddc13d1842a6a810c",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
+    "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
     "internal/graph": "sha256:39c61c63e8099f25dfdb53217036a8aca7987edf49c5d7372594efb901353f63",
     "internal/implink": "sha256:0b712a92ff26fa7e9cf90f2ed7e594c2460b0e8fbdf044d3ae69fc4aba76d677",
     "internal/layout": "sha256:22b57470d1c8381dfee41e360c123d1633ae1c923bf8ec1f736fe9a00b6caeb3",
     "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
-    "internal/loader": "sha256:1a590eb8f2e6479330b7e5d5b738c36659155777e0b10013800f20768be6bd0f",
-    "internal/lock": "sha256:12ada487827d1add29dc9b5b1a9f4e8798de0a8dd0434249ad9f0705d39b4f8b",
+    "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
+    "internal/lock": "sha256:d6e659bfd81c3996d503d4bd74012bc7f5a337f23412c0f35aefc5ad9eef6f36",
     "internal/model": "sha256:604cd3dfa6de63d2bd483425d859508e1c95b3fa77a475dfbb65b3c9ac2f2bfe",
-    "internal/readiness": "sha256:850a50ac29b81ca35a9690c8b41e35a104a540462da71a0ca198ee2d0396ae92",
+    "internal/readiness": "sha256:705cd7a1c00c60e1ffec82a557cd13389ce49ac4b76f9ff4a3927559e353b033",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:9478fef5969c75314684cd06fadbc396b3345a8886810b8e3f90f336fc6a7549",
+    "internal/render": "sha256:fc71df8a16b3d3ad535ac5a69e904c54d0a009e5efcf80884be057153ddfffd5",
     "internal/render/components": "sha256:6e7bbdd0665e8449fb5fabee6a32ce648cd244759fe2a9ccca8313de5720e011",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:33a0c23c3cb2f708f38986b445df8f59976f9e562d9f94b52d3862daf6904a34"
+    "skills": "sha256:cf65eae90a57ec761ec10ac04f5cc283b59893a7cc26b63a61be76b0f31a172d"
   },
   "envelope": {
     "keys": [
@@ -575,6 +588,7 @@
       "conformance_failed": 1,
       "dependency_not_locked": 1,
       "empty_body": 1,
+      "git_unavailable": 1,
       "implink_refused": 1,
       "integrity_failed": 1,
       "internal": 1,
@@ -855,6 +869,18 @@
         "side_effects",
         "trigger"
       ],
+      "recoverData": [
+        "already_retained",
+        "eligible",
+        "missing",
+        "preconditions",
+        "reason",
+        "recovered",
+        "side_effects",
+        "unrecovered",
+        "would",
+        "written"
+      ],
       "scanErrorData": [
         "claim_id",
         "file",
@@ -931,8 +957,8 @@
     }
   ],
   "counts": {
-    "commands": 24,
-    "error_codes": 49,
+    "commands": 25,
+    "error_codes": 50,
     "http_routes": 14,
     "lint_rules": 38,
     "nouns": 8

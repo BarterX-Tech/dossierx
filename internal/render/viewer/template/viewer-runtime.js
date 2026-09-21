@@ -2328,25 +2328,103 @@
           }
           body.appendChild(block);
         });
-        if ((change.other_fields || []).length) {
-          body.appendChild(textEl('p', 'claim-edit-fields',
-            'Also changed: ' + change.other_fields.join(', ') + '.'));
-        }
+        var fields = approvedEditFields(change);
+        if (fields) { body.appendChild(fields); }
         return body;
+      }
+
+      // approvedEditFields draws the non-body fields that moved, each as its
+      // approved YAML above its current YAML with the words that moved marked.
+      //
+      // It is here because "Also changed: embodiment, audit_notes." was not an
+      // answer. For a claim whose prose never moved that sentence WAS the whole
+      // panel, and it named the change without showing it — the reader was told
+      // a field they cannot see had moved in a way they cannot see, and had to
+      // go and read the file to find out what they were being asked about. Six
+      // of the fourteen claims this feature was built for are in exactly that
+      // state.
+      //
+      // The blocks are drawn as text and not as prose. A field is YAML, so it
+      // is escaped by the engine (internal/approvaledit/fields.go) and shown in
+      // the monospace the file itself would show; running it through the
+      // markdown renderer would turn a list into a list and a `*` into
+      // emphasis, and stop it being the thing on disk.
+      function approvedEditFields(change) {
+        var changes = change.field_changes || [];
+        if (!changes.length) { return null; }
+        var wrap = el('div', 'claim-edit-fields');
+
+        var toggle = el('button', 'claim-edit-fields-toggle');
+        toggle.type = 'button';
+        var list = el('div', 'claim-edit-fields-list');
+        var open = true;
+        function paint() {
+          toggle.setAttribute('aria-expanded', String(open));
+          toggle.textContent = (open ? 'Hide' : 'Show') + ' the ' +
+            (changes.length === 1 ? 'field' : changes.length + ' fields') + ' that moved';
+          list.hidden = !open;
+        }
+        toggle.addEventListener('click', function (event) {
+          event.preventDefault();
+          open = !open;
+          paint();
+        });
+
+        changes.forEach(function (field) {
+          var row = el('div', 'claim-edit-field');
+          row.appendChild(textEl('span', 'claim-edit-field-name', field.field));
+          if (field.truncated) {
+            row.appendChild(textEl('p', 'claim-edit-field-note',
+              'This field moved. It is too large to show here; read it in the claim file.'));
+            list.appendChild(row);
+            return;
+          }
+          (field.hunks || []).forEach(function (hunk) {
+            var cls = hunk.op === 'remove' ? 'claim-edit-field-hunk claim-edit-field-hunk--removed'
+              : hunk.op === 'add' ? 'claim-edit-field-hunk claim-edit-field-hunk--added'
+              : 'claim-edit-field-hunk';
+            var block = el('pre', cls);
+            // innerHTML over engine-escaped text. internal/approvaledit's
+            // field renderer HTML-escapes the YAML before it marks anything,
+            // so the only tags that can be in here are the mark spans it
+            // wrote itself — a field holding <script> arrives as text.
+            block.innerHTML = hunk.html || '';
+            if ((hunk.changed || []).length) {
+              block.setAttribute('aria-label',
+                (hunk.op === 'remove' ? 'Removed from ' : 'Added to ') + field.field + ': ' +
+                hunk.changed.join(', '));
+            }
+            row.appendChild(block);
+          });
+          list.appendChild(row);
+        });
+
+        paint();
+        wrap.appendChild(toggle);
+        wrap.appendChild(list);
+        return wrap;
       }
 
       // approvedEditNote is what a claim with no second wording says instead of
       // offering a switch. It sits under the bar, beside the claim's own body
       // rather than in place of it.
       function approvedEditNote(change) {
+        var wrap = el('div', 'claim-edit-note');
         if (!change.content_retained) {
-          return textEl('p', 'claim-edit-note',
-            'This claim was approved before the approved wording was kept on the record, so there is nothing to compare against. The approval is released and the text has since changed.');
+          wrap.appendChild(textEl('p', 'claim-edit-note-text',
+            'This claim was approved before the approved wording was kept on the record, so there is nothing to compare against. The approval is released and the text has since changed.'));
+          wrap.appendChild(textEl('p', 'claim-edit-note-hint',
+            'Run dossierx claim recover-approved-content to look for the approved revision in this project\u2019s git history.'));
+          return wrap;
         }
         var fields = change.other_fields || [];
-        return textEl('p', 'claim-edit-note', fields.length
-          ? 'The wording is unchanged since approval. What moved: ' + fields.join(', ') + '.'
-          : 'The wording is unchanged since approval.');
+        wrap.appendChild(textEl('p', 'claim-edit-note-text', fields.length
+          ? 'The wording is unchanged since approval. ' +
+            (fields.length === 1 ? '1 field moved.' : fields.length + ' fields moved.')
+          : 'The wording is unchanged since approval.'));
+        var diff = approvedEditFields(change);
+        if (diff) { wrap.appendChild(diff); }
+        return wrap;
       }
 
       // approvedEditBar is the control the board draws in place of the old

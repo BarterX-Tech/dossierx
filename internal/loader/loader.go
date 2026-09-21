@@ -61,28 +61,10 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 			return fmt.Errorf("loader: read %s: %w", path, err)
 		}
 
-		var c model.Claim
-		dec := yaml.NewDecoder(strings.NewReader(string(raw)))
-		dec.KnownFields(true)
-		if err := dec.Decode(&c); err != nil {
-			return fmt.Errorf("loader: parse %s: %w", path, err)
+		c, err := ParseClaim(raw, path)
+		if err != nil {
+			return err
 		}
-		if err := model.ValidateEmbodiment(&c); err != nil {
-			return fmt.Errorf("loader: parse %s: %w", path, err)
-		}
-		// One claim per file is required, not merely recommended. A second
-		// YAML document (--- separated) in the same file must be a hard
-		// error rather than silently dropped: SaveClaim rewrites a claim's
-		// file as a single document, so a later lock/reaudit would clobber
-		// any file-siblings stacked behind the first. A clean single-
-		// document file leaves the decoder at io.EOF on the next Decode;
-		// anything else (another document, even an empty or malformed one)
-		// means more than one document is present.
-		var extra yaml.Node
-		if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("loader: %s contains more than one YAML document; exactly one claim per file is required", path)
-		}
-		c.SourcePath = path
 		claims = append(claims, c)
 		return nil
 	})
@@ -92,6 +74,45 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 
 	sort.Slice(claims, func(i, j int) bool { return claims[i].SourcePath < claims[j].SourcePath })
 	return claims, nil
+}
+
+// ParseClaim decodes one claim file's BYTES, under exactly the discipline
+// LoadClaims applies to a file on disk: strict decoding (unknown fields are a
+// hard error), embodiment validation, and the one-document-per-file rule.
+// sourcePath is recorded on the claim and named in every error; it does not
+// have to exist on disk.
+//
+// It is separate from LoadClaims because a second caller reads claim bytes that
+// are not files: internal/approvalrecovery pulls historical revisions out of
+// git objects and must judge them by the same parser the working tree gets. A
+// looser parser there would accept a revision the engine would reject and
+// hand it back as "the approved wording"; a stricter one would silently fail
+// to recover approvals that are perfectly valid. Sharing the parse is what
+// makes the recovered claim comparable to the current one at all.
+func ParseClaim(raw []byte, sourcePath string) (model.Claim, error) {
+	var c model.Claim
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+	if err := dec.Decode(&c); err != nil {
+		return model.Claim{}, fmt.Errorf("loader: parse %s: %w", sourcePath, err)
+	}
+	if err := model.ValidateEmbodiment(&c); err != nil {
+		return model.Claim{}, fmt.Errorf("loader: parse %s: %w", sourcePath, err)
+	}
+	// One claim per file is required, not merely recommended. A second
+	// YAML document (--- separated) in the same file must be a hard
+	// error rather than silently dropped: SaveClaim rewrites a claim's
+	// file as a single document, so a later lock/reaudit would clobber
+	// any file-siblings stacked behind the first. A clean single-
+	// document file leaves the decoder at io.EOF on the next Decode;
+	// anything else (another document, even an empty or malformed one)
+	// means more than one document is present.
+	var extra yaml.Node
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return model.Claim{}, fmt.Errorf("loader: %s contains more than one YAML document; exactly one claim per file is required", sourcePath)
+	}
+	c.SourcePath = sourcePath
+	return c, nil
 }
 
 // readFileWithRetry is os.ReadFile with a short, bounded retry loop on

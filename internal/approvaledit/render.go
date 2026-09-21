@@ -114,7 +114,28 @@ func renderHunk(h textdiff.Hunk) (rendered string, changedWords []string) {
 // syntax at a word's edge: letters, digits and sentence punctuation are never
 // stripped, so "not" and "internal." survive whole.
 func splitMarkable(token string) (prefix, core, suffix string) {
-	const edge = "*_~`[]()<>\"'“”‘’ \t\n\r"
+	return splitMarkableAt(token, markdownEdge)
+}
+
+// markdownEdge is the body's edge set: markdown's own inline delimiters plus
+// the whitespace a token carries.
+const markdownEdge = "*_~`[]()<>\"'“”‘’ \t\n\r"
+
+// yamlEdge is the field renderer's edge set. It is markdownEdge plus the
+// three characters that carry STRUCTURE in YAML rather than meaning in a
+// value: the list dash, the key colon and the flow comma.
+//
+// They belong here for the same reason `**` does in the body. A changed list
+// member arrives as a token whose neighbouring bytes are "- " and a newline,
+// and marking those along with the value draws a highlight that starts on one
+// line's punctuation and ends on the next line's — the mark stops looking
+// like a word and starts looking like a rendering fault. Stripping them moves
+// the highlight onto the value, which is the thing that moved. A dash or
+// colon INSIDE a value (every claim id has dashes) is untouched: this strips
+// only at a token's edges.
+const yamlEdge = markdownEdge + "-:,"
+
+func splitMarkableAt(token, edge string) (prefix, core, suffix string) {
 	core = token
 	for core != "" && strings.ContainsRune(edge, rune(core[0])) {
 		prefix += core[:1]

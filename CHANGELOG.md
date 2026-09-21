@@ -24,6 +24,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second document in a notation nobody asked them to read. Marking a word
   never changes the prose around it — the rendering is compared with and
   without the marks, and a passage that would change renders unmarked.
+- `dossierx claim recover-approved-content` recovers the approved WORDING for
+  approvals recorded before the ledger kept it. Those records signed a hash and
+  not the text, so on any corpus that has been locking claims for a while every
+  claim in the edited-since-approval state reached the viewer with a panel that
+  could only say the wording was not retained. The verb searches the project's
+  own git history for each approval's revision and identifies it by hashing the
+  candidate against the hash the record ALREADY signed, so a match is a proof
+  and not an inference from dates or commit messages. It creates no approval and
+  moves no hash, timestamp, actor or reason: content that does not hash equal is
+  refused (`lock.ErrContentMismatch`), a record that already carries its wording
+  is never replaced, and a claim whose revision is not in history is reported by
+  name and left alone. `--dry-run` previews; the write takes `--reason` and the
+  same store-gitignored refusal as every other verb that writes the ledger. It
+  is a separate verb rather than something `check` does in passing, so the file
+  holding a project's approvals is written only by a command a human asked for,
+  and so rendering a viewer never depends on a git work tree. New error code
+  `git_unavailable` distinguishes "git could not answer" from "nothing was
+  recoverable"; the surface is now twenty-five leaves under eight nouns.
+- The edit panel now shows what moved in the FIELDS a claim persists, not only
+  in its prose. A claim's hash covers every persisted field, so a claim can be
+  honestly edited-since-approval with its wording untouched — its checks
+  retargeted, an edge added, an audit note written. Until now the panel said
+  "Also changed: embodiment, audit_notes." and showed nothing, naming a change
+  the reader could not see; on the corpus this was built against that was six
+  of the fourteen affected claims. Each changed field is now rendered back to
+  its YAML and diffed with the same passage-and-word marking the body uses, in
+  a "what moved" list under the bar. Field YAML is escaped and shown as text
+  rather than run through the markdown renderer, because the row is quoting the
+  claim file and a row that renders what it quotes is not quoting it. A claim
+  whose prose did not move still offers no `Changes`/`Current` switch and keeps
+  its body on screen — there is one wording, and the rows sit beside it.
 - `readiness` emits a new independent review cause, `unapproved_edit`, for a
   draft claim holding a released approval whose content has since changed. This
   closes a gap: such a claim previously emitted no cause of its own, so one

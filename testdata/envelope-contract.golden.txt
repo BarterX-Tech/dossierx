@@ -281,6 +281,32 @@ claim migrate-lock-policy / preview
                   reason:string
                   to:number
 
+claim recover-approved-content / nothing to recover
+    argv          claim recover-approved-content --dry-run
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       claim recover-approved-content
+    data          already_retained:number
+                  eligible:number
+                  missing:[string]
+                  preconditions:[{name:string,ok:bool}]
+                  recovered:[]
+                  side_effects:[string]
+                  unrecovered:[]
+                  would:string
+
+claim recover-approved-content / refused, no git work tree
+    argv          claim recover-approved-content --dry-run
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       claim recover-approved-content
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    git_unavailable
+
 claim unlock / a locked claim
     argv          claim unlock widget.contract.overview --reason fixing it
     exit          0
@@ -653,10 +679,11 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (13 of 49)
+    pinned by an invocation above (14 of 50)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
+        git_unavailable           exit 1
         invalid_actor             exit 1
         invalid_config            exit 1
         lint_failed               exit 1

@@ -9592,11 +9592,86 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   color: #12310e;
 }
 
-.claim-edit-fields,
 .claim-edit-note {
   margin: 8px 0 0;
+}
+
+.claim-edit-note-text,
+.claim-edit-note-hint,
+.claim-edit-field-note {
+  margin: 0;
   font: 400 13px/19px var(--font-sans);
   color: var(--muted);
+}
+
+/* The hint names the command that ENDS this state. A record written before
+   the approved wording was kept says "there is nothing to compare against",
+   and until this line existed that was the end of the sentence — true, and
+   with no way out of it. The wording is usually still in the project's own
+   git history, so the panel that reports the gap also names the verb that
+   closes it. */
+.claim-edit-note-hint {
+  margin-top: 4px;
+  color: var(--faint);
+}
+
+/* The fields that moved. This block is TEXT, not prose: it shows the YAML the
+   claim file holds, so it is monospace and pre-wrapped, and the tints are the
+   same two the passage diff uses so a reader does not learn a second colour
+   language halfway down one panel. */
+.claim-edit-fields {
+  margin: 8px 0 0;
+}
+
+.claim-edit-fields-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: 500 13px/19px var(--font-sans);
+  color: var(--accent);
+  text-align: left;
+}
+
+.claim-edit-fields-toggle:hover { text-decoration: underline; }
+
+.claim-edit-fields-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.claim-edit-field-name {
+  display: block;
+  font: 600 12px/18px var(--font-mono);
+  color: var(--muted);
+}
+
+.claim-edit-field-hunk {
+  margin: 3px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  background: var(--code-bg);
+  font: 400 12px/18px var(--font-mono);
+  /* pre-wrap and not pre: a claims file's embodiment block is indented deep
+     enough to overflow a narrow column, and a horizontal scrollbar inside a
+     panel inside a claim is three nested scroll regions. Wrapping keeps the
+     indentation and loses only the guarantee that a line is one line. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.claim-edit-field-hunk--removed {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 7%, var(--code-bg));
+}
+
+.claim-edit-field-hunk--added {
+  border-left-color: var(--border-strong);
 }
 
 @media (max-width: 520px) {
