@@ -769,6 +769,30 @@ func TestIndependentDifferentialDAG(t *testing.T) {
 				}
 			}
 		}
+		// Cover CauseUnapprovedEdit in the generative set: an honest unlock
+		// (Released) plus a later rewrite. Unreleased drafts stay the orphan
+		// case and must not flip this cause; unchanged released drafts stay
+		// silent. Mutate claims[i] after the store hashed the original body.
+		for i, c := range claims {
+			if c.Status != model.StatusDraft {
+				continue
+			}
+			r, ok := s.Ledger[c.ID]
+			if !ok {
+				continue
+			}
+			if rng.Intn(2) != 0 {
+				continue
+			}
+			r.ReleasedAt = "2026-09-04T00:00:00Z"
+			r.ReleasedBy = "maintainer"
+			r.ReleasedReason = "rewrite"
+			s.Ledger[c.ID] = r
+			if rng.Intn(2) == 0 {
+				c.Body += " rewritten"
+				claims[i] = c
+			}
+		}
 		old := oracleCompute(claims, s, flags)
 		got := Compute(claims, s, flags)
 		for id, a := range got {

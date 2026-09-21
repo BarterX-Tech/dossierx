@@ -532,8 +532,9 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // guide growing for one new leaf, with the other five still, is the surface
 // signature this budget exists to distinguish from prose creep. The ceiling is
 // 272 rather than 270 so the router is not left with zero headroom, which turns
-// the next one-line correction into a budget argument. CENSUS: router 270 of
-// 272, claims 255, comments 206, code-links 136, build-order 142.
+// the next one-line correction into a budget argument. CENSUS: router 271 of
+// 272, claims 255, comments 206, code-links 136, build-order 142. The extra
+// line is the `git_unavailable` recovery row for recover-approved-content.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 272
 

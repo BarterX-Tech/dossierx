@@ -126,6 +126,17 @@ func oraclelocalSummary(c model.Claim, claims []model.Claim, store *lock.Store, 
 		}
 	}
 	if c.Status != model.StatusLocked {
+		// Same independent cause production localSummary emits: a draft whose
+		// released approval no longer hashes. Without this arm the generative
+		// oracle silently disagreed with Compute on the new unapproved_edit
+		// contract, and only graphs that never released an edited draft passed.
+		if _, ok := lock.EditedSinceApproval(c, store); ok {
+			out.causes = append(out.causes, Cause{
+				Kind: CauseUnapprovedEdit, SourceKind: CauseUnapprovedEdit,
+				Path: Path{c.ID}, Direct: true,
+				Detail: "this claim was approved, then unlocked and rewritten; what is written differs from what was approved",
+			})
+		}
 		return out
 	}
 	for _, depID := range lock.BaselineDependencyIDs(c) {
