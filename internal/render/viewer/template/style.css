@@ -3614,14 +3614,18 @@ button.comment-chip--active.comment-chip--empty {
   display: none;
 }
 
+/* The strip itself is card ground. Its TINT lives on each row (below,
+   keyed by data-tone), because a band with two findings on it carries two
+   hues and a surface cannot make two severity claims at once (Paper board
+   15, C2M-0 red over C92-0 amber, hairline-divided). */
 .status-strip--lint {
   border-color: color-mix(in srgb, var(--warn) 36%, var(--border));
-  background: var(--status-strip-bg);
+  background: var(--card-bg);
 }
 
 .status-strip--integrity {
   border-color: color-mix(in srgb, var(--warn) 36%, var(--border));
-  background: var(--status-strip-bg);
+  background: var(--card-bg);
   box-shadow: none;
 }
 
@@ -3661,6 +3665,36 @@ button.comment-chip--active.comment-chip--empty {
   color: var(--warn);
   flex-shrink: 0;
 }
+
+/* One row per finding, each its own tint (Paper C2M-0: blocked ground
+   #9E3B360F; CDR-0: edited ground #9A6A1612), divided by the hairline. The
+   icon slot is 15px either way: the triangle for an alarm row, a 7px dot in
+   the draft hue for an edited row, so the sentences of stacked rows share
+   one left edge. */
+.status-strip-head[data-tone="alarm"] { background: var(--status-strip-bg); }
+.status-strip-head[data-tone="draft"] { background: var(--status-draft-bg, rgba(154, 106, 22, .11)); }
+.status-strip-head + .status-strip-head { border-top: 1px solid var(--border); }
+
+.status-strip-dot {
+  display: none;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-strip-dot::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--status-draft, #976600);
+}
+
+.status-strip-head[data-tone="draft"] .status-strip-icon { display: none; }
+.status-strip-head[data-tone="draft"] .status-strip-dot { display: inline-flex; }
+.status-strip-head[data-tone="draft"] .status-strip-action { color: var(--status-draft, #976600); }
 
 .status-strip-summary-text {
   display: grid;
@@ -3976,6 +4010,81 @@ button.comment-chip--active.comment-chip--empty {
 .status-finding--group[data-severity="blocker"] .status-finding-msg {
   color: var(--status-draft);
   font-weight: 600;
+}
+
+/* Paper board 15 (BR5-0 / ETC-0 / EUD-0): a row's third line — the cause
+   kind in mono, a mono summary of what moved, and for a blocker row whose
+   owner was approved and is being rewritten, the way to its diff. */
+.status-finding-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding-top: 1px;
+}
+
+.status-finding-kind {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font: 500 10px/12px var(--font-mono);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.status-finding--group[data-tone="draft"] .status-finding-kind,
+.status-finding-kind--edited {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+
+/* BR5-0: the chip under a blocker row is the claim chip's word, at the
+   row's scale — Inter 10/14 600, 0.06em, uppercase. */
+.status-finding-kind--edited {
+  font: 600 10px/14px var(--font-sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.status-finding-meta {
+  font: 400 11px/14px var(--font-mono);
+  color: var(--muted);
+}
+
+.status-finding-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  font: 600 11px/14px var(--font-sans);
+  color: var(--link);
+}
+
+.status-finding-link:hover { text-decoration: underline; }
+
+/* EUD-0: a Needs-you row's right-hand slot is its way in, in the row's hue,
+   where a blocker row keeps its count. */
+.status-finding-action {
+  flex: 0 0 auto;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  text-align: right;
+  font: 600 14px/18px var(--font-sans);
+  color: var(--warn);
+}
+
+.status-finding-action:hover { text-decoration: underline; }
+
+/* A row caused by an edit since approval is draft work, not an alarm: its
+   dot and its action take the draft hue (EUD-0). */
+.status-finding--group[data-tone="draft"] .status-finding-dot,
+.status-finding--group[data-severity="needs_you"][data-tone="draft"] .status-finding-dot {
+  background: var(--status-draft);
+}
+
+.status-finding--group[data-tone="draft"] .status-finding-action {
+  color: var(--status-draft);
 }
 
 /* file:// has no /api/status and therefore no ledger_findings at all (04 §8
@@ -6235,7 +6344,8 @@ body.shell-body {
 }
 
 .claim-body-disclosure > .claim-body,
-.claim-body-disclosure > .claim-edit-diff { max-width: none; }
+.claim-body-disclosure > .claim-edit-diff,
+.claim-body-disclosure > .claim-edit-current { max-width: none; }
 
 /* .claim-edit-diff is clamped alongside .claim-body because it IS the body,
    shown a passage at a time (see system-record.js's BODY_LIKE). A claim that
@@ -6248,7 +6358,8 @@ body.shell-body {
    the line height — which is the honest description, and what the test
    asserts rather than an exact 4x that does not hold. */
 .claim-body-disclosure--collapsed > .claim-body,
-.claim-body-disclosure--collapsed > .claim-edit-diff {
+.claim-body-disclosure--collapsed > .claim-edit-diff,
+.claim-body-disclosure--collapsed > .claim-edit-current {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -8471,12 +8582,18 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   background: var(--paper);
 }
 
-/* 04 §4.9: the bar is always draft amber, ranking VOLUME, not severity —
-   never colour these bars per row severity. */
+/* 04 §4.9: the module ranking's bar is always draft amber, ranking VOLUME,
+   not severity. The cause ranking under the Needs-you filter (Paper EKL-0,
+   "WHAT IS WAITING") is the one exception: each bar takes its cause's hue,
+   because there the rows ARE kinds of work and the hue is what tells them
+   apart. */
 .issues-rail-bar-fill {
   height: 5px;
   background: var(--status-draft);
 }
+
+.issues-rail-bar-fill[data-tone="alarm"] { background: var(--warn); }
+.issues-rail-bar-fill[data-tone="draft"] { background: var(--status-draft); }
 
 /* 04 §8 item 8: the rail is a ranking, so it truncates rather than scrolls. */
 .issues-rail-more {
@@ -9316,7 +9433,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 
 .status-strip-card-eyebrow {
   font: 600 11px/14px var(--font-sans);
-  letter-spacing: .05em;
+  letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -9368,16 +9485,13 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   color: var(--ink);
 }
 
+/* EH1-0: a 12px "\203a" glyph, in the card's hue (the tinted forms below
+   recolour it), optically dropped 2px to sit on the sentence's first line. */
 .status-strip-finding-chevron {
   flex-shrink: 0;
   margin-top: 2px;
   color: var(--faint);
-  display: inline-flex;
-}
-
-.status-strip-finding-chevron .dx-icon {
-  width: 14px;
-  height: 14px;
+  font: 400 12px/16px var(--font-sans);
 }
 
 /* The two tinted forms. The alphas are EH1-0's own (#9A6A1612 / #9A6A1645 /
@@ -9435,10 +9549,10 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
    on the CARD. See paintApprovedEdit for why the state does not live on the
    body: the long-body disclosure re-wraps it after first paint, so the body
    is not the same node before and after. */
-.claim--showing-changes > .claim-body,
-.claim--showing-changes > .claim-body-disclosure:not(.claim-body-disclosure--edit),
-.claim--showing-changes > .claim-empty,
-.claim--showing-changes > .claim-mockup-body {
+.claim--edit-view > .claim-body,
+.claim--edit-view > .claim-body-disclosure:not(.claim-body-disclosure--edit),
+.claim--edit-view > .claim-empty,
+.claim--edit-view > .claim-mockup-body {
   display: none;
 }
 
@@ -9454,15 +9568,18 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
    smaller than anything else on the card, and the third costs 8px of height
    in the rare case. The switch is what moves, because it is the only part
    with no sentence in it. */
+/* Paper CKF-0: the bar is the draft tint (--color-draft-bg), radius 6,
+   9px/13px, and it sits in the card's own 16px rhythm — no margin of its
+   own. Title and meta share a baseline with 10px between them. */
 .claim-edit-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
-  margin: 10px 0 4px;
-  padding: 9px 14px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--status-draft, #976600) 7%, transparent);
+  gap: 8px 10px;
+  margin: 0;
+  padding: 9px 13px;
+  border-radius: 6px;
+  background: var(--status-draft-bg, rgba(154, 106, 22, .11));
   font-family: var(--font-sans);
 }
 
@@ -9487,7 +9604,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 .claim-edit-bar-meta {
   flex: 1 1 auto;
   min-width: 0;
-  font: 12px/16px var(--font-mono, var(--font-sans));
+  font: 11px/16px var(--font-mono, var(--font-sans));
   color: var(--muted);
 }
 
@@ -9495,24 +9612,28 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
    place in this panel that spends a strong value — everything else is a tint,
    and the reader has to be able to see which of two states they are in from
    across the page. */
+/* Paper CKJ-0: a card-ground pill with a 1px hairline, 2px inset, segments
+   3px/11px at 11/14. */
 .claim-edit-switch {
   display: inline-flex;
+  align-items: center;
   flex: 0 0 auto;
   /* Pinned right on the first row, and still right when it wraps to its own. */
   margin-left: auto;
-  gap: 2px;
+  gap: 0;
   padding: 2px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: var(--card-bg);
 }
 
 .claim-edit-switch-seg {
   border: 0;
   border-radius: 999px;
-  padding: 4px 12px;
+  padding: 3px 11px;
   background: none;
   cursor: pointer;
-  font: 500 12px/16px var(--font-sans);
+  font: 500 11px/14px var(--font-sans);
   color: var(--muted);
 }
 
@@ -9525,15 +9646,23 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 /* The passages. Typography is the claim body's own — this IS the claim body,
    shown a passage at a time — so a reader moving between Changes and Current
    is reading the same prose in the same face, not a second document. */
-.claim-edit-diff {
+.claim-edit-diff,
+.claim-edit-current {
   font-family: var(--font-serif);
   font-size: 17px;
   line-height: 28px;
   max-width: 760px;
 }
 
+/* Passages keep the body's 16px rhythm between them (the card's own gap).
+   Margins rather than flex gap, because the four-line clamp turns this box
+   into a -webkit-box and a flex gap would vanish with it. */
 .claim-edit-passage {
-  margin: .8em 0;
+  margin: 0;
+}
+
+.claim-edit-passage + .claim-edit-passage {
+  margin-top: 16px;
 }
 
 .claim-edit-passage > :first-child {
@@ -9544,52 +9673,83 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   margin-bottom: 0;
 }
 
-/* A changed passage is tinted and ruled on the left, old above new. Colour is
-   not the only carrier: the removed passage is struck through and the added
-   one is not, so the two stay distinguishable in a monochrome print, under a
-   colour-vision deficiency, and in the dark scheme where the two tints are
-   close in luminance. */
+/* Paper CK7-0 / CKP-0: a changed passage is a tinted row, radius 4, with a
+   3px rule INSIDE it (12px in from the edge, 12px before the text) that runs
+   the height of the text, old above new with 2px between them and 4px above
+   the pair. The prose itself takes the hue: blocked for the approved
+   passage, locked for the current one. Colour is not the only carrier — the
+   removed passage is struck through and the added one is not, so the two
+   stay apart in a monochrome print, under a colour-vision deficiency, and
+   in the dark scheme where the two tints are close in luminance. */
+.claim-edit-passage--removed,
+.claim-edit-passage--added,
+.claim-edit-passage--current {
+  position: relative;
+  border-radius: 4px;
+}
+
 .claim-edit-passage--removed,
 .claim-edit-passage--added {
-  padding: 10px 14px;
-  border-left: 3px solid;
-  border-radius: 0 6px 6px 0;
+  padding: 7px 12px 7px 27px;
+}
+
+.claim-edit-passage--removed::before,
+.claim-edit-passage--added::before,
+.claim-edit-passage--current::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
 .claim-edit-passage--removed {
-  border-left-color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 7%, transparent);
-  text-decoration: line-through;
+  color: var(--warn);
+  background: var(--warn-bg, rgba(158, 59, 54, .10));
+  text-decoration: line-through 1px;
+  text-underline-position: from-font;
 }
 
 .claim-edit-passage--added {
-  border-left-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  background: var(--accent-bg, rgba(44, 107, 82, .10));
 }
 
-/* The words that moved, inside the passage they moved in. Without these a
-   reader has to compare two near-identical passages by eye, which is the work
-   the diff exists to do for them. The literal tints are the diff convention
-   this engine already uses end to end — internal/reaudit's <mark> spans are
-   the same two colours — rather than two new tokens that would drift from
-   it. */
+.claim-edit-passage + .claim-edit-passage--removed {
+  margin-top: 20px;
+}
+
+.claim-edit-passage--removed + .claim-edit-passage--added {
+  margin-top: 2px;
+}
+
+/* The Current state (Paper DPZ-0): the passage that differs carries only a
+   draft-coloured rule at the left edge — no tint, prose in ink — so the
+   claim reads as ordinary prose with the seam marked. */
+.claim-edit-passage--current {
+  padding: 0 0 0 15px;
+}
+
+.claim-edit-passage--current::before {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--status-draft, #976600);
+}
+
+/* The words that moved, inside the passage they moved in. They stay in the
+   DOM for the passage's aria-label and for a reader who selects the text,
+   but Paper draws the passage as one tinted, coloured, struck (or not)
+   block and paints nothing on the individual words — the struck passage and
+   the coloured one are the comparison. */
 .claim-edit-word--removed,
 .claim-edit-word--added {
-  border-radius: 3px;
-  padding: 0 2px;
-  /* The mark is drawn tight to the word, so two adjacent marks stay two. */
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.claim-edit-word--removed {
-  background: #f7c2c2;
-  color: #3a1414;
-}
-
-.claim-edit-word--added {
-  background: #b7ebb0;
-  color: #12310e;
+  background: none;
+  color: inherit;
+  padding: 0;
 }
 
 .claim-edit-note {
@@ -9711,11 +9871,18 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .claim-edit-bar-title {
+    /* CKY-0: the title and its machine line are 2px apart on the phone. */
+    margin-bottom: -6px;
   }
 
   .claim-edit-bar-meta {
     /* The phone stack gives every part its own row already. */
     flex: none;
+    line-height: 15px;
   }
 
   .claim-edit-switch {
@@ -9725,7 +9892,25 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 
   .claim-edit-switch-seg {
     flex: 1;
-    padding: 7px 12px;
+    padding: 5px 10px;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: center;
+  }
+
+  /* CKP-0: the rule and the text sit 10px in on a phone, not 12. */
+  .claim-edit-passage--removed,
+  .claim-edit-passage--added {
+    padding: 7px 10px 7px 23px;
+  }
+
+  .claim-edit-passage--removed::before,
+  .claim-edit-passage--added::before {
+    left: 10px;
+  }
+
+  .claim-edit-passage + .claim-edit-passage--removed {
+    margin-top: 18px;
   }
 }
 

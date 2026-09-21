@@ -269,10 +269,13 @@
   // different components. Sharing the mechanism rather than copying it also
   // means the toggle's label, its aria wiring and its scroll compensation
   // cannot drift between the two.
-  var BODY_LIKE = '.claim-body, .claim-edit-diff';
+  // .claim-edit-current is the other state of the same surface: the current
+  // wording rendered from the same passages, with the changed one ruled. It
+  // stands in for the body exactly as the diff does, so it clamps like it.
+  var BODY_LIKE = '.claim-body, .claim-edit-diff, .claim-edit-current';
 
   function setClaimBodyExpanded(wrapper, expanded) {
-    var body = wrapper && wrapper.querySelector(':scope > .claim-body, :scope > .claim-edit-diff');
+    var body = wrapper && wrapper.querySelector(':scope > .claim-body, :scope > .claim-edit-diff, :scope > .claim-edit-current');
     var toggle = wrapper && wrapper.querySelector(':scope > .claim-body-disclosure__toggle');
     if (!body || !toggle || toggle.hidden) { return; }
     wrapper.classList.toggle('claim-body-disclosure--expanded', expanded);
@@ -295,7 +298,7 @@
         // The diff's wrapper is marked, because the card hides the claim's
         // own body while the changes are showing and must not hide the diff
         // along with it — both are a .claim-body-disclosure by then.
-        if (body.classList.contains('claim-edit-diff')) {
+        if (body.classList.contains('claim-edit-diff') || body.classList.contains('claim-edit-current')) {
           wrapper.classList.add('claim-body-disclosure--edit');
         }
         body.parentNode.insertBefore(wrapper, body);

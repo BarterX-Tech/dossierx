@@ -89,7 +89,10 @@ func TestEditedClaimChipSaysItWasApproved(t *testing.T) {
 		// colour would say this state is unrelated to the one the reader
 		// already knows.
 		{"the chip keeps the draft hue", `pill.classList.contains('pv')`},
-		{"the chip keeps its padlock", `!!pill.querySelector('.dx-icon')`},
+		// Paper CDJ-0 / CIY-0 draws the chip as the word alone: the open
+		// padlock is DRAFT's glyph, and this chip exists to say the state is
+		// not plain draft.
+		{"the chip carries no padlock", `!pill.querySelector('.dx-icon')`},
 	})
 }
 
@@ -156,22 +159,32 @@ func TestEditedClaimSwitchesBetweenChangesAndCurrent(t *testing.T) {
 	runCDP(t, ctx, chromedp.Click(`[id="`+testClaimID+`"] .claim-edit-switch-seg:nth-of-type(2)`, chromedp.ByQuery))
 	pollTrue(t, ctx, `!document.querySelector('[id="`+testClaimID+`"] .claim-edit-diff')`)
 
+	// Paper DPZ-0: Current is the same claim with the diff put away, reading
+	// as ordinary prose, with an amber rule marking where the difference
+	// sits. It is rendered from the same passages, so the rule can sit on
+	// the one that moved; the claim's own body has no seam to hang it on.
 	requireAll(t, ctx, "after switching to Current", `
 		var card = document.querySelector('[id="`+testClaimID+`"]');
 		var segs = Array.from(card.querySelectorAll('.claim-edit-switch-seg'));
 		var body = card.querySelector('.claim-body');
+		var current = card.querySelector('.claim-edit-current');
+		var ruled = current ? Array.from(current.querySelectorAll('.claim-edit-passage--current')) : [];
 	`, [][2]string{
 		{"Current is the one selected", `segs[1].getAttribute('aria-pressed') === 'true' && segs[0].getAttribute('aria-pressed') === 'false'`},
 		{"the diff is gone", `!card.querySelector('.claim-edit-diff')`},
-		{"the claim's own body is showing", `!!body && body.getClientRects().length > 0`},
+		{"the current wording is showing", `!!current && current.getClientRects().length > 0`},
+		{"the claim's own body is not", `!body || !body.getClientRects().length`},
+		{"nothing is struck through", `!current.querySelector('.claim-edit-passage--removed')`},
+		{"exactly the passage that moved is ruled", `ruled.length === 1 && ruled[0].textContent.indexOf('An object with no identifier') >= 0`},
+		{"the unchanged prose is there too", `current.textContent.indexOf('A widget is the smallest unit') >= 0`},
 		{"the bar says what state this is, and counts what differs", `/Showing the current wording/.test(card.querySelector('.claim-edit-bar').textContent) && /1 passage differs/.test(card.querySelector('.claim-edit-bar').textContent)`},
 	})
 
 	// And back, because a switch that only goes one way is a link.
 	runCDP(t, ctx, chromedp.Click(`[id="`+testClaimID+`"] .claim-edit-switch-seg:nth-of-type(1)`, chromedp.ByQuery))
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-diff')`)
-	if !evalBool(t, ctx, `(function(){ var b = document.querySelector('[id="`+testClaimID+`"] .claim-body'); return !b || !b.getClientRects().length; })()`) {
-		t.Fatal("switching back to Changes must hide the claim's own body again")
+	if !evalBool(t, ctx, `(function(){ var c = document.querySelector('[id="`+testClaimID+`"]'); var b = c.querySelector('.claim-body'); return (!b || !b.getClientRects().length) && !c.querySelector('.claim-edit-current'); })()`) {
+		t.Fatal("switching back to Changes must put the current view away and keep the claim's own body hidden")
 	}
 }
 
@@ -238,7 +251,7 @@ governed_by:
 		var view = document.getElementById('issuesView');
 		var pressed = Array.from(view.querySelectorAll('.status-severity-chip[aria-pressed="true"]'));
 	`, [][2]string{
-		{"it lists the edited claim by what happened to it", `view.textContent.indexOf('approved, then rewritten') >= 0`},
+		{"it lists the edited claim by what happened to it", `view.textContent.indexOf('was approved and is being rewritten') >= 0`},
 		// On a real corpus the unfiltered screen is hundreds of dependency
 		// rows and the claims this row named are somewhere inside them. A way
 		// in that lands a reader in a list they then have to search has not
@@ -386,7 +399,9 @@ func TestDesktopKeepsTheBandAndPhoneTakesTheCard(t *testing.T) {
 	`, [][2]string{
 		{"the band is on screen", `band.getClientRects().length > 0`},
 		{"the card is not", `!card.getClientRects().length`},
-		{"the band keeps its Show issues action", `document.getElementById('statusStripAction').textContent === 'Show issues'`},
+		// Paper CDS-0: an edited-since-approval row says what it is for.
+		{"the band's row offers Review changes", `document.getElementById('statusStripAction').textContent === 'Review changes'`},
+		{"and carries the draft hue", `band.getAttribute('data-tone') === 'draft'`},
 		// Both forms are written from the same findings, so they can differ
 		// in shape and never in what they say.
 		{"the band's sentence is the card's first row", `title.textContent === card.querySelector('.status-strip-finding-text').textContent`},
@@ -411,11 +426,212 @@ func TestDesktopKeepsTheBandAndPhoneTakesTheCard(t *testing.T) {
 	pollTrue(t, ctx, `document.getElementById('statusStripToggle').getClientRects().length > 0`)
 	runCDP(t, ctx, chromedp.Click("#statusStripToggle", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.getElementById('issuesView').hidden === false`)
-	// Unfiltered, unlike a card row: the band's sentence names one finding
-	// but the band stands for the whole facet.
-	if evalBool(t, ctx, `!!document.querySelector('#issuesView .status-severity-chip[aria-pressed="true"]')`) {
-		t.Fatal("the desktop band opens the Issues screen unfiltered; only a card row names what it filters to")
+	// An edited row names exactly what it filters to — the claims waiting on
+	// the reader — which is what earns it the filter (a blocked row still
+	// opens the screen unfiltered; see TestDesktopBandStacksOneRowPerFinding).
+	if !evalBool(t, ctx, `(function(){ var p = document.querySelectorAll('#issuesView .status-severity-chip[aria-pressed="true"]'); return p.length === 1 && p[0].classList.contains('status-severity-chip--needs_you'); })()`) {
+		t.Fatal("the band's Review changes row must open the Issues screen filtered to Needs you")
 	}
+}
+
+// blockedDependentYAML rests on the edited claim, so the facet carries a
+// blocked finding beside the edited one.
+func blockedDependentYAML() string {
+	return `id: widget.contract.blocked
+facet: contract
+module: widget
+status: draft
+body: |
+  a claim that rests on something nobody approved.
+rests_on:
+  - ` + testClaimID + `
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`
+}
+
+// Paper board 15 A (C2M-0 / C92-0): the desktop band merges two findings into
+// one strip — a full-bleed row per finding, hairline-divided, each with its
+// own tint, icon and action. Before this the band carried one sentence and
+// the second finding was simply not on the desktop at all.
+func TestDesktopBandStacksOneRowPerFinding(t *testing.T) {
+	p := editedAfterApproval(t)
+	p.writeClaim("blocked.yaml", blockedDependentYAML())
+	ctx := browserContext(t)
+
+	runCDP(t, ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(p.renderStatic()),
+		chromedp.WaitVisible(".claim", chromedp.ByQuery),
+	)
+	pollTrue(t, ctx, `document.querySelectorAll('#statusStrip > .status-strip-head').length > 1`)
+
+	requireAll(t, ctx, "the desktop band", `
+		var rows = Array.from(document.querySelectorAll('#statusStrip > .status-strip-head'));
+		var text = rows.map(function (r) { return r.querySelector('.status-strip-title').textContent; });
+		var tones = rows.map(function (r) { return r.getAttribute('data-tone'); });
+		var actions = rows.map(function (r) { return r.querySelector('.status-strip-action').textContent; });
+		var probe = function (token) { var s = document.createElement('span'); s.style.color = 'var(' + token + ')'; document.body.appendChild(s); var c = getComputedStyle(s).color; s.remove(); return c; };
+		var visibleIcon = function (r) { return Array.from(r.querySelectorAll('.status-strip-icon, .status-strip-dot')).filter(function (n) { return n.getClientRects().length > 0; }); };
+	`, [][2]string{
+		{"one row per finding", `rows.length === 2`},
+		{"both rows are on screen", `rows.every(function (r) { return r.getClientRects().length > 0; })`},
+		{"the blocked finding leads", `tones[0] === 'alarm' && text[0].indexOf('blocked by unapproved dependencies') >= 0`},
+		{"the edited finding follows", `tones[1] === 'draft' && text[1].indexOf('edits that have not been approved') >= 0`},
+		{"each row carries its own action", `actions[0] === 'Show issues' && actions[1] === 'Review changes'`},
+		{"the blocked row's action is red", `getComputedStyle(rows[0].querySelector('.status-strip-action')).color === probe('--warn')`},
+		{"the edited row's action is amber", `getComputedStyle(rows[1].querySelector('.status-strip-action')).color === probe('--status-draft')`},
+		{"the rows take different tints", `getComputedStyle(rows[0]).backgroundColor !== getComputedStyle(rows[1]).backgroundColor`},
+		{"a hairline divides them", `parseFloat(getComputedStyle(rows[1]).borderTopWidth) === 1`},
+		{"the blocked row shows the triangle", `visibleIcon(rows[0]).length === 1 && visibleIcon(rows[0])[0].classList.contains('status-strip-icon')`},
+		{"the edited row shows the dot", `visibleIcon(rows[1]).length === 1 && visibleIcon(rows[1])[0].classList.contains('status-strip-dot')`},
+		{"the sentences share a left edge", `Math.abs(rows[0].querySelector('.status-strip-title').getBoundingClientRect().left - rows[1].querySelector('.status-strip-title').getBoundingClientRect().left) < 1`},
+		{"every row is a real control", `rows.every(function (r) { return r.tagName === 'BUTTON'; })`},
+	})
+
+	// The blocked row opens the screen unfiltered: its sentence names one
+	// finding but it stands for the whole facet.
+	runCDP(t, ctx, chromedp.Click("#statusStripToggle", chromedp.ByQuery))
+	pollTrue(t, ctx, `document.getElementById('issuesView').hidden === false`)
+	if evalBool(t, ctx, `!!document.querySelector('#issuesView .status-severity-chip[aria-pressed="true"]')`) {
+		t.Fatal("the blocked row opens the Issues screen unfiltered")
+	}
+}
+
+// Paper CK7-0 / CKP-0 / DPZ-0: the passages are tinted rows with the rule
+// INSIDE them and the prose in the row's hue; the words that moved are not
+// painted, because the struck passage beside the coloured one IS the
+// comparison. The Current state carries only a draft rule and no tint.
+func TestEditedPassagesAreTintedRuledAndUnpainted(t *testing.T) {
+	p := newProjectRaw(t, defaultConfigYAML)
+	p.writeClaim("overview.yaml", rewrappedApprovedYAML)
+	p.run("claim", "lock", testClaimID, "--reason", "the wording as it stands")
+	p.run("claim", "unlock", testClaimID, "--reason", "one word is wrong")
+	p.writeClaim("overview.yaml", rewrappedEditedYAML)
+
+	ctx := browserContext(t)
+	runCDP(t, ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(p.renderStatic()),
+		chromedp.WaitVisible(".claim", chromedp.ByQuery),
+	)
+	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-passage--added')`)
+
+	requireAll(t, ctx, "the Changes passages", `
+		var card = document.querySelector('[id="`+testClaimID+`"]');
+		var removed = card.querySelector('.claim-edit-passage--removed');
+		var added = card.querySelector('.claim-edit-passage--added');
+		var word = card.querySelector('.claim-edit-word--removed');
+		var probe = function (token) { var s = document.createElement('span'); s.style.color = 'var(' + token + ')'; document.body.appendChild(s); var c = getComputedStyle(s).color; s.remove(); return c; };
+		var rule = function (el) { return getComputedStyle(el, '::before'); };
+		var bar = card.querySelector('.claim-edit-bar');
+	`, [][2]string{
+		{"the approved passage reads in the blocked hue", `getComputedStyle(removed).color === probe('--warn')`},
+		{"the current passage reads in the locked hue", `getComputedStyle(added).color === probe('--accent')`},
+		{"both are tinted rows", `getComputedStyle(removed).backgroundColor !== 'rgba(0, 0, 0, 0)' && getComputedStyle(added).backgroundColor !== 'rgba(0, 0, 0, 0)'`},
+		{"with a 4px radius", `getComputedStyle(removed).borderTopLeftRadius === '4px'`},
+		{"the rule is inside the row, 12px in", `parseFloat(rule(removed).left) === 12 && parseFloat(rule(removed).width) === 3`},
+		{"and the text starts 12px after it", `parseFloat(getComputedStyle(removed).paddingLeft) === 27`},
+		{"old and new are 2px apart", `Math.round(added.getBoundingClientRect().top - removed.getBoundingClientRect().bottom) === 2`},
+		{"the moved word is marked for a reader, not painted", `!!word && getComputedStyle(word).backgroundColor === 'rgba(0, 0, 0, 0)'`},
+		{"the bar takes the draft tint with a 6px radius", `getComputedStyle(bar).borderTopLeftRadius === '6px' && getComputedStyle(bar).backgroundColor !== 'rgba(0, 0, 0, 0)'`},
+		{"the switch is a hairlined card pill", `parseFloat(getComputedStyle(card.querySelector('.claim-edit-switch')).borderTopWidth) === 1`},
+	})
+
+	runCDP(t, ctx, chromedp.Click(`[id="`+testClaimID+`"] .claim-edit-switch-seg:nth-of-type(2)`, chromedp.ByQuery))
+	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-passage--current')`)
+	requireAll(t, ctx, "the Current passage", `
+		var card = document.querySelector('[id="`+testClaimID+`"]');
+		var current = card.querySelector('.claim-edit-passage--current');
+		var probe = function (token) { var s = document.createElement('span'); s.style.color = 'var(' + token + ')'; document.body.appendChild(s); var c = getComputedStyle(s).color; s.remove(); return c; };
+		var rule = getComputedStyle(current, '::before');
+	`, [][2]string{
+		{"it is not tinted", `getComputedStyle(current).backgroundColor === 'rgba(0, 0, 0, 0)'`},
+		{"it reads in ink", `getComputedStyle(current).color === probe('--ink')`},
+		{"it is not struck through", `getComputedStyle(current).textDecorationLine.indexOf('line-through') < 0`},
+		{"the rule is at the edge, in the draft hue", `parseFloat(rule.left) === 0 && parseFloat(rule.width) === 3 && rule.backgroundColor === probe('--status-draft')`},
+		{"it still marks nothing on the words", `!current.querySelector('.claim-edit-word--added') || getComputedStyle(current.querySelector('.claim-edit-word--added')).backgroundColor === 'rgba(0, 0, 0, 0)'`},
+	})
+}
+
+// Paper board 15 F and I: on the Issues screen an edited claim's row names
+// its cause kind in mono, says what moved, and carries the way to its diff;
+// under the Needs-you filter the subtitle, the group note and the rail all
+// describe what is waiting rather than where the blockers live.
+func TestIssuesRowForEditedClaimNamesItsCauseAndLeadsToTheDiff(t *testing.T) {
+	p := editedAfterApproval(t)
+	p.writeClaim("blocked.yaml", blockedDependentYAML())
+	ctx := browserContext(t)
+
+	runCDP(t, ctx,
+		chromedp.EmulateViewport(1440, 900),
+		chromedp.Navigate(p.renderStatic()),
+		chromedp.WaitVisible(".claim", chromedp.ByQuery),
+	)
+	pollTrue(t, ctx, `document.querySelectorAll('#statusStrip > .status-strip-head').length > 1`)
+
+	// Unfiltered first: the blocker row whose owner is the edited claim says
+	// so under the row it already had (BR5-0), and keeps its count.
+	runCDP(t, ctx, chromedp.Click("#statusStripToggle", chromedp.ByQuery))
+	pollTrue(t, ctx, `document.getElementById('issuesView').hidden === false`)
+	requireAll(t, ctx, "the blocker row for an edited owner", `
+		var view = document.getElementById('issuesView');
+		var row = Array.from(view.querySelectorAll('.status-finding--group[data-severity="blocker"]')).filter(function (r) {
+			return r.textContent.indexOf('`+testClaimID+`') >= 0;
+		})[0];
+		var chip = row && row.querySelector('.status-finding-kind--edited');
+		var meta = row && row.querySelector('.status-finding-meta');
+		var link = row && row.querySelector('.status-finding-link');
+	`, [][2]string{
+		{"the row exists", `!!row`},
+		{"it keeps its count", `!!row.querySelector('.status-finding-msg') && /1 claim/.test(row.querySelector('.status-finding-msg').textContent)`},
+		{"it carries the edited chip", `!!chip && chip.textContent.toLowerCase().indexOf('was approved') >= 0`},
+		{"it says what moved", `!!meta && /1 passage changed/.test(meta.textContent) && /approved/.test(meta.textContent)`},
+		{"it offers the diff", `!!link && link.textContent === 'See changes'`},
+	})
+
+	// Then filtered to Needs you (I): the cause row, the subtitle, the note
+	// and the rail.
+	runCDP(t, ctx, chromedp.Click("#issuesView .status-severity-chip--needs_you", chromedp.ByQuery))
+	pollTrue(t, ctx, `!!document.querySelector('#issuesView .status-finding-kind') && document.getElementById('issuesRailHeading').textContent === 'WHAT IS WAITING'`)
+	requireAll(t, ctx, "the Needs-you screen", `
+		var view = document.getElementById('issuesView');
+		var row = Array.from(view.querySelectorAll('.status-finding--group[data-severity="needs_you"]')).filter(function (r) {
+			return r.querySelector('.status-finding-kind') && r.querySelector('.status-finding-kind').textContent === 'unapproved_edit';
+		})[0];
+		var probe = function (token) { var s = document.createElement('span'); s.style.color = 'var(' + token + ')'; document.body.appendChild(s); var c = getComputedStyle(s).color; s.remove(); return c; };
+		var rail = document.getElementById('issuesRailRows');
+		var railRows = Array.from(rail.querySelectorAll('.issues-rail-row'));
+	`, [][2]string{
+		{"the edited claim's row names its cause kind in mono", `!!row && getComputedStyle(row.querySelector('.status-finding-kind')).fontFamily.toLowerCase().indexOf('mono') >= 0`},
+		{"its title names the claim and what happened to it", `/was approved and is being rewritten/.test(row.querySelector('.status-finding-rule').textContent)`},
+		{"it says what moved", `/1 passage changed/.test(row.querySelector('.status-finding-meta').textContent)`},
+		{"its way in replaces the count", `!!row.querySelector('.status-finding-action') && row.querySelector('.status-finding-action').textContent === 'See changes' && !row.querySelector('.status-finding-msg')`},
+		{"the row is draft work, not an alarm", `row.getAttribute('data-tone') === 'draft' && getComputedStyle(row.querySelector('.status-finding-dot')).backgroundColor === probe('--status-draft')`},
+		{"the subtitle is about the reader's work", `/waiting on you in this facet/.test(document.getElementById('issuesSubtitle').textContent)`},
+		{"the group note counts what needs the reader", `/^\d+ of \d+ need you here$/.test(view.querySelector('.status-group-head-note').textContent)`},
+		{"the rail counts causes", `railRows.length >= 1 && railRows.some(function (r) { return r.querySelector('.issues-rail-row-name').textContent === 'Unapproved edits'; })`},
+		{"the edited cause's bar is amber", `getComputedStyle(railRows.filter(function (r) { return r.querySelector('.issues-rail-row-name').textContent === 'Unapproved edits'; })[0].querySelector('.issues-rail-bar-fill')).backgroundColor === probe('--status-draft')`},
+		{"the caveat counts causes, not paths", `/cause/.test(document.getElementById('issuesRailCaveat').textContent)`},
+	})
+
+	// The way in lands on the claim with the Changes state showing.
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){
+		var row = Array.from(document.querySelectorAll('#issuesView .status-finding--group[data-severity="needs_you"]')).filter(function (r) {
+			return r.querySelector('.status-finding-kind') && r.querySelector('.status-finding-kind').textContent === 'unapproved_edit';
+		})[0];
+		row.querySelector('.status-finding-action').click();
+	})()`, nil))
+	pollTrue(t, ctx, `document.getElementById('issuesView').hidden === true`)
+	requireAll(t, ctx, "after See changes", `
+		var card = document.querySelector('[id="`+testClaimID+`"]');
+		var segs = Array.from(card.querySelectorAll('.claim-edit-switch-seg'));
+	`, [][2]string{
+		{"the reader is on the claim", `location.hash === '#` + testClaimID + `'`},
+		{"with the changes showing", `!!card.querySelector('.claim-edit-diff') && segs[0].getAttribute('aria-pressed') === 'true'`},
+		{"and the claim on screen", `card.getBoundingClientRect().bottom > 0 && card.getBoundingClientRect().top < window.innerHeight`},
+	})
 }
 
 // The bar's width is the reading COLUMN's, not the window's, so no media
@@ -641,10 +857,11 @@ func TestSwitchRoundTripsWithoutStrandingTheDiff(t *testing.T) {
 		if !evalBool(t, ctx, `(function(){
 			var card = document.querySelector('[id="`+testClaimID+`"]');
 			var body = card.querySelector('.claim-body');
-			return card.querySelectorAll('.claim-body-disclosure--edit').length === 0 &&
-				!!body && body.getClientRects().length > 0;
+			return card.querySelectorAll('.claim-edit-current').length === 1 &&
+				card.querySelectorAll('.claim-body-disclosure--edit').length === 1 &&
+				(!body || !body.getClientRects().length);
 		})()`) {
-			t.Fatalf("pass %d: Current must remove the diff and its wrapper and show the body", pass)
+			t.Fatalf("pass %d: Current must remove the diff and show exactly one current view, wrapped once", pass)
 		}
 
 		runCDP(t, ctx, chromedp.Click(`[id="`+testClaimID+`"] .claim-edit-switch-seg:nth-of-type(1)`, chromedp.ByQuery))
@@ -652,10 +869,11 @@ func TestSwitchRoundTripsWithoutStrandingTheDiff(t *testing.T) {
 		if !evalBool(t, ctx, `(function(){
 			var card = document.querySelector('[id="`+testClaimID+`"]');
 			return card.querySelectorAll('.claim-edit-diff').length === 1 &&
+				card.querySelectorAll('.claim-edit-current').length === 0 &&
 				card.querySelectorAll('.claim-body-disclosure--edit').length === 1 &&
 				card.querySelectorAll('.claim-edit-passage').length > 0;
 		})()`) {
-			t.Fatalf("pass %d: Changes must leave exactly one diff, wrapped once", pass)
+			t.Fatalf("pass %d: Changes must leave exactly one diff, wrapped once, and no current view", pass)
 		}
 	}
 }
@@ -993,17 +1211,20 @@ governed_by:
 		t.Fatal("the field rows must follow the passages, not precede them")
 	}
 
-	// Switching to Current puts the claim's own body back and takes the whole
-	// changes view — field rows included — away.
+	// Switching to Current shows the current wording (with the passage that
+	// moved ruled) and takes the whole changes view — field rows included —
+	// away.
 	runCDP(t, ctx, chromedp.Evaluate(`(function(){
   var segs = document.querySelectorAll('.claim-edit-switch-seg');
   segs[segs.length - 1].click();
  })()`, nil))
 	pollTrue(t, ctx, `document.querySelectorAll('.claim-edit-field-name').length === 0`)
 	if !evalBool(t, ctx, `(function(){
-  var body = document.getElementById('`+testClaimID+`').querySelector('.claim-body');
-  return !!body && body.getBoundingClientRect().height > 0;
+  var card = document.getElementById('`+testClaimID+`');
+  var current = card.querySelector('.claim-edit-current');
+  return !!current && current.getBoundingClientRect().height > 0 &&
+    current.querySelectorAll('.claim-edit-passage--current').length === 1;
  })()`) {
-		t.Fatal("Current must show the claim's own body")
+		t.Fatal("Current must show the current wording with the passage that moved ruled")
 	}
 }

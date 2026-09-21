@@ -286,7 +286,7 @@
     <div class="issues-body">
       <div id="issuesFindingsCard" class="issues-findings-card"></div>
       <aside id="issuesRailPanel" class="issues-rail-panel">
-        <p class="issues-rail-heading">WHERE THE BLOCKERS LIVE</p>
+        <p id="issuesRailHeading" class="issues-rail-heading">WHERE THE BLOCKERS LIVE</p>
         <p id="issuesRailCaveat" class="issues-rail-caveat"></p>
         <div id="issuesRailRows" class="issues-rail-rows"></div>
       </aside>
@@ -346,10 +346,15 @@
 
        THE HEAD HAS TWO FORMS, ONE PER WIDTH, and only one is ever on screen.
 
-       #statusStripToggle is the desktop form and is unchanged: one summary
-       sentence with "Show issues" beside it, on a full-bleed band. At 1440 a
-       row has the space to carry a sentence and an action without either
-       crowding the other, and this reads well.
+       #statusStripToggle is the desktop form: a full-bleed band with ONE ROW
+       PER FINDING (Paper board 15, nodes C2M-0 / C92-0). The first row is this
+       static button, and viewer-runtime.js appends one more .status-strip-head
+       button after it for every further finding, hairline-divided. Each row
+       carries its own tint, icon and action: a blocked row is red with the
+       triangle and "Show issues"; an edited-since-approval row is draft amber
+       with a dot and "Review changes". At 1440 a row has the space to carry a
+       sentence and an action without either crowding the other, and a second
+       row simply follows the first.
 
        #statusStripCard is the PHONE form (Paper node EH1-0, "Proposed — one
        card, a row per finding"): a header carrying the count and one row per
@@ -377,9 +382,10 @@
        — the grouped findings list the Issues view MOVES into itself
        (issuesSyncFromStrip), never a second copy of it. -->
   <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
-    <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
+    <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody" data-tone="alarm">
       <span id="statusStripSummary" class="status-strip-summary">
         <svg class="dx-icon status-strip-icon" aria-hidden="true"><use href="#dx-icon-triangle-alert"/></svg>
+        <span class="status-strip-dot" aria-hidden="true"></span>
         <span class="status-strip-summary-text">
           <strong id="statusStripTitle" class="status-strip-title"></strong>
         </span>

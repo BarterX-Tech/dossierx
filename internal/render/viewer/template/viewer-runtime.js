@@ -1562,12 +1562,51 @@
       // demoted slug, and the fixed-width count slot — rather than three
       // loose wrapping siblings. See style.css's .status-finding-dot /
       // .status-finding-text for the layout this DOM shape enables.
+      // editChangeSummary is the mono line under an Issues row for a claim
+      // rewritten since approval (Paper BR5-0 / EUD-0): what moved, and when
+      // the approval it moved from was given.
+      function editChangeSummary(change) {
+        var parts = [];
+        if (!change.content_retained) {
+          parts.push('approved wording not retained');
+        } else if (change.changed_passages) {
+          parts.push(countLabel(change.changed_passages, 'passage') + ' changed');
+        } else if ((change.field_changes || []).length) {
+          parts.push(countLabel(change.field_changes.length, 'field') + ' moved');
+        }
+        var approved = editDateLabel(change.approved_at);
+        if (approved) { parts.push('approved ' + approved); }
+        return parts.join(' · ');
+      }
+
+      // goToClaimChanges leaves the Issues screen for the claim itself, with
+      // the Changes state showing — the row said "See changes", so landing
+      // on the claim with the diff put away would not be what it offered.
+      function goToClaimChanges(id, change) {
+        closeIssuesView();
+        if (window.location.hash !== '#' + id) { window.location.hash = '#' + id; }
+        var card = document.getElementById(id);
+        if (card && change) { paintApprovedEdit(card, change, true); }
+        if (card && typeof card.scrollIntoView === 'function') { card.scrollIntoView({ block: 'start' }); }
+      }
+
       function renderStatusGroup(group) {
         var row = el('li', 'status-finding status-finding--group');
         row.setAttribute('data-severity', group.severity);
+        // A row whose cause is an edit since approval is draft work, not an
+        // alarm (Paper EUD-0 draws its dot and action in the draft hue).
+        var edits = offlineApprovedEdits();
+        var editedOwner = group.ownerModuleClaimID && edits[group.ownerModuleClaimID] ? group.ownerModuleClaimID : '';
+        var isEditCause = group.severity === 'needs_you' && group.kind === 'unapproved_edit' && !!editedOwner;
+        row.setAttribute('data-tone', isEditCause ? 'draft' : 'alarm');
         row.appendChild(el('span', 'status-finding-dot'));
         var text = el('span', 'status-finding-text');
-        text.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
+        // Paper EUD-0 names the claim and what happened to it in one line:
+        // "<Title> was approved and is being rewritten".
+        var title = isEditCause
+          ? readinessClaimLabel(editedOwner) + ' was approved and is being rewritten'
+          : (group.title || 'Issue');
+        text.appendChild(textEl('span', 'status-finding-rule', title));
         var ids = Object.keys(group.claimIDs).sort();
         // Paper 1KX-0: every row carries a second, demoted line under its
         // title holding the dotted claim id of the claim the reader must go
@@ -1585,11 +1624,52 @@
         if (ownerID) {
           text.appendChild(textEl('span', 'status-finding-claim', ownerID));
         }
+
+        // The third line (Paper board 15, F and I). A Needs-you row names its
+        // cause KIND in mono, because the sentence alone cannot distinguish
+        // "someone never wrote this" from "someone approved it and then
+        // moved it". A blocker row whose owner was approved and is being
+        // rewritten says so under the row it already had (BR5-0): no new
+        // group and no new severity, one line added to the existing row.
+        var detail = null;
+        if (group.severity === 'needs_you') {
+          detail = el('span', 'status-finding-detail');
+          detail.appendChild(textEl('span', 'status-finding-kind', group.kind || 'review'));
+          if (isEditCause) {
+            detail.appendChild(textEl('span', 'status-finding-meta', editChangeSummary(edits[editedOwner])));
+          }
+        } else if (editedOwner && group.severity === 'blocker') {
+          detail = el('span', 'status-finding-detail');
+          detail.appendChild(textEl('span', 'status-finding-kind status-finding-kind--edited', 'Edited · was approved'));
+          detail.appendChild(textEl('span', 'status-finding-meta', editChangeSummary(edits[editedOwner])));
+          var link = textEl('button', 'status-finding-link', 'See changes');
+          link.type = 'button';
+          link.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            goToClaimChanges(editedOwner, edits[editedOwner]);
+          });
+          detail.appendChild(link);
+        }
+        if (detail) { text.appendChild(detail); }
         row.appendChild(text);
-        // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
-        // phrase INTO the count slot as a bare `N claims`, never `blocks N
-        // claim(s)` — that longer phrase was written for a full-width third
-        // line, which the fixed 104px slot (style.css) no longer is.
+
+        // The right-hand slot. A blocker row keeps its count (04 §4.8: the
+        // phrase promoted INTO the 104px slot as a bare `N claims`). A
+        // Needs-you row carries its way in instead (Paper ETC-0 / EUD-0):
+        // the thing waiting is one claim, and the count would always be 1.
+        if (group.severity === 'needs_you' && group.ownerModuleClaimID) {
+          var owner = group.ownerModuleClaimID;
+          var action = textEl('button', 'status-finding-action', isEditCause ? 'See changes' : 'Open claim');
+          action.type = 'button';
+          action.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            goToClaimChanges(owner, isEditCause ? edits[owner] : null);
+          });
+          row.appendChild(action);
+          return row;
+        }
         var n = ids.length || group.count;
         row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
         return row;
@@ -2333,6 +2413,34 @@
         return body;
       }
 
+      // approvedEditCurrent builds the OTHER state of the same surface: the
+      // current wording, passage by passage, with the passage that differs
+      // from the approval carrying a draft-coloured rule and no tint (Paper
+      // DPZ-0: "the same claim with the diff put away, reading as ordinary
+      // prose, with an amber rule marking where the difference sits").
+      //
+      // It is rendered from the same hunks as the diff rather than by
+      // un-hiding the claim's own body, because the body cannot say WHERE the
+      // difference sits: the rule is the one thing this state adds, and the
+      // body has no passage boundaries to hang it on.
+      function approvedEditCurrent(change) {
+        var body = el('div', 'claim-edit-current');
+        (change.hunks || []).forEach(function (hunk) {
+          if (hunk.op === 'remove') { return; }
+          var block = el('div', hunk.op === 'add'
+            ? 'claim-edit-passage claim-edit-passage--current'
+            : 'claim-edit-passage');
+          // Same escaping boundary as approvedEditDiff: engine-rendered
+          // markdown, the same bytes the diff shows.
+          block.innerHTML = hunk.html || '';
+          if (hunk.op === 'add') {
+            block.setAttribute('aria-label', 'This passage differs from the approved wording');
+          }
+          body.appendChild(block);
+        });
+        return body;
+      }
+
       // approvedEditFields draws the non-body fields that moved, each as its
       // approved YAML above its current YAML with the words that moved marked.
       //
@@ -2490,7 +2598,7 @@
         // exactly as it wraps a claim body (system-record.js's BODY_LIKE), so
         // what has to be taken out is the wrapper when there is one.
         var existingDiff = card.querySelector(
-          ':scope > .claim-edit-diff, :scope > .claim-edit-note, :scope > .claim-body-disclosure--edit');
+          ':scope > .claim-edit-diff, :scope > .claim-edit-current, :scope > .claim-edit-note, :scope > .claim-body-disclosure--edit');
 
         var bar = approvedEditBar(card, change, showingChanges);
         if (existingBar) { existingBar.replaceWith(bar); }
@@ -2502,16 +2610,22 @@
         if (existingDiff) { existingDiff.remove(); }
         if (!hasDiff) {
           bar.parentNode.insertBefore(approvedEditNote(change), bar.nextSibling);
-        } else if (showingChanges) {
-          bar.parentNode.insertBefore(approvedEditDiff(change), bar.nextSibling);
-          // Hand the new diff to the disclosure so it is measured and clamped
-          // like any other body. Without this the diff renders at full height
-          // while the claim beside it truncates at four lines, which is the
-          // same claim behaving as two components.
+        } else {
+          bar.parentNode.insertBefore(
+            showingChanges ? approvedEditDiff(change) : approvedEditCurrent(change), bar.nextSibling);
+          // Hand the new surface to the disclosure so it is measured and
+          // clamped like any other body. Without this the diff renders at
+          // full height while the claim beside it truncates at four lines,
+          // which is the same claim behaving as two components.
           if (typeof window.dossierxEnhanceSystemRecord === 'function') {
             window.dossierxEnhanceSystemRecord();
           }
         }
+        // While there is a second wording the claim's own body is off screen
+        // in BOTH states: Changes shows the diff and Current shows the same
+        // passages with the changed one ruled. The body comes back only for
+        // a claim with nothing to compare against (no switch).
+        card.classList.toggle('claim--edit-view', hasDiff);
         // The claim's own body is hidden by a class ON THE CARD, and not by
         // setting `hidden` on the body itself.
         //
@@ -2551,9 +2665,10 @@
           if (pill && pill.getAttribute('data-dx-edited') !== '1') {
             pill.setAttribute('data-dx-edited', '1');
             pill.setAttribute('title', 'This claim held an approval, which was released when it was unlocked. What is written now differs from what was approved.');
-            var icon = pill.querySelector('.dx-icon');
+            // No padlock. Paper (CDJ-0, CIY-0) draws the chip as the word
+            // alone: the open padlock is DRAFT's glyph, and this chip exists
+            // to say the state is NOT plain draft.
             pill.textContent = '';
-            if (icon) { pill.appendChild(icon); }
             pill.appendChild(textEl('span', '', 'Edited \u00b7 was approved'));
           }
 
@@ -2701,12 +2816,18 @@
           recordEl.classList.add('status-group--approval-record');
           stripBody.appendChild(recordEl);
         }
+        // Under the Needs-you filter the group's weight phrase counts what is
+        // waiting on the reader, not what is blocked (Paper EMP-0: "3 of 4
+        // need you here").
+        var needsTotal = countSeverity(groups, 'needs_you');
         moduleOrder.forEach(function (moduleID) {
           var rows = byModule[moduleID].slice().sort(function (a, b) {
             return statusGroupClaimCount(b) - statusGroupClaimCount(a);
           });
           var weight = uniqueClaimCount(rows);
-          var note = 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
+          var note = stripSeverityFilter === 'needs_you'
+            ? weight + ' of ' + needsTotal + ' need you here'
+            : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
           stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
         });
 
@@ -2724,10 +2845,10 @@
         // in what they say.
         var rows = statusStripRows(groups, ledger, lintErrors, claimIDs);
         renderStatusStripCard(rows);
-        // The sentence is the first row's — the rows are already in the order
-        // that puts the most serious finding first, so the band leads with
-        // the same fact the card's top row does.
-        stripTitle.textContent = rows[0].text;
+        // The band gets the same rows, one full-bleed row each (Paper board
+        // 15, C2M-0 / C92-0), in the same order — most serious first — so the
+        // two forms differ in shape and never in what they say.
+        renderStatusStripBand(rows);
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
@@ -2794,6 +2915,68 @@
       // and the reason it is a rule: a tinted surface IS a severity claim,
       // so a card holding a red fact and an amber one has to stop making it
       // and let the dots carry the colour instead.
+      // statusStripRowAction names the way in each row offers. A blocked row
+      // opens the Issues screen as it always did; an edited-since-approval
+      // row says what it is for (Paper CDS-0: "Review changes").
+      function statusStripRowAction(row) {
+        return row.tone === 'draft' ? 'Review changes' : 'Show issues';
+      }
+
+      // openIssuesForBandRow: a blocked row opens the screen UNFILTERED — its
+      // sentence names one finding but the band stands for the whole facet.
+      // An edited row names exactly what it filters to (the claims waiting on
+      // the reader), which is what earns it the filter, same as a card row.
+      function openIssuesForBandRow(tone, severity) {
+        stripSeverityFilter = tone === 'draft' ? (severity || '') : '';
+        renderStatusStrip(lastStatusData);
+        openIssuesView();
+      }
+
+      // renderStatusStripBand paints the DESKTOP form: the static first row
+      // (#statusStripToggle, so the ids the rest of the viewer and its tests
+      // address stay put) takes the first finding, and one more
+      // .status-strip-head button is appended per further finding. Each row
+      // carries data-tone, which is the only thing the stylesheet reads to
+      // pick its tint, its icon and its action colour.
+      function renderStatusStripBand(rows) {
+        if (!stripToggle || !stripTitle || !stripEl) { return; }
+        var first = rows[0];
+        stripToggle.setAttribute('data-tone', first.tone);
+        stripToggle.setAttribute('data-severity', first.severity || '');
+        stripTitle.textContent = first.text;
+        var firstAction = document.getElementById('statusStripAction');
+        if (firstAction) { firstAction.textContent = statusStripRowAction(first); }
+
+        stripEl.querySelectorAll(':scope > .status-strip-head--row').forEach(function (node) { node.remove(); });
+        rows.slice(1).forEach(function (row) {
+          var btn = el('button', 'status-strip-head status-strip-head--row');
+          btn.type = 'button';
+          btn.setAttribute('data-tone', row.tone);
+          btn.setAttribute('data-severity', row.severity || '');
+          var summary = el('span', 'status-strip-summary');
+          var icon = dxIcon('triangle-alert');
+          icon.classList.add('status-strip-icon');
+          summary.appendChild(icon);
+          summary.appendChild(el('span', 'status-strip-dot'));
+          var text = el('span', 'status-strip-summary-text');
+          text.appendChild(textEl('strong', 'status-strip-title', row.text));
+          summary.appendChild(text);
+          btn.appendChild(summary);
+          var actionRow = el('span', 'status-strip-action-row');
+          actionRow.appendChild(textEl('span', 'status-strip-action', statusStripRowAction(row)));
+          btn.appendChild(actionRow);
+          btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            openIssuesForBandRow(row.tone, row.severity);
+          });
+          // After the previous row and before the phone card, so the band is
+          // one stack of rows whatever the count.
+          var before = stripCard || stripBody;
+          if (before && before.parentNode === stripEl) { stripEl.insertBefore(btn, before); }
+          else { stripEl.appendChild(btn); }
+        });
+      }
+
       function renderStatusStripCard(rows) {
         if (!stripCard || !stripFindings) { return; }
         var tones = {};
@@ -2817,9 +3000,10 @@
           dot.setAttribute('aria-hidden', 'true');
           el_.appendChild(dot);
           el_.appendChild(textEl('span', 'status-strip-finding-text', row.text));
-          var chev = el('span', 'status-strip-finding-chevron');
+          // A text glyph, not the 14px icon: EH1-0 draws the row's way-in as
+          // a 12px "›" in the card's own hue.
+          var chev = textEl('span', 'status-strip-finding-chevron', '›');
           chev.setAttribute('aria-hidden', 'true');
-          chev.appendChild(dxIcon('chevron-right'));
           el_.appendChild(chev);
           el_.addEventListener('click', function (event) {
             event.preventDefault();
@@ -2978,9 +3162,57 @@
         var m = issuesModuleWeights(issuesScope).claims;
         issuesFindingsCard.querySelectorAll('.status-group-head-note').forEach(function (note) {
           var match = /^blocks (\d+) of \d+ claims? here$/.exec(note.textContent || '');
-          if (!match) { return; }
-          note.textContent = 'blocks ' + match[1] + ' of ' + m + ' claim' + (m === 1 ? '' : 's') + ' here';
+          if (match) {
+            note.textContent = 'blocks ' + match[1] + ' of ' + m + ' claim' + (m === 1 ? '' : 's') + ' here';
+            return;
+          }
+          // The Needs-you phrase: the same denominator rule, over the rows
+          // the filter is showing (issuesGroupsForScope already applies it).
+          var waiting = /^(\d+) of \d+ need you here$/.exec(note.textContent || '');
+          if (waiting) { note.textContent = waiting[1] + ' of ' + m + ' need you here'; }
         });
+      }
+
+      // issuesCauseWeights is the rail's OTHER ranking (Paper EKL-0, "WHAT IS
+      // WAITING"): under the Needs-you filter the question is what kind of
+      // work is waiting rather than where the blockers live, so the rail
+      // counts causes, by kind, and colours each bar by the kind's hue. A
+      // claim waiting for two reasons is counted under each, and the caveat
+      // says so.
+      var ISSUES_CAUSE_LABELS = {
+        unapproved_edit: 'Unapproved edits',
+        direct_dependency_change: 'Dependency changed',
+        upstream_dependency_review: 'Upstream review',
+        own_flag: 'Flagged for review',
+        own_thread: 'Open review thread',
+        approval_content_drift: 'Approved wording drifted',
+        approval_released: 'Approval released',
+        approval_missing: 'Approval record missing',
+        approval_unknown: 'Approval state unknown'
+      };
+      function issuesCauseWeights(scope) {
+        var groups = issuesGroupsForScope(scope);
+        var byKind = {};
+        var order = [];
+        groups.forEach(function (g) {
+          var kind = g.kind || 'review';
+          if (!Object.prototype.hasOwnProperty.call(byKind, kind)) { byKind[kind] = []; order.push(kind); }
+          byKind[kind].push(g);
+        });
+        var rows = order.map(function (kind) {
+          return {
+            id: kind,
+            label: ISSUES_CAUSE_LABELS[kind] || kind.replace(/_/g, ' '),
+            tone: kind === 'unapproved_edit' ? 'draft' : 'alarm',
+            weight: uniqueClaimCount(byKind[kind])
+          };
+        });
+        rows.sort(function (a, b) { return b.weight - a.weight; });
+        return {
+          rows: rows,
+          claims: uniqueClaimCount(groups),
+          causes: rows.reduce(function (sum, r) { return sum + r.weight; }, 0)
+        };
       }
 
       // renderIssuesRail (04 §4.9): a ranking with bars, proportional to the
@@ -3002,10 +3234,15 @@
       // corpus size or scope.
       function renderIssuesRail() {
         if (!issuesRailRowsEl) { return; }
-        var data = issuesModuleWeights(issuesScope);
+        var waiting = stripSeverityFilter === 'needs_you';
+        var data = waiting ? issuesCauseWeights(issuesScope) : issuesModuleWeights(issuesScope);
+        var heading = document.getElementById('issuesRailHeading');
+        if (heading) { heading.textContent = waiting ? 'WHAT IS WAITING' : 'WHERE THE BLOCKERS LIVE'; }
         issuesRailRowsEl.textContent = '';
         var shown = data.rows.slice(0, ISSUES_RAIL_MAX_ROWS);
-        var total = data.claims;
+        // Module bars are proportional to the blocked-claim total; cause bars
+        // to the cause total (EKL-0: 2 of 4 causes draws round(50%)).
+        var total = waiting ? data.causes : data.claims;
         shown.forEach(function (row) {
           var wrap = el('div', 'issues-rail-row');
           var labelRow = el('div', 'issues-rail-row-label');
@@ -3014,6 +3251,7 @@
           wrap.appendChild(labelRow);
           var track = el('div', 'issues-rail-bar-track');
           var fill = el('div', 'issues-rail-bar-fill');
+          if (row.tone) { fill.setAttribute('data-tone', row.tone); }
           fill.style.width = (total ? Math.round((row.weight / total) * 100) : 0) + '%';
           track.appendChild(fill);
           wrap.appendChild(track);
@@ -3023,10 +3261,14 @@
           issuesRailRowsEl.appendChild(textEl('p', 'issues-rail-more',
             (data.rows.length - ISSUES_RAIL_MAX_ROWS) + ' more not shown'));
         }
-        var caveat = data.claims > 0
-          ? (countLabel(data.claims, 'claim') + ' blocked, ' + countLabel(data.paths, 'path') +
-             ' — a claim blocked through two modules counts under both.')
-          : '';
+        var caveat = '';
+        if (waiting && data.claims > 0) {
+          caveat = countLabel(data.claims, 'claim') + ', ' + countLabel(data.causes, 'cause') +
+            ' — a claim can be waiting for more than one reason and is counted under each.';
+        } else if (!waiting && data.claims > 0) {
+          caveat = countLabel(data.claims, 'claim') + ' blocked, ' + countLabel(data.paths, 'path') +
+            ' — a claim blocked through two modules counts under both.';
+        }
         if (issuesRailCaveatEl) { issuesRailCaveatEl.textContent = caveat; }
         if (issuesCaveatEl) { issuesCaveatEl.textContent = caveat; }
         // §8 item 5: an empty ranking is a ranking of nothing — the panel is
@@ -3052,7 +3294,13 @@
             (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
             activeFacetClaimIDs(), [], [], [], []
           );
-          issuesSubtitleEl.textContent = blockerHeadline(groups) || 'Nothing in this facet is blocked.';
+          // Under the Needs-you filter the sentence is about the reader's
+          // work, not the facet's blockers (Paper ENQ-0).
+          var waiting = stripSeverityFilter === 'needs_you' ? countSeverity(groups, 'needs_you') : 0;
+          issuesSubtitleEl.textContent = waiting
+            ? countLabel(waiting, 'claim') + (waiting === 1 ? ' is' : ' are') +
+              ' waiting on you in this facet. Each one names what moved and what it was measured against.'
+            : (blockerHeadline(groups) || 'Nothing in this facet is blocked.');
         }
       }
 
@@ -3100,6 +3348,10 @@
         }
         issuesApplyScopeDenominator();
         renderIssuesRail();
+        // The subtitle follows the filter (a chip click repaints the strip,
+        // which lands here through the observer), so it is re-read on every
+        // sync and not only when the screen opens.
+        issuesSyncHeader();
         if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
       }
 
@@ -3224,9 +3476,7 @@
       // exactly what it filters to, which is what earns it the filter.
       if (stripToggle) {
         stripToggle.addEventListener('click', function () {
-          stripSeverityFilter = '';
-          renderStatusStrip(lastStatusData);
-          openIssuesView();
+          openIssuesForBandRow(stripToggle.getAttribute('data-tone'), stripToggle.getAttribute('data-severity'));
         });
       }
       // Any ordinary navigation — a sidebar tab, a subtab, a citation link —
