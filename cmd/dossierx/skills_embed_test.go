@@ -285,7 +285,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The eight nouns, twenty-four leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The eight nouns, twenty-five leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}
@@ -519,8 +519,24 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // and that is the number to look at next time: a companion growing 30% while
 // the others sit still is the shape of prose creep, and it is worth reading
 // that file before this budget is argued about again.
+//
+// THE RAISE TO 272 IS A SURFACE CHANGE, which is the one reason the paragraphs
+// above accept. `claim recover-approved-content` is a new leaf, and
+// TestRouterSkillNounBlockListsEveryCommandInTheSurface requires the router to
+// carry every leaf the binary has — so the router could not stay at 263 and
+// stay correct. The verb needed more than its name: it WRITES the lock store,
+// so an agent that met it as a bare entry in the noun block would not know that
+// it creates no approval, that a revision which does not hash equal is refused,
+// or that the human should see the dry run before it runs. That is seven lines,
+// and the router went 263 -> 270 for them while no companion moved at all. One
+// guide growing for one new leaf, with the other five still, is the surface
+// signature this budget exists to distinguish from prose creep. The ceiling is
+// 272 rather than 270 so the router is not left with zero headroom, which turns
+// the next one-line correction into a budget argument. CENSUS: router 271 of
+// 272, claims 255, comments 206, code-links 136, build-order 142. The extra
+// line is the `git_unavailable` recovery row for recover-approved-content.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
-	const maxLines = 265
+	const maxLines = 272
 
 	for _, name := range wantSkillNames {
 		raw, err := fs.ReadFile(dxskills.FS, name+"/SKILL.md")

@@ -198,19 +198,6 @@
     return { from: from, to: to, type: type };
   }
 
-  // normalizeEdges maps a whole edge list, dropping unusable entries.
-  function normalizeEdges(edges) {
-    var list = asArray(edges);
-    var out = [];
-    for (var i = 0; i < list.length; i++) {
-      var e = normalizeEdge(list[i]);
-      if (e) {
-        out.push(e);
-      }
-    }
-    return out;
-  }
-
   // idSet builds a lookup Set from an id array. Internal only.
   function idSet(ids) {
     var s = new Set();

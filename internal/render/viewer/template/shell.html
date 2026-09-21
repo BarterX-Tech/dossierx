@@ -286,7 +286,7 @@
     <div class="issues-body">
       <div id="issuesFindingsCard" class="issues-findings-card"></div>
       <aside id="issuesRailPanel" class="issues-rail-panel">
-        <p class="issues-rail-heading">WHERE THE BLOCKERS LIVE</p>
+        <p id="issuesRailHeading" class="issues-rail-heading">WHERE THE BLOCKERS LIVE</p>
         <p id="issuesRailCaveat" class="issues-rail-caveat"></p>
         <div id="issuesRailRows" class="issues-rail-rows"></div>
       </aside>
@@ -342,11 +342,50 @@
        exactly as it reveals the composer; a static file:// viewer has no
        /api/status to poll, and a strip baked into the rendered HTML would be
        permanently stale — which for an integrity verdict is worse than absent,
-       because a stale green strip is an assurance nobody checked. -->
+       because a stale green strip is an assurance nobody checked.
+
+       THE HEAD HAS TWO FORMS, ONE PER WIDTH, and only one is ever on screen.
+
+       #statusStripToggle is the desktop form: a full-bleed band with ONE ROW
+       PER FINDING (Paper board 15, nodes C2M-0 / C92-0). The first row is this
+       static button, and viewer-runtime.js appends one more .status-strip-head
+       button after it for every further finding, hairline-divided. Each row
+       carries its own tint, icon and action: a blocked row is red with the
+       triangle and "Show issues"; an edited-since-approval row is draft amber
+       with a dot and "Review changes". At 1440 a row has the space to carry a
+       sentence and an action without either crowding the other, and a second
+       row simply follows the first.
+
+       #statusStripCard is the PHONE form (Paper node EH1-0, "Proposed — one
+       card, a row per finding"): a header carrying the count and one row per
+       finding, each row its own way in. It exists because the desktop shape
+       does not survive the narrower column. One sentence holds one statement,
+       and a facet routinely has two kinds of thing waiting — claims blocked
+       by unapproved dependencies AND claims rewritten since they were
+       approved. On a wide row a second fact can sit beside the first; at
+       375px it had to go into a second tinted band stacked underneath, and
+       two tinted bands touching read as one broken component.
+
+       The card is TINTED while every row shares a hue and goes NEUTRAL the
+       moment they disagree, with the dots carrying the colour instead. A
+       tinted surface is a severity claim, and a surface cannot make two.
+
+       BOTH ARE IN THE DOM AND CSS PICKS ONE, rather than the runtime choosing
+       by measuring the window. A media query needs no resize listener, is
+       right during the first paint instead of one frame after it, and takes
+       the hidden form out of the accessibility tree for free — a width read
+       in JS does none of those and has to be kept in step with the
+       stylesheet's own breakpoint by hand.
+
+       Both are filled by viewer-runtime.js, like every other dynamic part of
+       this section, and #statusStripBody below them stays exactly what it was
+       — the grouped findings list the Issues view MOVES into itself
+       (issuesSyncFromStrip), never a second copy of it. -->
   <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
-    <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
+    <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody" data-tone="alarm">
       <span id="statusStripSummary" class="status-strip-summary">
         <svg class="dx-icon status-strip-icon" aria-hidden="true"><use href="#dx-icon-triangle-alert"/></svg>
+        <span class="status-strip-dot" aria-hidden="true"></span>
         <span class="status-strip-summary-text">
           <strong id="statusStripTitle" class="status-strip-title"></strong>
         </span>
@@ -356,6 +395,13 @@
         <svg class="dx-icon status-strip-action-chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
       </span>
     </button>
+    <div id="statusStripCard" class="status-strip-card">
+      <div class="status-strip-card-head">
+        <span id="statusStripCardEyebrow" class="status-strip-card-eyebrow">Needs you here</span>
+        <span id="statusStripCardCount" class="status-strip-card-count"></span>
+      </div>
+      <div id="statusStripFindings" class="status-strip-card-findings"></div>
+    </div>
     <div id="statusStripBody" class="status-strip-body" hidden></div>
   </section>
 

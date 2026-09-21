@@ -17,14 +17,14 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 24 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads, and its top-level **Build order** tab (a module strip inside it, not a per-module sub-tab) |
+| Surface | the CLI — all 25 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads, and its top-level **Build order** tab (a module strip inside it, not a per-module sub-tab) |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The eight nouns, twenty-four leaves
+## The eight nouns, twenty-five leaves
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
-dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy
+dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy recover-approved-content
 dossierx comment inbox list add reply
 dossierx build-order propose status lock show
 dossierx track list show status            # read-only: the cross-cutting feature axis
@@ -35,6 +35,13 @@ dossierx version
 
 A claim joins a track via `tracks:` in its own YAML, so changing membership on a **locked** claim is
 `unlock → fix → lock`. `track` never edits anything and `track status` never gates a lock.
+
+`claim recover-approved-content` is a ONE-TIME migration for a project that locked before the ledger
+kept the approved WORDING — those records signed a hash, not the text, so a claim edited after one shows
+"the approved wording was not kept on the record" and no comparison. It finds each approval's own revision
+in the project's git history by hashing it against the hash the record already signed. It creates no
+approval: a non-matching revision is refused and an unfindable claim is named and left alone. `--dry-run`
+previews, the write takes `--reason`; show the human the dry run first — it edits their approval file. If git cannot answer, it refuses with `git_unavailable` rather than an empty recovery.
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.
@@ -85,6 +92,7 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `missing_flag` | 1 | a required `--reason`/`--as`/`--module` was omitted. `--reason` carries the human's approving words; do not invent them. |
 | `layout_legacy` | 1 | this project still keeps DossierX's generated files at the project root, which this release does not read. Every verb refuses until the printed `git mv`/`mv` block is run — paste it verbatim, then `dossierx check --validate`. Nothing needs re-locking: signatures hash bytes, not paths. |
 | `store_gitignored` | 1 | `claim lock`, `claim flag`, `claim reaudit --confirm` or `build-order lock` refused, one of two arms, and the recovery differs: **ignored and untracked** — same recovery as the `store-gitignored` finding above, replace the `.gitignore` pattern (or repoint `build_dir`); do not retry the same command unchanged, it fails identically. **git could not be consulted** (missing from PATH, a bare or corrupt repository, a `.git` file whose gitdir is missing) — no pattern or `build_dir` edit touches this; install git, or fix the repository, and run again. |
+| `git_unavailable` | 1 | `claim recover-approved-content` refused because it needs to READ git history and cannot: git is not installed, or the project is not inside a work tree. That is not an empty recovery — nothing was looked for. Install git or run from a work tree; do not treat the refusal as "no approval could be recovered". Distinct from `store_gitignored`, which is a write-path answer from git. |
 | `unknown_module` / `unknown_track` / `unsupported_format` / `usage` | 1 | fix your own invocation. A typo'd track id is the one worth naming: without this code it would answer exactly like a real track nobody has joined yet. |
 | `write_failed` | 1 | a write did not land: a permission, a missing directory, a full disk — or, from `skills export`, "no directory given and no `project.config.yaml` found", which is your invocation and not the filesystem. Give the export an explicit directory (`dossierx skills export .claude/skills`). Show the human anything else; retrying an unwritable path just fails again. |
 | `conformance_capacity_exceeded` | 1 | a status, whole catalog (including readiness), or viewer projection cannot fit DossierX's bounded output budget. No generated artifact was replaced. Read `stopped_at`: reduce total declared checks or check-ID/value bytes at `conformance`, projected catalog/readiness/conformance volume at `catalog`, or viewer content/facet/track duplication at `render`, then run the same check again. The matching detail remains in `data.conformance_error`, `data.catalog_error`, or `data.render_error`; do not treat a catalog/render refusal as an observation failure. |
@@ -231,7 +239,7 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
    reverts, and which `--no-verify` bypasses. Neither the hook installer nor
    `scripts/ci/dossierx-check.yml` exists in *their* repo — both ship with DossierX, so fetch each
    from the same release path. If yes, fetch
-   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.18/scripts/install-git-hook.sh`,
+   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.19/scripts/install-git-hook.sh`,
    show them what it does, run `sh install-git-hook.sh --yes`, then add the CI workflow as well.
    If no, skip the hook, add the CI workflow alone, and say so.
 5. **Only if the project predates the lock ledger AND still holds locked claims or a locked build

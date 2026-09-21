@@ -7,6 +7,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.19] - 2026-09-22
+
+### Added
+
+- A claim that was locked, unlocked, and then rewritten now says so. The lock
+  ledger retains the claim it approved alongside the hash of it, so the viewer
+  can show what moved instead of replacing the old text in place with nothing
+  to compare it against. The claim's chip reads `EDITED · WAS APPROVED` rather
+  than `DRAFT`, which was true of this state and of a claim nobody ever
+  approved, and a bar above the body switches between `Changes` and `Current`.
+- The diff is passage by passage, rendered as prose, with the words that moved
+  marked inside each passage. The unit is a passage and not a line because a
+  claim body is markdown hard-wrapped by the author's editor: diffed by line,
+  changing one word showed as one line each way or three, depending on nothing
+  but whether the paragraph re-wrapped. It renders as prose, not source,
+  because a reader comparing two passages of `**like this**` is reading a
+  second document in a notation nobody asked them to read. Marking a word
+  never changes the prose around it — the rendering is compared with and
+  without the marks, and a passage that would change renders unmarked.
+- `dossierx claim recover-approved-content` recovers the approved WORDING for
+  approvals recorded before the ledger kept it. Those records signed a hash and
+  not the text, so on any corpus that has been locking claims for a while every
+  claim in the edited-since-approval state reached the viewer with a panel that
+  could only say the wording was not retained. The verb searches the project's
+  own git history for each approval's revision and identifies it by hashing the
+  candidate against the hash the record ALREADY signed, so a match is a proof
+  and not an inference from dates or commit messages. It creates no approval and
+  moves no hash, timestamp, actor or reason: content that does not hash equal is
+  refused (`lock.ErrContentMismatch`), a record that already carries its wording
+  is never replaced, and a claim whose revision is not in history is reported by
+  name and left alone. `--dry-run` previews; the write takes `--reason` and the
+  same store-gitignored refusal as every other verb that writes the ledger. It
+  is a separate verb rather than something `check` does in passing, so the file
+  holding a project's approvals is written only by a command a human asked for,
+  and so rendering a viewer never depends on a git work tree. New error code
+  `git_unavailable` distinguishes "git could not answer" from "nothing was
+  recoverable"; the surface is now twenty-five leaves under eight nouns.
+- The edit panel now shows what moved in the FIELDS a claim persists, not only
+  in its prose. A claim's hash covers every persisted field, so a claim can be
+  honestly edited-since-approval with its wording untouched — its checks
+  retargeted, an edge added, an audit note written. Until now the panel said
+  "Also changed: embodiment, audit_notes." and showed nothing, naming a change
+  the reader could not see; on the corpus this was built against that was six
+  of the fourteen affected claims. Each changed field is now rendered back to
+  its YAML and diffed with the same passage-and-word marking the body uses, in
+  a "what moved" list under the bar. Field YAML is escaped and shown as text
+  rather than run through the markdown renderer, because the row is quoting the
+  claim file and a row that renders what it quotes is not quoting it. A claim
+  whose prose did not move still offers no `Changes`/`Current` switch and keeps
+  its body on screen — there is one wording, and the rows sit beside it.
+- `readiness` emits a new independent review cause, `unapproved_edit`, for a
+  draft claim holding a released approval whose content has since changed. This
+  closes a gap: such a claim previously emitted no cause of its own, so one
+  that nothing depended on appeared in no Issues list at all. It is distinct
+  from `approval_content_drift` (a still-locked claim whose bytes left a
+  standing approval, which is an integrity finding) and stays silent on a draft
+  holding an unreleased record (which is the `lock-ledger-orphan` finding).
+
+### Changed
+
+- The facet banner carries one row per kind of thing waiting, in both forms.
+  A facet routinely has two: claims blocked by unapproved dependencies AND
+  claims rewritten since they were approved, and a banner that held one
+  sentence showed only the first. On the desktop the band is now a stack of
+  full-bleed rows, hairline-divided, each with its own tint, icon and action —
+  a blocked row is red with the triangle and "Show issues", an edited row is
+  amber with a dot and "Review changes". On phones the same rows are a card
+  with a header counting them, tinted while every row shares a hue and
+  neutral the moment two rows disagree, with the dots carrying the colour. A
+  blocked row opens the Issues screen unfiltered, because it stands for the
+  whole facet; an edited row opens it filtered to the claims waiting on the
+  reader. Both forms are in the DOM and CSS picks one.
+- The edited-since-approval surface follows the design board it was drawn
+  from. The `EDITED · WAS APPROVED` chip is the word alone, without the open
+  padlock that is DRAFT's glyph. The bar above the body takes the draft tint
+  and a hairlined two-segment switch. The passages that moved are tinted rows
+  with the rule inside them and the prose in the row's hue — the approved
+  passage struck through in the blocked hue, the current one in the locked
+  hue — and the individual words that moved are no longer painted, because
+  the struck passage beside the coloured one is the comparison. `Current` no
+  longer un-hides the claim's own body: it renders the same passages with
+  the one that differs carrying an amber rule, so a reader can see where the
+  seam is without opening the diff.
+- On the Issues screen a claim rewritten since approval says so wherever it
+  appears. Under the Needs-you filter its row reads "<Title> was approved and
+  is being rewritten", names its cause kind in mono (`unapproved_edit`),
+  says what moved and when the approval was given, and carries "See changes"
+  in place of a count — which lands on the claim with the changes showing.
+  Every other Needs-you row names its cause kind the same way and carries
+  "Open claim". A blocker row whose owner is such a claim gains the chip,
+  the summary and the same link under the row it already had. With the
+  filter on, the subtitle counts the claims waiting on the reader, each
+  group's note reads "n of N need you here", and the rail becomes "WHAT IS
+  WAITING": one row per cause kind, its bar in the kind's hue, with a caveat
+  that a claim waiting for two reasons is counted under each.
+- The implementation-checks panel no longer opens itself when a check is
+  failing. R09.3 suppresses a claim-level auto-open whenever a facet-level
+  blocked banner is showing, and a facet with failing checks always has one, so
+  the auto-open fired precisely in the case the rule excludes. The footer chip
+  still carries the count and the panel still carries the verdict; what changed
+  is that the reader no longer has to close it to read the claim.
+- `lock-store.json` ledger records carry a `content` field holding the approved
+  claim. Records written by earlier versions have no such field and are read as
+  "the approved text was not retained" — they keep working, and the viewer says
+  the text is unavailable rather than showing an empty or all-new diff.
+
+### Maintenance
+
+- A dead-code sweep of the viewer and the repository, proved unreachable
+  before removal: `x/tools/cmd/deadcode -test` and staticcheck U1000 for Go
+  (both clean, nothing to remove), a full-repository reference scan for CSS
+  classes, custom properties and JS declarations, and a path scan for
+  fixtures and comments. Removed: `.nav-group-label` (both rules; the sidebar
+  has grouped modules and tracks in `.system-nav-group` since the system
+  record redesign) and the print block's `.claim-links-summary` rule left
+  behind by the 0.7.17 sweep; the `normalizeEdges` function in graph-core,
+  the write-only `mountedSurfaceID` and unread `notices` variables, two
+  always-false guards (`data-footer-enhanced`, `__dxParityFreezeToc`) and
+  four class toggles whose rules no longer exist (`comments-toast--show`,
+  `claim--showing-changes`, `status-strip-card--neutral`, the
+  `.claim-collapse-chevron` selector); and `testdata/ci-run-evidence` plus
+  `testdata/gate-stage3`, fixtures of the release gate removed in 0.7.0 whose
+  readers went with it. The mobile comments sheet's top hairline now reads the
+  `--sheet-hairline` token declared for it instead of a `light-dark()`
+  literal beside an unread token; same paint on every path. Comments in
+  `ci.yml` and two tests that still described `tests/ci_run_evidence_test.go`
+  as the reader of the CI run now say that reader is gone.
+
 ## [0.7.18] - 2026-09-20
 
 ### Added

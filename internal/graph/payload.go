@@ -58,7 +58,10 @@
 //     encode_test.go's TestEncodeEscapesScriptClose for the executable half.
 package graph
 
-import "github.com/BarterX-Tech/dossierx/internal/readiness"
+import (
+	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
+)
 
 // SchemaVersion is bumped when the payload shape changes in a way a browser
 // built against an older shape cannot read. It rides on the wire as the
@@ -136,6 +139,23 @@ type Node struct {
 	// only meaningful on a locked claim.
 	ReviewPending bool                  `json:"review_pending"`
 	Readiness     *readiness.Assessment `json:"readiness,omitempty"`
+
+	// ApprovedEdit is what has moved in this claim since the approval its
+	// unlock released (approvaledit.Change). Absent — the common case — for
+	// every claim that is locked, or draft and never approved, or draft and
+	// unchanged since its approval.
+	//
+	// It rides on the graph payload rather than on /api/status because the
+	// viewer must draw the same panel from a checked-in file:// export, where
+	// there is no status endpoint at all. The payload is the one place both
+	// modes already read claim-level projections from (see the viewer
+	// runtime's offlineReadiness), so this needs no second delivery path and
+	// cannot disagree between the two.
+	//
+	// Size: one bounded line diff per UNLOCKED-AND-EDITED claim, which is a
+	// small subset of V and zero for a project with nothing in flight. It adds
+	// no per-edge or path-dependent term to the payload.
+	ApprovedEdit *approvaledit.Change `json:"approved_edit,omitempty"`
 
 	// OpenComments is len(model.Claim.OpenThreadIDs()).
 	OpenComments int `json:"open_comments"`

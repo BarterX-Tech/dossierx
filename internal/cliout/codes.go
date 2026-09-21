@@ -306,6 +306,14 @@ const (
 	// CodeWriteFailed is a filesystem write that failed outright (permissions,
 	// a missing directory, a full disk).
 	CodeWriteFailed Code = "write_failed"
+	// CodeGitUnavailable is a command refusing because it needs to READ git
+	// history and cannot: git is not installed, or the project is not inside
+	// a work tree. Only `claim recover-approved-content` carries it, and it is
+	// deliberately distinct from CodeStoreGitignored: that one is "git can
+	// answer and the answer refuses the write", this one is "git cannot answer
+	// at all". Reporting the second as an empty result would say no approval
+	// could be recovered when in fact none was looked for.
+	CodeGitUnavailable Code = "git_unavailable"
 	// CodeConformanceCapacityExceeded is a deterministic pre-write refusal:
 	// the opted-in status/catalog/viewer projection cannot fit the documented
 	// resource budget. No generated artifact was replaced.

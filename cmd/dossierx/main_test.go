@@ -338,19 +338,34 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // narrow migration surface because the policy version and historical receipts
 // must remain visible and recoverable rather than being silently rewritten by
 // lock or unlock.
+//
+// THE SEVENTH MOVE IS `claim recover-approved-content`, and it is the same
+// kind of addition as the sixth: a narrow, one-time migration surface that
+// creates no approval. Approvals recorded before the ledger kept the approved
+// WORDING signed a hash and nothing else, so every claim edited after such an
+// approval reaches the viewer with a panel that can only say the wording was
+// not kept — on a corpus that has been locking for months, that is every claim
+// the panel exists for. The verb finds each approval's own revision in the
+// project's git history, identified by hashing it against the hash the record
+// already signed, and records it. It cannot widen an approval (content that
+// does not hash equal is refused), cannot invent one (a claim with no matching
+// revision is reported by name and left alone), and has nothing to do on a
+// corpus it has already swept. It is a LEAF and not a `check` side effect
+// precisely so the lock store is written only by a verb a human asked for.
 func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
-		"claim show":                true,
-		"claim list":                true,
-		"claim new":                 true,
-		"claim lock":                true,
-		"claim unlock":              true,
-		"claim flag":                true,
-		"claim reaudit":             true,
-		"claim link":                true,
-		"claim migrate-lock-policy": true,
+		"claim show":                     true,
+		"claim list":                     true,
+		"claim new":                      true,
+		"claim lock":                     true,
+		"claim unlock":                   true,
+		"claim flag":                     true,
+		"claim reaudit":                  true,
+		"claim link":                     true,
+		"claim migrate-lock-policy":      true,
+		"claim recover-approved-content": true,
 
 		"comment inbox": true,
 		"comment list":  true,
@@ -414,8 +429,8 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 24 {
-		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 25 {
+		t.Errorf("the surface is 25 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 

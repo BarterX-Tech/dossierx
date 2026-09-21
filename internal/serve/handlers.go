@@ -333,12 +333,13 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, fmt.Errorf("build catalog: %w", err))
 		return
 	}
-	assessment, err := s.readinessFor(claims)
+	assessment, approvedEdits, err := s.readinessFor(claims)
 	if err != nil {
 		s.writeInternal(w, fmt.Errorf("readiness: %w", err))
 		return
 	}
 	cat.SetReadiness(assessment)
+	cat.SetApprovedEdits(approvedEdits)
 
 	p := graph.Build(cat, s.cfg)
 	// graph.Build reads no clock — it leaves GeneratedAt empty and every

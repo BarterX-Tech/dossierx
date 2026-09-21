@@ -50,13 +50,32 @@
         carries this as a checklist item.
       -->
       <div class="ledger">
-        <article class="release release--current" data-version="v0.7.18" data-current="true">
+        <article class="release release--current" data-version="v0.7.19" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.19</span>
+            <time datetime="2026-09-22">2026-09-22</time>
+          </p>
+          <div>
+            <h2 class="release__title">What changed since a claim was approved<span class="release__badge">Latest</span></h2>
+            <p class="release__note">
+              A claim unlocked and rewritten shows what moved: an
+              <code>EDITED · WAS APPROVED</code> chip, a Changes / Current
+              switch, passage-by-passage prose diff, and the fields that
+              moved. <code>dossierx claim recover-approved-content</code>
+              recovers the approved wording for older approvals from git
+              history. The facet banner carries one row per finding on every
+              width, and the Issues screen names each Needs-you cause.
+              Rerun <code>dossierx check</code> after upgrade.
+            </p>
+          </div>
+        </article>
+        <article class="release" data-version="v0.7.18">
           <p class="release__meta">
             <span class="release__version">v0.7.18</span>
             <time datetime="2026-09-20">2026-09-20</time>
           </p>
           <div>
-            <h2 class="release__title">Step code-link tags; theme docs scrub<span class="release__badge">Latest</span></h2>
+            <h2 class="release__title">Step code-link tags; theme docs scrub</h2>
             <p class="release__note">
               Code Links recognizes <code>dossierx-step</code> tags next to
               <code>dossierx-claim</code>. Escape restores focus to the mobile

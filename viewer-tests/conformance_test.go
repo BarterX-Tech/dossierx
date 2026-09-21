@@ -1,6 +1,7 @@
 package viewertests
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,13 +103,33 @@ func TestConformanceStatusFreshnessGuardRejectsInvertedCompletion(t *testing.T) 
 	}
 }
 
+// openConformancePanel opens a claim's implementation-checks door and waits
+// for its panel to be on screen.
+//
+// The panel no longer auto-opens when a check is failing. R09.3 suppresses a
+// claim-level auto-open whenever a facet-level blocked banner is showing (02
+// §9.1), and a facet with failing checks always has one — so the old `open`
+// attribute fired precisely in the case the rule excludes. These tests are
+// about the panel's CONTENT, not its default state; TestReadyConformanceRendersAsClaimFooterDoor
+// owns the default.
+func openConformancePanel(t *testing.T, ctx context.Context) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.WaitVisible(".claim-conformance-door", chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){
+		var d = document.querySelector('.claim-conformance-door');
+		if (d && !d.open) { d.querySelector('summary').click(); }
+	})()`, nil))
+	pollTrue(t, ctx, `(function(){ var d = document.querySelector('.claim-conformance-door'); return !!d && d.open; })()`)
+}
+
 func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
 	staticProject := newProjectRaw(t, conformanceConfigYAML)
 	staticProject.writeClaim("overview.yaml", conformanceClaimYAML)
 	writeConformanceObservation(t, staticProject, `["ready","paused"]`)
 	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.Navigate(staticProject.renderStatic()))
+	openConformancePanel(t, ctx)
 	runCDP(t, ctx,
-		chromedp.Navigate(staticProject.renderStatic()),
 		chromedp.WaitVisible(`.claim-conformance-check[data-check-id="public-values"][data-conformance-state="mismatch"]`, chromedp.ByQuery),
 	)
 	if !evalBool(t, ctx, `document.querySelector('.claim-conformance').textContent.includes('blocked') && document.querySelector('.claim-conformance').textContent.includes('paused') && document.querySelector('.claim-conformance').textContent.includes('schema-version') && document.querySelector('.claim-conformance-check[data-check-id="schema-version"]').getAttribute('data-shape') === 'scalar'`) {
@@ -141,8 +162,9 @@ func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
 	liveProject := newProjectRaw(t, conformanceConfigYAML)
 	liveProject.writeClaim("overview.yaml", conformanceClaimYAML)
 	liveCtx := browserContext(t)
+	runCDP(t, liveCtx, chromedp.Navigate(liveProject.ensureServe()+"/"))
+	openConformancePanel(t, liveCtx)
 	runCDP(t, liveCtx,
-		chromedp.Navigate(liveProject.ensureServe()+"/"),
 		chromedp.WaitVisible(`.claim-conformance[data-implementation-ready="false"] .claim-conformance-check[data-conformance-state="uncheckable"]`, chromedp.ByQuery),
 	)
 	// Missing -> created.

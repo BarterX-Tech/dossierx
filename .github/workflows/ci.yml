@@ -99,10 +99,11 @@ jobs:
       # exported into $GITHUB_ENV by an earlier step prints `ok <pkg>
       # [no tests to run]` for every package and concludes success at the step,
       # the job and the check run alike. `-json` makes the binary state what it
-      # actually executed, per test, in a form nothing above it can paraphrase —
-      # tests/ci_run_evidence_test.go fetches this log for the merge commit,
-      # per matrix cell, and refuses a release whose packages passed having run
-      # nothing.
+      # actually executed, per test, in a form nothing above it can paraphrase.
+      # The machine reader of that account (tests/ci_run_evidence_test.go) went
+      # with the release-gate pipeline; the account is still emitted so that
+      # a person opening this log can tell a suite that ran from one that ran
+      # nothing, which a conclusion cannot.
       #
       # IT IS STILL ONE COMMAND, and that is not an accident of spelling. The
       # body may hold exactly one command, which is what closes `|| true`,
@@ -212,14 +213,14 @@ jobs:
   # tests/ci_workflow_test.go's header sets out that boundary and does not cross
   # it.
   #
-  # IT IS ANSWERED ELSEWHERE NOW, from the run rather than from the file.
-  # tests/ci_run_evidence_test.go fetches this job's log for the merge commit,
-  # parses the `-json` account the suite step emits and requires every
-  # instantiation the matrix declares to carry one in which no test failed and
-  # no package passed having executed nothing. It reads no conclusion at all, so
-  # a step forgiven by `continue-on-error` reaches it exactly as a step that was
-  # not. What it cannot see remains open and is stated there: the hooks job below
-  # runs a shell script, which emits no countable account of anything.
+  # IT IS NOT ANSWERED BY A MACHINE ANY MORE. tests/ci_run_evidence_test.go
+  # used to fetch this job's log for the merge commit, parse the `-json`
+  # account the suite step emits and require every instantiation the matrix
+  # declares to carry one in which no test failed and no package passed having
+  # executed nothing; it went with the release-gate pipeline. docs/RELEASING.md
+  # has the maintainer run the suites locally before tagging instead. What
+  # remains open is the same: the hooks job below runs a shell script, which
+  # emits no countable account of anything.
   #
   # THE SUITE STEP IS HELD TO THREE CLOSED SETS by that same file, because a run
   # that selects nothing is a green job over nothing:
@@ -347,9 +348,9 @@ jobs:
         # ENTIRE output on v0.5.0's run was one line —
         # `ok  github.com/BarterX-Tech/dossierx/viewer-tests  89.327s` — and a
         # suite emptied at run time would have printed one line too, with `[no
-        # tests to run]` on the end and a green conclusion above it. The account
-        # tests/ci_run_evidence_test.go reads is what tells those apart, and it
-        # exists only if the binary is asked to emit it.
+        # tests to run]` on the end and a green conclusion above it. The
+        # per-test account is what tells those apart, and it exists only if the
+        # binary is asked to emit it.
         run: go test -count=1 -json ./...
 
   lint:

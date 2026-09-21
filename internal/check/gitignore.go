@@ -109,7 +109,7 @@ func Gitignored(cfg *config.Config) (findings []lock.Finding, warnings []string,
 		// answer for, and an approval recorded over it reaches nobody.
 		return nil, nil, GitignoreGitNotAvailable, gitUnavailable(cfg, runnerErr.Error())
 	}
-	g.verb = gitignoreVerb
+	g.SetVerb(gitignoreVerb)
 
 	targets := gitignoreTargets(cfg)
 	specs := make([]string, 0, len(targets))
@@ -210,7 +210,7 @@ func Gitignored(cfg *config.Config) (findings []lock.Finding, warnings []string,
 	// as configured; both sides are resolved before any arithmetic so a temp
 	// directory reached through a symlink does not print as ../../../private.
 	projectDir := resolved(cfg.Dir())
-	repoDir := resolved(g.dir)
+	repoDir := resolved(g.Dir())
 	for _, spec := range orderedIgnored {
 		t := byspec[spec]
 		m := matches[spec]
@@ -222,7 +222,7 @@ func Gitignored(cfg *config.Config) (findings []lock.Finding, warnings []string,
 		// would offer the eight-line block for a machine-wide file.
 		sourceAbs := m.source
 		if sourceAbs != "" && !filepath.IsAbs(sourceAbs) {
-			sourceAbs = filepath.Join(g.dir, filepath.FromSlash(sourceAbs))
+			sourceAbs = filepath.Join(g.Dir(), filepath.FromSlash(sourceAbs))
 		}
 		sourceAbs = resolved(sourceAbs)
 		ip := layout.IgnoredPath{

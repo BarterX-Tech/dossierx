@@ -54,9 +54,24 @@ func ConformanceHTML(result conformance.Result, snapshot string) template.HTML {
 		b.WriteString(`" data-conformance-state="declared_none`)
 	}
 	b.WriteString(`"`)
-	if !result.ImplementationReady {
-		b.WriteString(` open`)
-	}
+	// NO `open` ATTRIBUTE, EVER — not even when the checks are failing.
+	//
+	// This used to emit one whenever ImplementationReady was false, so a claim
+	// with a mismatched check drew its whole check panel expanded on first
+	// paint. Two things are wrong with that. R09.3 suppresses a claim-level
+	// auto-open whenever a facet-level blocked banner is showing (02 §9.1),
+	// and in any facet that has failing checks the banner is showing — so the
+	// attribute fired precisely in the case the rule excludes. And Z7-0 had
+	// already settled the same question for this door's siblings: the
+	// relationships door never opens by default, and components.go stopped
+	// emitting its own `open` for that reason. A door that opens itself while
+	// the reader is being told the facet is blocked is one more thing shouting
+	// over the thing that matters.
+	//
+	// The verdict is not hidden by this. The footer chip carries the count,
+	// and the panel's own border already tracks
+	// data-implementation-ready — what moved is only whether the reader has to
+	// close it before they can read the claim.
 	// RETRY FIX (verifier item 8): the summary's own label no longer echoes
 	// the panel-body eyebrow's literal "Implementation checks" text two
 	// lines below it (06a §4.3, §6 — the board draws that string exactly

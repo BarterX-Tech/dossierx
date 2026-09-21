@@ -38,6 +38,7 @@
 package lock
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -120,6 +121,62 @@ type LedgerRecord struct {
 	ReleasedAt     string `json:"released_at,omitempty"`
 	ReleasedBy     string `json:"released_by,omitempty"`
 	ReleasedReason string `json:"released_reason,omitempty"`
+
+	// Content is the claim exactly as it was approved — the TEXT behind Hash,
+	// not a second copy of the signature.
+	//
+	// Hash alone can answer "does what is written still match what was
+	// approved". It cannot answer the question a reviewer actually asks next:
+	// "then what changed?". Before this field, an unlock-edit-relock cycle
+	// overwrote the approved wording in place and the only surviving evidence
+	// of the prior text was git — which the viewer cannot read, and which does
+	// not know which commit carried the approval. Keeping the approved claim
+	// beside its hash is what lets the viewer show the removed wording next to
+	// the new wording instead of asserting that something moved.
+	//
+	// It is a pointer, and omitempty, for one reason: a record written by a
+	// build that predates this field decodes as nil, and nil must stay
+	// distinguishable from "approved an empty claim". Every consumer reads it
+	// through Store.ApprovedContent, which reports that distinction rather than
+	// handing back a zero Claim that would diff as "the whole body was added".
+	//
+	// Cost is one claim copy per LOCKED claim: O(V) claim-bytes in
+	// lock-store.json. That is strictly below what the store already carries,
+	// since DependencyReceipt has stored a full model.Claim per dependent ->
+	// dependency EDGE — O(E) claim-bytes — since receipts were introduced. It
+	// adds no path-dependent term.
+	//
+	// model.Claim carries yaml tags and no json tags, so this serialises under
+	// Go field names. That is not an oversight and not a thing to fix here:
+	// DependencyReceipt.Content is a model.Claim in this same file already, so
+	// the store has written claims in exactly this shape since receipts
+	// existed. Adding json tags to model.Claim to prettify this one field
+	// would silently re-key every receipt already on disk in every project,
+	// which decodes as a zero claim and loses the reviewed dependency
+	// boundaries — a far worse trade than a verbose block in a file readers
+	// mostly ask questions of through the CLI.
+	Content *model.Claim `json:"content,omitempty"`
+}
+
+// ApprovedContent returns the claim content a standing or released ledger
+// record was written against, and whether that content is on the record at
+// all.
+//
+// The second return is not a convenience. A record minted before the Content
+// field existed carries a hash and no text, and a consumer that treated the
+// missing text as an empty claim would render "everything in this claim is
+// new" — a confident, wrong answer to a question the record cannot answer.
+// Callers are expected to branch on it and say the approved text is not
+// retained, rather than diff against nothing.
+func (s *Store) ApprovedContent(claimID string) (model.Claim, bool) {
+	if s == nil {
+		return model.Claim{}, false
+	}
+	r, ok := s.Record(claimID)
+	if !ok || r.Subject != SubjectClaim || r.Content == nil {
+		return model.Claim{}, false
+	}
+	return *r.Content, true
 }
 
 // Released reports whether this record has been legitimately released by an
@@ -208,12 +265,19 @@ func RecordApproval(store *Store, claim model.Claim, ap Approval) {
 	if store == nil {
 		return
 	}
+	// approved is a copy of the value parameter, so the pointer stored below
+	// cannot alias anything the caller goes on to mutate. Slice fields inside
+	// it still share backing arrays with the caller's claim; nothing on the
+	// lock path rewrites a claim's slices in place after approval, and the
+	// store is serialised to JSON on Save, which snapshots them regardless.
+	approved := claim
 	store.putRecord(claim.ID, LedgerRecord{
 		Subject: SubjectClaim,
 		Hash:    LockedClaimHash(claim),
 		At:      nowFunc().UTC().Format(time.RFC3339Nano),
 		Actor:   ap.Actor,
 		Reason:  ap.Reason,
+		Content: &approved,
 	})
 
 	// The claim's COMMENT DIGEST is recorded at the same instant, and that is
@@ -1090,4 +1154,81 @@ func commentDigestReleased(id, recorded string, store *Store) bool {
 	}
 	r, ok := store.Record(id)
 	return ok && r.Subject == SubjectClaim && r.Released()
+}
+
+// EditedSinceApproval reports whether claim c held an approval that an honest
+// unlock released, and whose text has since moved away from what was approved.
+// It returns the released record so a caller can read the approval and the
+// release off it without a second lookup.
+//
+// It is here, beside the ledger it reads, because THREE callers ask this exact
+// question and must never disagree about the answer:
+//
+//   - internal/readiness raises CauseUnapprovedEdit, which is what puts the
+//     claim on the Issues screen;
+//   - internal/approvaledit builds the panel that shows what moved;
+//   - internal/approvalrecovery decides which approvals to go looking for in
+//     git history.
+//
+// Three inline copies would agree only by inspection, and the failure mode is
+// silent in both directions: a row on Issues with no panel under it, or a
+// panel for a claim nothing reported. The conditions, in order, are that the
+// claim is a draft (Unlock is the only path that makes it one), that the
+// record is a CLAIM approval rather than a build order, that it was released
+// rather than deleted (Released() is what separates an honest unlock from
+// lock-ledger-orphan tampering), that a hash was signed at all, and that the
+// signed hash no longer matches the claim in front of us.
+func EditedSinceApproval(c model.Claim, s *Store) (LedgerRecord, bool) {
+	if s == nil || c.Status != model.StatusDraft {
+		return LedgerRecord{}, false
+	}
+	record, ok := s.Record(c.ID)
+	if !ok || record.Subject != SubjectClaim || !record.Released() {
+		return LedgerRecord{}, false
+	}
+	if record.Hash == "" || record.Hash == LockedClaimHash(c) {
+		return LedgerRecord{}, false
+	}
+	return record, true
+}
+
+// ErrContentMismatch refuses content that does not hash to the approval it
+// claims to be. It is the guarantee the whole of approved-content recovery
+// rests on: a record's Content is never anything but the bytes its own
+// signed Hash already certifies.
+var ErrContentMismatch = errors.New("content does not hash to the approval it is for")
+
+// RetainApprovedContent records the WORDING a claim record's Hash already
+// certifies, for a record written before the ledger kept it.
+//
+// It is the only way to put content on an existing record, and it is
+// deliberately narrow. It refuses unless approved hashes to exactly the hash
+// the record signed (ErrContentMismatch), so no caller — however it obtained
+// the bytes — can widen an approval by supplying different ones. It changes
+// nothing else: not the hash, not the approval's time, actor or reason, not
+// the release fields, not the claim. The record certifies what it always
+// certified and now carries it.
+//
+// A record that already has content is left alone and reported false: a
+// retained approval is never replaced, so a recovered historical revision can
+// never overwrite wording the engine itself kept at lock time.
+func (s *Store) RetainApprovedContent(claimID string, approved model.Claim) (bool, error) {
+	if s == nil {
+		return false, fmt.Errorf("retain approved content: no store")
+	}
+	record, ok := s.Record(claimID)
+	if !ok || record.Subject != SubjectClaim {
+		return false, fmt.Errorf("retain approved content: %s has no claim approval record", claimID)
+	}
+	if record.Content != nil {
+		return false, nil
+	}
+	if record.Hash == "" || record.Hash != LockedClaimHash(approved) {
+		return false, fmt.Errorf("retain approved content: %s: %w", claimID, ErrContentMismatch)
+	}
+	stored := approved
+	stored.SourcePath = ""
+	record.Content = &stored
+	s.putRecord(claimID, record)
+	return true, nil
 }

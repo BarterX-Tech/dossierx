@@ -18,6 +18,7 @@ import (
 	"sort"
 	"unicode/utf8"
 
+	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
@@ -30,6 +31,19 @@ type Catalog struct {
 	Claims      []model.Claim
 	Readiness   map[string]readiness.Assessment
 	Conformance map[string]conformance.Result
+
+	// ApprovedEdits is what has changed in each draft claim since the
+	// approval its unlock released, keyed by claim id (approvaledit.Compute).
+	// It is present only for the claims that have such a change, so an
+	// ordinary project with nothing unlocked carries an empty map.
+	//
+	// It is deliberately NOT projected into Document/catalog.json. The diff is
+	// a reading aid the viewer draws beside the claim; catalog.json is the
+	// machine export, and a consumer of that file already has both the claim
+	// and the lock store and can recompute this exactly. Carrying it there
+	// would add O(V) claim-bytes to an artifact whose size the bounded encoder
+	// is responsible for, to say nothing the file did not already imply.
+	ApprovedEdits map[string]approvaledit.Change
 
 	// ConformanceSnapshot is the observation pass's provenance hash
 	// (conformance.Report.Snapshot), carried alongside Conformance rather
@@ -66,6 +80,15 @@ func (cat *Catalog) SetConformance(report *conformance.Report) {
 func (cat *Catalog) SetReadiness(assessments map[string]readiness.Assessment) {
 	if cat != nil {
 		cat.Readiness = assessments
+	}
+}
+
+// SetApprovedEdits attaches the read-only "what moved since approval"
+// projection. Like SetReadiness, it is a post-Build attachment so Build stays
+// a pure projection of authored claims with no lock-store input.
+func (cat *Catalog) SetApprovedEdits(changes map[string]approvaledit.Change) {
+	if cat != nil {
+		cat.ApprovedEdits = changes
 	}
 }
 

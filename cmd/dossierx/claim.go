@@ -59,6 +59,7 @@ func newClaimCmd() *cobra.Command {
 		newClaimNewCmd(),
 		newLockCmd(),
 		newLockPolicyMigrateCmd(),
+		newClaimRecoverApprovedContentCmd(),
 		newUnlockCmd(),
 		newFlagCmd(),
 		newReauditCmd(),

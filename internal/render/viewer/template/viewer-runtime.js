@@ -37,8 +37,6 @@
       // each SSE re-render. It attaches NO listeners — those are delegated once
       // on surviving nodes below, so re-running this never double-binds.
       function initViewer() {
-        // Fragment swaps replace <main>; drop the stale mount pointer.
-        mountedSurfaceID = null;
         // Two-level show/hide: one .module-section per sidebar .sec-tab, and
         // (when a module has more than one facet) one .claim-group per .subtab
         // inside that module's .sub-nav. A single-facet module still has exactly
@@ -165,7 +163,6 @@
       // surface on first paint; smaller fixtures mount every surface so print,
       // theme probes, and live-reload witnesses that call getElementById keep
       // working without visiting every facet first.
-      var mountedSurfaceID = null;
       var SOFT_MOUNT_MIN_CLAIMS = 80;
 
       function claimCorpusSize() {
@@ -193,7 +190,6 @@
         var host = group.querySelector(':scope > [data-dossierx-surface-host]');
         var tmpl = group.querySelector(':scope > template.dossierx-surface-template');
         if (!host || !tmpl) {
-          mountedSurfaceID = surfaceID;
           return;
         }
         if (!host.querySelector('.claim')) {
@@ -201,13 +197,31 @@
           if (typeof window.dossierxEnhanceSystemRecord === 'function') {
             window.dossierxEnhanceSystemRecord();
           }
+          // The edited-since-approval chips and panels are attached HERE, at
+          // mount, and BEFORE the clamps below — not left to the next
+          // renderStatusStrip pass.
+          //
+          // They insert a node above each edited claim's body, so attaching
+          // them later moves everything under them. Two things read that
+          // height and cannot be allowed to read it early: a deep link has
+          // already scrolled to its claim, so the panels appearing afterwards
+          // slid the page out from under the sticky header; and the
+          // source-note clamps measure scrollHeight against clientHeight, so
+          // a mid-measurement insertion decides "show more" from a layout
+          // that is about to change. Decorating first means the surface is at
+          // its final height before anything measures or scrolls it.
+          renderApprovedEdits();
           // Source-note clamps observe live nodes only; re-arm after every
           // first-time mount so a freshly revealed surface is measured.
           if (typeof mountSourceNoteClamps === 'function') {
             mountSourceNoteClamps();
           }
         }
-        mountedSurfaceID = surfaceID;
+        // The no-template path (an eagerly rendered surface) never enters the
+        // block above, and still has claims to decorate. renderApprovedEdits
+        // is idempotent — every node it creates is either replaced wholesale
+        // or guarded — so the second call costs nothing on the path that did.
+        renderApprovedEdits();
       }
 
       function mountAllSurfaces() {
@@ -469,10 +483,8 @@
         if (!toastEl) { return; }
         toastEl.textContent = msg; // textContent — error text is never trusted markup
         toastEl.hidden = false;
-        toastEl.classList.add('comments-toast--show');
         if (toastTimer) { window.clearTimeout(toastTimer); }
         toastTimer = window.setTimeout(function () {
-          toastEl.classList.remove('comments-toast--show');
           toastEl.hidden = true;
         }, 4000);
       }
@@ -1313,21 +1325,30 @@
       // claim has no edges".
 
       var stripEl = document.getElementById('statusStrip');
-      var stripToggle = document.getElementById('statusStripToggle');
-      var stripSummary = document.getElementById('statusStripSummary');
-      var stripTitle = document.getElementById('statusStripTitle');
       // retry fix 21 (this lane's third attempt): #statusStripNote (the
       // "Critical 0 · Needs you 3 · ..." tally) is REMOVED per the
       // coordinator's ruling — no 02/03/04 board draws it, the chips
       // already carry every count it repeated — and dropped from shell.html
       // along with its element lookup here.
-      var stripAction = document.getElementById('statusStripAction');
+      //
+      // THE HEAD HAS TWO FORMS, ONE PER WIDTH, and both are written on every
+      // paint. #statusStripToggle is the desktop band — one summary sentence
+      // with "Show issues" beside it — and #statusStripCard is the phone form
+      // (Paper EH1-0), a card with one ROW PER FINDING. CSS shows one; see
+      // shell.html for why the choice is a media query and not a width read
+      // in here.
+      //
+      // Both are filled unconditionally rather than behind a matchMedia
+      // check. The cost is a few DOM nodes nobody sees; the alternative is a
+      // resize listener and a breakpoint duplicated out of the stylesheet,
+      // which is one more thing to keep in step for no gain.
+      var stripToggle = document.getElementById('statusStripToggle');
+      var stripTitle = document.getElementById('statusStripTitle');
+      var stripCard = document.getElementById('statusStripCard');
+      var stripCardCount = document.getElementById('statusStripCardCount');
+      var stripFindings = document.getElementById('statusStripFindings');
       var stripBody = document.getElementById('statusStripBody');
       var lastStatusData = null;
-      // Paper starts every status strip collapsed. stripExpanded then stays
-      // sticky across refreshes, so a poll (or an SSE tick) never takes the
-      // disclosure state away from the reader.
-      var stripExpanded = false;
 
       function countLabel(n, word) {
         return n + ' ' + word + (n === 1 ? '' : 's');
@@ -1534,12 +1555,51 @@
       // demoted slug, and the fixed-width count slot — rather than three
       // loose wrapping siblings. See style.css's .status-finding-dot /
       // .status-finding-text for the layout this DOM shape enables.
+      // editChangeSummary is the mono line under an Issues row for a claim
+      // rewritten since approval (Paper BR5-0 / EUD-0): what moved, and when
+      // the approval it moved from was given.
+      function editChangeSummary(change) {
+        var parts = [];
+        if (!change.content_retained) {
+          parts.push('approved wording not retained');
+        } else if (change.changed_passages) {
+          parts.push(countLabel(change.changed_passages, 'passage') + ' changed');
+        } else if ((change.field_changes || []).length) {
+          parts.push(countLabel(change.field_changes.length, 'field') + ' moved');
+        }
+        var approved = editDateLabel(change.approved_at);
+        if (approved) { parts.push('approved ' + approved); }
+        return parts.join(' · ');
+      }
+
+      // goToClaimChanges leaves the Issues screen for the claim itself, with
+      // the Changes state showing — the row said "See changes", so landing
+      // on the claim with the diff put away would not be what it offered.
+      function goToClaimChanges(id, change) {
+        closeIssuesView();
+        if (window.location.hash !== '#' + id) { window.location.hash = '#' + id; }
+        var card = document.getElementById(id);
+        if (card && change) { paintApprovedEdit(card, change, true); }
+        if (card && typeof card.scrollIntoView === 'function') { card.scrollIntoView({ block: 'start' }); }
+      }
+
       function renderStatusGroup(group) {
         var row = el('li', 'status-finding status-finding--group');
         row.setAttribute('data-severity', group.severity);
+        // A row whose cause is an edit since approval is draft work, not an
+        // alarm (Paper EUD-0 draws its dot and action in the draft hue).
+        var edits = offlineApprovedEdits();
+        var editedOwner = group.ownerModuleClaimID && edits[group.ownerModuleClaimID] ? group.ownerModuleClaimID : '';
+        var isEditCause = group.severity === 'needs_you' && group.kind === 'unapproved_edit' && !!editedOwner;
+        row.setAttribute('data-tone', isEditCause ? 'draft' : 'alarm');
         row.appendChild(el('span', 'status-finding-dot'));
         var text = el('span', 'status-finding-text');
-        text.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
+        // Paper EUD-0 names the claim and what happened to it in one line:
+        // "<Title> was approved and is being rewritten".
+        var title = isEditCause
+          ? readinessClaimLabel(editedOwner) + ' was approved and is being rewritten'
+          : (group.title || 'Issue');
+        text.appendChild(textEl('span', 'status-finding-rule', title));
         var ids = Object.keys(group.claimIDs).sort();
         // Paper 1KX-0: every row carries a second, demoted line under its
         // title holding the dotted claim id of the claim the reader must go
@@ -1557,11 +1617,52 @@
         if (ownerID) {
           text.appendChild(textEl('span', 'status-finding-claim', ownerID));
         }
+
+        // The third line (Paper board 15, F and I). A Needs-you row names its
+        // cause KIND in mono, because the sentence alone cannot distinguish
+        // "someone never wrote this" from "someone approved it and then
+        // moved it". A blocker row whose owner was approved and is being
+        // rewritten says so under the row it already had (BR5-0): no new
+        // group and no new severity, one line added to the existing row.
+        var detail = null;
+        if (group.severity === 'needs_you') {
+          detail = el('span', 'status-finding-detail');
+          detail.appendChild(textEl('span', 'status-finding-kind', group.kind || 'review'));
+          if (isEditCause) {
+            detail.appendChild(textEl('span', 'status-finding-meta', editChangeSummary(edits[editedOwner])));
+          }
+        } else if (editedOwner && group.severity === 'blocker') {
+          detail = el('span', 'status-finding-detail');
+          detail.appendChild(textEl('span', 'status-finding-kind status-finding-kind--edited', 'Edited · was approved'));
+          detail.appendChild(textEl('span', 'status-finding-meta', editChangeSummary(edits[editedOwner])));
+          var link = textEl('button', 'status-finding-link', 'See changes');
+          link.type = 'button';
+          link.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            goToClaimChanges(editedOwner, edits[editedOwner]);
+          });
+          detail.appendChild(link);
+        }
+        if (detail) { text.appendChild(detail); }
         row.appendChild(text);
-        // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
-        // phrase INTO the count slot as a bare `N claims`, never `blocks N
-        // claim(s)` — that longer phrase was written for a full-width third
-        // line, which the fixed 104px slot (style.css) no longer is.
+
+        // The right-hand slot. A blocker row keeps its count (04 §4.8: the
+        // phrase promoted INTO the 104px slot as a bare `N claims`). A
+        // Needs-you row carries its way in instead (Paper ETC-0 / EUD-0):
+        // the thing waiting is one claim, and the count would always be 1.
+        if (group.severity === 'needs_you' && group.ownerModuleClaimID) {
+          var owner = group.ownerModuleClaimID;
+          var action = textEl('button', 'status-finding-action', isEditCause ? 'See changes' : 'Open claim');
+          action.type = 'button';
+          action.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            goToClaimChanges(owner, isEditCause ? edits[owner] : null);
+          });
+          row.appendChild(action);
+          return row;
+        }
         var n = ids.length || group.count;
         row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
         return row;
@@ -1660,7 +1761,7 @@
         var label = card && card.querySelector('.k .label');
         if (label) {
           var copy = label.cloneNode(true);
-          copy.querySelectorAll('.pill, .k-id, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
+          copy.querySelectorAll('.pill, .k-id').forEach(function (node) { node.remove(); });
           var rendered = (copy.textContent || '').replace(/\s+/g, ' ').trim();
           if (rendered) { return rendered; }
         }
@@ -1687,7 +1788,12 @@
           approval_content_drift: 'This claim changed after approval',
           approval_missing: 'This claim has no approval record',
           approval_released: 'This claim\'s approval was released',
-          approval_unknown: 'This claim\'s approval state is unknown'
+          approval_unknown: 'This claim\'s approval state is unknown',
+          // Deliberately not "changed after approval" (approval_content_drift's
+          // wording): that names a LOCKED claim whose bytes no longer match a
+          // STANDING approval, which is the tamper finding. This names the
+          // honest, intended act — unlock, rewrite, re-lock — caught mid-way.
+          unapproved_edit: 'This claim was approved, then rewritten'
         };
         return labels[record.kind] || String(record.kind || 'Readiness obstacle').replace(/_/g, ' ');
       }
@@ -2195,12 +2301,397 @@
         } catch (_) { return {}; }
       }
 
+      // ---- Unapproved edits -------------------------------------------------
+      //
+      // The state these three functions draw is the ordinary one, and it was
+      // the one the viewer could not show. A claim is locked; someone unlocks
+      // it, rewrites it, and has not locked it again yet. The new wording
+      // replaced the old in the file, so the reading view showed text with
+      // nothing to compare it against and a chip reading DRAFT — the same chip
+      // a claim nobody ever approved carries. "Never written" and "approved,
+      // then moved" are different jobs for a reviewer, and one word was being
+      // used for both.
+      //
+      // The engine now answers both questions: readiness emits an
+      // `unapproved_edit` cause (so the claim reaches the Issues screen on its
+      // own, without needing a dependent to notice for it), and the graph
+      // payload carries the line diff from the approved body to the current
+      // one. Everything below is presentation of those two facts. It computes
+      // nothing about whether an edit is allowed, and never writes.
+
+      // offlineApprovedEdits reads the per-claim approvaledit.Change records
+      // off the SAME rendered graph payload offlineReadiness reads. There is
+      // deliberately no /api/status path for this: a checked-in file:// export
+      // has no endpoint to ask, and a panel that appeared only under
+      // "dossierx serve" would be missing exactly where a reviewer reads a
+      // repository they did not build.
+      function offlineApprovedEdits() {
+        var node = document.getElementById('dossierx-graph');
+        if (!node) { return {}; }
+        try {
+          var payload = JSON.parse(node.textContent || '{}');
+          var out = {};
+          (payload.nodes || []).forEach(function (graphNode) {
+            if (graphNode.id && graphNode.approved_edit) { out[graphNode.id] = graphNode.approved_edit; }
+          });
+          return out;
+        } catch (_) { return {}; }
+      }
+
+      // editDateLabel turns an RFC3339 instant into the board's own short
+      // form ("12 Sep"). It is deliberately not a full date: the panel's job
+      // is to place the approval in the reader's recent memory, and a
+      // four-part date would be the widest thing on a row that is otherwise
+      // a sentence.
+      function editDateLabel(iso) {
+        if (!iso) { return ''; }
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) { return String(iso).slice(0, 10); }
+        return d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+      }
+
+      // approvedEditHasDiff reports whether there is a second wording to show
+      // at all.
+      //
+      // Two states look like an edit and have nothing to put behind a
+      // "Changes" tab. A record written before the approved wording was kept
+      // proves the text moved and does not carry what it moved from. A claim
+      // whose hash moved because its rests_on or build_role moved has an
+      // approved wording identical to its current one. In both, the panel has
+      // one sentence to say and no second version of the claim — so there is
+      // no switch, and the claim's own body stays on screen.
+      //
+      // Offering the switch anyway is what this replaces, and it was worse
+      // than a useless control: choosing "Changes" hid the body and put the
+      // sentence in its place, so the claim rendered with no content at all.
+      function approvedEditHasDiff(change) {
+        return !!(change.content_retained &&
+          (change.hunks || []).length &&
+          (change.changed_passages || 0) > 0);
+      }
+
+      // approvedEditDiff builds the passage-by-passage view: unchanged
+      // passages as ordinary prose, and each changed one as the approved
+      // passage above the current one, tinted and ruled.
+      //
+      // The HTML is produced by the ENGINE (internal/approvaledit), not here,
+      // because internal/render/markdown is this project's only markdown
+      // renderer and the viewer has none. Shipping the source and parsing it
+      // in the browser would mean growing a second renderer that could
+      // disagree with the first about the same claim, on the same page.
+      function approvedEditDiff(change) {
+        var body = el('div', 'claim-edit-diff');
+        (change.hunks || []).forEach(function (hunk) {
+          var cls = hunk.op === 'remove' ? 'claim-edit-passage claim-edit-passage--removed'
+            : hunk.op === 'add' ? 'claim-edit-passage claim-edit-passage--added'
+            : 'claim-edit-passage';
+          var block = el('div', cls);
+          // innerHTML, and only here. The value came from
+          // internal/render/markdown, which is the escaping boundary every
+          // other claim body in this viewer crosses — the same function, over
+          // the same author bytes, reached through the same payload as the
+          // readiness projection beside it. It is exactly as trusted as the
+          // body it sits above, and no more.
+          block.innerHTML = hunk.html || '';
+          if ((hunk.changed || []).length) {
+            block.setAttribute('aria-label',
+              (hunk.op === 'remove' ? 'Removed since approval: ' : 'Added since approval: ') +
+              hunk.changed.join(', '));
+          }
+          body.appendChild(block);
+        });
+        var fields = approvedEditFields(change);
+        if (fields) { body.appendChild(fields); }
+        return body;
+      }
+
+      // approvedEditCurrent builds the OTHER state of the same surface: the
+      // current wording, passage by passage, with the passage that differs
+      // from the approval carrying a draft-coloured rule and no tint (Paper
+      // DPZ-0: "the same claim with the diff put away, reading as ordinary
+      // prose, with an amber rule marking where the difference sits").
+      //
+      // It is rendered from the same hunks as the diff rather than by
+      // un-hiding the claim's own body, because the body cannot say WHERE the
+      // difference sits: the rule is the one thing this state adds, and the
+      // body has no passage boundaries to hang it on.
+      function approvedEditCurrent(change) {
+        var body = el('div', 'claim-edit-current');
+        (change.hunks || []).forEach(function (hunk) {
+          if (hunk.op === 'remove') { return; }
+          var block = el('div', hunk.op === 'add'
+            ? 'claim-edit-passage claim-edit-passage--current'
+            : 'claim-edit-passage');
+          // Same escaping boundary as approvedEditDiff: engine-rendered
+          // markdown, the same bytes the diff shows.
+          block.innerHTML = hunk.html || '';
+          if (hunk.op === 'add') {
+            block.setAttribute('aria-label', 'This passage differs from the approved wording');
+          }
+          body.appendChild(block);
+        });
+        return body;
+      }
+
+      // approvedEditFields draws the non-body fields that moved, each as its
+      // approved YAML above its current YAML with the words that moved marked.
+      //
+      // It is here because "Also changed: embodiment, audit_notes." was not an
+      // answer. For a claim whose prose never moved that sentence WAS the whole
+      // panel, and it named the change without showing it — the reader was told
+      // a field they cannot see had moved in a way they cannot see, and had to
+      // go and read the file to find out what they were being asked about. Six
+      // of the fourteen claims this feature was built for are in exactly that
+      // state.
+      //
+      // The blocks are drawn as text and not as prose. A field is YAML, so it
+      // is escaped by the engine (internal/approvaledit/fields.go) and shown in
+      // the monospace the file itself would show; running it through the
+      // markdown renderer would turn a list into a list and a `*` into
+      // emphasis, and stop it being the thing on disk.
+      function approvedEditFields(change) {
+        var changes = change.field_changes || [];
+        if (!changes.length) { return null; }
+        var wrap = el('div', 'claim-edit-fields');
+
+        var toggle = el('button', 'claim-edit-fields-toggle');
+        toggle.type = 'button';
+        var list = el('div', 'claim-edit-fields-list');
+        var open = true;
+        function paint() {
+          toggle.setAttribute('aria-expanded', String(open));
+          toggle.textContent = (open ? 'Hide' : 'Show') + ' the ' +
+            (changes.length === 1 ? 'field' : changes.length + ' fields') + ' that moved';
+          list.hidden = !open;
+        }
+        toggle.addEventListener('click', function (event) {
+          event.preventDefault();
+          open = !open;
+          paint();
+        });
+
+        changes.forEach(function (field) {
+          var row = el('div', 'claim-edit-field');
+          row.appendChild(textEl('span', 'claim-edit-field-name', field.field));
+          if (field.truncated) {
+            row.appendChild(textEl('p', 'claim-edit-field-note',
+              'This field moved. It is too large to show here; read it in the claim file.'));
+            list.appendChild(row);
+            return;
+          }
+          (field.hunks || []).forEach(function (hunk) {
+            var cls = hunk.op === 'remove' ? 'claim-edit-field-hunk claim-edit-field-hunk--removed'
+              : hunk.op === 'add' ? 'claim-edit-field-hunk claim-edit-field-hunk--added'
+              : 'claim-edit-field-hunk';
+            var block = el('pre', cls);
+            // innerHTML over engine-escaped text. internal/approvaledit's
+            // field renderer HTML-escapes the YAML before it marks anything,
+            // so the only tags that can be in here are the mark spans it
+            // wrote itself — a field holding <script> arrives as text.
+            block.innerHTML = hunk.html || '';
+            if ((hunk.changed || []).length) {
+              block.setAttribute('aria-label',
+                (hunk.op === 'remove' ? 'Removed from ' : 'Added to ') + field.field + ': ' +
+                hunk.changed.join(', '));
+            }
+            row.appendChild(block);
+          });
+          list.appendChild(row);
+        });
+
+        paint();
+        wrap.appendChild(toggle);
+        wrap.appendChild(list);
+        return wrap;
+      }
+
+      // approvedEditNote is what a claim with no second wording says instead of
+      // offering a switch. It sits under the bar, beside the claim's own body
+      // rather than in place of it.
+      function approvedEditNote(change) {
+        var wrap = el('div', 'claim-edit-note');
+        if (!change.content_retained) {
+          wrap.appendChild(textEl('p', 'claim-edit-note-text',
+            'This claim was approved before the approved wording was kept on the record, so there is nothing to compare against. The approval is released and the text has since changed.'));
+          wrap.appendChild(textEl('p', 'claim-edit-note-hint',
+            'Run dossierx claim recover-approved-content to look for the approved revision in this project\u2019s git history.'));
+          return wrap;
+        }
+        var fields = change.other_fields || [];
+        wrap.appendChild(textEl('p', 'claim-edit-note-text', fields.length
+          ? 'The wording is unchanged since approval. ' +
+            (fields.length === 1 ? '1 field moved.' : fields.length + ' fields moved.')
+          : 'The wording is unchanged since approval.'));
+        var diff = approvedEditFields(change);
+        if (diff) { wrap.appendChild(diff); }
+        return wrap;
+      }
+
+      // approvedEditBar is the control the board draws in place of the old
+      // disclosure: a tinted row above the body that says what the reader is
+      // looking at, and a two-segment switch between the two states.
+      //
+      // It is a BAR AND NOT A DISCLOSURE, and the difference is which state
+      // is the default. A disclosure says the diff is an aside a reader opens
+      // if they want it; the board says the opposite — a claim that was
+      // approved and then rewritten opens SHOWING what moved, because that is
+      // the thing about it a reader has to know before they read a word of
+      // it. "Current" is the escape hatch, not the resting state.
+      function approvedEditBar(card, change, showingChanges) {
+        var bar = el('div', 'claim-edit-bar');
+        var approved = editDateLabel(change.approved_at);
+        var hasDiff = approvedEditHasDiff(change);
+        bar.appendChild(textEl('span', 'claim-edit-bar-title',
+          !hasDiff || showingChanges ? 'Edited since it was approved' : 'Showing the current wording'));
+
+        var meta;
+        if (!hasDiff || showingChanges) {
+          meta = 'approved ' + approved + (change.approved_by ? ' \u00b7 ' + change.approved_by : '');
+        } else {
+          var passages = change.changed_passages || 0;
+          meta = passages === 1
+            ? '1 passage differs from the approval of ' + approved
+            : passages + ' passages differ from the approval of ' + approved;
+        }
+        bar.appendChild(textEl('span', 'claim-edit-bar-meta', meta));
+
+        // No second wording, no switch. A control whose two states show the
+        // same thing is not a control, and the one that used to be here did
+        // worse than nothing: picking "Changes" hid the claim's body to make
+        // room for a diff that did not exist.
+        if (!hasDiff) { return bar; }
+
+        var group = el('div', 'claim-edit-switch');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Which wording to show');
+        [['Changes', true], ['Current', false]].forEach(function (pair) {
+          var seg = el('button', 'claim-edit-switch-seg');
+          seg.type = 'button';
+          seg.textContent = pair[0];
+          seg.setAttribute('aria-pressed', String(showingChanges === pair[1]));
+          seg.addEventListener('click', function (event) {
+            event.preventDefault();
+            paintApprovedEdit(card, change, pair[1]);
+          });
+          group.appendChild(seg);
+        });
+        bar.appendChild(group);
+        return bar;
+      }
+
+      // paintApprovedEdit puts one claim card into one of the two states, and
+      // is the only thing that writes either of them, so the bar and the body
+      // can never disagree about which one is showing.
+      function paintApprovedEdit(card, change, showingChanges) {
+        var hasDiff = approvedEditHasDiff(change);
+        showingChanges = hasDiff && showingChanges;
+        var existingBar = card.querySelector(':scope > .claim-edit-bar');
+        // The diff may already be wrapped: the four-line disclosure wraps it
+        // exactly as it wraps a claim body (system-record.js's BODY_LIKE), so
+        // what has to be taken out is the wrapper when there is one.
+        var existingDiff = card.querySelector(
+          ':scope > .claim-edit-diff, :scope > .claim-edit-current, :scope > .claim-edit-note, :scope > .claim-body-disclosure--edit');
+
+        var bar = approvedEditBar(card, change, showingChanges);
+        if (existingBar) { existingBar.replaceWith(bar); }
+        else {
+          var head = card.querySelector(':scope > .k');
+          if (head && head.parentNode) { head.parentNode.insertBefore(bar, head.nextSibling); }
+          else { card.insertBefore(bar, card.firstChild); }
+        }
+        if (existingDiff) { existingDiff.remove(); }
+        if (!hasDiff) {
+          bar.parentNode.insertBefore(approvedEditNote(change), bar.nextSibling);
+        } else {
+          bar.parentNode.insertBefore(
+            showingChanges ? approvedEditDiff(change) : approvedEditCurrent(change), bar.nextSibling);
+          // Hand the new surface to the disclosure so it is measured and
+          // clamped like any other body. Without this the diff renders at
+          // full height while the claim beside it truncates at four lines,
+          // which is the same claim behaving as two components.
+          if (typeof window.dossierxEnhanceSystemRecord === 'function') {
+            window.dossierxEnhanceSystemRecord();
+          }
+        }
+        // While there is a second wording the claim's own body is off screen
+        // in BOTH states: Changes shows the diff and Current shows the same
+        // passages with the changed one ruled. The body comes back only for
+        // a claim with nothing to compare against (no switch).
+        //
+        // The body is hidden by a class ON THE CARD, and not by setting
+        // `hidden` on the body itself. Which element the body IS moves: the
+        // long-body disclosure wraps
+        // .claim-body inside .claim-body-disclosure after first paint, so a
+        // handle taken before the wrap and a handle taken after it are
+        // different nodes. Hiding whichever one a selector matched at the
+        // time left the first one hidden and the second one shown, and the
+        // switch stopped working on exactly the claims long enough to be
+        // wrapped. A class on the card is one state, in one place, whatever
+        // the body is wearing.
+        //
+        // It is also why the body is hidden rather than removed: it carries
+        // the source-note clamps and that disclosure, and tearing it out
+        // would take their state with it every time the reader flipped.
+        card.classList.toggle('claim--edit-view', hasDiff);
+      }
+
+      // renderApprovedEdits upgrades each edited claim's chip and puts its
+      // card into the Changes state. It is driven from mountSurface (so the
+      // surface reaches its final height before anything measures or scrolls
+      // it) and again from renderStatusStrip, so everything it creates is
+      // either guarded or left alone on a repaint.
+      function renderApprovedEdits() {
+        var edits = offlineApprovedEdits();
+        Object.keys(edits).forEach(function (id) {
+          var card = document.getElementById(id);
+          if (!card) { return; }
+          var change = edits[id];
+
+          // The chip. It stays .pill.pv — the claim IS a draft, and inventing
+          // a fourth colour for it would say the state is unrelated to the
+          // one the reader already knows. Only the word changes, because only
+          // the word was wrong: DRAFT is true and incomplete, and a reviewer
+          // deciding what to open next needs the part it leaves out.
+          var pill = card.querySelector('.k .label .pill');
+          if (pill && pill.getAttribute('data-dx-edited') !== '1') {
+            pill.setAttribute('data-dx-edited', '1');
+            pill.setAttribute('title', 'This claim held an approval, which was released when it was unlocked. What is written now differs from what was approved.');
+            // No padlock. Paper (CDJ-0, CIY-0) draws the chip as the word
+            // alone: the open padlock is DRAFT's glyph, and this chip exists
+            // to say the state is NOT plain draft.
+            pill.textContent = '';
+            pill.appendChild(textEl('span', '', 'Edited \u00b7 was approved'));
+          }
+
+          // The bar and the body state, painted only when the bar is not
+          // already there: a repaint must not take the reader's own "Current"
+          // choice away from them on the next poll.
+          if (!card.querySelector(':scope > .claim-edit-bar')) {
+            paintApprovedEdit(card, change, true);
+          }
+        });
+      }
+
+      // approvedEditIDsIn returns the claims in the id set that have been
+      // rewritten since the approval their unlock released.
+      //
+      // It is scoped to the facet on screen, by the SAME id set the rest of
+      // the strip scopes itself with — a count of claims on a page the reader
+      // is not looking at is a count they cannot act on. The set is a
+      // null-prototype object keyed by id (activeFacetClaimIDs), so this
+      // indexes it rather than calling Set or Array methods it does not have.
+      function approvedEditIDsIn(claimIDs) {
+        var ids = claimIDs || {};
+        return Object.keys(offlineApprovedEdits()).filter(function (id) { return ids[id]; });
+      }
+
       // renderStatusStrip paints one /api/status payload. An empty verdict hides
       // the strip entirely rather than showing a green badge: the viewer already
       // reads as "fine" by default, and a persistent all-clear chip would be one
       // more thing to stop noticing.
       function renderStatusStrip(data) {
-        if (!stripEl || !stripBody || !stripSummary || !stripTitle) { return; }
+        if (!stripEl || !stripBody || !stripCard || !stripFindings || !stripTitle) { return; }
         lastStatusData = data || {};
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
@@ -2223,6 +2714,7 @@
         // PREVIOUS pass's state, since this function only writes it below.
         var bannerShowing = groups.length > 0 && actionable;
         renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
+        renderApprovedEdits();
         if (!groups.length || !actionable) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
@@ -2316,12 +2808,18 @@
           recordEl.classList.add('status-group--approval-record');
           stripBody.appendChild(recordEl);
         }
+        // Under the Needs-you filter the group's weight phrase counts what is
+        // waiting on the reader, not what is blocked (Paper EMP-0: "3 of 4
+        // need you here").
+        var needsTotal = countSeverity(groups, 'needs_you');
         moduleOrder.forEach(function (moduleID) {
           var rows = byModule[moduleID].slice().sort(function (a, b) {
             return statusGroupClaimCount(b) - statusGroupClaimCount(a);
           });
           var weight = uniqueClaimCount(rows);
-          var note = 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
+          var note = stripSeverityFilter === 'needs_you'
+            ? weight + ' of ' + needsTotal + ' need you here'
+            : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
           stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
         });
 
@@ -2331,36 +2829,187 @@
         // used to repeat as a second string. statusChipLine, the function
         // that built that string, is now dead (no other call site) and is
         // deleted.
-        var headline = blockerHeadline(groups);
-        var needsYou = countSeverity(groups, 'needs_you') > 0;
-        if (ledger.length) {
-          stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-        } else if (lintErrors.length && !headline && !needsYou) {
-          stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
-        } else if (headline) {
-          stripTitle.textContent = headline;
-        } else {
-          stripTitle.textContent = countLabel(groups.length, 'grouped issue') + ' in this facet';
-        }
+        //
+        // Both forms of the head, every paint. The desktop band carries the
+        // single headline sentence it always did; the phone card carries one
+        // row per finding. They are derived from the SAME groups, ledger and
+        // lint lists a line apart, so the two can differ in shape and never
+        // in what they say.
+        var rows = statusStripRows(groups, ledger, lintErrors, claimIDs);
+        renderStatusStripCard(rows);
+        // The band gets the same rows, one full-bleed row each (Paper board
+        // 15, C2M-0 / C92-0), in the same order — most serious first — so the
+        // two forms differ in shape and never in what they say.
+        renderStatusStripBand(rows);
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        // Paper's default reading view always starts with the findings body
-        // collapsed. Critical and needs-you counts still determine the
-        // truthful summary/chips above; they do not take control of the
-        // reader's disclosure state. Once the reader opens the strip, the
-        // existing stripExpanded state remains sticky across later polls.
-        setStripExpanded(stripExpanded);
+        // #statusStripBody is populated above and stays hidden: the Issues
+        // screen MOVES its children into itself (issuesSyncFromStrip), so it
+        // must exist and must not be shown here.
+        if (stripBody) { stripBody.hidden = true; }
         positionStatusStrip();
         stripEl.hidden = false;
       }
 
-      function setStripExpanded(expanded) {
-        stripExpanded = !!expanded;
-        if (stripBody) { stripBody.hidden = !stripExpanded; }
-        if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
-        if (stripAction) { stripAction.textContent = stripExpanded ? 'Hide issues' : 'Show issues'; }
-        if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
+      // statusStripRows turns the facet's findings into the card's rows —
+      // one row per KIND of thing waiting, never one per claim.
+      //
+      // The rows are the summary sentences the strip already computed, each
+      // now carrying its own hue instead of four of them competing to be the
+      // one headline. `tone` is the row's colour family, and it is the only
+      // thing the card's tint rule reads: 'alarm' for anything the approval
+      // record or the dependency chain is refusing, 'draft' for work in
+      // progress that nobody has approved yet.
+      function statusStripRows(groups, ledger, lintErrors, claimIDs) {
+        var rows = [];
+        if (ledger.length) {
+          rows.push({
+            tone: 'alarm', severity: 'critical',
+            text: countLabel(ledger.length, 'approval record issue') + ' in this facet need' +
+              (ledger.length === 1 ? 's' : '') + ' attention'
+          });
+        }
+        var headline = blockerHeadline(groups);
+        if (headline) {
+          rows.push({ tone: 'alarm', severity: 'blocker', text: headline });
+        }
+        if (lintErrors.length) {
+          rows.push({
+            tone: 'alarm', severity: 'critical',
+            text: countLabel(lintErrors.length, 'issue') + ' in this facet need' +
+              (lintErrors.length === 1 ? 's' : '') + ' attention'
+          });
+        }
+        // Claims rewritten since approval. This is the row the old
+        // single-sentence head had no space for, and the reason it became a
+        // card: it is amber where everything above it is red, and one tinted
+        // surface cannot make two severity claims at once.
+        var edited = approvedEditIDsIn(claimIDs);
+        if (edited.length) {
+          rows.push({
+            tone: 'draft', severity: 'needs_you',
+            text: countLabel(edited.length, 'claim') + ' ' + (edited.length === 1 ? 'has' : 'have') +
+              ' edits that have not been approved'
+          });
+        }
+        if (!rows.length) {
+          rows.push({
+            tone: 'alarm', severity: '',
+            text: countLabel(groups.length, 'grouped issue') + ' in this facet'
+          });
+        }
+        return rows;
+      }
+
+      // renderStatusStripCard paints the head. Tinted while every row shares
+      // a tone, neutral the moment they disagree — Paper EH1-0's own rule,
+      // and the reason it is a rule: a tinted surface IS a severity claim,
+      // so a card holding a red fact and an amber one has to stop making it
+      // and let the dots carry the colour instead.
+      // statusStripRowAction names the way in each row offers. A blocked row
+      // opens the Issues screen as it always did; an edited-since-approval
+      // row says what it is for (Paper CDS-0: "Review changes").
+      function statusStripRowAction(row) {
+        return row.tone === 'draft' ? 'Review changes' : 'Show issues';
+      }
+
+      // openIssuesForBandRow: a blocked row opens the screen UNFILTERED — its
+      // sentence names one finding but the band stands for the whole facet.
+      // An edited row names exactly what it filters to (the claims waiting on
+      // the reader), which is what earns it the filter, same as a card row.
+      function openIssuesForBandRow(tone, severity) {
+        stripSeverityFilter = tone === 'draft' ? (severity || '') : '';
+        renderStatusStrip(lastStatusData);
+        openIssuesView();
+      }
+
+      // renderStatusStripBand paints the DESKTOP form: the static first row
+      // (#statusStripToggle, so the ids the rest of the viewer and its tests
+      // address stay put) takes the first finding, and one more
+      // .status-strip-head button is appended per further finding. Each row
+      // carries data-tone, which is the only thing the stylesheet reads to
+      // pick its tint, its icon and its action colour.
+      function renderStatusStripBand(rows) {
+        if (!stripToggle || !stripTitle || !stripEl) { return; }
+        var first = rows[0];
+        stripToggle.setAttribute('data-tone', first.tone);
+        stripToggle.setAttribute('data-severity', first.severity || '');
+        stripTitle.textContent = first.text;
+        var firstAction = document.getElementById('statusStripAction');
+        if (firstAction) { firstAction.textContent = statusStripRowAction(first); }
+
+        stripEl.querySelectorAll(':scope > .status-strip-head--row').forEach(function (node) { node.remove(); });
+        rows.slice(1).forEach(function (row) {
+          var btn = el('button', 'status-strip-head status-strip-head--row');
+          btn.type = 'button';
+          btn.setAttribute('data-tone', row.tone);
+          btn.setAttribute('data-severity', row.severity || '');
+          var summary = el('span', 'status-strip-summary');
+          var icon = dxIcon('triangle-alert');
+          icon.classList.add('status-strip-icon');
+          summary.appendChild(icon);
+          summary.appendChild(el('span', 'status-strip-dot'));
+          var text = el('span', 'status-strip-summary-text');
+          text.appendChild(textEl('strong', 'status-strip-title', row.text));
+          summary.appendChild(text);
+          btn.appendChild(summary);
+          var actionRow = el('span', 'status-strip-action-row');
+          actionRow.appendChild(textEl('span', 'status-strip-action', statusStripRowAction(row)));
+          btn.appendChild(actionRow);
+          btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            openIssuesForBandRow(row.tone, row.severity);
+          });
+          // After the previous row and before the phone card, so the band is
+          // one stack of rows whatever the count.
+          var before = stripCard || stripBody;
+          if (before && before.parentNode === stripEl) { stripEl.insertBefore(btn, before); }
+          else { stripEl.appendChild(btn); }
+        });
+      }
+
+      function renderStatusStripCard(rows) {
+        if (!stripCard || !stripFindings) { return; }
+        var tones = {};
+        rows.forEach(function (row) { tones[row.tone] = true; });
+        var toneKeys = Object.keys(tones);
+        var tinted = toneKeys.length === 1 ? toneKeys[0] : '';
+        stripCard.classList.toggle('status-strip-card--alarm', tinted === 'alarm');
+        stripCard.classList.toggle('status-strip-card--draft', tinted === 'draft');
+        if (stripCardCount) { stripCardCount.textContent = String(rows.length); }
+
+        stripFindings.textContent = '';
+        rows.forEach(function (row) {
+          // A button, not a div with a handler: each row is a way into the
+          // Issues screen and has to be reachable by keyboard and named to a
+          // screen reader like the one control it is.
+          var el_ = el('button', 'status-strip-finding');
+          el_.type = 'button';
+          el_.setAttribute('data-tone', row.tone);
+          var dot = el('span', 'status-strip-finding-dot');
+          dot.setAttribute('aria-hidden', 'true');
+          el_.appendChild(dot);
+          el_.appendChild(textEl('span', 'status-strip-finding-text', row.text));
+          // A text glyph, not the 14px icon: EH1-0 draws the row's way-in as
+          // a 12px "›" in the card's own hue.
+          var chev = textEl('span', 'status-strip-finding-chevron', '›');
+          chev.setAttribute('aria-hidden', 'true');
+          el_.appendChild(chev);
+          el_.addEventListener('click', function (event) {
+            event.preventDefault();
+            // Filtered to the row's own severity. On a real corpus the
+            // unfiltered screen is hundreds of dependency rows and the thing
+            // this row named is somewhere inside them; a way in that lands a
+            // reader in a list they then have to search has not answered the
+            // question it asked. Same stripSeverityFilter the chips set, so
+            // the chip is pressed on arrival and one more click clears it.
+            stripSeverityFilter = row.severity || '';
+            renderStatusStrip(lastStatusData);
+            openIssuesView();
+          });
+          stripFindings.appendChild(el_);
+        });
       }
 
       // refreshStatus polls the endpoint. A FAILED poll deliberately leaves the
@@ -2376,25 +3025,20 @@
       }
 
       // R09.6 (Paper ZP-0): "Issues is its own screen, not an expansion. The
-      // banner is the only way in." Paper backs that with node evidence:
-      // 56T-0, 574-0 and 6P-0 draw ONE state — the sentence plus "Show
-      // issues" — the desktop banner is a single flex ROW with no slot for a
-      // body, the string "Hide issues" does not exist anywhere in the design
-      // file, and 04 section 4 records that no board in the group draws an
-      // expanded state. The inline expand listener that lived here is gone;
-      // the toggle's only job is opening the Issues screen.
+      // banner is the only way in." No board in the group draws an expanded
+      // banner, and the string "Hide issues" does not exist anywhere in the
+      // design file, so the strip has no inline disclosure at all.
       //
-      // setStripExpanded is deliberately KEPT: renderStatusStrip still calls
-      // it every poll with a permanently-false stripExpanded, and that is
-      // what holds #statusStripBody hidden, aria-expanded="false" and the
-      // action reading "Show issues".
+      // EH1-0 then replaced the one sentence with one row per finding, and
+      // the entry point went with it: each row opens the Issues screen,
+      // filtered to that row's own severity. "The banner is the only way in"
+      // still holds — the banner simply has more than one door now, because
+      // a facet routinely has more than one kind of thing waiting.
       //
       // #statusStripBody is never emptied, removed or left unpopulated:
       // renderStatusStrip still builds into it, issuesSyncFromStrip still
       // MOVES its children into the Issues screen, and closeIssuesView still
-      // moves them back. Only its visibility to the reader is withdrawn — the
-      // children now return into a hidden body instead of an expanded one,
-      // which is the defect this removes.
+      // moves them back. It is simply never shown in place.
 
       // ================================================================
       // Issues view (04-issues-screen.md) — lane L8a
@@ -2403,9 +3047,8 @@
       // The screen's own chrome around lane L8's status-strip vocabulary:
       // breadcrumb, title/subtitle, scope and sort controls, the findings
       // card and the "WHERE THE BLOCKERS LIVE" rail (04 §3, §4.1-4.3, §4.5,
-      // §4.6, §4.9). R09.6: reached ONLY from "Show issues" — the listener
-      // just below runs AFTER the one directly above (source order), so by
-      // the time it fires `stripExpanded` already holds L8's own new value.
+      // §4.6, §4.9). R09.6: reached ONLY from a row of the banner card, each
+      // of which wires openIssuesView itself as it is built.
       //
       // #issuesFilters and #issuesFindingsCard never build their own copy of
       // the severity chips or the grouped findings list: issuesSyncFromStrip
@@ -2510,9 +3153,57 @@
         var m = issuesModuleWeights(issuesScope).claims;
         issuesFindingsCard.querySelectorAll('.status-group-head-note').forEach(function (note) {
           var match = /^blocks (\d+) of \d+ claims? here$/.exec(note.textContent || '');
-          if (!match) { return; }
-          note.textContent = 'blocks ' + match[1] + ' of ' + m + ' claim' + (m === 1 ? '' : 's') + ' here';
+          if (match) {
+            note.textContent = 'blocks ' + match[1] + ' of ' + m + ' claim' + (m === 1 ? '' : 's') + ' here';
+            return;
+          }
+          // The Needs-you phrase: the same denominator rule, over the rows
+          // the filter is showing (issuesGroupsForScope already applies it).
+          var waiting = /^(\d+) of \d+ need you here$/.exec(note.textContent || '');
+          if (waiting) { note.textContent = waiting[1] + ' of ' + m + ' need you here'; }
         });
+      }
+
+      // issuesCauseWeights is the rail's OTHER ranking (Paper EKL-0, "WHAT IS
+      // WAITING"): under the Needs-you filter the question is what kind of
+      // work is waiting rather than where the blockers live, so the rail
+      // counts causes, by kind, and colours each bar by the kind's hue. A
+      // claim waiting for two reasons is counted under each, and the caveat
+      // says so.
+      var ISSUES_CAUSE_LABELS = {
+        unapproved_edit: 'Unapproved edits',
+        direct_dependency_change: 'Dependency changed',
+        upstream_dependency_review: 'Upstream review',
+        own_flag: 'Flagged for review',
+        own_thread: 'Open review thread',
+        approval_content_drift: 'Approved wording drifted',
+        approval_released: 'Approval released',
+        approval_missing: 'Approval record missing',
+        approval_unknown: 'Approval state unknown'
+      };
+      function issuesCauseWeights(scope) {
+        var groups = issuesGroupsForScope(scope);
+        var byKind = {};
+        var order = [];
+        groups.forEach(function (g) {
+          var kind = g.kind || 'review';
+          if (!Object.prototype.hasOwnProperty.call(byKind, kind)) { byKind[kind] = []; order.push(kind); }
+          byKind[kind].push(g);
+        });
+        var rows = order.map(function (kind) {
+          return {
+            id: kind,
+            label: ISSUES_CAUSE_LABELS[kind] || kind.replace(/_/g, ' '),
+            tone: kind === 'unapproved_edit' ? 'draft' : 'alarm',
+            weight: uniqueClaimCount(byKind[kind])
+          };
+        });
+        rows.sort(function (a, b) { return b.weight - a.weight; });
+        return {
+          rows: rows,
+          claims: uniqueClaimCount(groups),
+          causes: rows.reduce(function (sum, r) { return sum + r.weight; }, 0)
+        };
       }
 
       // renderIssuesRail (04 §4.9): a ranking with bars, proportional to the
@@ -2534,10 +3225,15 @@
       // corpus size or scope.
       function renderIssuesRail() {
         if (!issuesRailRowsEl) { return; }
-        var data = issuesModuleWeights(issuesScope);
+        var waiting = stripSeverityFilter === 'needs_you';
+        var data = waiting ? issuesCauseWeights(issuesScope) : issuesModuleWeights(issuesScope);
+        var heading = document.getElementById('issuesRailHeading');
+        if (heading) { heading.textContent = waiting ? 'WHAT IS WAITING' : 'WHERE THE BLOCKERS LIVE'; }
         issuesRailRowsEl.textContent = '';
         var shown = data.rows.slice(0, ISSUES_RAIL_MAX_ROWS);
-        var total = data.claims;
+        // Module bars are proportional to the blocked-claim total; cause bars
+        // to the cause total (EKL-0: 2 of 4 causes draws round(50%)).
+        var total = waiting ? data.causes : data.claims;
         shown.forEach(function (row) {
           var wrap = el('div', 'issues-rail-row');
           var labelRow = el('div', 'issues-rail-row-label');
@@ -2546,6 +3242,7 @@
           wrap.appendChild(labelRow);
           var track = el('div', 'issues-rail-bar-track');
           var fill = el('div', 'issues-rail-bar-fill');
+          if (row.tone) { fill.setAttribute('data-tone', row.tone); }
           fill.style.width = (total ? Math.round((row.weight / total) * 100) : 0) + '%';
           track.appendChild(fill);
           wrap.appendChild(track);
@@ -2555,10 +3252,14 @@
           issuesRailRowsEl.appendChild(textEl('p', 'issues-rail-more',
             (data.rows.length - ISSUES_RAIL_MAX_ROWS) + ' more not shown'));
         }
-        var caveat = data.claims > 0
-          ? (countLabel(data.claims, 'claim') + ' blocked, ' + countLabel(data.paths, 'path') +
-             ' — a claim blocked through two modules counts under both.')
-          : '';
+        var caveat = '';
+        if (waiting && data.claims > 0) {
+          caveat = countLabel(data.claims, 'claim') + ', ' + countLabel(data.causes, 'cause') +
+            ' — a claim can be waiting for more than one reason and is counted under each.';
+        } else if (!waiting && data.claims > 0) {
+          caveat = countLabel(data.claims, 'claim') + ' blocked, ' + countLabel(data.paths, 'path') +
+            ' — a claim blocked through two modules counts under both.';
+        }
         if (issuesRailCaveatEl) { issuesRailCaveatEl.textContent = caveat; }
         if (issuesCaveatEl) { issuesCaveatEl.textContent = caveat; }
         // §8 item 5: an empty ranking is a ranking of nothing — the panel is
@@ -2584,7 +3285,13 @@
             (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
             activeFacetClaimIDs(), [], [], [], []
           );
-          issuesSubtitleEl.textContent = blockerHeadline(groups) || 'Nothing in this facet is blocked.';
+          // Under the Needs-you filter the sentence is about the reader's
+          // work, not the facet's blockers (Paper ENQ-0).
+          var waiting = stripSeverityFilter === 'needs_you' ? countSeverity(groups, 'needs_you') : 0;
+          issuesSubtitleEl.textContent = waiting
+            ? countLabel(waiting, 'claim') + (waiting === 1 ? ' is' : ' are') +
+              ' waiting on you in this facet. Each one names what moved and what it was measured against.'
+            : (blockerHeadline(groups) || 'Nothing in this facet is blocked.');
         }
       }
 
@@ -2632,6 +3339,10 @@
         }
         issuesApplyScopeDenominator();
         renderIssuesRail();
+        // The subtitle follows the filter (a chip click repaints the strip,
+        // which lands here through the observer), so it is re-read on every
+        // sync and not only when the screen opens.
+        issuesSyncHeader();
         if (issuesStripObserver) { issuesStripObserver.observe(stripBody, { childList: true }); }
       }
 
@@ -2744,14 +3455,20 @@
       if (issuesSortControl) {
         issuesSortControl.addEventListener('click', function (event) { event.preventDefault(); });
       }
-      // "Show issues" (R09.6) opens this view — UNCONDITIONALLY on every
-      // click of this control, whichever label it currently reads. The
-      // strip's own inline expand/collapse (the listener directly above,
-      // L8's, toggling stripExpanded/#statusStripBody) changes the sticky
-      // disclosure state first. R09.6 names this same control as the Issues
-      // entry point, so this listener does not gate on that resulting state.
+      // R09.6's "the banner is the only way in" holds for both forms. The
+      // desktop band has one door, bound here; the phone card has one per
+      // finding, each wired as it is built (see renderStatusStripCard)
+      // because each carries its own severity filter.
+      //
+      // The band's door opens the screen UNFILTERED, and that is not an
+      // oversight: its sentence names one finding but the band stands for the
+      // whole facet, so narrowing to that one row's severity would hide the
+      // others behind a filter the reader did not choose. A card row names
+      // exactly what it filters to, which is what earns it the filter.
       if (stripToggle) {
-        stripToggle.addEventListener('click', openIssuesView);
+        stripToggle.addEventListener('click', function () {
+          openIssuesForBandRow(stripToggle.getAttribute('data-tone'), stripToggle.getAttribute('data-severity'));
+        });
       }
       // Any ordinary navigation — a sidebar tab, a subtab, a citation link —
       // leaves this screen the same way the back chevron does. Capture phase

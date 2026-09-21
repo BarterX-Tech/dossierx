@@ -156,11 +156,14 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	if got := evalInt(t, ctx, `document.querySelectorAll('#statusStripBody .status-finding--group').length`); got < 1 || got > 6 {
 		t.Fatalf("grouped strip rows = %d, want a small unique-blocker set", got)
 	}
-	if evalBool(t, ctx, `document.getElementById('statusStrip').classList.contains('status-strip--open')`) {
-		t.Fatal("blocker-only strip must stay collapsed")
+	// "Stays collapsed" means the findings body is never shown in place — it
+	// is MOVED into the Issues screen. Reading that directly replaces a class
+	// check that no longer corresponds to anything and so could not fail.
+	if evalBool(t, ctx, `!document.getElementById('statusStripBody').hidden`) {
+		t.Fatal("blocker-only strip must never show its findings body in place")
 	}
 	// The banner no longer expands inline (R09.6 / Paper ZP-0: "its own screen,
-	// not an expansion"); activating it opens the Issues screen instead. The
+	// not an expansion"); activating a row opens the Issues screen instead. The
 	// blocker-count assertion below still resolves, because the severity chips
 	// travel with the findings and textContent reaches a hidden body.
 	runCDP(t, ctx, chromedp.SendKeys("#statusStripToggle", "\n", chromedp.ByQuery))
@@ -590,8 +593,13 @@ func TestPhone390SoftMountSmoke(t *testing.T) {
 
 	runCDP(t, ctx, chromedp.Navigate(blocker.renderStatic()+"#widget.contract.root"))
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
-	if evalBool(t, ctx, `document.getElementById('statusStrip').classList.contains('status-strip--open')`) {
-		t.Fatal("390px blocker-only strip must stay collapsed")
+	// The strip has no expanded form at all — no board draws one, and the
+	// grouped findings list it builds is MOVED into the Issues screen rather
+	// than shown in place. The old assertion read a class that no longer
+	// exists, which is a check that cannot fail; this reads the body's own
+	// visibility, which is the thing "stays collapsed" actually meant.
+	if evalBool(t, ctx, `!document.getElementById('statusStripBody').hidden`) {
+		t.Fatal("390px blocker-only strip must never show its findings body in place")
 	}
 
 	runCDP(t, ctx, chromedp.Navigate(ready.renderStatic()))

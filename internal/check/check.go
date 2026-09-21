@@ -46,6 +46,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
@@ -333,6 +334,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	}
 	res.Readiness = readiness.Compute(claims, inputs.store, flags)
 	cat.SetReadiness(res.Readiness)
+	cat.SetApprovedEdits(approvaledit.Compute(claims, inputs.store))
 	res.Conformance, err = conformance.Evaluate(claims, conformanceObservationPath(cfg), conformanceWorktreeReader(cfg))
 	if err != nil {
 		res.ConformanceError = err.Error()
@@ -716,6 +718,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 	}
 	res.Readiness = readiness.Compute(claims, in.store, in.flags)
 	cat.SetReadiness(res.Readiness)
+	cat.SetApprovedEdits(approvaledit.Compute(claims, in.store))
 	if _, encodeErr := catalog.EncodeJSONBounded(cat, conformance.MaxOutputBytes); encodeErr != nil {
 		res.CatalogError = encodeErr.Error()
 		res.ConformanceCapacityExceeded = errors.Is(encodeErr, conformance.ErrCapacityExceeded)

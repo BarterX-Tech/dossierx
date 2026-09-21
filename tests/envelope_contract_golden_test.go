@@ -195,6 +195,73 @@ func envLocked(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
+// envEditedSinceApproval is a project holding one claim that was approved,
+// unlocked and rewritten, whose ledger record carries no approved wording —
+// the legacy shape `claim recover-approved-content` exists for.
+//
+// It is deliberately NOT a git work tree. That is what makes it pin the
+// refusal rather than the success: an agent running this verb in a tarball
+// checkout, or a container without git, has to be able to tell "git could not
+// answer" from "nothing was recoverable", and only a fixture with something
+// eligible in it can reach that branch at all.
+func envEditedSinceApproval(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	writeFixtureProject(t, dir, "widget")
+	envMustRun(t, dir, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
+	envMustRun(t, dir, "claim", "unlock", "widget.contract.overview", "--reason", "rewording")
+
+	claimPath := filepath.Join(dir, "claims", "overview.yaml")
+	raw, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(raw), "body: |", "body: |\n  rewritten since the approval.\n", 1)
+	if edited == string(raw) {
+		t.Fatal("fixture claim body was not rewritten; this fixture would prove nothing")
+	}
+	if err := os.WriteFile(claimPath, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Strip the wording the current engine records, leaving the hash-only
+	// record a pre-v0.7.18 project has on disk.
+	storePath := filepath.Join(dir, "build", "ledger", "lock-store.json")
+	storeRaw, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var store map[string]any
+	if err := json.Unmarshal(storeRaw, &store); err != nil {
+		t.Fatal(err)
+	}
+	ledger, isMap := store["ledger"].(map[string]any)
+	if !isMap {
+		t.Fatal("the lock store has no ledger object")
+	}
+	stripped := 0
+	for _, entry := range ledger {
+		record, isRecord := entry.(map[string]any)
+		if !isRecord {
+			t.Fatalf("ledger entry is not an object: %T", entry)
+		}
+		if _, ok := record["content"]; ok {
+			delete(record, "content")
+			stripped++
+		}
+	}
+	if stripped == 0 {
+		t.Fatal("fixture ledger carried no content to strip; this fixture would prove nothing")
+	}
+	out, err := json.Marshal(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(storePath, out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return nil
+}
+
 // envTracked is a project that has adopted the SECOND axis: two declared
 // tracks, one of them assembled from a claim it owns plus two it cites — one of
 // those in another module and still draft.
@@ -448,6 +515,11 @@ func envelopeCases() []envelopeCase {
 		{"claim lock / previewed", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"}},
 		{"claim lock / already locked", envLocked, []string{"claim", "lock", "widget.contract.overview", "--reason", "again"}},
 		{"claim migrate-lock-policy / preview", envFresh, []string{"claim", "migrate-lock-policy", "--dry-run"}},
+		// Both branches of the recovery verb: nothing eligible needs no git
+		// and succeeds, something eligible with no work tree refuses. Pinning
+		// only the first would leave an agent unable to tell them apart.
+		{"claim recover-approved-content / nothing to recover", envFresh, []string{"claim", "recover-approved-content", "--dry-run"}},
+		{"claim recover-approved-content / refused, no git work tree", envEditedSinceApproval, []string{"claim", "recover-approved-content", "--dry-run"}},
 
 		{"claim unlock / a locked claim", envLocked, []string{"claim", "unlock", "widget.contract.overview", "--reason", "fixing it"}},
 		{"claim flag / a locked claim", envLocked, []string{"claim", "flag", "widget.contract.overview", "--claim-says", "a", "--now-does", "b", "--reason", "c"}},
