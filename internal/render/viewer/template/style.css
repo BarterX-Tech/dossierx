@@ -4277,12 +4277,15 @@ button.comment-chip--active.comment-chip--empty {
     border-left: 0;
     /* R-J.2 / OD14a.7 / M4, verifier RETRY item 4(iii): a dark-only 1px top
        hairline (the light sheet relies on its 16px corners and the scrim
-       alone). `light-dark()` expresses "present only under dark" without a
-       second selector-scoped dark query or a new dark-only token. A
+       alone). --sheet-hairline is the engine-owned token declared for
+       exactly this edge (:root and the two dark blocks): `transparent` in
+       light, var(--border) in dark, on both the OS path and the explicit
+       Dark toggle. It used to be a `light-dark()` literal while the token
+       sat unread; the token is the single place the edge is decided. A
        component-scoped `@media screen and (prefers-color-scheme: dark)`
-       block is unavailable
-       here (theme_tokens_test.go's ExactlyOneScreenScopedDarkQuery). */
-    border-top: 1px solid light-dark(transparent, var(--border));
+       block is unavailable here (theme_tokens_test.go's
+       ExactlyOneScreenScopedDarkQuery). */
+    border-top: 1px solid var(--sheet-hairline);
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
     border-radius: 16px 16px 0 0;
@@ -4904,24 +4907,9 @@ body.shell-body {
   background: var(--accent-bg);
 }
 
-/* nav-group-label separates the Tracks run from the modules above it. The
-   sidebar is otherwise a flat list of .sec-tab buttons, and a track tab looks
-   exactly like a module tab because mechanically it IS one — so without a
-   caption a reader would have no way to tell that the axis changed halfway
-   down. It borrows the .eyebrow register (mono, uppercase, --faint) rather
-   than inventing one, because it is the same kind of thing: a quiet caption
-   over the content beneath it, never a control. The top border and margin are
-   what make it read as a division rather than as a first entry in the run. */
-.nav-group-label {
-  margin: 14px 0 4px;
-  padding: 10px 20px 0;
-  border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
+/* .nav-group-label (the caption over the Tracks run) is gone: the sidebar
+   groups modules and tracks in .system-nav-group <details> (shell.html), and
+   nothing has emitted the class since the system-record redesign. */
 
 /* Secondary horizontal facet tab strip inside a module's content area,
    ported verbatim (selector + declarations) from the reference docs
@@ -5548,14 +5536,6 @@ body.shell-body {
 
 .sec-tab.on .sec-tab__count {
   color: var(--link);
-}
-
-.nav-group-label {
-  margin: 17px 0 5px;
-  padding: 12px 10px 0;
-  color: var(--faint);
-  font-size: 9px;
-  letter-spacing: .12em;
 }
 
 .sidebar-footer {
@@ -9931,10 +9911,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   /* collapsed door panels (both claim-links and claim-sources) */
   .claim-footer-panel {
     display: block;
-  }
-
-  .claim-links-summary {
-    cursor: auto;
   }
 
   /* layout: chrome off the page, gutters closed */

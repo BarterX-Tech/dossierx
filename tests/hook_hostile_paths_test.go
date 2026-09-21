@@ -10,13 +10,12 @@
 //
 // It is a Go test rather than a 22nd shell case for an accounting reason the
 // shell cannot satisfy: the `hooks` CI job runs a script, and a script emits
-// no countable per-test record — tests/ci_run_evidence_test.go says in its
-// header that a smoke test which degenerates into asserting nothing still
-// reaches a release as a green conclusion. This file runs inside the root
-// `go test -race -json ./...` step on all three platforms of the `test`
-// matrix, so every case here is a named entry in the account the release
-// gate's evidence stage counts, and a case that silently stopped executing is
-// a missing entry rather than a quieter shade of green.
+// no countable per-test record — a smoke test which degenerates into
+// asserting nothing still reaches a release as a green conclusion. This file
+// runs inside the root `go test -race -json ./...` step on all three platforms
+// of the `test` matrix, so every case here is a named entry in the per-test
+// account that step emits, and a case that silently stopped executing is a
+// missing entry rather than a quieter shade of green.
 //
 // THE FIXTURE SHAPE, and why the hostile name appears at TWO levels. Each
 // case builds a repository whose PARENT directory carries the hostile name,

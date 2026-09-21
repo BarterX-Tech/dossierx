@@ -37,8 +37,6 @@
       // each SSE re-render. It attaches NO listeners — those are delegated once
       // on surviving nodes below, so re-running this never double-binds.
       function initViewer() {
-        // Fragment swaps replace <main>; drop the stale mount pointer.
-        mountedSurfaceID = null;
         // Two-level show/hide: one .module-section per sidebar .sec-tab, and
         // (when a module has more than one facet) one .claim-group per .subtab
         // inside that module's .sub-nav. A single-facet module still has exactly
@@ -165,7 +163,6 @@
       // surface on first paint; smaller fixtures mount every surface so print,
       // theme probes, and live-reload witnesses that call getElementById keep
       // working without visiting every facet first.
-      var mountedSurfaceID = null;
       var SOFT_MOUNT_MIN_CLAIMS = 80;
 
       function claimCorpusSize() {
@@ -193,7 +190,6 @@
         var host = group.querySelector(':scope > [data-dossierx-surface-host]');
         var tmpl = group.querySelector(':scope > template.dossierx-surface-template');
         if (!host || !tmpl) {
-          mountedSurfaceID = surfaceID;
           return;
         }
         if (!host.querySelector('.claim')) {
@@ -226,7 +222,6 @@
         // is idempotent — every node it creates is either replaced wholesale
         // or guarded — so the second call costs nothing on the path that did.
         renderApprovedEdits();
-        mountedSurfaceID = surfaceID;
       }
 
       function mountAllSurfaces() {
@@ -488,10 +483,8 @@
         if (!toastEl) { return; }
         toastEl.textContent = msg; // textContent — error text is never trusted markup
         toastEl.hidden = false;
-        toastEl.classList.add('comments-toast--show');
         if (toastTimer) { window.clearTimeout(toastTimer); }
         toastTimer = window.setTimeout(function () {
-          toastEl.classList.remove('comments-toast--show');
           toastEl.hidden = true;
         }, 4000);
       }
@@ -1768,7 +1761,7 @@
         var label = card && card.querySelector('.k .label');
         if (label) {
           var copy = label.cloneNode(true);
-          copy.querySelectorAll('.pill, .k-id, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
+          copy.querySelectorAll('.pill, .k-id').forEach(function (node) { node.remove(); });
           var rendered = (copy.textContent || '').replace(/\s+/g, ' ').trim();
           if (rendered) { return rendered; }
         }
@@ -2625,11 +2618,10 @@
         // in BOTH states: Changes shows the diff and Current shows the same
         // passages with the changed one ruled. The body comes back only for
         // a claim with nothing to compare against (no switch).
-        card.classList.toggle('claim--edit-view', hasDiff);
-        // The claim's own body is hidden by a class ON THE CARD, and not by
-        // setting `hidden` on the body itself.
         //
-        // Which element the body IS moves: the long-body disclosure wraps
+        // The body is hidden by a class ON THE CARD, and not by setting
+        // `hidden` on the body itself. Which element the body IS moves: the
+        // long-body disclosure wraps
         // .claim-body inside .claim-body-disclosure after first paint, so a
         // handle taken before the wrap and a handle taken after it are
         // different nodes. Hiding whichever one a selector matched at the
@@ -2641,7 +2633,7 @@
         // It is also why the body is hidden rather than removed: it carries
         // the source-note clamps and that disclosure, and tearing it out
         // would take their state with it every time the reader flipped.
-        card.classList.toggle('claim--showing-changes', showingChanges);
+        card.classList.toggle('claim--edit-view', hasDiff);
       }
 
       // renderApprovedEdits upgrades each edited claim's chip and puts its
@@ -2985,7 +2977,6 @@
         var tinted = toneKeys.length === 1 ? toneKeys[0] : '';
         stripCard.classList.toggle('status-strip-card--alarm', tinted === 'alarm');
         stripCard.classList.toggle('status-strip-card--draft', tinted === 'draft');
-        stripCard.classList.toggle('status-strip-card--neutral', !tinted);
         if (stripCardCount) { stripCardCount.textContent = String(rows.length); }
 
         stripFindings.textContent = '';

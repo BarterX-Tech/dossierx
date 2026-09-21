@@ -113,6 +113,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "the approved text was not retained" — they keep working, and the viewer says
   the text is unavailable rather than showing an empty or all-new diff.
 
+### Maintenance
+
+- A dead-code sweep of the viewer and the repository, proved unreachable
+  before removal: `x/tools/cmd/deadcode -test` and staticcheck U1000 for Go
+  (both clean, nothing to remove), a full-repository reference scan for CSS
+  classes, custom properties and JS declarations, and a path scan for
+  fixtures and comments. Removed: `.nav-group-label` (both rules; the sidebar
+  has grouped modules and tracks in `.system-nav-group` since the system
+  record redesign) and the print block's `.claim-links-summary` rule left
+  behind by the 0.7.17 sweep; the `normalizeEdges` function in graph-core,
+  the write-only `mountedSurfaceID` and unread `notices` variables, two
+  always-false guards (`data-footer-enhanced`, `__dxParityFreezeToc`) and
+  four class toggles whose rules no longer exist (`comments-toast--show`,
+  `claim--showing-changes`, `status-strip-card--neutral`, the
+  `.claim-collapse-chevron` selector); and `testdata/ci-run-evidence` plus
+  `testdata/gate-stage3`, fixtures of the release gate removed in 0.7.0 whose
+  readers went with it. The mobile comments sheet's top hairline now reads the
+  `--sheet-hairline` token declared for it instead of a `light-dark()`
+  literal beside an unread token; same paint on every path. Comments in
+  `ci.yml` and two tests that still described `tests/ci_run_evidence_test.go`
+  as the reader of the CI run now say that reader is gone.
+
 ## [0.7.18] - 2026-09-20
 
 ### Added

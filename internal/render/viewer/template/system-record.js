@@ -356,7 +356,6 @@
 
   function enhanceConformanceFooters() {
     document.querySelectorAll('details.claim-conformance').forEach(function (original) {
-      if (original.dataset.footerEnhanced === 'true') { return; }
       var claim = original.closest('.claim');
       var footer = claim && claim.querySelector('.claim-footer');
       var summary = original.querySelector(':scope > summary');
@@ -461,13 +460,6 @@
   }
 
   function renderToc() {
-    // Theme-parity's hover probe forces :hover through CDP node ids. This
-    // function replaceChildren()s the TOC list on every enhance pass (the
-    // layout MutationObserver retriggers enhance when addModuleHeaders
-    // rewrites the module head), so a node id dies between QuerySelector
-    // and ForcePseudoState. The harness sets this flag for the duration of
-    // that probe; it is otherwise unset.
-    if (window.__dxParityFreezeToc) { return; }
     var toc = document.getElementById('systemFacetToc');
     if (!toc) {
       toc = document.createElement('aside');

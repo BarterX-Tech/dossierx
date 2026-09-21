@@ -237,7 +237,6 @@
   var parseTimeHash = ''; // the graph state segment seen at parse time
   var originClaimId = ''; // OPEN_ID_ATTR off the trigger that opened the pane, '' from the nav trigger
   var collapseOverride = false; // the reader insisted on every claim
-  var notices = []; // {text, kind, action} rendered above the canvas
   var dragging = null; // {id} while a node is being dragged
   var panning = null; // {x, y} while the background is being dragged
   var movedWhileDown = false;

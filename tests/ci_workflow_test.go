@@ -60,14 +60,14 @@
 // not model a shell. Setup goes in its own step, where its own failure is its own.
 //
 // WHERE THE OTHER QUESTION IS ANSWERED, and this paragraph has been rewritten
-// because the answer changed. It is answered from the RUN, in
-// tests/ci_run_evidence_test.go, which fetches the CI run for one commit,
-// derives from this same workflow which suites exist and in how many matrix
-// instantiations, fetches each instantiation's job log, and parses the
-// `go test -json` account the suite steps now emit. That file's subject is the
-// run and this file's subject is the document; neither can do the other's job,
-// and the boundary drawn above is unchanged — it is a boundary on what a reader
-// of a FILE can establish, and nothing here has started reading a run.
+// because the answer changed twice. Nothing reads the RUN any more. A machine
+// reader of it (tests/ci_run_evidence_test.go, which fetched each matrix
+// instantiation's job log and parsed the `go test -json` account the suite
+// steps emit) went with the release-gate pipeline; docs/RELEASING.md now has
+// the maintainer run the four suites locally before tagging and stops there.
+// This file's subject is the document; the boundary drawn above is unchanged —
+// it is a boundary on what a reader of a FILE can establish, and nothing here
+// has started reading a run.
 //
 // THERE USED TO BE A SECOND AUTOMATED READER AND THERE IS NOT ANY MORE, which
 // is worth stating because its absence is a coverage boundary and not an
@@ -75,14 +75,13 @@
 // ran `gh api repos/<owner>/<repo>/commits/<merge-sha>/check-runs` and required
 // every check run on the merge commit to be a pass. That checklist was retired
 // with the release-gate pipeline — it published main before the tag, the order
-// the driver refuses to perform — and nothing inherited its whole subject. What
-// it saw that is still seen: a workflow that never fired for the commit, and a
-// declared job that produced no account, are both findings of
-// tests/ci_run_evidence_test.go (`no-ci-run-for-sha`, `missing-instantiation`).
-// What it saw that no machine sees now: check runs belonging to workflows other
-// than ci.yml — `Release`, `CodeQL`, `Deploy site` — because the reader that
-// replaced it derives its subject from THIS file's workflow and accounts for
-// nothing else. Those are read by a person, in docs/RELEASING.md.
+// the driver refused to perform — and nothing inherited its whole subject. The
+// run-level reader that briefly replaced it (tests/ci_run_evidence_test.go)
+// went with the same pipeline, so no machine now sees a workflow that never
+// fired for the commit, a declared job that produced no account, or check
+// runs belonging to workflows other than ci.yml — `Release`, `CodeQL`,
+// `Deploy site`. docs/RELEASING.md names the ones a person reads after the
+// tag; the rest are open.
 //
 // THE HUMAN ITEM SURVIVES ANYWAY, and for a reason that has also changed. It used
 // to survive because it was the only thing that could see a suite that ran
@@ -1064,8 +1063,8 @@ const pesterSuiteFile = "scripts/install-git-hook.Tests.ps1"
 // for Windows PowerShell users — and this file reads `if:` nowhere, on
 // purpose; whether any step ran is a fact about a run. Nor can the run be
 // counted the way the Go suites are: Invoke-Pester emits no `go test -json`
-// account, so tests/ci_run_evidence_test.go cannot see it either — the same
-// stated residue as the smoke test it sits beside. What is closed is the
+// account, so no reader of the run could count it either — the same stated
+// residue as the smoke test it sits beside. What is closed is the
 // silent-deletion channel, which is the one that actually happened.
 func TestTheHooksJobDeclaresThePowerShellInstallerSuite(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ciRepoRoot(t), filepath.FromSlash(pesterSuiteFile))); err != nil {
