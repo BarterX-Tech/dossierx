@@ -530,7 +530,48 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		links++
 		extra.WriteString(`<li class="claim-review-pending claim-relationship-extra">review_pending</li>`)
 	}
+	if c.LinksNone() {
+		links++
+		extra.WriteString(`<li class="claim-links-none claim-relationship-extra claim-relationship-none">implemented in: none`)
+		if c.Links.Reason != "" {
+			extra.WriteString(`<span class="claim-links-none-reason"> — `)
+			extra.WriteString(string(markdown.RenderInline(c.Links.Reason)))
+			extra.WriteString(`</span>`)
+		}
+		extra.WriteString(`</li>`)
+	}
+	processShown := map[int]bool{}
+	writeProcessRow := func(step int, artifact string) {
+		links++
+		extra.WriteString(`<li class="claim-process-owned claim-relationship-extra">step `)
+		extra.WriteString(strconv.Itoa(step))
+		extra.WriteString(`: process-owned`)
+		if artifact != "" {
+			extra.WriteString(` — `)
+			extra.WriteString(html.EscapeString(artifact))
+		}
+		extra.WriteString(`</li>`)
+		processShown[step] = true
+	}
+	for _, n := range c.ProcessOwnedSteps() {
+		artifact := ""
+		for _, f := range files {
+			if f.Step == n && f.Process != "" {
+				artifact = f.Process
+				break
+			}
+		}
+		writeProcessRow(n, artifact)
+	}
 	for _, f := range files {
+		if f.Process != "" && f.Step > 0 && !processShown[f.Step] {
+			writeProcessRow(f.Step, f.Process)
+		}
+	}
+	for _, f := range files {
+		if f.File == "" {
+			continue
+		}
 		extra.WriteString(`<li class="claim-implemented-in claim-relationship-extra">implemented in: <code>`)
 		extra.WriteString(html.EscapeString(f.File))
 		if f.Symbol != "" {
@@ -544,11 +585,17 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		extra.WriteString(`</li>`)
 	}
 	if linksGated && implink.Expects(c) {
-		if len(files) == 0 {
+		fileCount := 0
+		for _, f := range files {
+			if f.File != "" {
+				fileCount++
+			}
+		}
+		if fileCount == 0 && len(c.ProcessOwnedSteps()) == 0 && len(processShown) == 0 {
 			links++
 			extra.WriteString(`<li class="claim-unlinked claim-relationship-extra">implemented in: <span class="pill pw">not linked to code</span></li>`)
 		} else if total := len(c.Steps); total > 0 {
-			steps := make([]int, 0, len(files))
+			steps := append([]int(nil), c.ProcessOwnedSteps()...)
 			for _, f := range files {
 				if f.Step > 0 {
 					steps = append(steps, f.Step)

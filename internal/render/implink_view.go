@@ -62,5 +62,5 @@ func buildImplinkLookup(cfg *config.Config) map[string][]implink.ViewFile {
 // never names a gap `dossierx check` does not refuse on, and never stays
 // quiet about one it does.
 func codeLinksGated(cfg *config.Config) bool {
-	return cfg != nil && len(cfg.SourceDirs) > 0
+	return cfg.ScansSource()
 }

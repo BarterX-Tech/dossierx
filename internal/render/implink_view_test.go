@@ -276,3 +276,34 @@ func TestRender_PartialStepsRow_NamesMissingSteps(t *testing.T) {
 		t.Fatalf("a fully stepped claim must show no partial row:\n%s", out)
 	}
 }
+
+func TestRender_LinksNone_ShowsReasonAndSkipsUnlinkedPill(t *testing.T) {
+	module := "widget"
+	cfg := implinkGatedConfig(t, module)
+	claim := implinkTestClaim(module)
+	claim.Links = &model.ClaimLinks{Mode: model.LinksModeNone, Reason: "no implementing declaration"}
+	out := renderClaims(t, []model.Claim{claim}, cfg)
+	if strings.Contains(out, "not linked to code") {
+		t.Fatalf("links.none must not show the unlinked pill:\n%s", out)
+	}
+	if !strings.Contains(out, "implemented in: none") || !strings.Contains(out, "no implementing declaration") {
+		t.Fatalf("expected links none + reason:\n%s", out)
+	}
+}
+
+func TestRender_ProcessOwnedStep_FromYAML(t *testing.T) {
+	module := "widget"
+	cfg := implinkGatedConfig(t, module)
+	claim := implinkTestClaim(module)
+	claim.Layout = model.LayoutSteps
+	claim.Steps = []string{"freeze", "run"}
+	claim.Body = ""
+	claim.StepsOwnedBy = model.StepsOwnedBy{1: model.StepOwnerProcess, 2: model.StepOwnerProcess}
+	out := renderClaims(t, []model.Claim{claim}, cfg)
+	if strings.Contains(out, "not linked to code") || strings.Contains(out, "claim-partial-link") {
+		t.Fatalf("fully process-owned steps must be complete:\n%s", out)
+	}
+	if !strings.Contains(out, "step 1: process-owned") || !strings.Contains(out, "step 2: process-owned") {
+		t.Fatalf("expected process-owned rows:\n%s", out)
+	}
+}

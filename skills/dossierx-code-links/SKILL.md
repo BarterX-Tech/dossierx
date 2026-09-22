@@ -57,7 +57,7 @@ The everyday case, and the only thing most implementation work needs.
    do not replace each other. Unknown id, not-locked, `#n` out of range, a claim
    with no `steps`, or a hash mismatch all fail `dossierx check` (`implink_refused`).
 
-2. Run `dossierx check`. If the project's `project.config.yaml` sets `source_dirs`, the scan finds
+2. Run `dossierx check`. If the project's `project.config.yaml` sets `source_dirs` or `source_roots`, the scan finds
    the tag and links it — no separate command. A claim may have any number of tagged files; a file
    may carry tags for any number of claims.
 3. An invalid tag is a **hard failure**: an unknown claim id (check for a typo) or a claim that is
@@ -74,31 +74,34 @@ The everyday case, and the only thing most implementation work needs.
    common declaration shapes below the tag line, not a real parser. File-level linking is reliable
    regardless.
 
-When there is no `source_dirs`, or the file genuinely cannot carry a comment (a generated artifact,
+When there is no `source_dirs` or `source_roots`, or the file genuinely cannot carry a comment (a generated artifact,
 a migration with nowhere to put one), link it explicitly — same validation, same artifact, simply
 not tag-triggered:
 
 ```
 dossierx claim link --module <name> --claim <id> --file <project-relative-path> [--symbol <name>]
+dossierx claim link --module <name> --claim <id> --step n --process "<artifact>"
 ```
 
 It takes `--dry-run`, needs no `--reason` (it records a fact, it does not change what is approved),
 and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write the same generated
-`build/code-links/<module>.json` — never hand-edit it.
+`build/code-links/<module>.json` — never hand-edit it. `--process` attests a person or review step;
+do not invent a dummy type or a fake `dossierx-step` tag. A claim with no declaration uses
+`links.mode: none` plus a reason (shown on the card; the gate excludes it), not a re-role unless
+it really is orientation or out-of-scope. The same process step can be authored as
+`steps_owned_by: {n: process}`.
 
-**Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
+**Green `check` means linked, and only that.** Once `source_dirs` or `source_roots` is set, plain `dossierx check`
 refuses (`unlinked_claims`, `stopped_at: links`) when any locked `schema`/`behavior`/`api`/
 `verification` claim has no linked file, or a claim with `steps:` is not tagged on every step — a
 `dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
-The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
-claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
-counts per module with `scanned` and `gated`; `--validate` and `--staged` fill it with both false
-and never refuse. Linked is not followed: the gate proves a pointer exists, never that the code still
-means what the claim says — that is the human's lock and the project's tests. Nor is it your saying
-so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain
-`check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the
-drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same
-thing for one claim, per file:
+Process-owned steps and `links.mode: none` are the honest exclusions. The catalog and viewer are
+regenerated before the refusal; only the exit status is withheld, and the claim's card reads
+"not linked to code", "steps linked: k of N", "process-owned", or "implemented in: none".
+`data.code_links` carries the counts per module with `scanned` and `gated`; `--validate` and
+`--staged` fill it with both false and never refuse. Linked is not followed: the gate proves a
+pointer exists, never that the code still means what the claim says — that is the human's lock and
+the project's tests. Nor is it your saying so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain `check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same thing for one claim, per file:
 
 ```json
 "implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]
@@ -161,6 +164,9 @@ Meaning changed, body-only claim → Channel A:
 
 ## Portability
 
-`source_dirs` is the one opt-in `project.config.yaml` field this skill depends on; unset, a project
-sees no behavior change. The tag marker string, the link artifact and the flag/reaudit dispatch are
-all covered by the same zero-hardcoded-assumptions guarantee as everything else in DossierX.
+`source_dirs` and `source_roots` are the opt-in `project.config.yaml` fields this skill depends on;
+unset, a project sees no behavior change. Use `source_roots: [{path, repo, ref}]` for a sibling
+checkout (`path` may leave the project). The scan records that tree's commit on
+`build/code-links`. Do not copy application code into a claims corpus to satisfy `source_dirs`.
+The tag marker string, the link artifact and the flag/reaudit dispatch are all covered by the
+same zero-hardcoded-assumptions guarantee as everything else in DossierX.

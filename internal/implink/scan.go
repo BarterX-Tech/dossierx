@@ -1,7 +1,7 @@
 // scan.go implements the automatic, tag-driven half of claim-to-code
 // linking: instead of an agent (or human) explicitly running "dossierx implink
 // set" once per claim, Scan walks a project's declared cfg.SourceDirs
-// looking for a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
+// and cfg.SourceRoots looking for a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
 // comment anywhere in a text file and, for
 // every one it finds, calls the exact same Set logic every explicit link
 // already goes through — same validation, same artifact file, same file-hash
@@ -90,6 +90,7 @@ type ScanMatch struct {
 	Symbol   string // best-effort; may be empty
 	Step     int    // 1-based; 0 = whole-claim tag
 	StepHash string
+	Process  string // set by claim link --process; Scan never fills this
 }
 
 // ScanError is one tag Scan found that could not be reconciled into a
@@ -121,7 +122,8 @@ func (r *ScanReport) Summary() string {
 	)
 }
 
-// Scan walks every directory in cfg.SourceDirs, finds every "dossierx-claim:
+// Scan walks every directory in cfg.ScanWalkDirs (source_dirs plus
+// source_roots), finds every "dossierx-claim:
 // <id>" and legal "dossierx-step: <id> #<n> <sha256>" tag in every text file
 // under them, and — for each tag naming a claim that exists and is locked —
 // reconciles a code link under that claim's own Module. Step tags also
@@ -130,9 +132,9 @@ func (r *ScanReport) Summary() string {
 // ScanReport.Errors instead of being silently dropped.
 //
 // Scan is a no-op (a zero-value, all-zero ScanReport, nil error) when
-// cfg.SourceDirs is empty — the zero-cost-when-unused contract every
-// optional feature in this engine follows; a project that has never set
-// source_dirs sees no behavior change at all from this function existing.
+// the project named neither source_dirs nor source_roots — the
+// zero-cost-when-unused contract every optional feature in this engine
+// follows.
 //
 // IT WALKS FIRST AND WRITES SECOND, one artifact write per module, holding that
 // module's sentinel (lock.AcquireFileLock over its ArtifactPath) across the
@@ -152,7 +154,7 @@ func (r *ScanReport) Summary() string {
 // also removes the N-renames-per-scan the per-tag write cost.
 func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 	report := &ScanReport{}
-	if cfg == nil || len(cfg.SourceDirs) == 0 {
+	if cfg == nil || !cfg.ScansSource() {
 		return report, nil
 	}
 
@@ -160,7 +162,7 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 	// module whose artifact it belongs in. Nothing is written during the walk.
 	pending := map[string][]ScanMatch{}
 
-	for _, root := range cfg.SourceDirs {
+	for _, root := range cfg.ScanWalkDirs() {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err

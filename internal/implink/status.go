@@ -43,11 +43,13 @@ func CodeProducing(role model.BuildRole) bool {
 }
 
 // Expects reports whether c is a claim the code-link gate holds to account:
-// locked, and in a code-producing build_role. A draft claim is never
-// expected to be linked (Scan refuses a tag on it), and an orientation or
-// out-of-scope claim has no code to point at.
+// locked, in a code-producing build_role, and not declared `links.mode: none`.
+// A draft claim is never expected to be linked (Scan refuses a tag on it),
+// an orientation or out-of-scope claim has no code to point at, and a
+// doctrine/boundary claim that names `links: none` with a reason is the
+// honest form of "no implementing declaration".
 func Expects(c model.Claim) bool {
-	return c.Status == model.StatusLocked && codeProducingRoles[c.BuildRole]
+	return c.Status == model.StatusLocked && codeProducingRoles[c.BuildRole] && !c.LinksNone()
 }
 
 // DriftEntry is one linked file whose current on-disk content no longer
@@ -195,6 +197,10 @@ func status(claims []model.Claim, cfg *config.Config, module string, artifact *A
 			if f.Step > 0 {
 				stepsByClaim[link.ClaimID] = append(stepsByClaim[link.ClaimID], f.Step)
 			}
+			if f.File == "" {
+				// Process attestation: no file to re-hash.
+				continue
+			}
 			current, statErr := hashFile(filepath.Join(cfg.Dir(), f.File))
 			switch {
 			case statErr == nil && current == f.FileHash:
@@ -231,15 +237,21 @@ func status(claims []model.Claim, cfg *config.Config, module string, artifact *A
 		if c.Module != module || !Expects(c) {
 			continue
 		}
-		if !linked[c.ID] {
+		attested := append(append([]int(nil), c.ProcessOwnedSteps()...), stepsByClaim[c.ID]...)
+		if total := len(c.Steps); total > 0 {
+			covered, missing := StepCoverage(total, attested)
+			if covered == total {
+				continue
+			}
+			if linked[c.ID] || covered > 0 {
+				report.Partial = append(report.Partial, PartialEntry{ClaimID: c.ID, Covered: covered, Total: total, Missing: missing})
+				continue
+			}
 			report.UnlinkedIDs = append(report.UnlinkedIDs, c.ID)
 			continue
 		}
-		if total := len(c.Steps); total > 0 {
-			covered, missing := StepCoverage(total, stepsByClaim[c.ID])
-			if covered < total {
-				report.Partial = append(report.Partial, PartialEntry{ClaimID: c.ID, Covered: covered, Total: total, Missing: missing})
-			}
+		if !linked[c.ID] {
+			report.UnlinkedIDs = append(report.UnlinkedIDs, c.ID)
 		}
 	}
 	sort.Strings(report.UnlinkedIDs)
@@ -262,6 +274,7 @@ type ViewFile struct {
 	Drifted  bool
 	Step     int
 	StepHash string
+	Process  string
 }
 
 // ViewsByClaim returns, for every claim id in module's implementation-link
@@ -285,9 +298,13 @@ func ViewsByClaim(cfg *config.Config, module string) (map[string][]ViewFile, err
 	for _, link := range artifact.Links {
 		views := make([]ViewFile, 0, len(link.Files))
 		for _, f := range link.Files {
+			if f.File == "" {
+				views = append(views, ViewFile{Step: f.Step, StepHash: f.StepHash, Process: f.Process})
+				continue
+			}
 			current, statErr := hashFile(filepath.Join(cfg.Dir(), f.File))
 			drifted := statErr != nil || current != f.FileHash
-			views = append(views, ViewFile{File: f.File, Symbol: f.Symbol, Drifted: drifted, Step: f.Step, StepHash: f.StepHash})
+			views = append(views, ViewFile{File: f.File, Symbol: f.Symbol, Drifted: drifted, Step: f.Step, StepHash: f.StepHash, Process: f.Process})
 		}
 		out[link.ClaimID] = views
 	}

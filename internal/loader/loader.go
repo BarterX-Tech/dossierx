@@ -99,6 +99,9 @@ func ParseClaim(raw []byte, sourcePath string) (model.Claim, error) {
 	if err := model.ValidateEmbodiment(&c); err != nil {
 		return model.Claim{}, fmt.Errorf("loader: parse %s: %w", sourcePath, err)
 	}
+	if err := model.ValidateCodeLinkDeclarations(&c); err != nil {
+		return model.Claim{}, fmt.Errorf("loader: parse %s: %w", sourcePath, err)
+	}
 	// One claim per file is required, not merely recommended. A second
 	// YAML document (--- separated) in the same file must be a hard
 	// error rather than silently dropped: SaveClaim rewrites a claim's

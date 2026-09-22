@@ -71,6 +71,11 @@ embodiment:                    # optional project-neutral implementation expecta
       expectation:
         shape: scalar
         value: "3"
+links:                         # optional; deliberate absence of an implementing declaration
+  mode: none                   # v1: none only
+  reason: string               # required with mode none; shown on the card; excluded from the code-link gate
+steps_owned_by:                # optional; 1-based steps: indexes discharged by a person or a review
+  1: process                   # v1 value is process only; those steps count as linked
 mirrors: [ id, ... ]           # optional
 rests_on: [ id, ... ]          # optional
 governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
@@ -126,6 +131,28 @@ null, mapping, and mixed-type values are rejected rather than coerced.
 whose value is null or empty. Omitting `embodiment` means the claim has not
 opted into this feature; it is different from deliberately declaring
 `mode: none`.
+
+### Code-link declarations (`links`, `steps_owned_by`)
+
+An optional `links` block records that a code-producing claim has no
+implementing declaration — doctrine, a refusal, a reading rule. `mode: none`
+requires a non-empty `reason` and is the only v1 mode. The viewer prints
+`implemented in: none — <reason>` on the card. `dossierx check` does not hold
+that claim to the code-link gate (the same exclusion as `build_role:
+orientation` / `out-of-scope`, without re-roling a behavior claim). Omitting
+`links` is not `mode: none`: once `source_dirs` is set, a locked
+schema/behavior/api/verification claim still needs a tag or an explicit
+`dossierx claim link`.
+
+An optional `steps_owned_by` map attests that numbered `steps:` entries are
+owned by a person or a review, not by a `dossierx-step` tag. Keys are 1-based
+indexes into `steps:`; the v1 value is `process`. Those indexes count as
+covered for the gate and render as `step n: process-owned` on the card. The
+same attestation can be recorded without editing the claim via
+`dossierx claim link --module <m> --claim <id> --step n --process "<artifact>"`,
+which writes the artifact into `build/code-links/<module>.json`. `links.mode:
+none` and `steps_owned_by` cannot be combined. Do not invent dummy source
+types or fake `dossierx-step` tags to clear the gate.
 
 A project-owned adapter writes the strict, versioned observation envelope;
 DossierX never runs or interprets the adapter. Configure its one literal path
@@ -1441,11 +1468,25 @@ source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-step: <id> #<n> <sha256-hex>"
                                   # comments, resolved
                                   # relative to this file's own directory like
-                                  # claims_dir. Unset/empty means DO NOT SCAN —
-                                  # `check` behaves as it did before the field
+                                  # claims_dir. Each path must stay inside the
+                                  # project. Unset/empty means DO NOT SCAN
+                                  # unless source_roots is set — `check`
+                                  # behaves as it did before the field
                                   # existed, and the engine never guesses where
-                                  # the code is. Without it, a code link can
-                                  # only be recorded by `dossierx claim link`.
+                                  # the code is. Without either field, a code
+                                  # link can only be recorded by
+                                  # `dossierx claim link` (including
+                                  # `--step n --process`).
+source_roots:                    # optional; sibling (or in-tree) source trees
+  - path: ../app                 # relative to this file; MAY leave the project
+    repo: org/app                # remote the checkout belongs to
+    ref: abcdef12                # commit, tag or branch; must equal HEAD
+                                  # Scan walks path. check writes
+                                  # {path, repo, ref, commit} on
+                                  # build/code-links. Same completeness gate
+                                  # as source_dirs. Use this instead of
+                                  # putting application code inside a claims
+                                  # corpus.
 mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
                                   # to author layout: mockup claims — the module
                                   # allowlist leg of raw-html-scope's gate. Every

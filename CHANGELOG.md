@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A locked `schema`/`behavior`/`api`/`verification` claim can declare
+  `links.mode: none` with a `reason`. The card shows `implemented in: none —
+  <reason>` and the code-link gate excludes that claim, so doctrine and
+  boundary claims no longer need a dummy `dossierx-claim` tag (#91).
+- A `layout: steps` claim can attest a process-owned step with
+  `steps_owned_by: {n: process}` or `dossierx claim link --step n --process
+  "<artifact>"`. Those indexes count as linked and render as
+  `step n: process-owned` on the card. Do not invent dummy `dossierx-step`
+  tags for a person or a review (#88).
+- `source_roots: [{path, repo, ref}]` names a source tree that may sit
+  outside the project (a sibling app checkout). `check` scans it, records
+  the resolved commit on `build/code-links`, and applies the same
+  completeness gate as `source_dirs`. `source_dirs` still must stay inside
+  the project. (#90)
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed
