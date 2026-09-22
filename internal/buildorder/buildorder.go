@@ -18,9 +18,11 @@
 //
 // Propose is the pure, in-memory computation (mirroring catalog.Build):
 // it never touches disk. The sibling store.go handles the artifact's
-// on-disk lifecycle (propose -> write, status, lock -> hash-snapshot),
-// mirroring internal/lock's Store/ContentHash precedent for "a generated
-// artifact with a human-confirmed lock step that can go stale".
+// on-disk lifecycle (propose -> write, status -> re-derive and compare,
+// lock -> freeze), following internal/lock's precedent for "a generated
+// artifact with a human-confirmed lock step that can go stale" — except
+// that the staleness baseline is the frozen artifact itself, never a
+// content hash of the claims (see store.go's recomputeStale).
 package buildorder
 
 import (
@@ -85,11 +87,30 @@ type PhaseBlock struct {
 // lock/staleness bookkeeping store.go's Lock/Status add on top. See this
 // package's doc comment and store.go's for the propose/lock lifecycle.
 //
-// Hashes is only ever populated by a successful Lock: it snapshots
-// lock.ContentHash for every claim covered by Phases (see ClaimIDs) as of
-// that lock, exactly mirroring internal/lock.Store.Hashes but scoped to
-// this one module's artifact instead of the whole project. It is empty
-// (omitted from JSON) on a freshly-proposed, not-yet-locked artifact.
+// Stale and StaleIDs are LIVE only in the value a reader gets back from
+// store.go's Status (and everything built on it: "build-order status",
+// "build-order show", check's BuildOrderReport, the viewer): Status recomputes
+// them from the claims as they are now, every time. The copy persisted in
+// build/build-order/<module>.json is the value as of the last WRITE — always
+// false/empty, because Propose writes an unlocked (never stale) artifact and
+// Lock refuses a stale one — and nothing ever rewrites it afterwards. It is
+// kept in the file rather than dropped because the lock ledger signs the JSON
+// marshalling of this struct (cmd/dossierx's buildOrderSignature and check's
+// twin): dropping the key would change every existing locked artifact's
+// signature and report build-order-content-drift on every project that
+// upgrades. A reader of the raw file must therefore treat `stale` as "not
+// stale when written", never as a current verdict; the current verdict is
+// only ever one Status call away and is what every DossierX surface reports.
+//
+// Hashes is LEGACY: releases before issue #58 snapshotted lock.ContentHash for
+// every covered claim here at Lock time and compared against it on every
+// Status, which marked the order stale after any content edit to a covered
+// claim. Staleness is now decided by re-deriving the order from the current
+// claims and comparing (store.go's recomputeStale), so Lock no longer writes
+// this map and Status never reads it. The field remains so an artifact written
+// by an older release loads and re-marshals byte-identically — its ledger
+// signature covers the map — and such an artifact is judged by exactly the
+// same re-derivation as a new one.
 type Artifact struct {
 	Module   string            `json:"module"`
 	Locked   bool              `json:"locked"`

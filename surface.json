@@ -2,7 +2,7 @@
   "commands": [
     {
       "path": "build-order lock",
-      "short": "Lock --module's proposed build-order artifact, snapshotting a content-hash baseline",
+      "short": "Lock --module's proposed build-order artifact, freezing the derived sequence",
       "flags": [
         "--config",
         "--dry-run",
@@ -533,11 +533,11 @@
   ],
   "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:02bd9e36909957ca603f2491d922c1d08fafd4d70387823412da45fd190b8032",
+    "cmd/dossierx": "sha256:8a4d290c74ad162ae729dbcaf1aa3cf6f3228fc5234a3e08e4d45472f0bdd65c",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/buildorder": "sha256:bf557239a85d4da9c7c40a4e0cdf2036eef0a0f104be3dfd14aa74506f64568f",
+    "internal/buildorder": "sha256:9d535232f6d1c05de536df4592b7f5f7451e804e2da035e495c461e40d9dbefe",
     "internal/catalog": "sha256:358d9aa06b14b14f5a9b52686cc328e005be4596e0fa89770ac32530f4629d31",
     "internal/check": "sha256:bba5501642f44bd52ab9b22d63157787346ab35e3f54fd1e17d33e7c8f8bed2f",
     "internal/cliout": "sha256:9c578cd84239c34947443e1e84df064b7099b16c21e3e450b476c9223f894c66",

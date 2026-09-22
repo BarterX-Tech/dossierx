@@ -193,16 +193,44 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 		t.Fatalf("expected stale: false immediately after lock, got: %s", statusAfterLock)
 	}
 
-	// Mutate the schema claim's body on disk (simulating a post-lock edit)
-	// and confirm status now reports staleness naming that claim.
+	// Edit the schema claim's PROSE on disk (simulating a post-lock reword).
+	// Issue #58: nothing the order is derived from moved, so status must keep
+	// reporting the order current rather than spending a human approval on a
+	// re-propose that would reproduce the same sequence.
 	schemaPath := filepath.Join(root, "claims", "schema.yaml")
 	raw, err := os.ReadFile(schemaPath)
 	if err != nil {
 		t.Fatalf("read schema claim: %v", err)
 	}
-	mutated := strings.Replace(string(raw), "fixture claim for build-order CLI tests.", "fixture claim, mutated after lock.", 1)
-	if err := os.WriteFile(schemaPath, []byte(mutated), 0o644); err != nil {
+	reworded := strings.Replace(string(raw), "fixture claim for build-order CLI tests.", "fixture claim, reworded after lock.", 1)
+	if reworded == string(raw) {
+		t.Fatalf("fixture precondition: the prose substitution did not apply")
+	}
+	if err := os.WriteFile(schemaPath, []byte(reworded), 0o644); err != nil {
 		t.Fatalf("rewrite schema claim: %v", err)
+	}
+	statusAfterReword, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "widget")
+	if err != nil {
+		t.Fatalf("status after reword: %v", err)
+	}
+	if !strings.Contains(statusAfterReword, "stale:    false") {
+		t.Fatalf("issue #58: a prose edit must not make the order stale, got: %s", statusAfterReword)
+	}
+
+	// Now move a derivation input: the behavior claim's build_role becomes
+	// schema, which changes the derived sequence. Status must report
+	// staleness naming that claim.
+	behaviorPath := filepath.Join(root, "claims", "behavior.yaml")
+	raw, err = os.ReadFile(behaviorPath)
+	if err != nil {
+		t.Fatalf("read behavior claim: %v", err)
+	}
+	mutated := strings.Replace(string(raw), "build_role: behavior\n", "build_role: schema\n", 1)
+	if mutated == string(raw) {
+		t.Fatalf("fixture precondition: the build_role substitution did not apply")
+	}
+	if err := os.WriteFile(behaviorPath, []byte(mutated), 0o644); err != nil {
+		t.Fatalf("rewrite behavior claim: %v", err)
 	}
 
 	statusAfterMutate, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "widget")
@@ -210,10 +238,13 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 		t.Fatalf("status after mutate: %v", err)
 	}
 	if !strings.Contains(statusAfterMutate, "stale:    true") {
-		t.Fatalf("expected stale: true after mutating a covered claim, got: %s", statusAfterMutate)
+		t.Fatalf("expected stale: true after moving a covered claim's build_role, got: %s", statusAfterMutate)
 	}
-	if !strings.Contains(statusAfterMutate, "widget.contract.schema") {
-		t.Fatalf("expected the mutated claim id named in stale output, got: %s", statusAfterMutate)
+	if !strings.Contains(statusAfterMutate, "widget.contract.behavior") {
+		t.Fatalf("expected the moved claim id named in stale output, got: %s", statusAfterMutate)
+	}
+	if strings.Contains(statusAfterMutate, "widget.contract.schema") {
+		t.Fatalf("the reworded-only claim must not be named as stale, got: %s", statusAfterMutate)
 	}
 
 	// A bare relock of the stale artifact is refused (FIX-13): it would
@@ -906,9 +937,11 @@ func TestCLI_BuildOrderShow_StaleOrderIsShownWithAWarning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the schema claim: %v", err)
 	}
-	mutated := strings.Replace(string(raw), "fixture claim for build-order CLI tests.", "fixture claim, edited after the order was locked.", 1)
+	// A derivation input moves (build_role), not prose: since issue #58 a
+	// prose edit leaves the order current, so it could not stage this test.
+	mutated := strings.Replace(string(raw), "build_role: schema\n", "build_role: orientation\n", 1)
 	if mutated == string(raw) {
-		t.Fatalf("the fixture claim body did not change, so this test would assert nothing about staleness")
+		t.Fatalf("the fixture claim's build_role did not change, so this test would assert nothing about staleness")
 	}
 	if err := os.WriteFile(schemaPath, []byte(mutated), 0o644); err != nil {
 		t.Fatalf("rewrite the schema claim: %v", err)
