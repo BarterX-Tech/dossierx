@@ -92,6 +92,8 @@ The loop while authoring is `dossierx check --validate`: the same lint gate `che
 same severity, writing **nothing** — no claim files, no lock store, no `build/catalog/catalog.json`, no viewer.
 Run the full `dossierx check` when you want the viewer rebuilt and code links scanned; only that
 run proves a locked claim is linked to code (`--validate` reports `code_links` but never gates on it).
+Report the envelope, never your belief: "it is synced" in chat is not a certificate, and an exit code
+you did not see is one you do not have — stop and say what is missing.
 
 ## Citing your evidence — `sources`
 

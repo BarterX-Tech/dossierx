@@ -557,6 +557,13 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // discriminator in comments and code-links, the read-only track section in
 // claims, the status-vs-show line in build-order), which is the surface
 // signature: one decision, stated once per guide that owns a piece of it.
+//
+// NO RAISE FOR #78 PHASE 2. The proof-or-stop rule — admitted evidence only,
+// a model's statement in chat is never a certificate — is three lines in the
+// router and two in each of the two companions that describe `check`. CENSUS:
+// router 294 of 296, claims 260, comments 212, code-links 166, build-order
+// 147. The router is now two lines from its ceiling, so the next sentence it
+// needs is a budget decision, not a quiet edit.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 296
 
@@ -606,6 +613,12 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		{"dossierx-code-links", "Linked is not followed", "the gate proves a pointer, not meaning"},
 		{"dossierx", "neither proves code links", "--validate and --staged are not sync"},
 		{"dossierx", "skills_drift", "a rewritten skill is a refusal, not a soft bump"},
+		// Issue #78 Phase 2: proof or stop. Only admitted evidence counts, and
+		// a model's statement in chat is never a certificate.
+		{"dossierx", "Proof or stop", "chat is not a certificate; stop when the evidence is missing"},
+		{"dossierx", "never a certificate", "an agent's 'it is synced' closes no loop"},
+		{"dossierx-code-links", "not a certificate and closes nothing", "linked is not followed, and saying so is not evidence"},
+		{"dossierx-claims", "an exit code\nyou did not see is one you do not have", "report the envelope, never a belief"},
 	} {
 		raw, err := fs.ReadFile(dxskills.FS, tc.skill+"/SKILL.md")
 		if err != nil {

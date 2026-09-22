@@ -47,6 +47,9 @@
 <p>Suppose you decide to increase the retry limit from three to five. The existing claim gives the agent a decision to revisit. The linked code and related claims give it places to investigate: does the new limit apply to every eligible failure, and what else depends on the old rule?</p>
 <p>You can review the proposed statement and the evidence for the change. Once accepted, the revised record gives the next task a place to begin.</p>
 <p>DossierX can report changes to approved claims and recorded dependencies. People and agents still need to investigate what those changes mean for the software. An approval records a decision; code inspection, tests, and real use are how you check whether the implementation supports it.</p>
+<h2>What DossierX is not</h2>
+<p>It is not a chat wrapper, and it is not another folder of markdown for the agent to read. Tools such as Spec Kit and OpenSpec keep a specification in the repository and leave it to the agent to say whether the code still agrees with it. DossierX records your approval of each claim in a ledger and refuses to re-sign a claim that changed without you. Only you can close a review thread, and a claim cannot lock while one is open. It checks that approved claims are linked to real code, and it answers with an exit code, not an opinion.</p>
+<p>A model can draft a claim, a tag, or a patch. It never decides whether the claim holds, and its saying so in a conversation is not a record of anything.</p>
 <h2>Start with one part of the product</h2>
 <p>DossierX works alongside your coding agent. Ask it to document one area you need to understand, then read and question the result. For a new feature, you can begin by recording the intended behaviour before implementation starts.</p>
 <p>The useful starting point is a part of the product where a misunderstanding would matter. You can expand the record as you learn which statements are worth maintaining.</p>

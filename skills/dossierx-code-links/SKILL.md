@@ -94,7 +94,9 @@ The catalog and viewer are regenerated before the refusal; only the exit status 
 claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
 counts per module with `scanned` and `gated`; `--validate` and `--staged` fill it with both false
 and never refuse. Linked is not followed: the gate proves a pointer exists, never that the code still
-means what the claim says — that is the human's lock and the project's tests. It also reports the
+means what the claim says — that is the human's lock and the project's tests. Nor is it your saying
+so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain
+`check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the
 drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same
 thing for one claim, per file:
 

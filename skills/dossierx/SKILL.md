@@ -66,6 +66,10 @@ an ordinary failed invocation — one envelope, `usage`, exit 1 — not help tex
 Exit status is one of three, unchanged since v0.1: `0` success · `1` failure (a lint error, a
 refused gate, a write error) · `2` not found, or not in the state the command requires.
 
+**Proof or stop.** Evidence is what the tool emits — an exit code, a finding, a conformance result,
+`data.code_links` — or what the human does — Resolve, `--reason`. Your saying "it matches" or "it is
+synced" in chat is neither and is never a certificate; when the evidence is missing, stop and say what is missing.
+
 ## error.code → what you actually do about it
 
 | code | exit | recovery |
