@@ -13,13 +13,11 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
-	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -141,15 +139,14 @@ func newClaimLinkCmd() *cobra.Command {
 					}
 				}
 				if file != "" {
-					inside, detail := fileIsInsideProject(cfg, file)
-					dr.Require("file_is_project_relative", inside, detail)
-					if inside {
+					abs, recorded, _, resolveErr := cfg.ResolveLinkFile(file)
+					dr.Require("file_is_project_relative", resolveErr == nil, fileLinkDetail(file, resolveErr))
+					if resolveErr == nil {
 						// implink.Set hashes the file to take its drift baseline,
 						// and a file it cannot open is the refusal an agent hits
 						// most: the link records a project-RELATIVE path, so a
 						// path that was correct in the agent's own cwd is not.
-						resolved := filepath.Join(cfg.Dir(), file)
-						dr.Require("file_exists", fileExists(resolved), resolved)
+						dr.Require("file_exists", fileExists(abs), recorded)
 					}
 				}
 				dr.Effect("rewrites " + path)
@@ -265,30 +262,11 @@ func newClaimLinkCmd() *cobra.Command {
 	return cmd
 }
 
-// fileIsInsideProject reproduces implink.Set's path contract for the dry run: a
-// --file must be RELATIVE and must resolve to somewhere inside the project
-// directory. It returns the verdict plus the detail string the precondition
-// reports.
-//
-// The rule is duplicated here rather than reached through internal/implink
-// because Set performs it as part of a write and exposes no read-only form. It
-// is deliberately the same three tests in the same order (absolute, resolve,
-// escape) so the two cannot disagree about a path either accepts; the write path
-// remains the authority, and this only ever has to STOP being wrong about a
-// refusal it would perform.
-func fileIsInsideProject(cfg *config.Config, file string) (ok bool, detail string) {
-	if filepath.IsAbs(file) {
-		return false, fmt.Sprintf("%q is absolute; a link records a project-relative path so it means the same thing on every machine", file)
-	}
-	absDir, err := filepath.Abs(cfg.Dir())
+func fileLinkDetail(file string, err error) string {
 	if err != nil {
-		return false, fmt.Sprintf("cannot resolve the project directory %q: %v", cfg.Dir(), err)
+		return err.Error()
 	}
-	rel, err := filepath.Rel(absDir, filepath.Join(absDir, file))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return false, fmt.Sprintf("%q escapes the project directory via \"..\"", file)
-	}
-	return true, file
+	return file
 }
 
 // linkTarget renders "<file>" or "<file>#<symbol>" for a dry run's would-phrase.

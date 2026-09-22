@@ -63,7 +63,8 @@ var ErrNoArtifact = errors.New("implink: no implementation-link artifact for thi
 // so the contract is enforced at the door instead), an optional symbol
 // name (e.g. a function or type Set was told this file's linked code lives
 // in), and FileHash — a whole-file content hash snapshot taken at Set time,
-// the drift baseline Status re-checks against.
+// the drift baseline Status re-checks against. A file under source_roots
+// may begin with "../" and then carries Repo/Ref/Commit.
 type FileLink struct {
 	File     string `json:"file"`
 	Symbol   string `json:"symbol,omitempty"`
@@ -79,6 +80,21 @@ type FileLink struct {
 	// `claim link --step n --process`. File is empty; Status does not
 	// hash a file for it.
 	Process string `json:"process,omitempty"`
+	// Repo, Ref and Commit identify the source_roots tree when File sits
+	// outside the project. Empty for an in-tree source_dirs file.
+	Repo   string `json:"repo,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	Commit string `json:"commit,omitempty"`
+}
+
+// ArtifactSourceRoot is the source_roots pin recorded on a module's
+// code-links artifact so a later reader knows which sibling checkout the
+// scan walked, and at which commit.
+type ArtifactSourceRoot struct {
+	Path   string `json:"path"`
+	Repo   string `json:"repo"`
+	Ref    string `json:"ref"`
+	Commit string `json:"commit"`
 }
 
 // Link is one claim's full set of linked files. LinkedAt is refreshed by
@@ -103,8 +119,9 @@ type Link struct {
 // Artifact stores Links keyed by claim, not files keyed by some unique
 // owner.
 type Artifact struct {
-	Module string `json:"module"`
-	Links  []Link `json:"links"`
+	Module      string               `json:"module"`
+	SourceRoots []ArtifactSourceRoot `json:"source_roots,omitempty"`
+	Links       []Link               `json:"links"`
 }
 
 // linkIndex returns the index of a's Link entry for claimID, or -1 if none
@@ -247,6 +264,7 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 	if cfg == nil {
 		return fmt.Errorf("implink: cfg must not be nil")
 	}
+	stampSourceRoots(artifact, cfg)
 	module = strings.TrimSpace(module)
 	claimID := strings.TrimSpace(m.ClaimID)
 	file := strings.TrimSpace(m.File)
@@ -315,26 +333,15 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 		return fmt.Errorf("implink: file must not be empty")
 	}
 
-	if filepath.IsAbs(file) {
-		return fmt.Errorf("implink: file %q must be a project-relative path, not absolute", file)
-	}
-	absDir, err := filepath.Abs(cfg.Dir())
+	absFile, recorded, root, err := cfg.ResolveLinkFile(file)
 	if err != nil {
-		return fmt.Errorf("implink: resolve project dir %q: %w", cfg.Dir(), err)
+		return fmt.Errorf("implink: %w", err)
 	}
-	absFile, err := filepath.Abs(filepath.Join(absDir, file))
-	if err != nil {
-		return fmt.Errorf("implink: resolve file %q: %w", file, err)
-	}
-	rel, err := filepath.Rel(absDir, absFile)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("implink: file %q must resolve to a path inside the project directory, not escape it via \"..\"", file)
-	}
-	hash, err := hashFile(filepath.Join(cfg.Dir(), file))
+	hash, err := hashFile(absFile)
 	if err != nil {
 		return fmt.Errorf("implink: file %q does not exist (looked relative to %s): %w", file, cfg.Dir(), err)
 	}
-	file = filepath.ToSlash(file)
+	file = recorded
 
 	now := nowFunc().UTC().Format(time.RFC3339Nano)
 
@@ -354,6 +361,11 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 		}
 	}
 	row := FileLink{File: file, Symbol: symbol, FileHash: hash, Step: m.Step, StepHash: m.StepHash}
+	if root != nil {
+		row.Repo = root.Repo
+		row.Ref = root.Ref
+		row.Commit = root.Commit()
+	}
 	if fidx == -1 {
 		link.Files = append(link.Files, row)
 	} else {
@@ -369,7 +381,22 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 	return nil
 }
 
+func stampSourceRoots(a *Artifact, cfg *config.Config) {
+	if a == nil || cfg == nil || len(cfg.SourceRoots) == 0 {
+		return
+	}
+	roots := make([]ArtifactSourceRoot, 0, len(cfg.SourceRoots))
+	for _, r := range cfg.SourceRoots {
+		roots = append(roots, ArtifactSourceRoot{
+			Path: r.Path, Repo: r.Repo, Ref: r.Ref, Commit: r.Commit(),
+		})
+	}
+	sort.Slice(roots, func(i, j int) bool { return roots[i].Path < roots[j].Path })
+	a.SourceRoots = roots
+}
+
 func sortArtifact(a *Artifact) {
+	sort.Slice(a.SourceRoots, func(i, j int) bool { return a.SourceRoots[i].Path < a.SourceRoots[j].Path })
 	sort.Slice(a.Links, func(i, j int) bool { return a.Links[i].ClaimID < a.Links[j].ClaimID })
 	for i := range a.Links {
 		files := a.Links[i].Files

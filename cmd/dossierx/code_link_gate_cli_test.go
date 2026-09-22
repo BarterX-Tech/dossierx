@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -246,5 +247,69 @@ func TestCLI_Check_ProcessStep_ViaClaimLinkAndYAML(t *testing.T) {
 	}
 	if !strings.Contains(string(viewer), "process-owned") || !strings.Contains(string(viewer), "operator run record") {
 		t.Fatalf("card must show process-owned steps:\n%s", viewer)
+	}
+}
+
+func TestCLI_Check_SourceRootsSibling_ScansAndRecordsCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	parent := t.TempDir()
+	app := filepath.Join(parent, "app")
+	corpus := filepath.Join(parent, "corpus")
+	if err := os.MkdirAll(filepath.Join(app, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(corpus, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, "src", "widget.go"), []byte("package widget\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = app
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return string(out)
+	}
+	run("init", "-q", "-b", "main")
+	run("config", "user.email", "fixture@example.invalid")
+	run("config", "user.name", "fixture")
+	run("add", "-A")
+	run("commit", "-qm", "fixture")
+	sha := strings.TrimSpace(run("rev-parse", "HEAD"))
+
+	cfgPath := filepath.Join(corpus, "project.config.yaml")
+	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
+		"source_roots:\n  - path: ../app\n    repo: example/app\n    ref: " + sha + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeLockedFixtureClaim(t, filepath.Join(corpus, "claims"), "widget.contract.main", "widget", "the widget retries twice")
+	armLedgerFixture(t, cfgPath)
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeUnlinkedClaims {
+		t.Fatalf("source_roots without a tag must gate, err=%v env=%+v", err, env)
+	}
+
+	if err := os.WriteFile(filepath.Join(app, "src", "widget.go"), []byte("// dossierx-claim: widget.contract.main\npackage widget\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "check")
+	if err != nil || !env.OK {
+		t.Fatalf("tagged sibling source should link, err=%v env=%+v", err, env)
+	}
+	raw, err := os.ReadFile(filepath.Join(corpus, "build", "code-links", "widget.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), sha) || !strings.Contains(string(raw), "example/app") || !strings.Contains(string(raw), "../app/src/widget.go") {
+		t.Fatalf("code-links artifact must record repo, commit and sibling path:\n%s", raw)
 	}
 }

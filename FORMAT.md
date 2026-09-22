@@ -1468,13 +1468,25 @@ source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-step: <id> #<n> <sha256-hex>"
                                   # comments, resolved
                                   # relative to this file's own directory like
-                                  # claims_dir. Unset/empty means DO NOT SCAN —
-                                  # `check` behaves as it did before the field
+                                  # claims_dir. Each path must stay inside the
+                                  # project. Unset/empty means DO NOT SCAN
+                                  # unless source_roots is set — `check`
+                                  # behaves as it did before the field
                                   # existed, and the engine never guesses where
-                                  # the code is. Without it, a code link can
-                                  # only be recorded by `dossierx claim link`
-                                  # (including `--step n --process`). Sibling
-                                  # `source_roots` is a later change.
+                                  # the code is. Without either field, a code
+                                  # link can only be recorded by
+                                  # `dossierx claim link` (including
+                                  # `--step n --process`).
+source_roots:                    # optional; sibling (or in-tree) source trees
+  - path: ../app                 # relative to this file; MAY leave the project
+    repo: org/app                # remote the checkout belongs to
+    ref: abcdef12                # commit, tag or branch; must equal HEAD
+                                  # Scan walks path. check writes
+                                  # {path, repo, ref, commit} on
+                                  # build/code-links. Same completeness gate
+                                  # as source_dirs. Use this instead of
+                                  # putting application code inside a claims
+                                  # corpus.
 mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
                                   # to author layout: mockup claims — the module
                                   # allowlist leg of raw-html-scope's gate. Every

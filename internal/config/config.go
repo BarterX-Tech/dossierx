@@ -191,14 +191,20 @@ type Config struct {
 	// SourceDirs is the optional list of directories (relative to this
 	// config file's own directory, like ClaimsDir) the engine scans for
 	// "dossierx-claim: <id>" and "dossierx-step: <id> #<n> <hash>" comments —
-	// claim-to-code linking. Unset/empty means "do not scan" — "dossierx
-	// check" behaves exactly as it did before this field existed, the same
+	// claim-to-code linking. Each entry must stay inside the project
+	// directory. A sibling checkout belongs in SourceRoots, not here.
+	// Unset/empty means "do not scan" unless SourceRoots is set — the same
 	// zero-cost-when-unused contract every other optional feature in this
 	// engine follows (mockup_modules, viewer.template_overrides, ...). A
-	// project only opts in by naming its actual source roots, same as it
-	// only opts into claim data via ClaimsDir — the engine never assumes
-	// or guesses where "the code" is.
+	// project only opts in by naming its actual source trees — the engine
+	// never assumes or guesses where "the code" is.
 	SourceDirs []string `yaml:"source_dirs,omitempty"`
+
+	// SourceRoots is the optional list of named source trees, including
+	// ones that sit outside the project (a sibling app repo). Each entry
+	// records path, repo and ref; the scan walks path, and check writes
+	// the resolved commit into build/code-links. Unset/empty is a no-op.
+	SourceRoots []SourceRoot `yaml:"source_roots,omitempty"`
 
 	// MockupModules is the checked-in allowlist of modules permitted to
 	// author a claim carrying RawHTML AT ALL — on any layout, not only
@@ -366,6 +372,12 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 		if !info.IsDir() {
 			return nil, fmt.Errorf("config: source_dirs %q is not a directory", sd)
 		}
+	}
+	if err := refuseEscapingSourceDirs(dir, cfg.SourceDirs); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	if err := cfg.resolveSourceRoots(dir); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
 
 	return &cfg, nil

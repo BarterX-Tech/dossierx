@@ -18,7 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "<artifact>"`. Those indexes count as linked and render as
   `step n: process-owned` on the card. Do not invent dummy `dossierx-step`
   tags for a person or a review (#88).
-- `source_roots` (sibling-repo scan) is not in this change.
+- `source_roots: [{path, repo, ref}]` names a source tree that may sit
+  outside the project (a sibling app checkout). `check` scans it, records
+  the resolved commit on `build/code-links`, and applies the same
+  completeness gate as `source_dirs`. `source_dirs` still must stay inside
+  the project. (#90)
 
 ## [0.7.20] - 2026-09-22
 

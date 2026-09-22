@@ -1820,7 +1820,7 @@ func joinStepIndexes(ns []int) string {
 // untagged, and tagging an unrelated file to clear the gate is the false
 // link the gate exists to refuse.
 func codeLinkRecoveryHint(res check.Result) string {
-	return fmt.Sprintf("read data.code_links.modules[].unlinked and .partial: add a dossierx-claim: or dossierx-step: tag in a source_dirs file (or dossierx claim link) for each named claim — every step of a stepped claim, or steps_owned_by / claim link --step n --process — or, if the claim produces no declaration, unlock → set links.mode none with a reason (or build_role to orientation or out-of-scope) → lock; %d claim(s) are not linked", res.CodeLinks.Incomplete())
+	return fmt.Sprintf("read data.code_links.modules[].unlinked and .partial: add a dossierx-claim: or dossierx-step: tag in a source_dirs or source_roots file (or dossierx claim link) for each named claim — every step of a stepped claim, or steps_owned_by / claim link --step n --process — or, if the claim produces no declaration, unlock → set links.mode none with a reason (or build_role to orientation or out-of-scope) → lock; %d claim(s) are not linked", res.CodeLinks.Incomplete())
 }
 
 func conformanceBlockingRecoveryHint(res check.Result) string {

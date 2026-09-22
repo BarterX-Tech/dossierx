@@ -203,7 +203,7 @@ type Result struct {
 	// claims are linked, drifted, partially linked (a stepped claim with a
 	// step nobody tagged) and unlinked (a locked, code-producing claim with
 	// no link at all). Nil when the project never opted in — no
-	// `source_dirs` and no module with a code-links artifact — so a project
+	// `source_dirs`/`source_roots` and no module with a code-links artifact — so a project
 	// that does not use the feature sees no new field, the same
 	// zero-cost-when-unused contract config.SourceDirs states.
 	//
@@ -212,12 +212,12 @@ type Result struct {
 	// and the serve strip, which read the stored artifact only, so a tag
 	// added since the last plain check is still counted as missing there.
 	// Gated says whether the run REFUSED on an incomplete claim: true only
-	// on a plain `check` with `source_dirs` set. Both are carried so a
+	// on a plain `check` with `source_dirs` or `source_roots` set. Both are carried so a
 	// consumer can never mistake a read-only green for a linked green.
 	CodeLinks *CodeLinksReport
 
 	// CodeLinkGateFailed is true only when Run reached and refused at the
-	// code-link gate: `source_dirs` is set and at least one locked,
+	// code-link gate: `source_dirs` or `source_roots` is set and at least one locked,
 	// code-producing claim is unlinked or partially linked. An earlier lint,
 	// projection, scan or ledger failure remains authoritative.
 	CodeLinkGateFailed bool
@@ -561,7 +561,8 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		return res, fmt.Errorf("ledger: %d integrity finding(s)", len(res.LedgerFindings))
 	}
 
-	// 5b. The code-link gate: once a project names its `source_dirs`, every
+	// 5b. The code-link gate: once a project names its `source_dirs` or
+	// `source_roots`, every
 	// locked schema/behavior/api/verification claim must be linked, and a
 	// claim with `steps:` must be linked on every step. It sits AFTER the
 	// ledger gate for the reason the conformance gate does — a refusal about
@@ -924,7 +925,7 @@ func (r *CodeLinksReport) Incomplete() int {
 // refused on links, however many `claim link` artifacts it carries, because
 // nothing has told the engine where "the code" is.
 func gatesCodeLinks(cfg *config.Config) bool {
-	return cfg != nil && len(cfg.SourceDirs) > 0
+	return cfg.ScansSource()
 }
 
 // moduleCoverage is implink.Coverage when the project is held to account
