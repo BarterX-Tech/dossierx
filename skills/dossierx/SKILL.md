@@ -135,10 +135,11 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
 
 1. **Draft is your workshop.** Create, rewrite, restructure and delete draft claims freely — no
    approval, no ceremony. This is the work, and nothing here gates it.
-2. **A locked claim never changes outside the approval path, and the path is unlock → fix →
-   lock.** Not `reaudit`: it refuses any claim not already `review_pending`, its dependency-drift
-   proposer is a no-change stub, and it rewrites only `body`. It is the
-   **drift** tool, not the edit tool. Never hand-edit locked YAML — the ledger sees it.
+2. **A locked claim never changes without a recorded approval.** Body-only meaning drift is
+   `claim flag`, then the human, then `reaudit` — not unlock. Every other edit is unlock → fix →
+   lock. `reaudit` refuses a claim not already `review_pending`, its dependency-drift proposer is
+   a no-change stub, and it rewrites only `body`. It is the **drift** tool, not the edit tool.
+   Never hand-edit locked YAML — the ledger sees it.
 3. **Resolve the human's words to an id, and say the id back before acting.** "the retry card in
    contract" is not an id. `dossierx claim list --match "retry"` ranks candidates with a `score`;
    name the winner and its title to the human and wait.

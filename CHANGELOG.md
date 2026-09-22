@@ -43,9 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.claude/skills` and `.agents/skills` the repository already has, and a
   `dossierx-skills.lock` beside each tree with the sha256 of every file
   written. `dossierx skills export --check` writes nothing and refuses
-  (`skills_drift`, exit 1) when a skill on disk was hand-edited, came from an
-  older release, or is missing, naming each file under `data.hand_edited`,
-  `data.stale` and `data.missing`. (#78)
+  (`skills_drift`, exit 1) when a file differs from this binary: hand-edited
+  (`data.hand_edited`, it also differs from the lock), stale (`data.stale`,
+  it matches the lock), or missing (`data.missing`). A tree with no lock is
+  `data.unverified` and `data.no_lock`, not hand-edited. (#78)
 - The code-links and claims skills state that a green `check` means linked and
   only that, and that `--validate` and `--staged` never prove code links. (#78)
 - Proof or stop: README, docs/approval-policy.md and the router, claims and

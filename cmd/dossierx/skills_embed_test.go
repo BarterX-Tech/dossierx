@@ -564,6 +564,10 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // router 294 of 296, claims 260, comments 212, code-links 166, build-order
 // 147. The router is now two lines from its ceiling, so the next sentence it
 // needs is a budget decision, not a quiet edit.
+//
+// THE #82 NEVER-BEND FIX does not raise the budget. Router rule 2 is five lines
+// so it can name `claim flag` and keep the reaudit no-change stub. CENSUS:
+// router 295 of 296, claims 261 of 296. The router is one line from its ceiling.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 296
 
@@ -588,13 +592,13 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		want  string
 		why   string
 	}{
-		{"dossierx", "unlock → fix → lock", "the approval path, named as the path"},
+		{"dossierx", "Body-only meaning drift is", "body-only meaning drift is claim flag, then reaudit"},
 		{"dossierx", "drift** tool, not the edit tool", "reaudit is not the general edit tool"},
 		{"dossierx", "never resolve", "advisory rights"},
 		{"dossierx", "score", "resolve the human's words to an id before acting"},
 		{"dossierx", "blocked", "a blocked dry run is a successful answer"},
 		{"dossierx", "Draft is your workshop", "draft claims are free to author"},
-		{"dossierx-claims", "unlock → fix → lock", "the only path through a locked claim"},
+		{"dossierx-claims", "body-only meaning drift is claim flag", "a locked body-only claim changes via flag; other edits use unlock, fix, lock"},
 		{"dossierx-claims", "not_review_pending", "reaudit refuses a non-drifting claim"},
 		{"dossierx-claims", "edit its file freely", "a draft claim needs no ceremony"},
 		{"dossierx-code-links", "dossierx-step:", "step tags are scanned with claim tags"},
@@ -739,13 +743,19 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if err := json.Unmarshal(raw, &data); err != nil {
 		t.Fatalf("decode data: %v\n%s", err, raw)
 	}
-	if len(data.HandEdited) != 1 || !strings.HasSuffix(data.HandEdited[0], "dossierx-claims/SKILL.md") {
+	// The check reports each path as written (filepath.Join), so Windows uses
+	// backslashes. Compare the slash form. Length and the exact skill file
+	// stay required: a wrong list still fails.
+	namesExactly := func(got []string, rel string) bool {
+		return len(got) == 1 && strings.HasSuffix(filepath.ToSlash(got[0]), "/"+rel)
+	}
+	if !namesExactly(data.HandEdited, "dossierx-claims/SKILL.md") {
 		t.Fatalf("hand_edited should name the edited claims skill only, got %+v", data)
 	}
-	if len(data.Stale) != 1 || !strings.HasSuffix(data.Stale[0], "dossierx-build-order/SKILL.md") {
+	if !namesExactly(data.Stale, "dossierx-build-order/SKILL.md") {
 		t.Fatalf("stale should name the build-order skill only, got %+v", data)
 	}
-	if len(data.Missing) != 1 || !strings.HasSuffix(data.Missing[0], "dossierx-comments/SKILL.md") {
+	if !namesExactly(data.Missing, "dossierx-comments/SKILL.md") {
 		t.Fatalf("missing should name the deleted comments skill only, got %+v", data)
 	}
 	if len(data.NoLock) != 0 {

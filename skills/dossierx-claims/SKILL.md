@@ -9,8 +9,8 @@ description: >-
   (dossierx check --validate), dossierx claim show and list, citing evidence with
   sources and [n] markers, the cross-cutting track axis and dossierx track
   list/show/status, the three
-  review_pending triggers, and the one rule everything else hangs off — draft
-  claims are free, a locked claim only ever changes via unlock, fix, lock.
+  review_pending triggers, and the rule a locked claim hangs off — draft claims
+  are free; body-only meaning drift is claim flag, and every other edit is unlock, fix, lock.
   Load the DossierX router skill first; it carries the envelope, the exit
   codes and the error-code recovery table this skill assumes.
 ---
@@ -187,7 +187,8 @@ the lifecycle yourself.
 
 ## Locked means locked
 
-A draft claim is yours. A locked claim is the human's, and the **only** path through it is
+A draft claim is yours. A locked claim is the human's. Body-only meaning drift is `claim flag`
+(see the table under `review_pending`), not unlock. Every other change is
 `dossierx claim unlock <id> --reason "<their words>"` → edit the file →
 `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"`.
 
