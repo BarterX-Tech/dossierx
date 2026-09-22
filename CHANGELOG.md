@@ -48,6 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `data.stale` and `data.missing`. (#78)
 - The code-links and claims skills state that a green `check` means linked and
   only that, and that `--validate` and `--staged` never prove code links. (#78)
+- Proof or stop: README, docs/approval-policy.md and the router, claims and
+  code-links skills state what counts as evidence — an exit code, a lint or
+  ledger finding, a conformance result, `data.code_links`, a human's Resolve
+  or `--reason` — and that an agent's "it is synced" in chat is never a
+  certificate; when the evidence is missing the agent stops and says what is
+  missing. (#78 Phase 2)
+- README and the site say what DossierX is against a specification folder
+  such as Spec Kit or OpenSpec: claims with a lock ledger that refuses
+  tampered content, human Resolve as the approval gate, machine-judged code
+  links, conformance checks, exit codes rather than opinions; no model inside
+  it, and an LLM is never the judge. (#78 Phase 2)
 
 ### Fixed
 
