@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### BREAKING
+
+- **BREAKING:** `dossierx-step` digests are SHA-256 of whitespace-normalised
+  step text (`" ".join(text.split())` UTF-8), not the raw loaded YAML string.
+  A tag may carry a prefix of at least 8 hex (12 preferred; 64 still accepted).
+  Retag if you hashed un-normalised text that contained extra whitespace —
+  `check` refuses those old full hashes (`implink_refused`, hash mismatch).
+  (#89)
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed

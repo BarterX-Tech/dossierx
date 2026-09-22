@@ -72,8 +72,9 @@ type FileLink struct {
 	// from a dossierx-step tag. Zero (omitted in JSON) is a whole-claim link
 	// from dossierx-claim or `claim link`.
 	Step int `json:"step,omitempty"`
-	// StepHash is sha256-hex of that YAML step string, recorded so claim show
-	// can surface what the tag attested. Scan already refused a mismatch.
+	// StepHash is the canonical 64-hex StepContentHash of that step, recorded
+	// so claim show can surface what the tag attested. Scan already refused a
+	// mismatch (including a prefix that does not match this digest).
 	StepHash string `json:"step_hash,omitempty"`
 }
 
@@ -323,12 +324,38 @@ func sortArtifact(a *Artifact) {
 	}
 }
 
-// StepContentHash is the sha256-hex of one claim `steps:` entry as loaded
-// (the YAML string, not the source file). dossierx-step tags must carry this
-// digest; Scan refuses a mismatch rather than linking silently.
+// Step hash contract (issue #89): SHA-256 of whitespace-normalised step text.
+// Normalisation is Python `" ".join(text.split())` / Go strings.Fields + join,
+// then UTF-8. A dossierx-step tag may carry a hex prefix of this digest.
+const (
+	StepHashMinPrefixLen       = 8
+	StepHashPreferredPrefixLen = 12
+	StepHashLen                = 64
+)
+
+// NormalizeStepText collapses any Unicode whitespace run to a single ASCII
+// space and trims the ends — the same rule the Curtainly mac adapters use.
+func NormalizeStepText(step string) string {
+	return strings.Join(strings.Fields(step), " ")
+}
+
+// StepContentHash is the sha256-hex of one claim `steps:` entry after
+// NormalizeStepText (not the source file, and not the raw YAML wrapping).
+// dossierx-step tags must carry this digest or a prefix of it; Scan refuses
+// a mismatch rather than linking silently.
 func StepContentHash(step string) string {
-	sum := sha256.Sum256([]byte(step))
+	sum := sha256.Sum256([]byte(NormalizeStepText(step)))
 	return hex.EncodeToString(sum[:])
+}
+
+// StepHashMatches reports whether got is a case-insensitive hex prefix of
+// want (the canonical 64-hex StepContentHash), of length 8–64 inclusive.
+func StepHashMatches(got, want string) bool {
+	got = strings.ToLower(got)
+	if len(got) < StepHashMinPrefixLen || len(got) > StepHashLen {
+		return false
+	}
+	return strings.HasPrefix(want, got)
 }
 
 // hashFile returns the hex-encoded sha256 of path's whole file content.

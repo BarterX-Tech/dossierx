@@ -1,6 +1,8 @@
 package implink
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -84,6 +86,69 @@ func TestScan_BareStepTag_IsAScanError(t *testing.T) {
 		t.Fatalf("expected 1 grammar error, got matches=%+v errors=%+v", report.Matches, report.Errors)
 	}
 	if report.Errors[0].Marker != "dossierx-step" || !strings.Contains(report.Errors[0].Message, "tag must be") {
+		t.Fatalf("unexpected error: %+v", report.Errors[0])
+	}
+}
+
+func TestScan_StepHashPrefix_ReconcilesAndRecordsFullDigest(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	steps := []string{"hello\n\tworld  "}
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", steps)}
+	want := StepContentHash(steps[0])
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+want[:StepHashPreferredPrefixLen]+"\nfunc Foo() {}\n")
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Errors) != 0 || len(report.Matches) != 1 {
+		t.Fatalf("expected prefix to reconcile, got matches=%+v errors=%+v", report.Matches, report.Errors)
+	}
+	if report.Matches[0].StepHash != want {
+		t.Fatalf("artifact must record the full digest, got %s want %s", report.Matches[0].StepHash, want)
+	}
+	artifact, err := LoadArtifact(ArtifactPath(cfg, "widget"))
+	if err != nil {
+		t.Fatalf("LoadArtifact: %v", err)
+	}
+	if artifact.Links[0].Files[0].StepHash != want {
+		t.Fatalf("expected full step_hash on disk, got %+v", artifact.Links[0].Files[0])
+	}
+}
+
+func TestScan_ShortStepHash_IsAScanError(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{"hello world"})}
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+StepContentHash("hello world")[:7]+"\nfunc Foo() {}\n")
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Matches) != 0 || len(report.Errors) != 1 {
+		t.Fatalf("expected 7-hex grammar error, got matches=%+v errors=%+v", report.Matches, report.Errors)
+	}
+	if !strings.Contains(report.Errors[0].Message, "tag must be") {
+		t.Fatalf("unexpected error: %+v", report.Errors[0])
+	}
+}
+
+func TestScan_RawUnnormalisedHash_IsAScanError(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	raw := "hello\nworld"
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{raw})}
+	sum := sha256.Sum256([]byte(raw))
+	old := hex.EncodeToString(sum[:])
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+old+"\nfunc Foo() {}\n")
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Matches) != 0 || len(report.Errors) != 1 {
+		t.Fatalf("expected old raw hash to mismatch, got matches=%+v errors=%+v", report.Matches, report.Errors)
+	}
+	if !strings.Contains(report.Errors[0].Message, "hash mismatch") {
 		t.Fatalf("unexpected error: %+v", report.Errors[0])
 	}
 }

@@ -1439,6 +1439,8 @@ doctrine_facet: string           # optional; omitted disables hub-gating entirel
 source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-claim: <id>" and
                                   # "dossierx-step: <id> #<n> <sha256-hex>"
+                                  # (SHA-256 of whitespace-normalised step
+                                  # text; ≥8 hex prefix, 12 preferred)
                                   # comments, resolved
                                   # relative to this file's own directory like
                                   # claims_dir. Unset/empty means DO NOT SCAN —
