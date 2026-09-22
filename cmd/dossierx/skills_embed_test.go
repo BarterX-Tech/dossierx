@@ -759,7 +759,7 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	}
 }
 
-func TestCLI_SkillsExportCheck_WithoutALockEveryDifferenceIsHandEdited(t *testing.T) {
+func TestCLI_SkillsExportCheck_WithoutALockEveryDifferenceIsUnverified(t *testing.T) {
 	targetDir := filepath.Join(t.TempDir(), "skills")
 	if _, _, err := execCLI(t, "skills", "export", targetDir); err != nil {
 		t.Fatalf("skills export: %v", err)
@@ -782,7 +782,7 @@ func TestCLI_SkillsExportCheck_WithoutALockEveryDifferenceIsHandEdited(t *testin
 	if err := json.Unmarshal(raw, &data); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(data.HandEdited) != 1 || len(data.Stale) != 0 || len(data.NoLock) != 1 {
-		t.Fatalf("without a lock the difference is hand_edited and the tree is named in no_lock, got %+v", data)
+	if len(data.Unverified) != 1 || len(data.HandEdited) != 0 || len(data.Stale) != 0 || len(data.NoLock) != 1 {
+		t.Fatalf("without a lock the difference is unverified and the tree is named in no_lock, got %+v", data)
 	}
 }

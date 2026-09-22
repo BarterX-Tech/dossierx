@@ -533,7 +533,7 @@
   ],
   "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:b750ace4d07ad6561c21d2fffa8dc8124eccc89b087eec1c4369db43a846b369",
+    "cmd/dossierx": "sha256:02bd9e36909957ca603f2491d922c1d08fafd4d70387823412da45fd190b8032",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -547,7 +547,7 @@
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
     "internal/graph": "sha256:39c61c63e8099f25dfdb53217036a8aca7987edf49c5d7372594efb901353f63",
-    "internal/implink": "sha256:175f2fc71522b9dc3263b0063d5fe0d32b7eb00d92f405b0466d03764af71434",
+    "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:22b57470d1c8381dfee41e360c123d1633ae1c923bf8ec1f736fe9a00b6caeb3",
     "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
@@ -563,7 +563,7 @@
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:462e8b6f93fb063e929903de0e0bd5a6188ab95310bd0cbb8b16d2f2300465de"
+    "skills": "sha256:4b0633728e100df42f60694e6de8c3cb596c09e479bcd8760be08e50ae63e812"
   },
   "envelope": {
     "keys": [
@@ -912,7 +912,8 @@
         "missing",
         "no_lock",
         "stale",
-        "trees"
+        "trees",
+        "unverified"
       ],
       "skillsExportData": [
         "count",

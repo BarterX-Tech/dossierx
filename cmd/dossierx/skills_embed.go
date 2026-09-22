@@ -156,9 +156,9 @@ func newSkillsExportCmd() *cobra.Command {
 					Data: data,
 					Text: func() { writeSkillsCheckText(cmd.OutOrStdout(), data) },
 				}
-				if n := len(data.HandEdited) + len(data.Stale) + len(data.Missing); n > 0 {
+				if n := data.differing(); n > 0 {
 					return out, cliout.Errorf(cliout.CodeSkillsDrift, "skills export --check: %d skill file(s) differ from this binary's bundle", n).
-						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release and data.missing was never exported — re-run dossierx skills export for both")
+						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release, data.missing was never exported and data.unverified sits in a tree with no dossierx-skills.lock — re-run dossierx skills export for those three")
 				}
 				return out, nil
 			}
@@ -192,7 +192,13 @@ type skillsLock struct {
 //   - Stale: on disk, matches the lock, differs from this binary — exported by
 //     an older release; re-export.
 //   - Missing: in the bundle, not on disk.
+//   - Unverified: on disk, differs from this binary, and the tree has no
+//     lock (NoLock names it) — an export older than the lock file, or a
+//     tree somebody assembled by hand; the check cannot tell which, and says
+//     so instead of guessing. Re-exporting writes the lock and settles it.
 //
+// Every path is the file's path as written: the tree directory the check
+// examined joined with the bundle path, so two trees never collide.
 // Checked counts the files compared; Trees names every tree examined.
 type skillsCheckData struct {
 	Trees      []string `json:"trees"`
@@ -200,6 +206,7 @@ type skillsCheckData struct {
 	HandEdited []string `json:"hand_edited"`
 	Stale      []string `json:"stale"`
 	Missing    []string `json:"missing"`
+	Unverified []string `json:"unverified"`
 	NoLock     []string `json:"no_lock"`
 }
 
@@ -428,13 +435,18 @@ func sha256Hex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// differing is the number of files the check refuses on.
+func (d skillsCheckData) differing() int {
+	return len(d.HandEdited) + len(d.Stale) + len(d.Missing) + len(d.Unverified)
+}
+
 // checkSkillTrees compares every tree skillTreeTargets would write against the
 // embedded bundle and the tree's lock, writing nothing. A tree with no lock
-// cannot tell hand-edited from stale, so every difference there counts as
-// hand-edited and the tree is named in NoLock. No tree at all is reported as
-// every file missing, which is the honest answer to "is the skill installed".
+// cannot tell hand-edited from stale, so every difference there is reported
+// as unverified and the tree is named in NoLock. No tree at all is reported
+// as every file missing, which is the honest answer to "is the skill installed".
 func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData, error) {
-	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, NoLock: []string{}}
+	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, Unverified: []string{}, NoLock: []string{}}
 	trees := skillTreeTargets(explicitDir, root)
 	if len(trees) == 0 {
 		if explicitDir == "" && root == "" {
@@ -466,21 +478,25 @@ func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData,
 				return fmt.Errorf("read embedded %s: %w", path, err)
 			}
 			data.Checked++
-			rel := filepath.ToSlash(filepath.Join(filepath.Base(tree.dir), filepath.FromSlash(path)))
-			got, readErr := os.ReadFile(filepath.Join(tree.dir, filepath.FromSlash(path)))
+			onDisk := filepath.Join(tree.dir, filepath.FromSlash(path))
+			got, readErr := os.ReadFile(onDisk)
 			if readErr != nil {
-				data.Missing = append(data.Missing, rel)
+				data.Missing = append(data.Missing, onDisk)
 				return nil
 			}
 			gotHash := sha256Hex(got)
 			if gotHash == sha256Hex(want) {
 				return nil
 			}
-			if lockKnown && lock.Files[path] == gotHash {
-				data.Stale = append(data.Stale, rel)
+			if !lockKnown {
+				data.Unverified = append(data.Unverified, onDisk)
 				return nil
 			}
-			data.HandEdited = append(data.HandEdited, rel)
+			if lock.Files[path] == gotHash {
+				data.Stale = append(data.Stale, onDisk)
+				return nil
+			}
+			data.HandEdited = append(data.HandEdited, onDisk)
 			return nil
 		})
 		if err != nil {
@@ -490,6 +506,7 @@ func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData,
 	sort.Strings(data.HandEdited)
 	sort.Strings(data.Stale)
 	sort.Strings(data.Missing)
+	sort.Strings(data.Unverified)
 	return data, nil
 }
 
@@ -507,10 +524,13 @@ func writeSkillsCheckText(out io.Writer, data skillsCheckData) {
 	for _, f := range data.Missing {
 		fmt.Fprintf(out, "skills check: missing %s\n", f)
 	}
-	for _, t := range data.NoLock {
-		fmt.Fprintf(out, "skills check: no %s in %s, so every difference counts as hand-edited\n", skillsLockFile, t)
+	for _, f := range data.Unverified {
+		fmt.Fprintf(out, "skills check: unverified %s (differs from this release; no lock to say whether it was edited or is older)\n", f)
 	}
-	n := len(data.HandEdited) + len(data.Stale) + len(data.Missing)
+	for _, t := range data.NoLock {
+		fmt.Fprintf(out, "skills check: no %s in %s — re-export to write one\n", skillsLockFile, t)
+	}
+	n := data.differing()
 	if n == 0 {
 		fmt.Fprintf(out, "skills check: %d file(s) match this binary's bundle\n", data.Checked)
 		return

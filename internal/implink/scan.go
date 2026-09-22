@@ -165,7 +165,23 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 			if err != nil {
 				return err
 			}
+			// Hidden directories are never source: .git, .build (SwiftPM),
+			// .swiftpm, .idea, node_modules-style caches under a dot. The
+			// root itself may be hidden (a project that keeps its code under
+			// .src) and is always entered.
 			if d.IsDir() {
+				if path != root && strings.HasPrefix(d.Name(), ".") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			// A symlink is skipped whole rather than followed: following one
+			// to a directory made os.ReadFile fail with "is a directory" and
+			// took the whole scan down on the first SwiftPM checkout it met
+			// (.build/debug is a symlink to a build product directory), and
+			// following one to a file would record a path the link target,
+			// not the source tree, owns.
+			if d.Type()&fs.ModeSymlink != 0 {
 				return nil
 			}
 			info, err := d.Info()
