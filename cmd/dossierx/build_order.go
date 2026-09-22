@@ -473,7 +473,7 @@ func newBuildOrderLockCmd() *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "lock",
-		Short: "Lock --module's proposed build-order artifact, snapshotting a content-hash baseline",
+		Short: "Lock --module's proposed build-order artifact, freezing the derived sequence",
 		// Selection is --module only; see `newBuildOrderProposeCmd`'s Args for
 		// what a discarded positional costs and why this shipped as an
 		// announced change rather than quietly.
@@ -516,7 +516,7 @@ func newBuildOrderLockCmd() *cobra.Command {
 					// The documented recovery is unchanged and is named here:
 					// re-propose, then lock.
 					dr.Require("build_order_not_stale", !artifact.Stale,
-						fmt.Sprintf("stale=%v (%d claim(s) changed, added or removed: %v); re-run \"dossierx build-order propose --module %s\" first",
+						fmt.Sprintf("stale=%v (%d claim(s) moved in the derived order: %v); re-run \"dossierx build-order propose --module %s\" first",
 							artifact.Stale, len(artifact.StaleIDs), artifact.StaleIDs, module))
 					// The unbacked-lock gate, previewed for the same reason the
 					// two above are: the write path refuses on it FIRST, and a
@@ -559,8 +559,8 @@ func newBuildOrderLockCmd() *cobra.Command {
 					}
 					dr.Propose("phases", phaseData(artifact))
 				}
-				dr.Effect("rewrites " + path + " with locked: true and a content-hash baseline").
-					Effect("the order becomes the implementation sequence: it goes stale, rather than silently changing, when its claims move")
+				dr.Effect("rewrites " + path + " with locked: true").
+					Effect("the order becomes the implementation sequence: it goes stale, rather than silently changing, when what it is derived from moves (a claim's build_role or rests_on, the module's membership, the out-of-scope set) — never on a prose edit")
 				dr.Propose("locked", true).Propose("reason", reason)
 				// The pre-ledger project: this command records an approval
 				// (recordBuildOrderApproval), and lock.CrossPreLedger refuses it
@@ -725,10 +725,11 @@ func newBuildOrderLockCmd() *cobra.Command {
 // re-lock.
 //
 // The artifact's signature is hashed HERE rather than in internal/lock because
-// internal/buildorder imports internal/lock (for ContentHash), so computing it
-// there would invert that edge into an import cycle. It hashes the artifact's
-// canonical JSON — module, phases, per-claim entries, excluded set, the frozen
-// hash baseline, and the LockedAt stamp — which is precisely the content
+// internal/buildorder imports internal/lock (for AcquireFileLock), so computing
+// it there would invert that edge into an import cycle. It hashes the artifact's
+// canonical JSON — module, phases, per-claim entries (id, file, rests_on),
+// excluded set, the LockedAt stamp, and on artifacts written before issue #58
+// the legacy `hashes` map — which is precisely the content
 // buildorder.WriteArtifact just persisted, so a later hand edit of
 // build/build-order/<module>.json no longer matches its record.
 func recordBuildOrderApproval(cfg *config.Config, module string, artifact *buildorder.Artifact, reason string) error {
@@ -841,9 +842,11 @@ func buildOrderRecordStands(cfg *config.Config, module string) bool {
 
 // buildOrderSignature hashes a build-order artifact for the lock ledger:
 // sha256 over encoding/json's canonical marshalling of the whole artifact —
-// module, phases, per-claim entries, excluded set, the frozen hash baseline and
-// the LockedAt stamp, which is precisely the content buildorder.WriteArtifact
-// persists.
+// module, phases, per-claim entries, excluded set, the LockedAt stamp and, on
+// artifacts written before issue #58, the legacy `hashes` map — which is
+// precisely the content buildorder.WriteArtifact persists. That is also why the
+// artifact keeps its persisted `stale` key and the legacy map: dropping either
+// would change every existing locked artifact's signature on upgrade.
 //
 // The READING side (internal/check's build-order gate) must compute this
 // byte-for-byte identically or every honestly-locked build order in every

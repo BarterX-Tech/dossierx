@@ -1,7 +1,10 @@
 package buildorder
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,8 +116,11 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	if locked.LockedAt != "2026-07-19T12:00:00Z" {
 		t.Fatalf("expected LockedAt stamped to the fixed clock, got %q", locked.LockedAt)
 	}
-	if len(locked.Hashes) != 3 {
-		t.Fatalf("expected a hash snapshot for all 3 covered claims, got %d", len(locked.Hashes))
+	// Issue #58: the frozen artifact is its own baseline. No content-hash
+	// snapshot is written, so nothing can later compare claim CONTENT against
+	// it.
+	if len(locked.Hashes) != 0 {
+		t.Fatalf("expected no content-hash snapshot on a locked artifact, got %v", locked.Hashes)
 	}
 
 	// status immediately after lock: not stale.
@@ -131,13 +137,37 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 		t.Fatalf("expected Lock to refuse re-locking an already-locked, non-stale artifact")
 	}
 
-	// Mutate a covered claim's body: status must now report stale, naming
-	// the changed claim id.
+	// A prose edit to a covered claim (the issue #58 case): its body changes,
+	// nothing the order is derived from does. The order must NOT go stale — a
+	// fresh propose would produce the identical artifact, and reporting stale
+	// here is what cost a human approval per reworded sentence.
+	prose := make([]model.Claim, len(claims))
+	copy(prose, claims)
+	for i, c := range prose {
+		if c.ID == "widget.contract.schema" {
+			c.Body = "schema definition reworded after lock"
+			prose[i] = c
+		}
+	}
+	stProse, err := Status(path, prose, nil)
+	if err != nil {
+		t.Fatalf("Status after prose edit: %v", err)
+	}
+	if stProse.Stale || len(stProse.StaleIDs) != 0 {
+		t.Fatalf("a prose edit must not make the order stale (issue #58), got stale=%v stale_claim_ids=%v", stProse.Stale, stProse.StaleIDs)
+	}
+	if _, err := Lock(path, prose, nil); err == nil || errors.Is(err, ErrStale) {
+		t.Fatalf("after a prose edit Lock must refuse as already-locked-and-current, not as stale; got: %v", err)
+	}
+
+	// Move a derivation input: the behavior claim's rests_on edge is
+	// redirected. Status must now report stale, naming exactly the claim
+	// whose input moved — and nothing else.
 	mutated := make([]model.Claim, len(claims))
 	copy(mutated, claims)
 	for i, c := range mutated {
-		if c.ID == "widget.contract.schema" {
-			c.Body = "schema definition changed after lock"
+		if c.ID == "widget.contract.behavior" {
+			c.RestsOn = []string{"widget.contract.orient"}
 			mutated[i] = c
 		}
 	}
@@ -147,10 +177,10 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 		t.Fatalf("Status after mutation: %v", err)
 	}
 	if !st3.Stale {
-		t.Fatalf("expected stale=true after mutating a covered claim")
+		t.Fatalf("expected stale=true after moving a covered claim's rests_on")
 	}
-	if len(st3.StaleIDs) != 1 || st3.StaleIDs[0] != "widget.contract.schema" {
-		t.Fatalf("expected stale_claim_ids=[widget.contract.schema], got %v", st3.StaleIDs)
+	if len(st3.StaleIDs) != 1 || st3.StaleIDs[0] != "widget.contract.behavior" {
+		t.Fatalf("expected stale_claim_ids=[widget.contract.behavior], got %v", st3.StaleIDs)
 	}
 
 	// A stale artifact is NOT bare-relockable (FIX-13): a bare relock would
@@ -551,17 +581,21 @@ func TestLock_RefusesStaleArtifact(t *testing.T) {
 		t.Fatalf("Lock: %v", err)
 	}
 
-	// Mutate a covered claim's body so the artifact goes stale.
+	// Move a covered claim's build_role so the artifact goes stale (a body
+	// edit would not — see TestRecomputeStale_ProseEdit_NotStale).
 	mutated := append([]model.Claim{}, claims...)
 	for i := range mutated {
 		if mutated[i].ID == "widget.contract.schema" {
-			mutated[i].Body = "schema definition changed after lock"
+			mutated[i].BuildRole = model.BuildRoleOrientation
 		}
 	}
 
 	_, err = Lock(path, mutated, nil)
 	if err == nil {
 		t.Fatalf("expected Lock to refuse a stale artifact")
+	}
+	if !errors.Is(err, ErrStale) {
+		t.Fatalf("expected the refusal to wrap ErrStale, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "propose") {
 		t.Fatalf("expected the refusal to direct a re-propose, got: %v", err)
@@ -818,9 +852,9 @@ func TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale(t *testing.T) {
 	}
 
 	// Edit the excluded claim's build_role to empty (no longer excluded by
-	// Propose, which would now error on it). Covered claim left untouched so a
-	// non-empty Hashes proves this is the excluded-loop classification, not the
-	// DEFECT-1 guard, that surfaces the staleness.
+	// Propose, which would now error on it). The covered claim is left
+	// untouched so the excluded-loop classification, not a covered-claim
+	// check, is what surfaces the staleness.
 	mutated := append([]model.Claim{}, claims...)
 	for i := range mutated {
 		if mutated[i].ID == "widget.contract.future" {
@@ -1040,13 +1074,15 @@ func TestRecomputeStale_CoveredClaimSourceFileRenamed_IsStale(t *testing.T) {
 	}
 }
 
-// TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale keeps the content-hash
-// path honest: reordering a claim's rests_on list (same target set, different
-// order) does NOT change its layeredTopoSort placement (deps are set-based), so
-// the structural re-derivation alone would miss it — but lock.ContentHash hashes
-// rests_on in order, so the retained content-hash check still surfaces it. This
-// guards against the structural diff being mistaken for a full replacement of
-// the content-hash check.
+// TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale pins that the
+// artifact's rests_on ECHO is part of what a fresh propose must reproduce:
+// reordering a claim's rests_on list (same target set, different order) does NOT
+// change its layeredTopoSort placement (deps are set-based), but the artifact
+// records rests_on verbatim and the viewer and "build-order show" draw the edges
+// from that record, so a fresh propose would write a different artifact. Before
+// issue #58 this was caught only as a side effect of the content-hash check;
+// now the per-entry rests_on comparison and the structural signature both carry
+// it, so removing the content hash did not lose it.
 func TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "build", "build-order", "widget.json")
@@ -1215,5 +1251,441 @@ func TestLock_AcceptsAFreshlyProposedArtifact(t *testing.T) {
 	}
 	if !locked.Locked || locked.Stale {
 		t.Fatalf("expected locked=true stale=false, got %+v", locked)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Issue #58: staleness keys on the derivation inputs, never on claim content
+// ---------------------------------------------------------------------
+
+// proposeAndLock is the shared fixture step for the issue #58 cases: propose
+// module's order from claims, write it to path, and lock it under a fixed
+// clock, failing the test on any refusal.
+func proposeAndLock(t *testing.T, path string, claims []model.Claim, module string) *Artifact {
+	t.Helper()
+	a, err := Propose(claims, nil, module)
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	locked, err := Lock(path, claims, nil)
+	if err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+	return locked
+}
+
+// TestRecomputeStale_ProseEdit_NotStale is the issue #58 regression test. A
+// locked order used to report stale after ANY content change to a covered claim
+// (the check compared a per-claim lock.ContentHash snapshot), and the documented
+// recovery — re-propose, then re-lock — releases the standing approval in the
+// ledger. So every reworded sentence in a still-being-audited spec cost a human
+// approval that decided nothing.
+//
+// Body, steps and section are edited on TWO covered claims and one excluded
+// claim; none of it is a derivation input, so the order must stay stale:false
+// with an empty stale_claim_ids — and the on-disk artifact must be untouched,
+// because Status is a read.
+func TestRecomputeStale_ProseEdit_NotStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.orient", "widget", model.BuildRoleOrientation),
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+		mc("widget.contract.api", "widget", model.BuildRoleAPI, "widget.contract.behavior"),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	proposeAndLock(t, path, claims, "widget")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read artifact: %v", err)
+	}
+
+	edited := append([]model.Claim{}, claims...)
+	for i := range edited {
+		switch edited[i].ID {
+		case "widget.contract.schema":
+			edited[i].Body = "the schema, reworded during audit"
+			edited[i].Section = "Data shapes"
+		case "widget.contract.api":
+			edited[i].Steps = []string{"call it", "check the response"}
+		case "widget.contract.future":
+			edited[i].Body = "still deferred, note tightened"
+		}
+	}
+	// Guard: these edits DO move the content hash the old check compared, or
+	// this test would assert nothing about issue #58.
+	for i := range claims {
+		if claims[i].ID != "widget.contract.orient" && claims[i].ID != "widget.contract.behavior" &&
+			lock.ContentHash(claims[i]) == lock.ContentHash(edited[i]) {
+			t.Fatalf("test setup error: the prose edit to %s did not change lock.ContentHash", claims[i].ID)
+		}
+	}
+
+	st, err := Status(path, edited, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Stale || len(st.StaleIDs) != 0 {
+		t.Fatalf("issue #58: prose edits must not make the order stale, got stale=%v stale_claim_ids=%v", st.Stale, st.StaleIDs)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read artifact after Status: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("Status must not rewrite the artifact")
+	}
+
+	// And the count a caller shows ("N claim(s) moved") counts ONLY claims
+	// whose derivation inputs moved: add one real move on top of the prose
+	// edits and exactly that one id must be named.
+	moved := append([]model.Claim{}, edited...)
+	for i := range moved {
+		if moved[i].ID == "widget.contract.orient" {
+			moved[i].BuildRole = model.BuildRoleVerification
+		}
+	}
+	st, err = Status(path, moved, nil)
+	if err != nil {
+		t.Fatalf("Status after a real move: %v", err)
+	}
+	if !st.Stale || len(st.StaleIDs) != 1 || st.StaleIDs[0] != "widget.contract.orient" {
+		t.Fatalf("expected exactly the moved claim named, got stale=%v stale_claim_ids=%v", st.Stale, st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_CoveredClaimRestsOnRetargeted_IsStale: a rests_on edit that
+// actually reorders a phase. b rested on a (layers: [a c] [b]); after the edit b
+// rests on c (layers: [a c] [b] still — but the recorded edge differs) and c is
+// moved to rest on b, which flips the two: a fresh propose now yields [a b] [c].
+func TestRecomputeStale_CoveredClaimRestsOnRetargeted_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.a", "widget", model.BuildRoleBehavior),
+		mc("widget.contract.b", "widget", model.BuildRoleBehavior, "widget.contract.a"),
+		mc("widget.contract.c", "widget", model.BuildRoleBehavior),
+	}
+	proposeAndLock(t, path, claims, "widget")
+
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.c" {
+			mutated[i].RestsOn = []string{"widget.contract.b"}
+		}
+	}
+	st, err := Status(path, mutated, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after retargeting a covered claim's rests_on, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.c") < 0 {
+		t.Fatalf("expected the retargeted claim named, got %v", st.StaleIDs)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.a") >= 0 {
+		t.Fatalf("a's inputs and placement did not move; it must not be named, got %v", st.StaleIDs)
+	}
+	if _, err := Lock(path, mutated, nil); !errors.Is(err, ErrStale) {
+		t.Fatalf("expected Lock to refuse with ErrStale, got: %v", err)
+	}
+}
+
+// TestRecomputeStale_CoveredClaimReclassifiedOutOfScope_IsStale is the
+// exclusion-set change in the covered direction (the excluded->in-phase
+// direction is TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale):
+// a placed claim whose build_role becomes out-of-scope leaves the sequence and
+// joins the excluded set, so a fresh propose differs in both.
+func TestRecomputeStale_CoveredClaimReclassifiedOutOfScope_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior),
+	}
+	proposeAndLock(t, path, claims, "widget")
+
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.behavior" {
+			mutated[i].BuildRole = model.BuildRoleOutOfScope
+		}
+	}
+	st, err := Status(path, mutated, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale || len(st.StaleIDs) != 1 || st.StaleIDs[0] != "widget.contract.behavior" {
+		t.Fatalf("expected exactly the reclassified claim named, got stale=%v stale_claim_ids=%v", st.Stale, st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_LegacyArtifactWithHashes_JudgedByRederivation pins the
+// upgrade rule for an artifact written by a release that still snapshotted
+// lock.ContentHash into `hashes`. The map is loaded (so the artifact re-marshals
+// byte-identically for its ledger signature) and otherwise ignored: the order
+// is judged by re-deriving and comparing, exactly like a new one. The stored
+// hashes here deliberately match NOTHING — the old check would have flagged
+// every covered claim — and the verdict must still be stale:false, because a
+// fresh propose reproduces the artifact. A real move must still be caught.
+func TestRecomputeStale_LegacyArtifactWithHashes_JudgedByRederivation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	legacy := `{
+  "module": "widget",
+  "locked": true,
+  "locked_at": "2026-01-01T00:00:00Z",
+  "stale": false,
+  "excluded": ["widget.contract.future"],
+  "phases": [
+    {"phase": "schema", "claims": [{"id": "widget.contract.schema", "file": "widget.contract.schema.yaml"}]},
+    {"phase": "behavior", "claims": [{"id": "widget.contract.behavior", "file": "widget.contract.behavior.yaml", "rests_on": ["widget.contract.schema"]}]}
+  ],
+  "hashes": {
+    "widget.contract.schema": "0000000000000000000000000000000000000000000000000000000000000000",
+    "widget.contract.behavior": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}
+`
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("write legacy artifact: %v", err)
+	}
+	// Guard: the stored hashes really do disagree with the claims' content,
+	// so the old rule would have said stale.
+	for _, c := range claims[:2] {
+		if lock.ContentHash(c) == strings.Repeat("0", 64) {
+			t.Fatalf("test setup error: the legacy hash accidentally matches %s", c.ID)
+		}
+	}
+
+	st, err := Status(path, claims, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Stale || len(st.StaleIDs) != 0 {
+		t.Fatalf("a legacy artifact whose order a fresh propose reproduces must be stale=false, got stale=%v stale_claim_ids=%v", st.Stale, st.StaleIDs)
+	}
+	if len(st.Hashes) != 2 {
+		t.Fatalf("the legacy hashes map must survive the load untouched (its ledger signature covers it), got %v", st.Hashes)
+	}
+	raw, err := json.Marshal(st)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"hashes":{`) {
+		t.Fatalf("a loaded legacy artifact must re-marshal with its hashes map, got %s", raw)
+	}
+
+	// A real move on the same legacy artifact is still caught.
+	moved := append([]model.Claim{}, claims...)
+	for i := range moved {
+		if moved[i].ID == "widget.contract.behavior" {
+			moved[i].RestsOn = nil
+		}
+	}
+	st, err = Status(path, moved, nil)
+	if err != nil {
+		t.Fatalf("Status after move: %v", err)
+	}
+	if !st.Stale || indexOf(st.StaleIDs, "widget.contract.behavior") < 0 {
+		t.Fatalf("expected the moved claim named on a legacy artifact, got stale=%v stale_claim_ids=%v", st.Stale, st.StaleIDs)
+	}
+}
+
+// TestLock_RefusesASplicedRestsOn: the hand-edit gate now sees the rests_on
+// echo. Dropping an edge from the artifact between propose and lock used to
+// pass structuralDivergence (which compared phase/position/file only) and be
+// signed into the ledger; the viewer then drew an order missing a dependency
+// the claims still declare.
+func TestLock_RefusesASplicedRestsOn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	for pi := range a.Phases {
+		for ci := range a.Phases[pi].Claims {
+			a.Phases[pi].Claims[ci].RestsOn = nil
+		}
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	_, err = Lock(path, claims, nil)
+	if !errors.Is(err, ErrHandEdited) {
+		t.Fatalf("expected Lock to refuse a rests_on splice as hand-edited, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "rests_on") {
+		t.Fatalf("expected the refusal to name rests_on, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Graph-safety scale evidence (.agents/skills/dossierx-graph-safety)
+// ---------------------------------------------------------------------
+
+// scaleClaims builds one module's worst-case shapes for the staleness
+// re-derivation: a deep behavior chain of depth claims (each rests_on the
+// previous one) and a layered dense DAG of layers x width behavior claims where
+// every claim rests_on EVERY claim of the previous layer — exponentially many
+// routes, O(layers * width^2) edges — plus one other-module claim every chain
+// claim also rests_on (a cross-module edge, informational only). Ids are
+// returned in source order so stableDisplayOrder's tiebreak is deterministic.
+func scaleClaims(depth, layers, width int) (claims []model.Claim, edges int) {
+	claims = append(claims, mc("other.contract.x", "other", model.BuildRoleSchema))
+	prev := ""
+	for i := 0; i < depth; i++ {
+		id := fmt.Sprintf("scale.contract.chain%04d", i)
+		deps := []string{"other.contract.x"}
+		edges++
+		if prev != "" {
+			deps = append(deps, prev)
+			edges++
+		}
+		claims = append(claims, mc(id, "scale", model.BuildRoleBehavior, deps...))
+		prev = id
+	}
+	var prevLayer []string
+	for l := 0; l < layers; l++ {
+		var layer []string
+		for w := 0; w < width; w++ {
+			id := fmt.Sprintf("scale.contract.dag%dx%d", l, w)
+			claims = append(claims, mc(id, "scale", model.BuildRoleBehavior, prevLayer...))
+			edges += len(prevLayer)
+			layer = append(layer, id)
+		}
+		prevLayer = layer
+	}
+	return claims, edges
+}
+
+// TestRecomputeStale_Scale_BoundedByClaimsAndEdges is the adversarial scale
+// evidence for the issue #58 rule. The re-derivation is layeredTopoSort over
+// the module (Kahn's algorithm: O(V + E) work, one visit per claim and one
+// decrement per edge, never a walk over routes) plus one signature per placed
+// claim of O(len(id) + sum of its rests_on ids) bytes, so on a layered dense
+// DAG with exponentially many routes the work, the allocations and the artifact
+// bytes must all follow V + E, not the route count. The budgets below are
+// asserted as structural allocation counts (deterministic on a given toolchain;
+// wall time is logged, not asserted) and as serialized artifact bytes.
+//
+// It also proves the two semantic ends of the rule at scale: a prose edit on
+// EVERY covered claim leaves the order stale:false with no ids, and one
+// rests_on edit that CLOSES A CYCLE (so a fresh propose errors) terminates and
+// names only the edited claim rather than the whole coverage.
+func TestRecomputeStale_Scale_BoundedByClaimsAndEdges(t *testing.T) {
+	for _, size := range []struct{ depth, layers, width int }{
+		{32, 4, 16},
+		{64, 6, 24},
+		{128, 8, 32},
+	} {
+		t.Run(fmt.Sprintf("chain%d_dag%dx%d", size.depth, size.layers, size.width), func(t *testing.T) {
+			scaleCase(t, size.depth, size.layers, size.width)
+		})
+	}
+}
+
+func scaleCase(t *testing.T, depth, layers, width int) {
+	t.Helper()
+	claims, edges := scaleClaims(depth, layers, width)
+	moduleClaims := 0
+	for _, c := range claims {
+		if c.Module == "scale" {
+			moduleClaims++
+		}
+	}
+	if moduleClaims != depth+layers*width {
+		t.Fatalf("fixture: expected %d module claims, got %d", depth+layers*width, moduleClaims)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "build", "build-order", "scale.json")
+	locked := proposeAndLock(t, path, claims, "scale")
+	raw, err := json.Marshal(locked)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	// Output bytes: every placed claim carries its id, file and rests_on echo,
+	// so the artifact is O(sum over claims of (id + file + sum rests_on ids))
+	// bytes. Ids here are <= 32 bytes; the budget is 96 bytes per claim (id,
+	// file, JSON scaffolding) plus 40 per edge (quoted id, comma, indentation).
+	if byteBudget := 96*moduleClaims + 40*edges; len(raw) > byteBudget {
+		t.Fatalf("artifact bytes %d exceed the V+E budget %d (V=%d, E=%d)", len(raw), byteBudget, moduleClaims, edges)
+	}
+
+	// Prose edit on EVERY covered claim: not stale, nothing named.
+	prose := append([]model.Claim{}, claims...)
+	for i := range prose {
+		prose[i].Body = "reworded " + prose[i].ID
+	}
+	start := time.Now()
+	st, err := Status(path, prose, nil)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Stale || len(st.StaleIDs) != 0 {
+		t.Fatalf("prose edits on every claim must not make the order stale, got stale=%v, %d ids", st.Stale, len(st.StaleIDs))
+	}
+
+	// Allocations of the re-check itself (load excluded): measured per run and
+	// bounded by V + E. The constant is generous headroom over the measured
+	// value on go1.26 so toolchain drift does not flake it, but it is linear in
+	// V + E by construction — a route-enumerating regression on this DAG would
+	// allocate orders of magnitude more.
+	loaded, err := LoadArtifact(path)
+	if err != nil {
+		t.Fatalf("LoadArtifact: %v", err)
+	}
+	allocs := testing.AllocsPerRun(5, func() { recomputeStale(loaded, prose, nil) })
+	if allocBudget := float64(40*moduleClaims + 4*edges); allocs > allocBudget {
+		t.Fatalf("recomputeStale allocated %.0f times, over the V+E budget %.0f (V=%d, E=%d)", allocs, allocBudget, moduleClaims, edges)
+	}
+	t.Logf("scale: V=%d module claims, E=%d edges, artifact=%d bytes, Status=%s, recomputeStale allocs/run=%.0f",
+		moduleClaims, edges, len(raw), elapsed, allocs)
+
+	// One edge that closes a cycle in the chain: a fresh propose ERRORS, the
+	// structural comparison cannot run, and the per-input rests_on check names
+	// exactly the edited claim. Terminates (layeredTopoSort's cycle guard) and
+	// does not flag the whole coverage.
+	cyclic := append([]model.Claim{}, prose...)
+	first := "scale.contract.chain0000"
+	last := fmt.Sprintf("scale.contract.chain%04d", depth-1)
+	for i := range cyclic {
+		if cyclic[i].ID == first {
+			cyclic[i].RestsOn = append([]string{"other.contract.x"}, last)
+		}
+	}
+	st, err = Status(path, cyclic, nil)
+	if err != nil {
+		t.Fatalf("Status on a cyclic edit: %v", err)
+	}
+	if !st.Stale || len(st.StaleIDs) != 1 || st.StaleIDs[0] != first {
+		t.Fatalf("a cycle-closing rests_on edit must name exactly the edited claim, got stale=%v ids=%v", st.Stale, st.StaleIDs)
 	}
 }

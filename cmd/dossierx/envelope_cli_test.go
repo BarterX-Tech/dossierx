@@ -869,9 +869,10 @@ func TestBuildOrderLockCodes(t *testing.T) {
 	}
 
 	// Move a covered claim underneath the frozen order, which is what makes it
-	// stale: unlock, edit the body (changing its content hash), lock again.
+	// stale: unlock, change its build_role (a derivation input — since issue
+	// #58 a body edit alone leaves the order current), lock again.
 	for _, args := range [][]string{
-		{"claim", "unlock", "widget.contract.a", "--reason", "reopening to fix the wording"},
+		{"claim", "unlock", "widget.contract.a", "--reason", "reopening to reclassify"},
 	} {
 		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
 			t.Fatalf("%v: %v", args, err)
@@ -882,9 +883,9 @@ func TestBuildOrderLockCodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read claim: %v", err)
 	}
-	edited := strings.Replace(string(raw), "a locked claim with a build role.", "a rewritten claim with a build role.", 1)
+	edited := strings.Replace(string(raw), "build_role: schema\n", "build_role: behavior\n", 1)
 	if edited == string(raw) {
-		t.Fatalf("fixture precondition: the body substitution did not apply")
+		t.Fatalf("fixture precondition: the build_role substitution did not apply")
 	}
 	if err := os.WriteFile(claimFile, []byte(edited), 0o644); err != nil {
 		t.Fatalf("edit claim: %v", err)
