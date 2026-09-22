@@ -992,13 +992,13 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 		}
 		for _, p := range report.Partial {
 			stdout = append(stdout, fmt.Sprintf("  partial: %s steps %d of %d linked (missing %s)", p.ClaimID, p.Covered, p.Total, joinInts(p.Missing)))
-			hints = append(hints, fmt.Sprintf("%s is partially linked -> add a dossierx-step tag for step(s) %s", p.ClaimID, joinInts(p.Missing)))
+			hints = append(hints, fmt.Sprintf("%s is partially linked -> add a dossierx-step tag for step(s) %s, or steps_owned_by / claim link --step n --process", p.ClaimID, joinInts(p.Missing)))
 		}
 		for _, id := range report.UnlinkedIDs {
 			stdout = append(stdout, fmt.Sprintf("  unlinked: %s", id))
 		}
 		if len(report.UnlinkedIDs) > 0 {
-			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim or dossierx-step tag or dossierx claim link", len(report.UnlinkedIDs), module))
+			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim or dossierx-step tag, dossierx claim link, steps_owned_by / --process, or links.mode none", len(report.UnlinkedIDs), module))
 		}
 	}
 	return stdout, stderr, hints

@@ -90,6 +90,7 @@ type ScanMatch struct {
 	Symbol   string // best-effort; may be empty
 	Step     int    // 1-based; 0 = whole-claim tag
 	StepHash string
+	Process  string // set by claim link --process; Scan never fills this
 }
 
 // ScanError is one tag Scan found that could not be reconciled into a

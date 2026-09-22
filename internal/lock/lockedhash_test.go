@@ -53,6 +53,12 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 			}}},
 		}
 	}},
+	"links": {hashed: true, mutate: func(c *model.Claim) {
+		c.Links = &model.ClaimLinks{Mode: model.LinksModeNone, Reason: "a different no-declaration reason"}
+	}},
+	"steps_owned_by": {hashed: true, mutate: func(c *model.Claim) {
+		c.StepsOwnedBy = model.StepsOwnedBy{1: model.StepOwnerProcess}
+	}},
 	"body":              {hashed: true, mutate: func(c *model.Claim) { c.Body = "a different body" }},
 	"rows":              {hashed: true, mutate: func(c *model.Claim) { c.Rows = []model.Row{{"col": "changed"}} }},
 	"section":           {hashed: true, mutate: func(c *model.Claim) { c.Section = "9 - elsewhere" }},

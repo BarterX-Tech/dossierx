@@ -32,27 +32,39 @@ import (
 type claimLinkData struct {
 	Module      string `json:"module"`
 	ClaimID     string `json:"claim_id"`
-	File        string `json:"file"`
+	File        string `json:"file,omitempty"`
 	Symbol      string `json:"symbol,omitempty"`
+	Step        int    `json:"step,omitempty"`
+	Process     string `json:"process,omitempty"`
 	Path        string `json:"path"`
 	LinkedCount int    `json:"linked_count"`
 }
 
 func newClaimLinkCmd() *cobra.Command {
-	var module, claimID, file, symbol string
+	var module, claimID, file, symbol, process string
+	var step int
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "link",
-		Short: "Link --file (optionally at --symbol) to --claim as its implementation (immediate, no confirm step)",
+		Short: "Link --file (or a process-owned --step) to --claim as its implementation (immediate, no confirm step)",
 		Args:  cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
-			for _, required := range []struct{ name, value string }{
-				{"--module", module},
-				{"--claim", claimID},
-				{"--file", file},
-			} {
-				if required.value == "" && !dryRun {
-					return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag, "claim link: %s is required", required.name)
+			process = strings.TrimSpace(process)
+			if !dryRun {
+				if module == "" {
+					return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag, "claim link: %s is required", "--module")
+				}
+				if claimID == "" {
+					return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag, "claim link: %s is required", "--claim")
+				}
+				if file == "" && process == "" {
+					return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag, "claim link: --file or --process is required")
+				}
+				if file != "" && process != "" {
+					return cmdResult{}, cliout.Errorf(cliout.CodeUsage, "claim link: --file and --process cannot be combined")
+				}
+				if process != "" && step < 1 {
+					return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag, "claim link: --step is required with --process")
 				}
 			}
 
@@ -68,15 +80,21 @@ func newClaimLinkCmd() *cobra.Command {
 			path := implink.ArtifactPath(cfg, module)
 
 			if dryRun {
-				dr := cliout.NewDryRun("link " + linkTarget(file, symbol) + " to claim " + claimID)
+				target := linkTarget(file, symbol)
+				if process != "" {
+					target = fmt.Sprintf("process step %d (%s)", step, process)
+				}
+				dr := cliout.NewDryRun("link " + target + " to claim " + claimID)
 				for _, required := range []struct{ name, value string }{
 					{"--module", module},
 					{"--claim", claimID},
-					{"--file", file},
 				} {
 					if required.value == "" {
 						dr.Lacking(required.name)
 					}
+				}
+				if file == "" && process == "" {
+					dr.Lacking("--file or --process")
 				}
 				// The preview reproduces implink.Set's refusals IN ITS ORDER —
 				// claim exists, claim belongs to --module, claim is locked, file
@@ -108,6 +126,20 @@ func newClaimLinkCmd() *cobra.Command {
 							fmt.Sprintf("status is %q", claim.Status))
 					}
 				}
+				if process != "" {
+					dr.Require("process_has_step", step >= 1, "--step is required with --process")
+					if claimID != "" {
+						claim, ok := loader.FindByID(claims, claimID)
+						if ok {
+							dr.Require("claim_has_steps", len(claim.Steps) > 0, "claim has no steps")
+							if len(claim.Steps) > 0 && step >= 1 {
+								dr.Require("step_in_range", step <= len(claim.Steps),
+									fmt.Sprintf("step %d of %d", step, len(claim.Steps)))
+							}
+							dr.Require("claim_accepts_links", !claim.LinksNone(), "links.mode is none")
+						}
+					}
+				}
 				if file != "" {
 					inside, detail := fileIsInsideProject(cfg, file)
 					dr.Require("file_is_project_relative", inside, detail)
@@ -120,9 +152,19 @@ func newClaimLinkCmd() *cobra.Command {
 						dr.Require("file_exists", fileExists(resolved), resolved)
 					}
 				}
-				dr.Effect("rewrites " + path).
-					Effect("\"dossierx check\" will report this link as drifted if the file or symbol later moves")
+				dr.Effect("rewrites " + path)
+				if process == "" {
+					dr.Effect("\"dossierx check\" will report this link as drifted if the file or symbol later moves")
+				} else {
+					dr.Effect("\"dossierx check\" will count this step as process-owned")
+				}
 				dr.Propose("file", file).Propose("symbol", symbol).Propose("claim_id", claimID)
+				if step > 0 {
+					dr.Propose("step", fmt.Sprintf("%d", step))
+				}
+				if process != "" {
+					dr.Propose("process", process)
+				}
 				return dryRunResult(cmd, "claim link", dr), nil
 			}
 
@@ -176,7 +218,12 @@ func newClaimLinkCmd() *cobra.Command {
 			}
 			defer release()
 
-			artifact, err := implink.Set(claims, cfg, module, claimID, file, symbol)
+			var artifact *implink.Artifact
+			if process != "" {
+				artifact, err = implink.SetProcess(claims, cfg, module, claimID, step, process)
+			} else {
+				artifact, err = implink.Set(claims, cfg, module, claimID, file, symbol)
+			}
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeImplinkRefused, "claim link: %w", err)
 			}
@@ -187,16 +234,22 @@ func newClaimLinkCmd() *cobra.Command {
 					ClaimID:     claimID,
 					File:        file,
 					Symbol:      symbol,
+					Step:        step,
+					Process:     process,
 					Path:        path,
 					LinkedCount: len(artifact.Links),
 				},
 				Text: func() {
 					out := cmd.OutOrStdout()
-					fmt.Fprintf(out, "claim link: %s -> %s", claimID, file)
-					if symbol != "" {
-						fmt.Fprintf(out, "#%s", symbol)
+					if process != "" {
+						fmt.Fprintf(out, "claim link: %s -> process step %d (%s)\n", claimID, step, process)
+					} else {
+						fmt.Fprintf(out, "claim link: %s -> %s", claimID, file)
+						if symbol != "" {
+							fmt.Fprintf(out, "#%s", symbol)
+						}
+						fmt.Fprintln(out)
 					}
-					fmt.Fprintln(out)
 					fmt.Fprintf(out, "claim link: wrote %s (%d claim(s) linked in module %q)\n", path, len(artifact.Links), module)
 				},
 			}, nil
@@ -204,8 +257,10 @@ func newClaimLinkCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&module, "module", "", "module the claim belongs to (required)")
 	cmd.Flags().StringVar(&claimID, "claim", "", "claim id to link (required)")
-	cmd.Flags().StringVar(&file, "file", "", "project-relative path to the implementing file (required)")
+	cmd.Flags().StringVar(&file, "file", "", "project-relative path to the implementing file (required unless --process)")
 	cmd.Flags().StringVar(&symbol, "symbol", "", "optional symbol (function/type/etc) within --file")
+	cmd.Flags().IntVar(&step, "step", 0, "1-based steps: index; required with --process")
+	cmd.Flags().StringVar(&process, "process", "", "attest that --step is process-owned, naming the review or person artifact")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what linking would do, and write nothing")
 	return cmd
 }

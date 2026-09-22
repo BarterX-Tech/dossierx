@@ -300,4 +300,93 @@ func TestExpects_LockedCodeProducingOnly(t *testing.T) {
 	if !CodeProducing(model.BuildRoleSchema) || CodeProducing(model.BuildRoleOrientation) {
 		t.Fatal("CodeProducing must expose the same four-role set Status counts")
 	}
+	c = lockedClaim("widget.contract.doctrine", "widget", model.BuildRoleBehavior)
+	c.Links = &model.ClaimLinks{Mode: model.LinksModeNone, Reason: "no declaration"}
+	if Expects(c) {
+		t.Fatal("links.mode none is not expected to be linked")
+	}
+}
+
+func TestCoverage_LinksNoneIsNotUnlinked(t *testing.T) {
+	cfg := testConfig(t, "widget")
+	c := lockedClaim("widget.contract.boundary", "widget", model.BuildRoleBehavior)
+	c.Links = &model.ClaimLinks{Mode: model.LinksModeNone, Reason: "doctrine"}
+	other := lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)
+	report, err := Coverage([]model.Claim{c, other}, cfg, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.UnlinkedCount != 1 || report.UnlinkedIDs[0] != "widget.contract.main" {
+		t.Fatalf("only the undeclared claim is unlinked: %+v", report.UnlinkedIDs)
+	}
+}
+
+func TestCoverage_StepsOwnedByCoversThoseIndexes(t *testing.T) {
+	cfg := testConfig(t, "widget")
+	c := lockedStepsClaim("widget.contract.walk", "widget", []string{"freeze", "hash", "review"})
+	c.StepsOwnedBy = model.StepsOwnedBy{1: model.StepOwnerProcess, 3: model.StepOwnerProcess}
+	report, err := Coverage([]model.Claim{c}, cfg, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.UnlinkedCount != 0 || report.PartialCount != 1 {
+		t.Fatalf("expected partial, not unlinked: %+v", report)
+	}
+	if report.Partial[0].Covered != 2 || len(report.Partial[0].Missing) != 1 || report.Partial[0].Missing[0] != 2 {
+		t.Fatalf("expected 2 of 3 missing 2, got %+v", report.Partial[0])
+	}
+
+	c.StepsOwnedBy[2] = model.StepOwnerProcess
+	report, err = Coverage([]model.Claim{c}, cfg, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Incomplete() != 0 {
+		t.Fatalf("all process-owned steps are complete: %+v", report)
+	}
+}
+
+func TestSetProcess_CoversTheStepWithoutAFile(t *testing.T) {
+	cfg := testConfig(t, "widget")
+	c := lockedStepsClaim("widget.contract.walk", "widget", []string{"freeze", "run"})
+	if _, err := SetProcess([]model.Claim{c}, cfg, "widget", c.ID, 1, "PR review of the freeze"); err != nil {
+		t.Fatalf("SetProcess: %v", err)
+	}
+	report, err := Status([]model.Claim{c}, cfg, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.UnlinkedCount != 0 || report.PartialCount != 1 || report.Partial[0].Missing[0] != 2 {
+		t.Fatalf("process step 1 leaves step 2 missing: %+v", report)
+	}
+	if _, err := SetProcess([]model.Claim{c}, cfg, "widget", c.ID, 2, "operator run"); err != nil {
+		t.Fatalf("SetProcess 2: %v", err)
+	}
+	report, err = Status([]model.Claim{c}, cfg, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Incomplete() != 0 || len(report.Drifted) != 0 {
+		t.Fatalf("both process steps: %+v", report)
+	}
+	views, err := ViewsByClaim(cfg, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views[c.ID]) != 2 || views[c.ID][0].Process == "" || views[c.ID][0].File != "" {
+		t.Fatalf("views: %+v", views[c.ID])
+	}
+}
+
+func TestSetProcess_RefusesLinksNoneAndOutOfRange(t *testing.T) {
+	cfg := testConfig(t, "widget")
+	none := lockedClaim("widget.contract.boundary", "widget", model.BuildRoleBehavior)
+	none.Links = &model.ClaimLinks{Mode: model.LinksModeNone, Reason: "doctrine"}
+	if _, err := SetProcess([]model.Claim{none}, cfg, "widget", none.ID, 1, "review"); err == nil {
+		t.Fatal("expected links.none refusal")
+	}
+	c := lockedStepsClaim("widget.contract.walk", "widget", []string{"one"})
+	if _, err := SetProcess([]model.Claim{c}, cfg, "widget", c.ID, 9, "review"); err == nil {
+		t.Fatal("expected out of range")
+	}
 }

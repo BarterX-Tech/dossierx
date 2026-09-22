@@ -332,6 +332,18 @@ type Claim struct {
 	// them in order.
 	Steps []string `yaml:"steps,omitempty"`
 
+	// Links optionally declares that this claim has no implementing
+	// declaration (`mode: none` plus a reason), parallel to
+	// embodiment.mode: none. The code-link gate excludes it; the card
+	// shows the reason. Omitting the field keeps the existing
+	// "locked code-producing claims must be tagged" rule.
+	Links *ClaimLinks `yaml:"links,omitempty"`
+
+	// StepsOwnedBy optionally attests that numbered `steps:` entries are
+	// discharged by a person or a review (`n: process`), not by a
+	// dossierx-step tag. Those indexes count as linked.
+	StepsOwnedBy StepsOwnedBy `yaml:"steps_owned_by,omitempty"`
+
 	// Edges.
 	Mirrors  []string `yaml:"mirrors,omitempty"`
 	RestsOn  []string `yaml:"rests_on,omitempty"`
