@@ -42,16 +42,15 @@ The everyday case, and the only thing most implementation work needs.
    ```
 
    For a claim that carries `steps:`, pin each implemented step with a **1-based**
-   index and the sha256-hex of **that YAML step string** (not the source file):
+   index and the step digest (not the source file):
 
    ```python
-   # dossierx-step: widget.contract.walkthrough #2 <64-char-sha256>
+   # dossierx-step: widget.contract.walkthrough #2 <sha256-hex-or-prefix>
    def _step_two():
        ...
    ```
 
-   Compute the digest over the claim's `steps[n-1]` text as loaded (`dossierx`
-   uses the same sha256-hex). A bare `dossierx-step: <id>` without `#n` and hash
+   Digest is SHA-256 hex of `" ".join(steps[n-1].split())` UTF-8; a tag may carry a prefix of at least 8 hex (12 preferred, 64 accepted). A bare `dossierx-step: <id>` without `#n` and hash
    is a hard scan error. `dossierx-claim:` still grounds a whole claim (including
    claims that have no `steps`). Both markers may appear; they add links, they
    do not replace each other. Unknown id, not-locked, `#n` out of range, a claim

@@ -52,8 +52,8 @@ var tagPattern = regexp.MustCompile(`dossierx-claim:\s*([A-Za-z0-9_.\-]+)`)
 const stepMarker = "dossierx-step:"
 
 // stepTagPattern is the only legal dossierx-step grammar: claim id, 1-based
-// step index, and sha256-hex of that YAML step string (64 hex chars).
-var stepTagPattern = regexp.MustCompile(`dossierx-step:\s*([A-Za-z0-9_.\-]+)\s+#([0-9]+)\s+([0-9a-fA-F]{64})(?:\s|$)`)
+// step index, and a hex prefix of StepContentHash (8–64 chars; 12 preferred).
+var stepTagPattern = regexp.MustCompile(`dossierx-step:\s*([A-Za-z0-9_.\-]+)\s+#([0-9]+)\s+([0-9a-fA-F]{8,64})(?:\s|$)`)
 var stepIDPattern = regexp.MustCompile(`dossierx-step:\s*([A-Za-z0-9_.\-]+)`)
 
 // symbolPatterns is a small, deliberately shallow set of "the next line
@@ -387,7 +387,7 @@ func scanStepLine(report *ScanReport, pending map[string][]ScanMatch, claims []m
 		}
 		report.Errors = append(report.Errors, ScanError{
 			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
-			Message: "tag must be `dossierx-step: <id> #<n> <sha256-hex>` (1-based n, 64 hex chars of the YAML step text)",
+			Message: "tag must be `dossierx-step: <id> #<n> <sha256-hex>` (1-based n, ≥8 hex of the whitespace-normalised step text; 12 preferred, 64 accepted)",
 		})
 		return
 	}
@@ -437,7 +437,7 @@ func recordStepTag(report *ScanReport, pending map[string][]ScanMatch, claims []
 		return
 	}
 	want := StepContentHash(claim.Steps[n-1])
-	if gotHash != want {
+	if !StepHashMatches(gotHash, want) {
 		report.Errors = append(report.Errors, ScanError{
 			File: relFile, Line: lineNo, ClaimID: claimID, Marker: "dossierx-step",
 			Message: fmt.Sprintf("step %d hash mismatch (want %s)", n, want),
