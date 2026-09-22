@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A locked build order is stale only when a fresh `propose` would produce a
+  different artifact: a claim's phase, position, file, `rests_on` list, or the
+  excluded set moved, a covered or excluded claim was deleted, or a new claim
+  was locked into the module. Prose edits to a covered claim no longer mark it
+  stale, so clearing a spurious flag no longer costs a human approval. An
+  artifact written by an earlier release keeps its `hashes` field for its
+  ledger signature and is judged by the same re-derivation. The `stale` key
+  inside the artifact remains a write-time stamp, always false; `status`,
+  `show`, `check` and the viewer recompute it on read. (#58)
 - The source scan no longer follows symlinks and skips hidden directories
   (`.git`, `.build`, `.swiftpm`). Against a SwiftPM checkout it followed
   `.build/debug` to a directory and the whole `check` refused with
