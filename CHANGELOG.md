@@ -49,6 +49,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The code-links and claims skills state that a green `check` means linked and
   only that, and that `--validate` and `--staged` never prove code links. (#78)
 
+### Fixed
+
+- The source scan no longer follows symlinks and skips hidden directories
+  (`.git`, `.build`, `.swiftpm`). Against a SwiftPM checkout it followed
+  `.build/debug` to a directory and the whole `check` refused with
+  "is a directory" before reading a single tag. A tag inside a hidden
+  directory is not source and is not found.
+
 ## [0.7.19] - 2026-09-21
 
 ### Added
