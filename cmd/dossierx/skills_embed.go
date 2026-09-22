@@ -36,6 +36,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -76,6 +79,17 @@ const (
 	agentsFileName  = "AGENTS.md"
 	agentGuidePath  = "docs/dossierx-agent-guide.md"
 	claudeSkillsDir = ".claude/skills"
+	// agentsSkillsDir is the tree Cursor, Codex and the other harnesses that
+	// read `.agents/skills` load from. Detected exactly as .claude/ is: written
+	// only when the repo already has an .agents/ directory.
+	agentsSkillsDir = ".agents/skills"
+	// skillsLockFile sits beside the exported bundles and records the sha256
+	// of every file this release wrote, so `skills export --check` can tell a
+	// hand-edited skill (differs from the lock) from a stale one (matches the
+	// lock, differs from the binary). A skill an agent rewrote can teach a
+	// false story about what the engine enforces, silently and while every
+	// gate stays green; the lock is what makes that rewrite visible.
+	skillsLockFile = "dossierx-skills.lock"
 
 	agentsBeginMarker = "<!-- BEGIN dossierx skills -->"
 	agentsEndMarker   = "<!-- END dossierx skills -->"
@@ -123,7 +137,8 @@ type skillsExportData struct {
 }
 
 func newSkillsExportCmd() *cobra.Command {
-	return &cobra.Command{
+	var check bool
+	cmd := &cobra.Command{
 		Use:   "export [dir]",
 		Short: "Write the embedded skills in every form this repo uses: a SKILL.md tree, an idempotent AGENTS.md section, and a self-contained agent guide",
 		Args:  cobra.MaximumNArgs(1),
@@ -131,6 +146,21 @@ func newSkillsExportCmd() *cobra.Command {
 			explicitDir := ""
 			if len(args) == 1 {
 				explicitDir = args[0]
+			}
+			if check {
+				data, err := checkSkillTrees(dxskills.FS, explicitDir, skillsExportRoot())
+				if err != nil {
+					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "skills export --check: %w", err)
+				}
+				out := cmdResult{
+					Data: data,
+					Text: func() { writeSkillsCheckText(cmd.OutOrStdout(), data) },
+				}
+				if n := data.differing(); n > 0 {
+					return out, cliout.Errorf(cliout.CodeSkillsDrift, "skills export --check: %d skill file(s) differ from this binary's bundle", n).
+						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release, data.missing was never exported and data.unverified sits in a tree with no dossierx-skills.lock — re-run dossierx skills export for those three")
+				}
+				return out, nil
 			}
 			data, err := exportSkillForms(dxskills.FS, explicitDir, skillsExportRoot())
 			if err != nil {
@@ -142,6 +172,42 @@ func newSkillsExportCmd() *cobra.Command {
 			}, nil
 		}),
 	}
+	cmd.Flags().BoolVar(&check, "check", false, "write nothing; compare every exported skill tree against this binary's bundle and its dossierx-skills.lock, and refuse (skills_drift) on a hand-edited, stale or missing file")
+	return cmd
+}
+
+// skillsLock is the on-disk shape of dossierx-skills.lock: the release that
+// wrote the tree and the sha256 of every file it wrote, keyed by the file's
+// path inside the tree (e.g. dossierx-claims/SKILL.md).
+type skillsLock struct {
+	Version string            `json:"version"`
+	Files   map[string]string `json:"files"`
+}
+
+// skillsCheckData is "dossierx skills export --check"'s machine payload. The
+// three lists are disjoint and each names a tree-relative file:
+//
+//   - HandEdited: on disk, differs from this binary, and also differs from the
+//     lock (or there is no lock to consult — see NoLock) — somebody rewrote it.
+//   - Stale: on disk, matches the lock, differs from this binary — exported by
+//     an older release; re-export.
+//   - Missing: in the bundle, not on disk.
+//   - Unverified: on disk, differs from this binary, and the tree has no
+//     lock (NoLock names it) — an export older than the lock file, or a
+//     tree somebody assembled by hand; the check cannot tell which, and says
+//     so instead of guessing. Re-exporting writes the lock and settles it.
+//
+// Every path is the file's path as written: the tree directory the check
+// examined joined with the bundle path, so two trees never collide.
+// Checked counts the files compared; Trees names every tree examined.
+type skillsCheckData struct {
+	Trees      []string `json:"trees"`
+	Checked    int      `json:"checked"`
+	HandEdited []string `json:"hand_edited"`
+	Stale      []string `json:"stale"`
+	Missing    []string `json:"missing"`
+	Unverified []string `json:"unverified"`
+	NoLock     []string `json:"no_lock"`
 }
 
 // skillsExportRoot is the directory the AGENTS.md section and the generic guide
@@ -203,26 +269,24 @@ func exportSkillForms(embedded fs.FS, explicitDir, root string) (skillsExportDat
 		return data, errors.New("no directory given and no project.config.yaml found, so there is nowhere to install the skills; pass a directory (e.g. \"dossierx skills export .claude/skills\") or run this from inside the project")
 	}
 
-	// --- Form 1: the SKILL.md tree, verbatim. ---
-	treeDir := explicitDir
-	if treeDir == "" {
-		if _, err := os.Stat(filepath.Join(root, ".claude")); err == nil {
-			treeDir = filepath.Join(root, claudeSkillsDir)
-		}
-	}
-	if treeDir == "" {
-		data.Skipped = append(data.Skipped, "claude-code skill tree: no .claude/ directory in "+root+" and no directory argument given")
-	} else {
-		written, err := exportSkills(embedded, treeDir)
+	// --- Form 1: the SKILL.md tree, verbatim — into the directory named, or
+	// into every skills directory the repo already has. ---
+	for _, tree := range skillTreeTargets(explicitDir, root) {
+		written, err := exportSkills(embedded, tree.dir)
 		if err != nil {
 			return data, err
 		}
-		data.TargetDir = treeDir
+		if data.TargetDir == "" {
+			data.TargetDir = tree.dir
+		}
 		data.Written = append(data.Written, written...)
 		data.Forms = append(data.Forms, skillsExportForm{
-			Harness: "claude-code", Form: "skill-tree", Path: treeDir,
+			Harness: tree.harness, Form: "skill-tree", Path: tree.dir,
 			Action: "written", Written: written,
 		})
+	}
+	if data.TargetDir == "" {
+		data.Skipped = append(data.Skipped, "skill tree: no .claude/ or .agents/ directory in "+root+" and no directory argument given")
 	}
 
 	// --- Form 2: the AGENTS.md section, only into a file that already exists. ---
@@ -298,6 +362,8 @@ func writeSkillsExportText(out io.Writer, data skillsExportData) {
 // overwritten. Returns the list of paths written, in walk order.
 func exportSkills(embedded fs.FS, targetDir string) ([]string, error) {
 	var written []string
+	v, _, _ := resolveVersionInfo()
+	lock := skillsLock{Version: v, Files: map[string]string{}}
 	err := fs.WalkDir(embedded, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -317,12 +383,159 @@ func exportSkills(embedded fs.FS, targetDir string) ([]string, error) {
 			return fmt.Errorf("write %s: %w", outPath, err)
 		}
 		written = append(written, outPath)
+		lock.Files[path] = sha256Hex(data)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	lockPath := filepath.Join(targetDir, skillsLockFile)
+	raw, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode %s: %w", lockPath, err)
+	}
+	if err := os.WriteFile(lockPath, append(raw, '\n'), 0o644); err != nil {
+		return nil, fmt.Errorf("write %s: %w", lockPath, err)
+	}
+	written = append(written, lockPath)
 	return written, nil
+}
+
+// skillTree is one directory the SKILL.md tree is written to (or checked in)
+// and the harness that reads it.
+type skillTree struct {
+	dir     string
+	harness string
+}
+
+// skillTreeTargets resolves where the tree goes. An explicit directory wins
+// outright. Otherwise every skills directory the repo ALREADY has is a target:
+// .claude/skills when .claude/ exists (Claude Code) and .agents/skills when
+// .agents/ exists (Cursor, Codex and the harnesses that share that path).
+// Detection, never creation — the harness decides where skills are read from.
+func skillTreeTargets(explicitDir, root string) []skillTree {
+	if explicitDir != "" {
+		return []skillTree{{dir: explicitDir, harness: "claude-code"}}
+	}
+	var out []skillTree
+	if root == "" {
+		return out
+	}
+	if _, err := os.Stat(filepath.Join(root, ".claude")); err == nil {
+		out = append(out, skillTree{dir: filepath.Join(root, claudeSkillsDir), harness: "claude-code"})
+	}
+	if _, err := os.Stat(filepath.Join(root, ".agents")); err == nil {
+		out = append(out, skillTree{dir: filepath.Join(root, agentsSkillsDir), harness: "agents-skills"})
+	}
+	return out
+}
+
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// differing is the number of files the check refuses on.
+func (d skillsCheckData) differing() int {
+	return len(d.HandEdited) + len(d.Stale) + len(d.Missing) + len(d.Unverified)
+}
+
+// checkSkillTrees compares every tree skillTreeTargets would write against the
+// embedded bundle and the tree's lock, writing nothing. A tree with no lock
+// cannot tell hand-edited from stale, so every difference there is reported
+// as unverified and the tree is named in NoLock. No tree at all is reported
+// as every file missing, which is the honest answer to "is the skill installed".
+func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData, error) {
+	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, Unverified: []string{}, NoLock: []string{}}
+	trees := skillTreeTargets(explicitDir, root)
+	if len(trees) == 0 {
+		if explicitDir == "" && root == "" {
+			return data, errors.New("no directory given and no project.config.yaml found, so there is no skill tree to check; pass the directory the skills were exported to")
+		}
+		return data, nil
+	}
+	for _, tree := range trees {
+		data.Trees = append(data.Trees, tree.dir)
+		var lock skillsLock
+		lockKnown := false
+		if raw, err := os.ReadFile(filepath.Join(tree.dir, skillsLockFile)); err == nil {
+			if json.Unmarshal(raw, &lock) == nil && lock.Files != nil {
+				lockKnown = true
+			}
+		}
+		if !lockKnown {
+			data.NoLock = append(data.NoLock, tree.dir)
+		}
+		err := fs.WalkDir(embedded, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			want, err := fs.ReadFile(embedded, path)
+			if err != nil {
+				return fmt.Errorf("read embedded %s: %w", path, err)
+			}
+			data.Checked++
+			onDisk := filepath.Join(tree.dir, filepath.FromSlash(path))
+			got, readErr := os.ReadFile(onDisk)
+			if readErr != nil {
+				data.Missing = append(data.Missing, onDisk)
+				return nil
+			}
+			gotHash := sha256Hex(got)
+			if gotHash == sha256Hex(want) {
+				return nil
+			}
+			if !lockKnown {
+				data.Unverified = append(data.Unverified, onDisk)
+				return nil
+			}
+			if lock.Files[path] == gotHash {
+				data.Stale = append(data.Stale, onDisk)
+				return nil
+			}
+			data.HandEdited = append(data.HandEdited, onDisk)
+			return nil
+		})
+		if err != nil {
+			return data, err
+		}
+	}
+	sort.Strings(data.HandEdited)
+	sort.Strings(data.Stale)
+	sort.Strings(data.Missing)
+	sort.Strings(data.Unverified)
+	return data, nil
+}
+
+// writeSkillsCheckText renders the check for a human reading the terminal.
+func writeSkillsCheckText(out io.Writer, data skillsCheckData) {
+	for _, t := range data.Trees {
+		fmt.Fprintf(out, "skills check: tree %s\n", t)
+	}
+	for _, f := range data.HandEdited {
+		fmt.Fprintf(out, "skills check: hand-edited %s\n", f)
+	}
+	for _, f := range data.Stale {
+		fmt.Fprintf(out, "skills check: stale %s (exported by an older release)\n", f)
+	}
+	for _, f := range data.Missing {
+		fmt.Fprintf(out, "skills check: missing %s\n", f)
+	}
+	for _, f := range data.Unverified {
+		fmt.Fprintf(out, "skills check: unverified %s (differs from this release; no lock to say whether it was edited or is older)\n", f)
+	}
+	for _, t := range data.NoLock {
+		fmt.Fprintf(out, "skills check: no %s in %s — re-export to write one\n", skillsLockFile, t)
+	}
+	n := data.differing()
+	if n == 0 {
+		fmt.Fprintf(out, "skills check: %d file(s) match this binary's bundle\n", data.Checked)
+		return
+	}
+	fmt.Fprintf(out, "skills check: %d of %d file(s) differ\n", n, data.Checked)
 }
 
 // skillDoc is one parsed bundle: its frontmatter identity plus the markdown

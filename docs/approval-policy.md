@@ -235,3 +235,16 @@ review, and the project still needs the implementation and independent
 evidence required by its acceptance contract. Consumers should show local
 approval, dependency conditions, review causes and paths together so a locked
 claim cannot appear ready merely because its own status says `locked`.
+
+## Admitted evidence
+
+Approval evidence is what the engine records or what a human does, and nothing
+else: a `claim lock` written with the human's `--reason` and the snapshot they
+previewed, a confirmed `claim reaudit`, a human's Resolve click on a thread, a
+`dossierx check` that exited 0, a lint, ledger or conformance finding, and the
+code-link coverage the scan reports. An agent's statement in chat that the code
+matches a claim, or that a claim is synced, is not evidence and is never a
+certificate: it records no approval, clears no review cause, and closes no
+loop. When the evidence for a step is missing, the agent stops and names what
+is missing. A model may draft the claim, the tag and the code; it never judges
+whether the claim holds.

@@ -9,8 +9,8 @@ description: >-
   (dossierx check --validate), dossierx claim show and list, citing evidence with
   sources and [n] markers, the cross-cutting track axis and dossierx track
   list/show/status, the three
-  review_pending triggers, and the one rule everything else hangs off — draft
-  claims are free, a locked claim only ever changes via unlock, fix, lock.
+  review_pending triggers, and the rule a locked claim hangs off — draft claims
+  are free; body-only meaning drift is claim flag, and every other edit is unlock, fix, lock.
   Load the DossierX router skill first; it carries the envelope, the exit
   codes and the error-code recovery table this skill assumes.
 ---
@@ -33,9 +33,7 @@ the five rules are there and are not repeated here.
 | freeze a claim, on the human's word | `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"` |
 | change a locked claim | `dossierx claim unlock <id> --reason "..."` → edit → `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "..."` |
 | a locked claim drifted from a changed dependency | `dossierx claim reaudit <id>` (preview) then `--confirm --reason "..."` |
-| what feature tracks this project declares | `dossierx track list` |
-| read a feature end to end, assembled across modules | `dossierx track show <id>` |
-| is a feature finished? | `dossierx track status <id>` — COMPLETE when every claim it owns and every claim it cites is locked |
+| read the feature axis (read-only; never a gate, never a build sequence) | `dossierx track list` · `show <id>` · `status <id>` — see Feature tracks below |
 
 ## A claim
 
@@ -92,7 +90,10 @@ the claim is a **draft** — edit its file freely.
 
 The loop while authoring is `dossierx check --validate`: the same lint gate `check` drives, at the
 same severity, writing **nothing** — no claim files, no lock store, no `build/catalog/catalog.json`, no viewer.
-Run the full `dossierx check` when you want the viewer rebuilt and code links scanned.
+Run the full `dossierx check` when you want the viewer rebuilt and code links scanned; only that
+run proves a locked claim is linked to code (`--validate` reports `code_links` but never gates on it).
+Report the envelope, never your belief: "it is synced" in chat is not a certificate, and an exit code
+you did not see is one you do not have — stop and say what is missing.
 
 ## Citing your evidence — `sources`
 
@@ -155,11 +156,15 @@ lints are `track-shape` (ERROR), `track-unknown` (ERROR — the claim names a tr
 declare), `track-empty` (WARNING — a declared track nothing references) and `track-unowned`
 (WARNING — citations but no owner).
 
-**Never treat a track as a gate.** `dossierx track status <id>` REPORTS: COMPLETE when every claim
-the track owns and every claim it cites is locked. It does not block anything, and track membership
-never gates `dossierx claim lock` — a claim locks on its own merits, and the way to change a locked
-claim's `tracks` is `unlock → fix → lock`, since `tracks` is signed by the ledger like every other
-field.
+**Three verbs, all read-only.** `dossierx track list` names the tracks the project declares;
+`dossierx track show <id>` reads a feature end to end, assembled across modules; `dossierx track
+status <id>` REPORTS whether it is finished: COMPLETE when every claim the track owns and every claim
+it cites is locked. **Never treat a track as a gate.** It does not block anything, and track
+membership never gates `dossierx claim lock` — a claim locks on its own merits, and the way to
+change a locked claim's `tracks` is `unlock → fix → lock`, since `tracks` is signed by the ledger
+like every other field. A track is not a build order either: "is the feature done?" is `track
+status`; "what do I build next in this module?" is `dossierx build-order status --module <m>`, a
+different question with its own human approval (see **[`dossierx-build-order`](../dossierx-build-order/SKILL.md)**).
 
 ## Finding the claim the human meant
 
@@ -182,7 +187,8 @@ the lifecycle yourself.
 
 ## Locked means locked
 
-A draft claim is yours. A locked claim is the human's, and the **only** path through it is
+A draft claim is yours. A locked claim is the human's. Body-only meaning drift is `claim flag`
+(see the table under `review_pending`), not unlock. Every other change is
 `dossierx claim unlock <id> --reason "<their words>"` → edit the file →
 `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"`.
 
@@ -191,7 +197,7 @@ Both ends require `--reason` and take `--dry-run`. Preview, show the human the `
 then run it. `--reason` carries their approval into the record — never fabricate one.
 
 The window between the two ends is not a steady state. If any source file carries a
-`dossierx-claim:` tag for that id, a plain `dossierx check` mid-edit fails with `implink_refused`
+`dossierx-claim:` or `dossierx-step:` tag for that id, a plain `dossierx check` mid-edit fails with `implink_refused`
 and `claim is not locked (status "draft")` — the tag is fine, the claim is mid-edit. Finish the
 relock; never touch the tag or leave the claim unlocked to silence it.
 
@@ -210,7 +216,7 @@ three independent triggers stands:
 | trigger | set by | cleared by |
 |---|---|---|
 | a baselined dependency's content changed underneath it — `mirrors`, `rests_on`, or a claim-valued `governed_by.type` | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
-| shipped code no longer matches the claim | `dossierx claim flag` (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**) | the same confirmed reaudit |
+| shipped code no longer matches the claim | `dossierx claim flag` — body-only claims; one that renders from `rows`/`steps`/`raw_html`/`mockup` is refused (`structured_layout`) and goes through unlock → fix → lock instead (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**) | the same confirmed reaudit |
 | an open comment thread on the claim | anyone commenting (see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**) | the **human** resolving it in the viewer |
 
 It is set automatically and never cleared automatically: it clears only once *every* standing

@@ -245,6 +245,24 @@ const (
 	// CodeImplinkRefused is implink's own refusal of a set (an unknown claim,
 	// a claim that may not be linked).
 	CodeImplinkRefused Code = "implink_refused"
+
+	// CodeUnlinkedClaims is "dossierx check"'s code-link gate: the project
+	// names its `source_dirs`, and at least one locked schema/behavior/api/
+	// verification claim has no link in source (no `dossierx-claim:` or
+	// `dossierx-step:` tag, no `claim link`) or, carrying `steps:`, is not
+	// tagged on every step. The catalog and viewer were regenerated before
+	// the refusal; only the exit status is withheld. data.code_links names
+	// every claim and, for a partial one, the missing step indexes.
+	CodeUnlinkedClaims Code = "unlinked_claims"
+
+	// CodeSkillsDrift is "dossierx skills export --check": a skill file on
+	// disk differs from the bundle embedded in this binary. data.hand_edited
+	// names files that also differ from dossierx-skills.lock (rewritten on
+	// disk — a rewritten skill can teach a false story about what the engine
+	// enforces), data.stale names files that match the lock but not the
+	// binary (exported by an older release), and data.missing names files
+	// that were never exported. Nothing is written by the check.
+	CodeSkillsDrift Code = "skills_drift"
 	// CodeUnknownModule is a --module that the project's config does not
 	// declare. Reported rather than answered with an empty report, because an
 	// empty report for a typo'd module looks exactly like success.

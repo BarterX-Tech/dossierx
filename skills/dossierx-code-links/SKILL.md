@@ -86,9 +86,19 @@ It takes `--dry-run`, needs no `--reason` (it records a fact, it does not change
 and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write the same generated
 `build/code-links/<module>.json` — never hand-edit it.
 
-`dossierx check` also reports, non-blocking, the drift count (a linked file changed since it was
-linked) and the unlinked count (locked `schema`/`behavior`/`api`/`verification` claims with zero
-linked files). `dossierx claim show <id>` gives the same thing for one claim, per file:
+**Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
+refuses (`unlinked_claims`, `stopped_at: links`) when any locked `schema`/`behavior`/`api`/
+`verification` claim has no linked file, or a claim with `steps:` is not tagged on every step — a
+`dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
+The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
+claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
+counts per module with `scanned` and `gated`; `--validate` and `--staged` fill it with both false
+and never refuse. Linked is not followed: the gate proves a pointer exists, never that the code still
+means what the claim says — that is the human's lock and the project's tests. Nor is it your saying
+so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain
+`check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the
+drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same
+thing for one claim, per file:
 
 ```json
 "implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]
@@ -99,16 +109,19 @@ linked files). `dossierx claim show <id>` gives the same thing for one claim, pe
 The scenario: months after lock, a new requirement changes the code, and the change means the
 locked claim's stated behavior is no longer true. Channel B must not paper over that.
 
-**First, is it actually a flag?** The discriminator is one question — *can you state a specific
-before/after for the claim's wording?* If you only have a question or a doubt, that is a **comment**
-(see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**), not a flag.
+**Is it actually a flag?** One question — *can you state a specific before/after for the claim's
+wording?* — with four arms, the same four **[`dossierx-comments`](../dossierx-comments/SKILL.md)** states and the router's "Which command" table shortens:
 
-**Then, which channel?** Did the code's *meaning* change relative to what the claim states, or did
-it just move, get renamed, or get refactored with identical behavior?
+- **Yes, and the claim renders from `body` only → `dossierx claim flag`** (Channel A, below).
+- **Yes, but the claim renders from `rows`, `steps`, `raw_html` or a `mockup` layout → `unlock →
+  fix → lock`** with the human's `--reason`: `claim flag` refuses these with `structured_layout`
+  (the paragraph at the end of this section says exactly which shapes).
+- **Yes, but only the code moved — same meaning, new file or name → Channel B.** Re-tag (or re-run
+  `dossierx claim link`) with the new location. Nothing else, no approval needed. This is the
+  common case and it is entirely yours.
+- **No → a comment**, not a flag. A question or a doubt has no `--now-does`.
 
-- Same meaning → Channel B. Re-tag (or re-run `dossierx claim link`) with the new location.
-  Nothing else, no approval needed. This is the common case and it is entirely yours.
-- Meaning changed → Channel A:
+Meaning changed, body-only claim → Channel A:
 
   ```
   dossierx claim flag <id> \

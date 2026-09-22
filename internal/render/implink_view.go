@@ -53,3 +53,14 @@ func buildImplinkLookup(cfg *config.Config) map[string][]implink.ViewFile {
 	}
 	return out
 }
+
+// codeLinksGated reports whether the project named its `source_dirs`, which
+// is the precondition of check's code-link gate and therefore of the
+// viewer's "not linked to code" row: a project that never said where the
+// code is has no unlinked claims to show, only claims nobody linked. The
+// row is bound to the same predicate as the gate on purpose, so the viewer
+// never names a gap `dossierx check` does not refuse on, and never stays
+// quiet about one it does.
+func codeLinksGated(cfg *config.Config) bool {
+	return cfg != nil && len(cfg.SourceDirs) > 0
+}

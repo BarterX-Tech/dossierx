@@ -447,14 +447,16 @@ func TestNextSteps_StaleLockedBuildOrderIsReported(t *testing.T) {
 		t.Fatalf("fixture precondition: the locked order must start fresh, got %+v", res.BuildOrders)
 	}
 
-	// The sanctioned change: the claim's content moves (unlock -> edit -> lock,
-	// compressed here to the edit the approval path would have written).
+	// The sanctioned change: the claim's build_role moves (unlock -> edit ->
+	// lock, compressed here to the edit the approval path would have written).
+	// A derivation input, not prose: since issue #58 a body edit alone leaves
+	// the order current.
 	path := filepath.Join(cfg.ClaimsDir, "a.yaml")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read claim: %v", err)
 	}
-	edited := strings.Replace(string(raw), "a locked claim.", "a locked claim, re-approved.", 1)
+	edited := strings.Replace(string(raw), "build_role: behavior\n", "build_role: schema\n", 1)
 	if edited == string(raw) {
 		t.Fatalf("fixture precondition: the edit did not apply")
 	}

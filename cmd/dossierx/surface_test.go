@@ -1176,6 +1176,8 @@ func surfacePayloadTypes() map[string]any {
 		"buildOrderShowPhaseData": buildOrderShowPhaseData{},
 		"buildOrderStatusData":    buildOrderStatusData{},
 		"checkData":               checkData{},
+		"codeLinksData":           codeLinksData{},
+		"moduleCodeLinksData":     moduleCodeLinksData{},
 		"claimEdgesData":          claimEdgesData{},
 		"claimLinkData":           claimLinkData{},
 		"claimListData":           claimListData{},
@@ -1198,6 +1200,7 @@ func surfacePayloadTypes() map[string]any {
 		"reauditData":             reauditData{},
 		"scanErrorData":           scanErrorData{},
 		"skillsExportData":        skillsExportData{},
+		"skillsCheckData":         skillsCheckData{},
 		"unlockData":              unlockData{},
 		"versionData":             versionData{},
 	}

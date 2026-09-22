@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.20] - 2026-09-22
+
+### Changed
+
+- `dossierx check` now refuses when a project that sets `source_dirs` holds a
+  locked `schema`/`behavior`/`api`/`verification` claim with no code link, or a
+  claim with `steps:` whose `dossierx-step:` tags do not cover every step
+  (`unlinked_claims`, `stopped_at: links`, exit 1). The unlinked and partial
+  counts were computed before, but only after the run had already decided it
+  was OK, so a project with zero links exited 0 and the only trace was a
+  `next_steps` sentence. The gate sits after the ledger gate: the catalog and
+  viewer are regenerated first, and a refusal about where the code is never
+  hides one about whether the claim was approved. Projects without
+  `source_dirs` are unchanged.
+- A `dossierx-claim:` tag on a claim that carries `steps:` links the file but
+  attests no step; it now counts as 0 of N rather than clearing the claim.
+- The check envelope carries `data.code_links` (`scanned`, `gated`, and per
+  module `linked`, `drifted`, `partial[]` with the missing step indexes, and
+  `unlinked[]`) whenever the project uses code links. `check --validate` and
+  `--staged` fill it with `scanned: false, gated: false` and never refuse, so
+  a read-only green cannot pass for a linked one.
+- The viewer's claim card shows `not linked to code` on a locked code-producing
+  claim with no link and `steps linked: k of N` naming the missing steps, on
+  the same relationships row as `implemented in`, for projects with
+  `source_dirs` set.
+- The impl-links summary line gained a `partial` count.
+- The exported skills now carry two "Which command" tables in the router: flag
+  vs unlock vs reaudit (with the lock-refusal recovery and the empty-reaudit
+  stop), and track vs build-order. The comment-or-flag discriminator has the
+  same four arms, word for word, in the comments and code-links skills; the
+  claims skill teaches the track verbs as a read-only axis; the build-order
+  skill says `status` answers stale and coverage while `show` only renders.
+  `claim migrate-lock-policy` left the router's always-loaded description and
+  stays in its recovery rows. (#82)
+- `dossierx skills export` with no directory now writes into every
+  `.claude/skills` and `.agents/skills` the repository already has, and a
+  `dossierx-skills.lock` beside each tree with the sha256 of every file
+  written. `dossierx skills export --check` writes nothing and refuses
+  (`skills_drift`, exit 1) when a file differs from this binary: hand-edited
+  (`data.hand_edited`, it also differs from the lock), stale (`data.stale`,
+  it matches the lock), or missing (`data.missing`). A tree with no lock is
+  `data.unverified` and `data.no_lock`, not hand-edited. (#78)
+- The code-links and claims skills state that a green `check` means linked and
+  only that, and that `--validate` and `--staged` never prove code links. (#78)
+- Proof or stop: README, docs/approval-policy.md and the router, claims and
+  code-links skills state what counts as evidence — an exit code, a lint or
+  ledger finding, a conformance result, `data.code_links`, a human's Resolve
+  or `--reason` — and that an agent's "it is synced" in chat is never a
+  certificate; when the evidence is missing the agent stops and says what is
+  missing. (#78 Phase 2)
+- README and the site say what DossierX is against a specification folder
+  such as Spec Kit or OpenSpec: claims with a lock ledger that refuses
+  tampered content, human Resolve as the approval gate, machine-judged code
+  links, conformance checks, exit codes rather than opinions; no model inside
+  it, and an LLM is never the judge. (#78 Phase 2)
+
+### Fixed
+
+- A locked build order is stale only when a fresh `propose` would produce a
+  different artifact: a claim's phase, position, file, `rests_on` list, or the
+  excluded set moved, a covered or excluded claim was deleted, or a new claim
+  was locked into the module. Prose edits to a covered claim no longer mark it
+  stale, so clearing a spurious flag no longer costs a human approval. An
+  artifact written by an earlier release keeps its `hashes` field for its
+  ledger signature and is judged by the same re-derivation. The `stale` key
+  inside the artifact remains a write-time stamp, always false. `build-order
+  status`, `build-order show`, and `check` recompute it on read. The viewer's
+  Build order tab still shows that stamp. (#58)
+- The source scan no longer follows symlinks and skips hidden directories
+  (`.git`, `.build`, `.swiftpm`). Against a SwiftPM checkout it followed
+  `.build/debug` to a directory and the whole `check` refused with
+  "is a directory" before reading a single tag. A tag inside a hidden
+  directory is not source and is not found.
+
 ## [0.7.19] - 2026-09-21
 
 ### Added

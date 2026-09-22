@@ -34,6 +34,22 @@ var codeProducingRoles = map[model.BuildRole]bool{
 	model.BuildRoleVerification: true,
 }
 
+// CodeProducing reports whether a claim in build_role role is expected to
+// have a linked file once locked — the one predicate Status's unlinked
+// count, check's code-link gate and the viewer's "not linked to code" row
+// all key off, exported so no consumer keeps a second copy of the set.
+func CodeProducing(role model.BuildRole) bool {
+	return codeProducingRoles[role]
+}
+
+// Expects reports whether c is a claim the code-link gate holds to account:
+// locked, and in a code-producing build_role. A draft claim is never
+// expected to be linked (Scan refuses a tag on it), and an orientation or
+// out-of-scope claim has no code to point at.
+func Expects(c model.Claim) bool {
+	return c.Status == model.StatusLocked && codeProducingRoles[c.BuildRole]
+}
+
 // DriftEntry is one linked file whose current on-disk content no longer
 // matches the hash snapshotted at its last Set call. Reason is a one-line,
 // human-readable explanation only — never a real content diff, since this
@@ -46,30 +62,78 @@ type DriftEntry struct {
 	Reason  string
 }
 
+// PartialEntry is one locked claim that carries `steps:` and has at least
+// one linked file, but whose dossierx-step tags do not cover every step.
+// Covered counts the DISTINCT 1-based step indexes that some tag attested;
+// Total is len(claim.Steps); Missing lists the untagged indexes in order.
+// A whole-claim link (dossierx-claim, or `claim link`; FileLink.Step == 0)
+// never counts toward Covered: it grounds the file for drift, and it is
+// exactly the "one tag clears the whole claim" shape the gate refuses.
+type PartialEntry struct {
+	ClaimID string `json:"claim_id"`
+	Covered int    `json:"covered"`
+	Total   int    `json:"total"`
+	Missing []int  `json:"missing"`
+}
+
 // StatusReport is Status's full result for one module: how many claims
 // have at least one linked file, which specific linked files have drifted,
-// and how many of the module's locked, code-producing-phase claims have no
-// linked file at all. UnlinkedCount is deliberately always present (never
-// omitted or hidden behind a "no drift, nothing to see" summary) — a
+// which stepped claims are linked but not on every step, and how many of
+// the module's locked, code-producing-phase claims have no linked file at
+// all. UnlinkedCount and PartialCount are deliberately always present
+// (never omitted or hidden behind a "no drift, nothing to see" summary) — a
 // project adopting this feature needs to see gaps as loudly as it sees
-// drift.
+// drift, and check's code-link gate refuses on either.
 type StatusReport struct {
 	Module        string
 	LinkedClaims  int
 	Drifted       []DriftEntry
+	Partial       []PartialEntry
+	PartialCount  int
 	UnlinkedCount int
 	UnlinkedIDs   []string
 }
 
+// Incomplete is the number of claims the code-link gate refuses on: every
+// unlinked claim plus every partially-linked one.
+func (r *StatusReport) Incomplete() int {
+	return r.UnlinkedCount + r.PartialCount
+}
+
 // Summary returns a one-line human-readable roll-up of r, in the exact
-// wording both "dossierx check"'s non-blocking impl-links step and "dossierx
-// implink status" print, so the two call sites can never drift apart on
-// phrasing.
+// wording both "dossierx check"'s impl-links step and "dossierx claim show"
+// print, so the two call sites can never drift apart on phrasing.
 func (r *StatusReport) Summary() string {
 	return fmt.Sprintf(
-		"impl-links: %d linked, %d drifted, %d unlinked-in-schema/behavior/api/verification-phases",
-		r.LinkedClaims, len(r.Drifted), r.UnlinkedCount,
+		"impl-links: %d linked, %d drifted, %d partial, %d unlinked-in-schema/behavior/api/verification-phases",
+		r.LinkedClaims, len(r.Drifted), r.PartialCount, r.UnlinkedCount,
 	)
+}
+
+// StepCoverage folds the step indexes attested by a claim's links against
+// its `steps:` count: covered is the number of DISTINCT indexes within
+// 1..total that appear in steps, and missing lists the rest in ascending
+// order. Indexes outside 1..total and the zero (whole-claim) index are
+// ignored — Scan already refused an out-of-range tag, and a whole-claim
+// link is not a step attestation. A claim with no steps is trivially
+// covered (0 of 0, nothing missing).
+func StepCoverage(total int, steps []int) (covered int, missing []int) {
+	if total <= 0 {
+		return 0, nil
+	}
+	seen := make([]bool, total+1)
+	for _, n := range steps {
+		if n >= 1 && n <= total && !seen[n] {
+			seen[n] = true
+			covered++
+		}
+	}
+	for n := 1; n <= total; n++ {
+		if !seen[n] {
+			missing = append(missing, n)
+		}
+	}
+	return covered, missing
 }
 
 // Status loads module's implementation-link artifact and reports its
@@ -93,13 +157,44 @@ func Status(claims []model.Claim, cfg *config.Config, module string) (*StatusRep
 	if err != nil {
 		return nil, err
 	}
+	return status(claims, cfg, module, artifact), nil
+}
 
+// Coverage is Status for the code-link gate: a module that has never
+// linked anything is not "nothing to report", it is a module in which
+// EVERY locked, code-producing claim is unlinked. Where Status wraps
+// ErrNoArtifact for a missing artifact — the right answer for a reporter
+// that must stay silent on projects that never opted in — Coverage
+// evaluates the empty artifact, because the caller has already decided,
+// from `source_dirs`, that this project is held to account. Any other load
+// error is still returned.
+func Coverage(claims []model.Claim, cfg *config.Config, module string) (*StatusReport, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("implink: cfg must not be nil")
+	}
+	artifact, err := LoadArtifact(ArtifactPath(cfg, module))
+	if err != nil {
+		if !errors.Is(err, ErrNoArtifact) {
+			return nil, err
+		}
+		artifact = &Artifact{Module: module}
+	}
+	return status(claims, cfg, module, artifact), nil
+}
+
+func status(claims []model.Claim, cfg *config.Config, module string, artifact *Artifact) *StatusReport {
 	report := &StatusReport{Module: module, LinkedClaims: len(artifact.Links)}
 
 	linked := make(map[string]bool, len(artifact.Links))
+	// stepsByClaim collects every step index a link attested, so a claim
+	// with `steps:` is judged on step coverage, not on "has any link".
+	stepsByClaim := make(map[string][]int, len(artifact.Links))
 	for _, link := range artifact.Links {
 		linked[link.ClaimID] = true
 		for _, f := range link.Files {
+			if f.Step > 0 {
+				stepsByClaim[link.ClaimID] = append(stepsByClaim[link.ClaimID], f.Step)
+			}
 			current, statErr := hashFile(filepath.Join(cfg.Dir(), f.File))
 			switch {
 			case statErr == nil && current == f.FileHash:
@@ -133,20 +228,26 @@ func Status(claims []model.Claim, cfg *config.Config, module string) (*StatusRep
 	})
 
 	for _, c := range claims {
-		if c.Module != module || c.Status != model.StatusLocked {
-			continue
-		}
-		if !codeProducingRoles[c.BuildRole] {
+		if c.Module != module || !Expects(c) {
 			continue
 		}
 		if !linked[c.ID] {
 			report.UnlinkedIDs = append(report.UnlinkedIDs, c.ID)
+			continue
+		}
+		if total := len(c.Steps); total > 0 {
+			covered, missing := StepCoverage(total, stepsByClaim[c.ID])
+			if covered < total {
+				report.Partial = append(report.Partial, PartialEntry{ClaimID: c.ID, Covered: covered, Total: total, Missing: missing})
+			}
 		}
 	}
 	sort.Strings(report.UnlinkedIDs)
+	sort.Slice(report.Partial, func(i, j int) bool { return report.Partial[i].ClaimID < report.Partial[j].ClaimID })
 	report.UnlinkedCount = len(report.UnlinkedIDs)
+	report.PartialCount = len(report.Partial)
 
-	return report, nil
+	return report
 }
 
 // ViewFile is one linked file annotated with its current drift status —

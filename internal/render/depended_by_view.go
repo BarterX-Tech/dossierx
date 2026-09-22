@@ -124,12 +124,18 @@ func buildTargetStatusLookup(cat *catalog.Catalog) map[string]components.TargetS
 // data still hits the early return above and keeps the default binding, and
 // still gets its panel, precisely because the panel lives inside
 // EdgesHTMLWithLinks rather than in this closure.
-func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, dependedByLookup map[string][]string, targetStatusLookup map[string]components.TargetStatus) {
-	if len(implinkLookup) == 0 && len(dependedByLookup) == 0 && len(targetStatusLookup) == 0 {
+//
+// linksGated is check's code-link precondition (`source_dirs` set — see
+// implink_view.go's codeLinksGated). It widens the early return on its own:
+// a gated project with no artifact at all is the loudest case of the row
+// this override exists to draw — every locked, code-producing claim is
+// unlinked — and the default binding cannot know that.
+func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, linksGated bool, dependedByLookup map[string][]string, targetStatusLookup map[string]components.TargetStatus) {
+	if len(implinkLookup) == 0 && !linksGated && len(dependedByLookup) == 0 && len(targetStatusLookup) == 0 {
 		return
 	}
 	edges := func(c model.Claim) template.HTML {
-		return components.EdgesHTMLWithLinks(c, implinkLookup[c.ID], dependedByLookup[c.ID], targetStatusLookup)
+		return components.EdgesHTMLWithCodeLinks(c, implinkLookup[c.ID], linksGated, dependedByLookup[c.ID], targetStatusLookup)
 	}
 	for _, tmpl := range partials {
 		tmpl.Funcs(template.FuncMap{"edges": edges})

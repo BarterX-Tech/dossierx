@@ -447,6 +447,20 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // single-source-of-truth rule (see rests_on's own doc comment) exists to
 // rule out.
 func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
+	return EdgesHTMLWithCodeLinks(c, files, false, dependedBy, targetStatuses)
+}
+
+// EdgesHTMLWithCodeLinks is EdgesHTMLWithLinks for a project that check's
+// code-link gate holds to account (linksGated: `source_dirs` is set). It
+// adds the two rows the gate refuses on, in the same "implemented in" slot
+// of the relationships panel: a locked schema/behavior/api/verification
+// claim with no linked file at all reads "not linked to code", and a
+// stepped claim whose dossierx-step tags miss a step reads "steps linked:
+// k of N" naming the missing indexes. Both count as a relationship so the
+// chip never says "No relationships" over a gap `dossierx check` exits 1
+// on. Neither row exists for an ungated project: with no `source_dirs`
+// there is no gate, and a claim nobody linked is not a claim in breach.
+func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated bool, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
 	links := 0
 
 	// The three R09.4 direction blocks, built independently of the "extra"
@@ -528,6 +542,34 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 			extra.WriteString(` <span class="pill pw">drifted</span>`)
 		}
 		extra.WriteString(`</li>`)
+	}
+	if linksGated && implink.Expects(c) {
+		if len(files) == 0 {
+			links++
+			extra.WriteString(`<li class="claim-unlinked claim-relationship-extra">implemented in: <span class="pill pw">not linked to code</span></li>`)
+		} else if total := len(c.Steps); total > 0 {
+			steps := make([]int, 0, len(files))
+			for _, f := range files {
+				if f.Step > 0 {
+					steps = append(steps, f.Step)
+				}
+			}
+			if covered, missing := implink.StepCoverage(total, steps); covered < total {
+				links++
+				extra.WriteString(`<li class="claim-partial-link claim-relationship-extra">steps linked: `)
+				extra.WriteString(strconv.Itoa(covered))
+				extra.WriteString(` of `)
+				extra.WriteString(strconv.Itoa(total))
+				extra.WriteString(` <span class="pill pw">missing step `)
+				for i, n := range missing {
+					if i > 0 {
+						extra.WriteString(`, `)
+					}
+					extra.WriteString(strconv.Itoa(n))
+				}
+				extra.WriteString(`</span></li>`)
+			}
+		}
 	}
 
 	var b strings.Builder

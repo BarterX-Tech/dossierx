@@ -209,7 +209,9 @@ func TestBuildOrderProposeStillRecomputesAStaleOrder(t *testing.T) {
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "unlock", "widget.contract.a", "--reason", "reopening"); err != nil {
 		t.Fatalf("claim unlock: %v", err)
 	}
-	tamper(t, claimFile, "a locked claim with a build role.", "a rewritten claim with a build role.")
+	// A derivation input has to move: since issue #58 a body edit leaves the
+	// order current, and propose then refuses it as an approved, current order.
+	tamper(t, claimFile, "build_role: schema\n", "build_role: behavior\n")
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "re-approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}

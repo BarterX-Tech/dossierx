@@ -174,3 +174,105 @@ func TestRender_ImplementedIn_OtherModuleUnaffected(t *testing.T) {
 		t.Fatalf("expected gadget's ordinary claim content still rendered, got:\n%s", out)
 	}
 }
+
+// ---------------------------------------------------------------------
+// The gate's two rows (issue #78). They exist only for a project that named
+// its source_dirs — the same precondition check's code-link gate has — so the
+// viewer never shows a gap check does not refuse on, and never hides one it does.
+// ---------------------------------------------------------------------
+
+// implinkGatedConfig is implinkTestConfig with source_dirs: [src] (the
+// directory must exist, or config refuses to load).
+func implinkGatedConfig(t *testing.T, module string) *config.Config {
+	t.Helper()
+	dir := t.TempDir()
+	for _, sub := range []string{"claims", "src"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", sub, err)
+		}
+	}
+	cfgPath := filepath.Join(dir, "project.config.yaml")
+	writeFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - "+module+"\nclaims_dir: claims\nsource_dirs:\n  - src\n")
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	return cfg
+}
+
+func renderClaims(t *testing.T, claims []model.Claim, cfg *config.Config) string {
+	t.Helper()
+	cat, err := catalog.Build(claims, cfg)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	return out
+}
+
+func TestRender_NotLinkedRow_PresentForGatedUnlinkedClaim(t *testing.T) {
+	module := "widget"
+	cfg := implinkGatedConfig(t, module)
+	claim := implinkTestClaim(module)
+	orientation := implinkTestClaim(module)
+	orientation.ID = module + ".contract.context"
+	orientation.BuildRole = model.BuildRoleOrientation
+	orientation.Body = "orientation, no code expected"
+
+	out := renderClaims(t, []model.Claim{claim, orientation}, cfg)
+	if n := strings.Count(out, `class="claim-unlinked`); n != 1 {
+		t.Fatalf("expected exactly one unlinked row (the behavior claim, not the orientation one), got %d in:\n%s", n, out)
+	}
+	if !strings.Contains(out, `<span class="pill pw">not linked to code</span>`) {
+		t.Fatalf("expected the not-linked pill, got:\n%s", out)
+	}
+	if strings.Contains(out, "No relationships") && strings.Count(out, "No relationships") > 1 {
+		t.Fatalf("the unlinked claim must not read 'No relationships'")
+	}
+}
+
+func TestRender_NotLinkedRow_AbsentWithoutSourceDirs(t *testing.T) {
+	module := "widget"
+	cfg := implinkTestConfig(t, module) // no source_dirs: no gate, no row
+	out := renderClaims(t, []model.Claim{implinkTestClaim(module)}, cfg)
+	if strings.Contains(out, "claim-unlinked") || strings.Contains(out, "not linked to code") {
+		t.Fatalf("an ungated project must show no unlinked row:\n%s", out)
+	}
+}
+
+func TestRender_PartialStepsRow_NamesMissingSteps(t *testing.T) {
+	module := "widget"
+	cfg := implinkGatedConfig(t, module)
+	claim := implinkTestClaim(module)
+	claim.Layout = model.LayoutSteps
+	claim.Steps = []string{"alpha", "beta", "gamma"}
+	claim.Body = ""
+	claims := []model.Claim{claim}
+
+	src := filepath.Join(cfg.Dir(), "src", "widget.go")
+	writeFile(t, src, "// dossierx-step: "+claim.ID+" #2 "+implink.StepContentHash("beta")+"\nfunc Beta() {}\n")
+	if _, err := implink.Scan(claims, cfg); err != nil {
+		t.Fatalf("implink.Scan: %v", err)
+	}
+
+	out := renderClaims(t, claims, cfg)
+	if !strings.Contains(out, `class="claim-partial-link claim-relationship-extra">steps linked: 1 of 3 <span class="pill pw">missing step 1, 3</span>`) {
+		t.Fatalf("expected the partial row naming steps 1 and 3, got:\n%s", out)
+	}
+	if strings.Contains(out, "not linked to code") {
+		t.Fatalf("a partially linked claim is linked, not unlinked")
+	}
+
+	// Cover the rest: the row goes away.
+	writeFile(t, src, "// dossierx-step: "+claim.ID+" #1 "+implink.StepContentHash("alpha")+"\n// dossierx-step: "+claim.ID+" #2 "+implink.StepContentHash("beta")+"\n// dossierx-step: "+claim.ID+" #3 "+implink.StepContentHash("gamma")+"\nfunc All() {}\n")
+	if _, err := implink.Scan(claims, cfg); err != nil {
+		t.Fatalf("implink.Scan (full): %v", err)
+	}
+	out = renderClaims(t, claims, cfg)
+	if strings.Contains(out, "claim-partial-link") {
+		t.Fatalf("a fully stepped claim must show no partial row:\n%s", out)
+	}
+}

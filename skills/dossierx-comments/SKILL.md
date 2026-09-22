@@ -155,11 +155,17 @@ with them. It would also forge the approval that the lock gate is waiting for.
 
 ## Comment or `dossierx claim flag`? One question
 
-**Can you state a specific before/after for the claim's wording?**
+**Can you state a specific before/after for the claim's wording?** The same four arms, word for
+word, are in **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**; the router's "Which command" table is the short form.
 
-- **Yes → `dossierx claim flag`** (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**). Only for a **locked** claim
-  whose stated meaning has drifted from what the code now does. It carries `--claim-says` /
+- **Yes, and the claim renders from `body` only → `dossierx claim flag`.** Only for a **locked**
+  claim whose stated meaning has drifted from what the code now does. It carries `--claim-says` /
   `--now-does` / `--reason`, sets `review_pending`, and feeds the reaudit diff.
+- **Yes, but the claim renders from `rows`, `steps`, `raw_html` or a `mockup` layout → `unlock →
+  fix → lock`** with the human's `--reason`. `claim flag` rewrites `body` only and refuses these
+  with `structured_layout`; the before/after goes in your message to the human instead.
+- **Yes, but only the code moved — same meaning, new file or name → re-tag or `dossierx claim
+  link`.** Nothing to approve; do not flag a refactor.
 - **No → a comment.** "Is this still true?", "why was it done this way?", "I think this rests_on
   the wrong module." The thread is the deliverable; no claim text changes when it resolves.
 

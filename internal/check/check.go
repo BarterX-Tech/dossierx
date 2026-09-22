@@ -199,6 +199,29 @@ type Result struct {
 	// warnings[] beside GitignoreWarnings, never touching the exit status.
 	ViewerWarnings []string
 
+	// CodeLinks is the code-link coverage report: per module, how many
+	// claims are linked, drifted, partially linked (a stepped claim with a
+	// step nobody tagged) and unlinked (a locked, code-producing claim with
+	// no link at all). Nil when the project never opted in — no
+	// `source_dirs` and no module with a code-links artifact — so a project
+	// that does not use the feature sees no new field, the same
+	// zero-cost-when-unused contract config.SourceDirs states.
+	//
+	// Scanned says whether this run reconciled source tags (implink.Scan)
+	// before counting: true on a plain `check`, false on --validate, --staged
+	// and the serve strip, which read the stored artifact only, so a tag
+	// added since the last plain check is still counted as missing there.
+	// Gated says whether the run REFUSED on an incomplete claim: true only
+	// on a plain `check` with `source_dirs` set. Both are carried so a
+	// consumer can never mistake a read-only green for a linked green.
+	CodeLinks *CodeLinksReport
+
+	// CodeLinkGateFailed is true only when Run reached and refused at the
+	// code-link gate: `source_dirs` is set and at least one locked,
+	// code-producing claim is unlinked or partially linked. An earlier lint,
+	// projection, scan or ledger failure remains authoritative.
+	CodeLinkGateFailed bool
+
 	// OK is true once every fail-fast step passed and the run reached the
 	// "check: OK" line. The reporting fields below are populated only then.
 	OK bool
@@ -317,7 +340,24 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, inputs))
 		return res, fmt.Errorf("lint: %d error-level finding(s)", len(res.LintErrors))
 	}
-	// 2. Catalog: build then persist build/catalog/catalog.json. The built catalog is
+	// 2. Impl-link scan: reconcile every "dossierx-claim: <id>" and
+	// "dossierx-step: <id> #<n> <hash>" source tag into the module's
+	// code-links artifact. It runs BEFORE the projections so the viewer this
+	// run writes reads the links this run reconciled — with the scan after
+	// the render, the claim card lagged the artifact by one check, and the
+	// run that tagged a claim went green while its card still said "not
+	// linked to code". Its errors are only ACTED ON after the projections
+	// (step 4 below): a scan I/O error or a bad tag still fails the run, but
+	// only once the catalog and the viewer are on disk, which is what
+	// `stopped_at: scan` has always promised.
+	scanReport, scanErr := implink.Scan(claims, cfg)
+	if scanErr == nil {
+		res.ScanFilesScanned = scanReport.FilesScanned
+		res.ScanSummary = scanReport.Summary()
+		res.ScanErrors = scanReport.Errors
+	}
+
+	// 3. Catalog: build then persist build/catalog/catalog.json. The built catalog is
 	// reused for the render below (deterministic — rebuilding would only
 	// repeat work and could not diverge).
 	cat, err := catalog.Build(claims, cfg)
@@ -493,20 +533,15 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		}
 	}
 
-	// 4. Impl-link scan: reconcile every "dossierx-claim: <id>" and
-	// "dossierx-step: <id> #<n> <hash>" source tag.
-	// A scan I/O error stops the run; per-tag reconciliation errors are
-	// reported (to stderr, by the caller) and also fail the run, but only
-	// after every one is recorded so the reporter can print them all.
-	scanReport, err := implink.Scan(claims, cfg)
-	if err != nil {
-		return res, err
+	// 4. The scan's verdict (see step 2). A scan I/O error stops the run;
+	// per-tag reconciliation errors are reported (to stderr, by the caller)
+	// and also fail the run, but only after every one is recorded so the
+	// reporter can print them all.
+	if scanErr != nil {
+		return res, scanErr
 	}
-	res.ScanFilesScanned = scanReport.FilesScanned
-	res.ScanSummary = scanReport.Summary()
-	res.ScanErrors = scanReport.Errors
-	if len(scanReport.Errors) > 0 {
-		return res, fmt.Errorf("%d impl-link scan error(s)", len(scanReport.Errors))
+	if len(res.ScanErrors) > 0 {
+		return res, fmt.Errorf("%d impl-link scan error(s)", len(res.ScanErrors))
 	}
 
 	// 5. The lock-ledger gate: does every locked claim still match the content
@@ -524,6 +559,26 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, loadLedgerInputs(cfg)))
 	if len(res.LedgerFindings) > 0 {
 		return res, fmt.Errorf("ledger: %d integrity finding(s)", len(res.LedgerFindings))
+	}
+
+	// 5b. The code-link gate: once a project names its `source_dirs`, every
+	// locked schema/behavior/api/verification claim must be linked, and a
+	// claim with `steps:` must be linked on every step. It sits AFTER the
+	// ledger gate for the reason the conformance gate does — a refusal about
+	// where the code is must never hide a refusal about whether the claim
+	// was approved — and after the projections for the reason the ledger
+	// gate does: the viewer a reader needs in order to SEE the unlinked
+	// claim has already been regenerated by the time this refuses, and what
+	// the refusal costs is the exit status. Before this gate existed the
+	// same counts were computed below, after OK, and reached the caller only
+	// as a next-steps sentence — a full check exited 0 on a project with
+	// zero links, which is the false green issue #78 names.
+	res.CodeLinks = codeLinks(cfg, claims, true, true)
+	if res.CodeLinks != nil && res.CodeLinks.Gated {
+		if n := res.CodeLinks.Incomplete(); n > 0 {
+			res.CodeLinkGateFailed = true
+			return res, fmt.Errorf("code links: %d claim(s) not linked", n)
+		}
 	}
 
 	// The optional conformance gate is deliberately after every established
@@ -761,6 +816,11 @@ func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	// mutating reconcile and stays out of the memory-only status path.
 	_, _, implinkHints := implinkStatus(cfg, claims)
 	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
+	// The same coverage the gate reads, but with Scanned and Gated both
+	// false: this path reconciles no tag and refuses nothing, and the
+	// envelope must say so rather than let a read-only green pass for a
+	// linked one.
+	res.CodeLinks = codeLinks(cfg, claims, false, false)
 	// NOTHING IS PREPENDED HERE ANY MORE. A scope advisory used to go first,
 	// ahead of every claim-level hint: under --staged, a shallow checkout could
 	// not reach the parent commit, so the run had to say "this run could not
@@ -828,13 +888,96 @@ func openCommentCounts(claims []model.Claim) map[string]int {
 	return counts
 }
 
+// CodeLinksReport is Result.CodeLinks: the code-link coverage of every
+// module, plus the two facts that say what kind of run produced it.
+type CodeLinksReport struct {
+	Scanned bool
+	Gated   bool
+	Modules []ModuleCodeLinks
+}
+
+// ModuleCodeLinks is one module's coverage. Partial and Unlinked are the
+// two shapes the gate refuses on; Linked and Drifted are context.
+type ModuleCodeLinks struct {
+	Module   string
+	Linked   int
+	Drifted  int
+	Partial  []implink.PartialEntry
+	Unlinked []string
+}
+
+// Incomplete is the number of claims the gate would refuse on: every
+// unlinked claim plus every partially-linked one, across all modules.
+func (r *CodeLinksReport) Incomplete() int {
+	if r == nil {
+		return 0
+	}
+	n := 0
+	for _, m := range r.Modules {
+		n += len(m.Unlinked) + len(m.Partial)
+	}
+	return n
+}
+
+// gatesCodeLinks is the one place the gate's precondition is spelled out:
+// the project named its source roots. A project that has not is never
+// refused on links, however many `claim link` artifacts it carries, because
+// nothing has told the engine where "the code" is.
+func gatesCodeLinks(cfg *config.Config) bool {
+	return cfg != nil && len(cfg.SourceDirs) > 0
+}
+
+// moduleCoverage is implink.Coverage when the project is held to account
+// (source_dirs set: a module with no artifact is a module of unlinked
+// claims) and implink.Status otherwise (a module with no artifact is
+// silently skipped, so a project that never opted in prints nothing).
+func moduleCoverage(cfg *config.Config, claims []model.Claim, module string) (*implink.StatusReport, error) {
+	if gatesCodeLinks(cfg) {
+		return implink.Coverage(claims, cfg, module)
+	}
+	return implink.Status(claims, cfg, module)
+}
+
+// codeLinks assembles Result.CodeLinks for a run. scanned is whether
+// implink.Scan ran first; gated is whether an incomplete claim is a
+// refusal on this path. Nil when no module had anything to report and the
+// project never opted in.
+func codeLinks(cfg *config.Config, claims []model.Claim, scanned, gated bool) *CodeLinksReport {
+	if cfg == nil {
+		return nil
+	}
+	report := &CodeLinksReport{Scanned: scanned, Gated: gated && gatesCodeLinks(cfg)}
+	for _, module := range cfg.Modules {
+		st, err := moduleCoverage(cfg, claims, module)
+		if err != nil {
+			// ErrNoArtifact on the ungated path, or a malformed artifact:
+			// implinkStatus reports the latter on stderr; here the module
+			// simply has no coverage row.
+			continue
+		}
+		report.Modules = append(report.Modules, ModuleCodeLinks{
+			Module:   module,
+			Linked:   st.LinkedClaims,
+			Drifted:  len(st.Drifted),
+			Partial:  st.Partial,
+			Unlinked: st.UnlinkedIDs,
+		})
+	}
+	if len(report.Modules) == 0 && !gatesCodeLinks(cfg) {
+		return nil
+	}
+	return report
+}
+
 // implinkStatus returns the impl-link status reporter's stdout lines, stderr
 // lines, and the next-steps hints it contributes, for every module in
-// cfg.Modules that has an implementation-link artifact (modules with none are
-// silently skipped). The value form of cmd/dossierx.reportImplinkStatus.
+// cfg.Modules that has an implementation-link artifact — or, once the
+// project sets `source_dirs`, for every module, since a module with no
+// artifact is then a module of unlinked claims (see moduleCoverage). The
+// value form of cmd/dossierx.reportImplinkStatus.
 func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hints []string) {
 	for _, module := range cfg.Modules {
-		report, err := implink.Status(claims, cfg, module)
+		report, err := moduleCoverage(cfg, claims, module)
 		if err != nil {
 			if errors.Is(err, implink.ErrNoArtifact) {
 				continue
@@ -847,6 +990,10 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 			stdout = append(stdout, fmt.Sprintf("  drifted: %s %s: %s", d.ClaimID, d.File, d.Reason))
 			hints = append(hints, fmt.Sprintf("%s is drifted -> re-tag or dossierx claim link --module %s --claim %s --file %s", d.ClaimID, module, d.ClaimID, d.File))
 		}
+		for _, p := range report.Partial {
+			stdout = append(stdout, fmt.Sprintf("  partial: %s steps %d of %d linked (missing %s)", p.ClaimID, p.Covered, p.Total, joinInts(p.Missing)))
+			hints = append(hints, fmt.Sprintf("%s is partially linked -> add a dossierx-step tag for step(s) %s", p.ClaimID, joinInts(p.Missing)))
+		}
 		for _, id := range report.UnlinkedIDs {
 			stdout = append(stdout, fmt.Sprintf("  unlinked: %s", id))
 		}
@@ -855,6 +1002,15 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 		}
 	}
 	return stdout, stderr, hints
+}
+
+// joinInts renders step indexes as "2, 3" for the partial-link lines.
+func joinInts(ns []int) string {
+	parts := make([]string, 0, len(ns))
+	for _, n := range ns {
+		parts = append(parts, fmt.Sprint(n))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // nextSteps returns the ordered "what to run next" hint lines: draft claims,

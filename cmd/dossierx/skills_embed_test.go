@@ -17,6 +17,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	dxskills "github.com/BarterX-Tech/dossierx/skills"
 )
 
@@ -62,10 +64,13 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		}
 	}
 
-	// Five bundles plus the generic guide, which is always written — with no
-	// project root to put it in, it lands beside the bundles.
-	if !strings.Contains(stdout, "wrote 6 file(s)") {
-		t.Fatalf("expected stdout to report 6 file(s) written, got:\n%s", stdout)
+	// Five bundles, their lock file, plus the generic guide, which is always
+	// written — with no project root to put it in, it lands beside the bundles.
+	if !strings.Contains(stdout, "wrote 7 file(s)") {
+		t.Fatalf("expected stdout to report 7 file(s) written, got:\n%s", stdout)
+	}
+	if _, statErr := os.Stat(filepath.Join(targetDir, skillsLockFile)); statErr != nil {
+		t.Fatalf("the lock file must be written beside the bundles: %v", statErr)
 	}
 	if _, statErr := os.Stat(filepath.Join(targetDir, "dossierx-agent-guide.md")); statErr != nil {
 		t.Fatalf("the generic guide must be written even with no project root: %v", statErr)
@@ -535,8 +540,36 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // the next one-line correction into a budget argument. CENSUS: router 271 of
 // 272, claims 255, comments 206, code-links 136, build-order 142. The extra
 // line is the `git_unavailable` recovery row for recover-approved-content.
+//
+// THE RAISE TO 296 IS THE ONE THE BUDGET'S OWN HISTORY DESCRIBES: an agent that
+// meets a finding without having read what it is, and loops. Issues #78 and
+// #82 recorded the loop: agents reached for `reaudit` on a claim that was not
+// pending, for `flag` on a claim that renders from `rows`, for `check
+// --validate` after a lock refusal, and for `build-order` when the question
+// was whether a feature was done — each a wrong verb that burns an approval.
+// The router now carries the two "Which command" tables (fourteen lines) and
+// two new refusal rows: `unlinked_claims` from the code-link gate and
+// `skills_drift` from `skills export --check`. The retired-verb table was
+// compressed from eleven lines to five first, so the raise is what was left
+// after the prose was tightened. CENSUS at the raise: router 290 of 296,
+// claims 258, comments 212, code-links 164, build-order 147 — every
+// companion moved a few lines for the same tables (the shared four-arm
+// discriminator in comments and code-links, the read-only track section in
+// claims, the status-vs-show line in build-order), which is the surface
+// signature: one decision, stated once per guide that owns a piece of it.
+//
+// NO RAISE FOR #78 PHASE 2. The proof-or-stop rule — admitted evidence only,
+// a model's statement in chat is never a certificate — is three lines in the
+// router and two in each of the two companions that describe `check`. CENSUS:
+// router 294 of 296, claims 260, comments 212, code-links 166, build-order
+// 147. The router is now two lines from its ceiling, so the next sentence it
+// needs is a budget decision, not a quiet edit.
+//
+// THE #82 NEVER-BEND FIX does not raise the budget. Router rule 2 is five lines
+// so it can name `claim flag` and keep the reaudit no-change stub. CENSUS:
+// router 295 of 296, claims 261 of 296. The router is one line from its ceiling.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
-	const maxLines = 272
+	const maxLines = 296
 
 	for _, name := range wantSkillNames {
 		raw, err := fs.ReadFile(dxskills.FS, name+"/SKILL.md")
@@ -559,18 +592,37 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		want  string
 		why   string
 	}{
-		{"dossierx", "unlock → fix → lock", "the approval path, named as the path"},
+		{"dossierx", "Body-only meaning drift is", "body-only meaning drift is claim flag, then reaudit"},
 		{"dossierx", "drift** tool, not the edit tool", "reaudit is not the general edit tool"},
 		{"dossierx", "never resolve", "advisory rights"},
 		{"dossierx", "score", "resolve the human's words to an id before acting"},
 		{"dossierx", "blocked", "a blocked dry run is a successful answer"},
 		{"dossierx", "Draft is your workshop", "draft claims are free to author"},
-		{"dossierx-claims", "unlock → fix → lock", "the only path through a locked claim"},
+		{"dossierx-claims", "body-only meaning drift is claim flag", "a locked body-only claim changes via flag; other edits use unlock, fix, lock"},
 		{"dossierx-claims", "not_review_pending", "reaudit refuses a non-drifting claim"},
 		{"dossierx-claims", "edit its file freely", "a draft claim needs no ceremony"},
 		{"dossierx-code-links", "dossierx-step:", "step tags are scanned with claim tags"},
 		{"dossierx-comments", "you never resolve", "the agent replies and waits"},
 		{"dossierx-comments", "inclusive", "the inbox cursor re-reports its boundary second"},
+		// Issue #82: the decision trees, pinned where the wrong verb is chosen.
+		{"dossierx", "Which command", "the flag/unlock/reaudit and track/build-order tables"},
+		{"dossierx", "`structured_layout`)", "flag refuses a structured claim; unlock is the path"},
+		{"dossierx", "gates nothing and orders nothing", "a track is never a lock gate or a build sequence"},
+		{"dossierx", "never a recompute", "build-order show reads the stored artifact"},
+		{"dossierx-comments", "structured_layout", "the discriminator's third arm"},
+		{"dossierx-code-links", "structured_layout", "the same third arm, same words"},
+		{"dossierx-claims", "never a gate, never a build sequence", "track verbs are the read-only axis"},
+		{"dossierx-build-order", "never recomputes", "status answers stale; show only renders"},
+		// Issue #78 Phase 1A: what a green check proves.
+		{"dossierx-code-links", "Linked is not followed", "the gate proves a pointer, not meaning"},
+		{"dossierx", "neither proves code links", "--validate and --staged are not sync"},
+		{"dossierx", "skills_drift", "a rewritten skill is a refusal, not a soft bump"},
+		// Issue #78 Phase 2: proof or stop. Only admitted evidence counts, and
+		// a model's statement in chat is never a certificate.
+		{"dossierx", "Proof or stop", "chat is not a certificate; stop when the evidence is missing"},
+		{"dossierx", "never a certificate", "an agent's 'it is synced' closes no loop"},
+		{"dossierx-code-links", "not a certificate and closes nothing", "linked is not followed, and saying so is not evidence"},
+		{"dossierx-claims", "an exit code\nyou did not see is one you do not have", "report the envelope, never a belief"},
 	} {
 		raw, err := fs.ReadFile(dxskills.FS, tc.skill+"/SKILL.md")
 		if err != nil {
@@ -579,5 +631,181 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		if !strings.Contains(string(raw), tc.want) {
 			t.Errorf("%s/SKILL.md no longer states %q (%s)", tc.skill, tc.want, tc.why)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// .agents/skills, the lock file and --check (issue #78 Phase 1A)
+// ---------------------------------------------------------------------
+
+func TestCLI_SkillsExport_WritesEveryTreeTheRepoAlreadyHas(t *testing.T) {
+	project := t.TempDir()
+	cfgPath, _ := icWriteFixtureProject(t, project, "widget")
+	for _, dir := range []string{".claude", ".agents"} {
+		if err := os.MkdirAll(filepath.Join(project, dir), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	stdout, _, err := execCLI(t, "--config", cfgPath, "skills", "export")
+	if err != nil {
+		t.Fatalf("skills export: %v (out: %s)", err, stdout)
+	}
+	for _, tree := range []string{claudeSkillsDir, agentsSkillsDir} {
+		for _, want := range []string{"dossierx/SKILL.md", skillsLockFile} {
+			if _, statErr := os.Stat(filepath.Join(project, filepath.FromSlash(tree), want)); statErr != nil {
+				t.Fatalf("expected %s under %s: %v", want, tree, statErr)
+			}
+		}
+	}
+	if !strings.Contains(stdout, "skill-tree (agents-skills)") || !strings.Contains(stdout, "skill-tree (claude-code)") {
+		t.Fatalf("expected both trees reported as forms, got:\n%s", stdout)
+	}
+
+	// The lock names every bundle file with a 64-hex sha256 and this binary's version.
+	raw, readErr := os.ReadFile(filepath.Join(project, filepath.FromSlash(agentsSkillsDir), skillsLockFile))
+	if readErr != nil {
+		t.Fatalf("read lock: %v", readErr)
+	}
+	var lock skillsLock
+	if err := json.Unmarshal(raw, &lock); err != nil {
+		t.Fatalf("decode lock: %v\n%s", err, raw)
+	}
+	for _, name := range wantSkillNames {
+		h, ok := lock.Files[name+"/SKILL.md"]
+		if !ok || len(h) != 64 {
+			t.Fatalf("lock must carry a sha256 for %s/SKILL.md, got %q (present=%v)", name, h, ok)
+		}
+	}
+	v, _, _ := resolveVersionInfo()
+	if lock.Version != v {
+		t.Fatalf("lock version = %q, want the binary's %q", lock.Version, v)
+	}
+}
+
+func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "skills")
+	if _, _, err := execCLI(t, "skills", "export", targetDir); err != nil {
+		t.Fatalf("skills export: %v", err)
+	}
+
+	// Clean: every file matches, exit 0.
+	env, _, err := execCLIJSON(t, "skills", "export", targetDir, "--check")
+	if err != nil || !env.OK {
+		t.Fatalf("a fresh export must pass --check, got err=%v env=%+v", err, env)
+	}
+
+	// Hand-edit one bundle: it differs from the binary AND from the lock.
+	claimsPath := filepath.Join(targetDir, "dossierx-claims", "SKILL.md")
+	original, readErr := os.ReadFile(claimsPath)
+	if readErr != nil {
+		t.Fatalf("read: %v", readErr)
+	}
+	if err := os.WriteFile(claimsPath, append(original, []byte("\nlocked claims may be edited freely\n")...), 0o644); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	// Make another look stale: rewrite its lock entry to the hash of a
+	// different body, then write that body — matches the lock, not the binary.
+	lockPath := filepath.Join(targetDir, skillsLockFile)
+	rawLock, readErr := os.ReadFile(lockPath)
+	if readErr != nil {
+		t.Fatalf("read lock: %v", readErr)
+	}
+	var lock skillsLock
+	if err := json.Unmarshal(rawLock, &lock); err != nil {
+		t.Fatalf("decode lock: %v", err)
+	}
+	staleBody := []byte("---\nname: dossierx-build-order\n---\nan older release's guide\n")
+	lock.Files["dossierx-build-order/SKILL.md"] = sha256Hex(staleBody)
+	encoded, encErr := json.Marshal(lock)
+	if encErr != nil {
+		t.Fatalf("encode lock: %v", encErr)
+	}
+	if err := os.WriteFile(lockPath, encoded, 0o644); err != nil {
+		t.Fatalf("write lock: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "dossierx-build-order", "SKILL.md"), staleBody, 0o644); err != nil {
+		t.Fatalf("write stale: %v", err)
+	}
+	// And delete a third.
+	if err := os.Remove(filepath.Join(targetDir, "dossierx-comments", "SKILL.md")); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	env, _, err = execCLIJSON(t, "skills", "export", targetDir, "--check")
+	if err == nil || env.OK || env.Error == nil || env.Error.Code != cliout.CodeSkillsDrift {
+		t.Fatalf("expected skills_drift, got err=%v env=%+v", err, env)
+	}
+	raw, encErr := json.Marshal(env.Data)
+	if encErr != nil {
+		t.Fatalf("re-marshal data: %v", encErr)
+	}
+	var data skillsCheckData
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("decode data: %v\n%s", err, raw)
+	}
+	// The check reports each path as written (filepath.Join), so Windows uses
+	// backslashes. Compare the slash form. Length and the exact skill file
+	// stay required: a wrong list still fails.
+	namesExactly := func(got []string, rel string) bool {
+		return len(got) == 1 && strings.HasSuffix(filepath.ToSlash(got[0]), "/"+rel)
+	}
+	if !namesExactly(data.HandEdited, "dossierx-claims/SKILL.md") {
+		t.Fatalf("hand_edited should name the edited claims skill only, got %+v", data)
+	}
+	if !namesExactly(data.Stale, "dossierx-build-order/SKILL.md") {
+		t.Fatalf("stale should name the build-order skill only, got %+v", data)
+	}
+	if !namesExactly(data.Missing, "dossierx-comments/SKILL.md") {
+		t.Fatalf("missing should name the deleted comments skill only, got %+v", data)
+	}
+	if len(data.NoLock) != 0 {
+		t.Fatalf("the lock was present, got no_lock=%v", data.NoLock)
+	}
+	// The check wrote nothing: the hand edit is still there.
+	after, afterErr := os.ReadFile(claimsPath)
+	if afterErr != nil {
+		t.Fatalf("re-read: %v", afterErr)
+	}
+	if !strings.Contains(string(after), "edited freely") {
+		t.Fatalf("--check must not rewrite files")
+	}
+
+	// Text mode names the file and the kind.
+	out, _, checkErr := execCLI(t, "skills", "export", targetDir, "--check")
+	if checkErr == nil {
+		t.Fatalf("text-mode --check must also refuse")
+	}
+	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 5 file(s) differ"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in text output, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestCLI_SkillsExportCheck_WithoutALockEveryDifferenceIsUnverified(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "skills")
+	if _, _, err := execCLI(t, "skills", "export", targetDir); err != nil {
+		t.Fatalf("skills export: %v", err)
+	}
+	if err := os.Remove(filepath.Join(targetDir, skillsLockFile)); err != nil {
+		t.Fatalf("remove lock: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "dossierx", "SKILL.md"), []byte("---\nname: dossierx\n---\nrewritten\n"), 0o644); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	env, _, err := execCLIJSON(t, "skills", "export", targetDir, "--check")
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeSkillsDrift {
+		t.Fatalf("expected skills_drift, got err=%v env=%+v", err, env)
+	}
+	raw, encErr := json.Marshal(env.Data)
+	if encErr != nil {
+		t.Fatalf("re-marshal data: %v", encErr)
+	}
+	var data skillsCheckData
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(data.Unverified) != 1 || len(data.HandEdited) != 0 || len(data.Stale) != 0 || len(data.NoLock) != 1 {
+		t.Fatalf("without a lock the difference is unverified and the tree is named in no_lock, got %+v", data)
 	}
 }

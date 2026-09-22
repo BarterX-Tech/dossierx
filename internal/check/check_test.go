@@ -89,6 +89,15 @@ func lockedClaim(id string) string {
 		"governed_by:\n  type: none\n  reason: fixture\n"
 }
 
+// lockedCodeClaim is lockedClaim in a code-producing build_role: the shape the
+// code-link gate holds to account. lockedClaim itself carries no build_role and
+// is therefore never expected to be linked.
+func lockedCodeClaim(id string) string {
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
+		"body: |\n  a locked claim with code behind it.\n" +
+		"governed_by:\n  type: none\n  reason: fixture\n"
+}
+
 func severities(findings []lint.Finding) map[lint.Severity]int {
 	m := map[lint.Severity]int{}
 	for _, f := range findings {
@@ -372,7 +381,7 @@ func TestRun_ImplinkScanAndStatus(t *testing.T) {
 	if len(res.ScanErrors) != 0 {
 		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
 	}
-	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 unlinked-in-schema/behavior/api/verification-phases" {
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases" {
 		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
 	}
 }
@@ -399,7 +408,7 @@ func TestRun_StepTagScanAndStatus(t *testing.T) {
 	if len(res.ScanErrors) != 0 {
 		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
 	}
-	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 unlinked-in-schema/behavior/api/verification-phases" {
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases" {
 		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
 	}
 }
@@ -431,5 +440,138 @@ func TestRun_ScanErrorSurfaced(t *testing.T) {
 	// catalog/render precede the scan step, so both were written before it failed.
 	if res.CatalogPath == "" || res.RenderPath == "" {
 		t.Fatalf("expected catalog/render written before the scan failure, got %q / %q", res.CatalogPath, res.RenderPath)
+	}
+}
+
+// ---------------------------------------------------------------------
+// The code-link gate (issue #78). With source_dirs set, a locked
+// schema/behavior/api/verification claim with no link — or a stepped claim
+// not tagged on every step — fails Run AFTER the catalog and viewer were
+// written and AFTER the ledger gate. Without source_dirs nothing is refused.
+// ---------------------------------------------------------------------
+
+func TestRun_CodeLinkGate_RefusesUnlinkedClaim(t *testing.T) {
+	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
+		"claims/locked.yaml": lockedCodeClaim("widget.contract.locked"),
+		"src/impl.go":        "package impl\n\nfunc Foo() {}\n", // no tag anywhere
+	})
+
+	res, err := check.Run(claims, cfg)
+	if err == nil || err.Error() != "code links: 1 claim(s) not linked" {
+		t.Fatalf("expected the code-link gate to refuse, got err=%v", err)
+	}
+	if !res.CodeLinkGateFailed || res.OK {
+		t.Fatalf("expected CodeLinkGateFailed and !OK, got %+v", res)
+	}
+	if res.CatalogPath == "" || res.RenderPath == "" {
+		t.Fatalf("the gate must refuse AFTER the projections landed; catalog=%q render=%q", res.CatalogPath, res.RenderPath)
+	}
+	if len(res.LedgerFindings) != 0 || len(res.ScanErrors) != 0 {
+		t.Fatalf("no earlier gate should have fired: %+v", res)
+	}
+	if res.CodeLinks == nil || !res.CodeLinks.Scanned || !res.CodeLinks.Gated {
+		t.Fatalf("a plain check with source_dirs is scanned and gated, got %+v", res.CodeLinks)
+	}
+	if res.CodeLinks.Incomplete() != 1 || len(res.CodeLinks.Modules) != 1 || len(res.CodeLinks.Modules[0].Unlinked) != 1 || res.CodeLinks.Modules[0].Unlinked[0] != "widget.contract.locked" {
+		t.Fatalf("expected the one unlinked claim named, got %+v", res.CodeLinks.Modules)
+	}
+	if _, statErr := os.Stat(res.RenderPath); statErr != nil {
+		t.Fatalf("viewer must exist on disk after a link refusal: %v", statErr)
+	}
+}
+
+func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
+	hash := implink.StepContentHash("do the thing")
+	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
+			"steps:\n  - do the thing\n  - do the other thing\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
+	})
+
+	res, err := check.Run(claims, cfg)
+	if err == nil || err.Error() != "code links: 1 claim(s) not linked" {
+		t.Fatalf("expected the gate to refuse a 1-of-2 stepped claim, got err=%v", err)
+	}
+	if !res.CodeLinkGateFailed {
+		t.Fatalf("expected CodeLinkGateFailed, got %+v", res)
+	}
+	m := res.CodeLinks.Modules[0]
+	if len(m.Unlinked) != 0 || len(m.Partial) != 1 || m.Partial[0].Covered != 1 || m.Partial[0].Total != 2 || len(m.Partial[0].Missing) != 1 || m.Partial[0].Missing[0] != 2 {
+		t.Fatalf("expected partial 1 of 2 missing step 2, got %+v", m)
+	}
+}
+
+func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
+	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
+		"claims/locked.yaml":  lockedCodeClaim("widget.contract.locked"),
+		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\ngoverned_by:\n  type: none\n  reason: fixture\n",
+		"src/impl.go":         "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
+	})
+
+	res, err := check.Run(claims, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.OK || res.CodeLinkGateFailed {
+		t.Fatalf("expected OK, got %+v", res)
+	}
+	if res.CodeLinks == nil || !res.CodeLinks.Gated || res.CodeLinks.Incomplete() != 0 {
+		t.Fatalf("expected a gated, complete report; the orientation claim is not expected to link: %+v", res.CodeLinks)
+	}
+}
+
+// Without source_dirs there is no gate: a project may hold `claim link`
+// artifacts and unlinked locked claims side by side and still exit 0, because
+// nothing told the engine where the code is.
+func TestRun_CodeLinkGate_InactiveWithoutSourceDirs(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/locked.yaml": lockedCodeClaim("widget.contract.locked"),
+	})
+	res, err := check.Run(claims, cfg)
+	if err != nil || !res.OK {
+		t.Fatalf("expected OK without source_dirs, got err=%v res=%+v", err, res)
+	}
+	if res.CodeLinks != nil {
+		t.Fatalf("a project that never opted in must carry no code_links report, got %+v", res.CodeLinks)
+	}
+}
+
+// --validate and --staged read the stored artifact and refuse nothing: the
+// same counts arrive with Scanned=false and Gated=false, so a consumer can
+// never read a read-only green as a linked green.
+func TestStatus_CodeLinks_ReportedButNeverGated(t *testing.T) {
+	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
+		"claims/locked.yaml": lockedCodeClaim("widget.contract.locked"),
+		"src/impl.go":        "package impl\n\nfunc Foo() {}\n",
+	})
+	res := check.Status(claims, cfg)
+	if !res.OK || res.CodeLinkGateFailed {
+		t.Fatalf("Status never refuses on links, got %+v", res)
+	}
+	if res.CodeLinks == nil || res.CodeLinks.Scanned || res.CodeLinks.Gated {
+		t.Fatalf("expected an unscanned, ungated report, got %+v", res.CodeLinks)
+	}
+	if res.CodeLinks.Incomplete() != 1 || res.CodeLinks.Modules[0].Unlinked[0] != "widget.contract.locked" {
+		t.Fatalf("the unlinked claim must still be named, got %+v", res.CodeLinks.Modules)
+	}
+}
+
+// A tampered locked claim AND an unlinked one: the ledger gate answers first,
+// and the link gate is never reached — a refusal about where the code is must
+// not hide a refusal about whether the claim was approved.
+func TestRun_LedgerFindingPrecedesCodeLinkGate(t *testing.T) {
+	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
+		"claims/locked.yaml": lockedCodeClaim("widget.contract.locked"),
+		"src/impl.go":        "package impl\n\nfunc Foo() {}\n",
+	})
+	claims[0].Body = "a locked claim, quietly rewritten.\n"
+
+	res, err := check.Run(claims, cfg)
+	if err == nil || len(res.LedgerFindings) == 0 {
+		t.Fatalf("expected the ledger gate to refuse first, got err=%v findings=%v", err, rulesOf(res.LedgerFindings))
+	}
+	if res.CodeLinkGateFailed || res.CodeLinks != nil {
+		t.Fatalf("the link gate must not run after a ledger refusal, got failed=%v links=%+v", res.CodeLinkGateFailed, res.CodeLinks)
 	}
 }

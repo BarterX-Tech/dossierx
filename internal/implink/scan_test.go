@@ -170,3 +170,41 @@ func TestScan_GoModuleImportPathNeverMistakenForATag(t *testing.T) {
 		t.Fatalf("expected zero matches/errors for a file with no dossierx-claim tag, got matches=%+v errors=%+v", report.Matches, report.Errors)
 	}
 }
+
+// A SwiftPM checkout carries .build/debug as a symlink to a directory and a
+// .git tree full of objects. Neither is source: the scan must skip hidden
+// directories and never follow a symlink, instead of failing the whole run on
+// "read .build/debug: is a directory" — which is what it did against the
+// first real Swift project it met (Curtainly, 2026-09-22).
+func TestScan_SkipsHiddenDirectoriesAndSymlinks(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	writeScanFile(t, srcDir, "main.go", "// dossierx-claim: widget.contract.main\nfunc Foo() {}\n")
+	// A tag inside a hidden directory is not source and must not be found.
+	writeScanFile(t, srcDir, ".build/checkouts/vendor.go", "// dossierx-claim: widget.contract.main\n")
+	writeScanFile(t, srcDir, ".git/HEAD", "ref: refs/heads/main\n")
+	// A symlink to a directory (SwiftPM's .build/debug shape) and one to a file.
+	if err := os.MkdirAll(filepath.Join(srcDir, "products"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(srcDir, "products"), filepath.Join(srcDir, "debug")); err != nil {
+		t.Fatalf("symlink dir: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(srcDir, "main.go"), filepath.Join(srcDir, "alias.go")); err != nil {
+		t.Fatalf("symlink file: %v", err)
+	}
+
+	report, err := Scan(claims, cfg)
+	if err != nil {
+		t.Fatalf("Scan must survive symlinks and hidden directories: %v", err)
+	}
+	if len(report.Errors) != 0 {
+		t.Fatalf("expected no scan errors, got %+v", report.Errors)
+	}
+	if report.FilesScanned != 1 {
+		t.Fatalf("expected exactly the one real source file scanned, got %d", report.FilesScanned)
+	}
+	if len(report.Matches) != 1 || report.Matches[0].File != "src/main.go" {
+		t.Fatalf("expected one match from src/main.go only, got %+v", report.Matches)
+	}
+}
