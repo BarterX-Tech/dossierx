@@ -297,8 +297,14 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 	if !outGiven {
 		root := newSkillsExportFixture(t)
 		capture := captureSkillsExport(t, root)
-		if len(capture.SkillTree) != len(wantSkillsExportNames) {
-			t.Fatalf("flagless capture exported %d skill files, want %d: %v", len(capture.SkillTree), len(wantSkillsExportNames), sortedSkillTreeKeys(capture.SkillTree))
+		// The five bundles plus dossierx-skills.lock, which every tree carries
+		// so `skills export --check` can tell a hand-edited skill from a stale one.
+		const lockFile = "dossierx-skills.lock"
+		if len(capture.SkillTree) != len(wantSkillsExportNames)+1 {
+			t.Fatalf("flagless capture exported %d skill files, want %d (five bundles plus %s): %v", len(capture.SkillTree), len(wantSkillsExportNames)+1, lockFile, sortedSkillTreeKeys(capture.SkillTree))
+		}
+		if _, ok := capture.SkillTree[lockFile]; !ok {
+			t.Errorf("flagless capture missing %s", lockFile)
 		}
 		for _, name := range wantSkillsExportNames {
 			if _, ok := capture.SkillTree[name+"/SKILL.md"]; !ok {

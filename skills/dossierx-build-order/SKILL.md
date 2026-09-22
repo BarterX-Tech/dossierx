@@ -31,6 +31,11 @@ dossierx build-order lock    --module <name> --reason "<their words>"
 dossierx build-order show    --module <name> --format json|text|mermaid   # json is the default
 ```
 
+`status` answers "is it stale, and how much is covered"; `show` renders the stored sequence (json,
+text or mermaid) and never recomputes it. Neither is the feature axis: `dossierx track status <id>`
+reports whether a user feature is finished across modules and gates nothing, while a build order
+sequences one module's implementation after its claims lock and is approved by `build-order lock`.
+
 `propose` and `lock` both take `--dry-run`. `lock` requires `--reason` — it is a lifecycle action,
 so it follows the same rule as `claim lock`: preview, show the human, get a yes, then run it.
 

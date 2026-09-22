@@ -220,6 +220,7 @@
       "path": "skills export",
       "short": "Write the embedded skills in every form this repo uses: a SKILL.md tree, an idempotent AGENTS.md section, and a self-contained agent guide",
       "flags": [
+        "--check",
         "--config",
         "--format"
       ]
@@ -356,6 +357,7 @@
     "reply_not_found",
     "review_pending",
     "rights_denied",
+    "skills_drift",
     "store_gitignored",
     "structured_layout",
     "thread_not_found",
@@ -531,14 +533,14 @@
   ],
   "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:279f7dc044c1984d7291f918ea34abffd8f786746c06a3002889b9370310c899",
+    "cmd/dossierx": "sha256:b750ace4d07ad6561c21d2fffa8dc8124eccc89b087eec1c4369db43a846b369",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/buildorder": "sha256:bf557239a85d4da9c7c40a4e0cdf2036eef0a0f104be3dfd14aa74506f64568f",
     "internal/catalog": "sha256:358d9aa06b14b14f5a9b52686cc328e005be4596e0fa89770ac32530f4629d31",
     "internal/check": "sha256:bba5501642f44bd52ab9b22d63157787346ab35e3f54fd1e17d33e7c8f8bed2f",
-    "internal/cliout": "sha256:12f9b168ad540f03cae34ea07355d2e264a51f1f30d27e9a0bd713258f9fef7f",
+    "internal/cliout": "sha256:9c578cd84239c34947443e1e84df064b7099b16c21e3e450b476c9223f894c66",
     "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
     "internal/config": "sha256:3b6ed912d2fe5b4cd622e0d49af32c3705a5960cb907f06ddc13d1842a6a810c",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
@@ -561,7 +563,7 @@
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:a4c4bb8f629587d235f9c5b22877bde1cff88d9a8a080908f87818da0c10a71c"
+    "skills": "sha256:462e8b6f93fb063e929903de0e0bd5a6188ab95310bd0cbb8b16d2f2300465de"
   },
   "envelope": {
     "keys": [
@@ -608,6 +610,7 @@
       "reply_not_found": 2,
       "review_pending": 2,
       "rights_denied": 1,
+      "skills_drift": 1,
       "store_gitignored": 1,
       "structured_layout": 1,
       "thread_not_found": 2,
@@ -903,6 +906,14 @@
         "marker",
         "message"
       ],
+      "skillsCheckData": [
+        "checked",
+        "hand_edited",
+        "missing",
+        "no_lock",
+        "stale",
+        "trees"
+      ],
       "skillsExportData": [
         "count",
         "forms",
@@ -973,7 +984,7 @@
   ],
   "counts": {
     "commands": 25,
-    "error_codes": 51,
+    "error_codes": 52,
     "http_routes": 14,
     "lint_rules": 38,
     "nouns": 8

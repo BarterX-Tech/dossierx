@@ -1200,6 +1200,7 @@ func surfacePayloadTypes() map[string]any {
 		"reauditData":             reauditData{},
 		"scanErrorData":           scanErrorData{},
 		"skillsExportData":        skillsExportData{},
+		"skillsCheckData":         skillsCheckData{},
 		"unlockData":              unlockData{},
 		"versionData":             versionData{},
 	}

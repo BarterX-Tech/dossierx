@@ -107,16 +107,19 @@ thing for one claim, per file:
 The scenario: months after lock, a new requirement changes the code, and the change means the
 locked claim's stated behavior is no longer true. Channel B must not paper over that.
 
-**First, is it actually a flag?** The discriminator is one question — *can you state a specific
-before/after for the claim's wording?* If you only have a question or a doubt, that is a **comment**
-(see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**), not a flag.
+**Is it actually a flag?** One question — *can you state a specific before/after for the claim's
+wording?* — with four arms, the same four **[`dossierx-comments`](../dossierx-comments/SKILL.md)** states and the router's "Which command" table shortens:
 
-**Then, which channel?** Did the code's *meaning* change relative to what the claim states, or did
-it just move, get renamed, or get refactored with identical behavior?
+- **Yes, and the claim renders from `body` only → `dossierx claim flag`** (Channel A, below).
+- **Yes, but the claim renders from `rows`, `steps`, `raw_html` or a `mockup` layout → `unlock →
+  fix → lock`** with the human's `--reason`: `claim flag` refuses these with `structured_layout`
+  (the paragraph at the end of this section says exactly which shapes).
+- **Yes, but only the code moved — same meaning, new file or name → Channel B.** Re-tag (or re-run
+  `dossierx claim link`) with the new location. Nothing else, no approval needed. This is the
+  common case and it is entirely yours.
+- **No → a comment**, not a flag. A question or a doubt has no `--now-does`.
 
-- Same meaning → Channel B. Re-tag (or re-run `dossierx claim link`) with the new location.
-  Nothing else, no approval needed. This is the common case and it is entirely yours.
-- Meaning changed → Channel A:
+Meaning changed, body-only claim → Channel A:
 
   ```
   dossierx claim flag <id> \

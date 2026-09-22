@@ -219,7 +219,9 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		"lint_rules": 38,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
-		"error_codes": 51,
+		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):
+		// `skills_drift` names a hand-edited or stale exported skill.
+		"error_codes": 52,
 		"http_routes": 14,
 	}
 	for name, expected := range want {
