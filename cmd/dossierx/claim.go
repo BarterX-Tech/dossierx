@@ -154,7 +154,7 @@ func linkViewsFor(cfg *config.Config, claim model.Claim) []claimLinkView {
 	}
 	out := make([]claimLinkView, 0, len(views))
 	for _, v := range views {
-		out = append(out, claimLinkView{File: v.File, Symbol: v.Symbol, Drifted: v.Drifted, Step: v.Step, StepHash: v.StepHash})
+		out = append(out, claimLinkView{File: v.File, Symbol: v.Symbol, Drifted: v.Drifted, Step: v.Step, StepHash: v.StepHash, Process: v.Process})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
@@ -177,6 +177,7 @@ type claimLinkView struct {
 	Drifted  bool   `json:"drifted"`
 	Step     int    `json:"step,omitempty"`
 	StepHash string `json:"step_hash,omitempty"`
+	Process  string `json:"process,omitempty"`
 }
 
 // claimSourceView is one cited source in snake_case — model.Source projected
@@ -363,6 +364,9 @@ type claimShowData struct {
 	Readiness     readiness.Assessment `json:"readiness"`
 	Edges         claimEdgesData       `json:"edges"`
 	ImplementedIn []claimLinkView      `json:"implemented_in"`
+	LinksNone     bool                 `json:"links_none,omitempty"`
+	LinksReason   string               `json:"links_reason,omitempty"`
+	ProcessOwned  []int                `json:"process_owned,omitempty"`
 	Comments      claimCommentCounts   `json:"comments"`
 	Ledger        *claimLedgerView     `json:"ledger,omitempty"`
 	NextActions   []string             `json:"next_actions"`
@@ -670,6 +674,9 @@ func newClaimShowCmd() *cobra.Command {
 					DependedOnBy:   emptyIfNil(dependedOnBy),
 				},
 				ImplementedIn: links,
+				LinksNone:     claim.LinksNone(),
+				LinksReason:   claimLinksReason(claim),
+				ProcessOwned:  claim.ProcessOwnedSteps(),
 				Comments:      counts,
 				Ledger:        ledger,
 				NextActions:   claimNextActions(claim, claims, cfg, store, storeErr, trigger, links, ledger),
@@ -684,6 +691,13 @@ func newClaimShowCmd() *cobra.Command {
 			}, nil
 		}),
 	}
+}
+
+func claimLinksReason(claim model.Claim) string {
+	if claim.Links == nil {
+		return ""
+	}
+	return claim.Links.Reason
 }
 
 // writeClaimShowText renders a claim show for a human reading the terminal —
@@ -726,10 +740,36 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 	}
 	fmt.Fprintf(out, "  incoming mirrors:   %v\n", d.Edges.MirroredBy)
 	fmt.Fprintf(out, "  incoming rests_on:  %v\n", d.Edges.DependedOnBy)
-	if len(d.ImplementedIn) == 0 {
+	if d.LinksNone {
+		fmt.Fprintf(out, "  implemented in:     none — %s\n", d.LinksReason)
+	} else if len(d.ImplementedIn) == 0 && len(d.ProcessOwned) == 0 {
 		fmt.Fprintln(out, "  implemented in:     (nothing linked)")
 	} else {
+		shown := map[int]bool{}
+		for _, n := range d.ProcessOwned {
+			artifact := ""
+			for _, l := range d.ImplementedIn {
+				if l.Step == n && l.Process != "" {
+					artifact = l.Process
+					break
+				}
+			}
+			if artifact == "" {
+				fmt.Fprintf(out, "  implemented in:     process step %d\n", n)
+			} else {
+				fmt.Fprintf(out, "  implemented in:     process step %d (%s)\n", n, artifact)
+			}
+			shown[n] = true
+		}
 		for _, l := range d.ImplementedIn {
+			if l.Process != "" && l.Step > 0 && !shown[l.Step] {
+				fmt.Fprintf(out, "  implemented in:     process step %d (%s)\n", l.Step, l.Process)
+				shown[l.Step] = true
+				continue
+			}
+			if l.File == "" {
+				continue
+			}
 			target := l.File
 			if l.Symbol != "" {
 				target += "#" + l.Symbol

@@ -143,9 +143,11 @@ var lockedClaimHashExcluded = map[string]bool{
 // the hash of every claim NOT carrying it, which is the exact churn this
 // prevents.
 var lockedClaimHashOmitWhenEmpty = map[string]bool{
-	"embodiment": true,
-	"sources":    true,
-	"tracks":     true,
+	"embodiment":     true,
+	"sources":        true,
+	"tracks":         true,
+	"links":          true,
+	"steps_owned_by": true,
 }
 
 // LockedClaimHash returns a deterministic hash over every persisted field of c

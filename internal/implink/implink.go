@@ -75,6 +75,10 @@ type FileLink struct {
 	// StepHash is sha256-hex of that YAML step string, recorded so claim show
 	// can surface what the tag attested. Scan already refused a mismatch.
 	StepHash string `json:"step_hash,omitempty"`
+	// Process is the review or person artifact when this row came from
+	// `claim link --step n --process`. File is empty; Status does not
+	// hash a file for it.
+	Process string `json:"process,omitempty"`
 }
 
 // Link is one claim's full set of linked files. LinkedAt is refreshed by
@@ -192,6 +196,18 @@ func WriteArtifact(a *Artifact, path string) error {
 // verification: a test-checklist claim links to the real test file(s) that
 // implement its checklist items via this exact same call.
 func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol string) (*Artifact, error) {
+	return setMatch(claims, cfg, module, ScanMatch{ClaimID: claimID, File: file, Symbol: symbol})
+}
+
+// SetProcess records that claimID's 1-based step is discharged by a person
+// or a review, naming artifact as the process evidence. It writes the same
+// module artifact as Set, with File empty and Process set, and counts as
+// covering that step for the code-link gate.
+func SetProcess(claims []model.Claim, cfg *config.Config, module, claimID string, step int, artifact string) (*Artifact, error) {
+	return setMatch(claims, cfg, module, ScanMatch{ClaimID: claimID, Step: step, Process: artifact})
+}
+
+func setMatch(claims []model.Claim, cfg *config.Config, module string, m ScanMatch) (*Artifact, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("implink: cfg must not be nil")
 	}
@@ -204,7 +220,7 @@ func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol
 		}
 		artifact = &Artifact{Module: strings.TrimSpace(module)}
 	}
-	if err := applyLink(artifact, claims, cfg, module, ScanMatch{ClaimID: claimID, File: file, Symbol: symbol}); err != nil {
+	if err := applyLink(artifact, claims, cfg, module, m); err != nil {
 		return nil, err
 	}
 	if err := WriteArtifact(artifact, path); err != nil {
@@ -235,14 +251,12 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 	claimID := strings.TrimSpace(m.ClaimID)
 	file := strings.TrimSpace(m.File)
 	symbol := m.Symbol
+	process := strings.TrimSpace(m.Process)
 	if module == "" {
 		return fmt.Errorf("implink: module must not be empty")
 	}
 	if claimID == "" {
 		return fmt.Errorf("implink: claim id must not be empty")
-	}
-	if file == "" {
-		return fmt.Errorf("implink: file must not be empty")
 	}
 
 	claim, ok := findByID(claims, claimID)
@@ -254,6 +268,51 @@ func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, mod
 	}
 	if claim.Status != model.StatusLocked {
 		return fmt.Errorf("implink: claim %q is not locked (status %q); only a locked claim can be linked", claimID, claim.Status)
+	}
+	if claim.LinksNone() {
+		return fmt.Errorf("implink: claim %q declares links.mode none; it cannot take a code or process link", claimID)
+	}
+
+	if process != "" {
+		if file != "" {
+			return fmt.Errorf("implink: process attestation cannot also name a file")
+		}
+		if m.Step < 1 {
+			return fmt.Errorf("implink: process attestation requires a 1-based step")
+		}
+		if len(claim.Steps) == 0 {
+			return fmt.Errorf("implink: claim %q has no steps; process attestation is per-step", claimID)
+		}
+		if m.Step > len(claim.Steps) {
+			return fmt.Errorf("implink: step %d is out of range (claim %q has %d steps)", m.Step, claimID, len(claim.Steps))
+		}
+		now := nowFunc().UTC().Format(time.RFC3339Nano)
+		idx := artifact.linkIndex(claimID)
+		if idx == -1 {
+			artifact.Links = append(artifact.Links, Link{ClaimID: claimID})
+			idx = len(artifact.Links) - 1
+		}
+		link := &artifact.Links[idx]
+		link.LinkedAt = now
+		row := FileLink{Step: m.Step, StepHash: StepContentHash(claim.Steps[m.Step-1]), Process: process}
+		fidx := -1
+		for i, f := range link.Files {
+			if f.File == "" && f.Step == m.Step && f.Process != "" {
+				fidx = i
+				break
+			}
+		}
+		if fidx == -1 {
+			link.Files = append(link.Files, row)
+		} else {
+			link.Files[fidx] = row
+		}
+		sortArtifact(artifact)
+		return nil
+	}
+
+	if file == "" {
+		return fmt.Errorf("implink: file must not be empty")
 	}
 
 	if filepath.IsAbs(file) {

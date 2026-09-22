@@ -80,25 +80,28 @@ not tag-triggered:
 
 ```
 dossierx claim link --module <name> --claim <id> --file <project-relative-path> [--symbol <name>]
+dossierx claim link --module <name> --claim <id> --step n --process "<artifact>"
 ```
 
 It takes `--dry-run`, needs no `--reason` (it records a fact, it does not change what is approved),
 and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write the same generated
-`build/code-links/<module>.json` — never hand-edit it.
+`build/code-links/<module>.json` — never hand-edit it. `--process` attests a person or review step;
+do not invent a dummy type or a fake `dossierx-step` tag. A claim with no declaration uses
+`links.mode: none` plus a reason (shown on the card; the gate excludes it), not a re-role unless
+it really is orientation or out-of-scope. The same process step can be authored as
+`steps_owned_by: {n: process}`.
 
 **Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
 refuses (`unlinked_claims`, `stopped_at: links`) when any locked `schema`/`behavior`/`api`/
 `verification` claim has no linked file, or a claim with `steps:` is not tagged on every step — a
 `dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
-The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
-claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
-counts per module with `scanned` and `gated`; `--validate` and `--staged` fill it with both false
-and never refuse. Linked is not followed: the gate proves a pointer exists, never that the code still
-means what the claim says — that is the human's lock and the project's tests. Nor is it your saying
-so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain
-`check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the
-drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same
-thing for one claim, per file:
+Process-owned steps and `links.mode: none` are the honest exclusions. The catalog and viewer are
+regenerated before the refusal; only the exit status is withheld, and the claim's card reads
+"not linked to code", "steps linked: k of N", "process-owned", or "implemented in: none".
+`data.code_links` carries the counts per module with `scanned` and `gated`; `--validate` and
+`--staged` fill it with both false and never refuse. Linked is not followed: the gate proves a
+pointer exists, never that the code still means what the claim says — that is the human's lock and
+the project's tests. Nor is it your saying so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain `check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same thing for one claim, per file:
 
 ```json
 "implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]
