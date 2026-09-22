@@ -92,7 +92,8 @@ the claim is a **draft** — edit its file freely.
 
 The loop while authoring is `dossierx check --validate`: the same lint gate `check` drives, at the
 same severity, writing **nothing** — no claim files, no lock store, no `build/catalog/catalog.json`, no viewer.
-Run the full `dossierx check` when you want the viewer rebuilt and code links scanned.
+Run the full `dossierx check` when you want the viewer rebuilt and code links scanned; only that
+run proves a locked claim is linked to code (`--validate` reports `code_links` but never gates on it).
 
 ## Citing your evidence — `sources`
 

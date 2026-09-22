@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,6 +21,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
+	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
@@ -1127,9 +1129,53 @@ type checkData struct {
 	FailurePhase               string              `json:"failure_phase,omitempty"`
 	ScanFilesScanned           int                 `json:"scan_files_scanned"`
 	ScanErrors                 []scanErrorData     `json:"scan_errors"`
-	OpenComments               map[string]int      `json:"open_comments,omitempty"`
-	OrientationNotes           []string            `json:"orientation_notes,omitempty"`
-	NextSteps                  []string            `json:"next_steps,omitempty"`
+	// CodeLinks is the code-link coverage report, present once the project
+	// opts into claim-to-code linking (`source_dirs`, or any module with a
+	// code-links artifact). `scanned` says whether this run reconciled
+	// source tags first; `gated` says whether an incomplete claim refused
+	// the run. A --validate or --staged run carries scanned:false and
+	// gated:false with the same counts, so a consumer can never read a
+	// read-only green as a linked one. See check.Result.CodeLinks.
+	CodeLinks        *codeLinksData `json:"code_links,omitempty"`
+	OpenComments     map[string]int `json:"open_comments,omitempty"`
+	OrientationNotes []string       `json:"orientation_notes,omitempty"`
+	NextSteps        []string       `json:"next_steps,omitempty"`
+}
+
+// codeLinksData is check.CodeLinksReport on the wire.
+type codeLinksData struct {
+	Scanned bool                  `json:"scanned"`
+	Gated   bool                  `json:"gated"`
+	Modules []moduleCodeLinksData `json:"modules"`
+}
+
+// moduleCodeLinksData is one module's coverage. partial and unlinked are
+// always arrays, never null, so a consumer ranges over them without a test.
+type moduleCodeLinksData struct {
+	Module   string                 `json:"module"`
+	Linked   int                    `json:"linked"`
+	Drifted  int                    `json:"drifted"`
+	Partial  []implink.PartialEntry `json:"partial"`
+	Unlinked []string               `json:"unlinked"`
+}
+
+func newCodeLinksData(r *check.CodeLinksReport) *codeLinksData {
+	if r == nil {
+		return nil
+	}
+	out := &codeLinksData{Scanned: r.Scanned, Gated: r.Gated, Modules: make([]moduleCodeLinksData, 0, len(r.Modules))}
+	for _, m := range r.Modules {
+		partial := m.Partial
+		if partial == nil {
+			partial = []implink.PartialEntry{}
+		}
+		unlinked := m.Unlinked
+		if unlinked == nil {
+			unlinked = []string{}
+		}
+		out.Modules = append(out.Modules, moduleCodeLinksData{Module: m.Module, Linked: m.Linked, Drifted: m.Drifted, Partial: partial, Unlinked: unlinked})
+	}
+	return out
 }
 
 // newCheckData projects a check.Result into the machine payload. Nil slices are
@@ -1170,6 +1216,7 @@ func newCheckData(res check.Result) checkData {
 		FailurePhase:               res.ConformanceFailurePhase,
 		ScanFilesScanned:           res.ScanFilesScanned,
 		ScanErrors:                 scanErrors,
+		CodeLinks:                  newCodeLinksData(res.CodeLinks),
 		OpenComments:               res.OpenComments,
 		OrientationNotes:           res.OrientationNotes,
 		NextSteps:                  res.NextSteps,
@@ -1188,10 +1235,13 @@ func newCheckData(res check.Result) checkData {
 // left zero is a step the run never reached" — deriving keeps the two from
 // drifting apart.
 //
-// "ledger" is last for a reason worth stating in the payload: reaching it means
-// the catalog and the viewer WERE regenerated and the impl-link scan passed.
-// The commit is refused; the documentation is current. That is the difference
-// between a gate and an outage, and stopped_at is where a caller reads it.
+// "ledger" and "links" come last for a reason worth stating in the payload:
+// reaching either means the catalog and the viewer WERE regenerated and the
+// impl-link scan passed. The commit is refused; the documentation is current.
+// That is the difference between a gate and an outage, and stopped_at is
+// where a caller reads it. "links" follows "ledger" because a refusal about
+// where the code is must never hide a refusal about whether the claim was
+// approved.
 func checkStoppedAt(res check.Result, err error) string {
 	switch {
 	case err == nil:
@@ -1210,6 +1260,8 @@ func checkStoppedAt(res check.Result, err error) string {
 		return "render"
 	case len(res.LedgerFindings) > 0:
 		return "ledger"
+	case res.CodeLinkGateFailed:
+		return "links"
 	case res.ConformanceGateFailed:
 		return "conformance"
 	default:
@@ -1235,6 +1287,8 @@ func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
 		return cliout.CodeLintFailed
 	case "ledger":
 		return cliout.CodeIntegrityFailed
+	case "links":
+		return cliout.CodeUnlinkedClaims
 	case "scan":
 		return cliout.CodeImplinkRefused
 	}
@@ -1460,6 +1514,9 @@ func newCheckCmd() *cobra.Command {
 					// destructive, so it is the one that must not arrive with
 					// an empty hint. See ledgerRecoveryHint.
 					failure = failure.WithHint(ledgerRecoveryHint(res.LedgerFindings))
+				}
+				if stoppedAt == "links" {
+					failure = failure.WithHint(codeLinkRecoveryHint(res))
 				}
 				return out, failure
 			}
@@ -1725,6 +1782,47 @@ func reportConformanceBlocking(cmd *cobra.Command, res check.Result) {
 		res.ConformanceBlockingChecks, summary.Owed, summary.Mismatch, summary.Uncheckable)
 }
 
+// reportCodeLinkGate prints the code-link gate's refusal: the per-module
+// coverage line every unlinked and partial claim, then the count. It prints
+// nothing when the gate did not refuse, so every passing project's output
+// is unchanged, and it prints BEFORE the "check: OK" tail is skipped so the
+// reader sees which claims, not only how many.
+func reportCodeLinkGate(cmd *cobra.Command, res check.Result) {
+	if !res.CodeLinkGateFailed || res.CodeLinks == nil {
+		return
+	}
+	out := cmd.OutOrStdout()
+	for _, m := range res.CodeLinks.Modules {
+		if len(m.Unlinked) == 0 && len(m.Partial) == 0 {
+			continue
+		}
+		for _, p := range m.Partial {
+			fmt.Fprintf(out, "[links] %s: %s: steps %d of %d linked, missing step(s) %s\n", m.Module, p.ClaimID, p.Covered, p.Total, joinStepIndexes(p.Missing))
+		}
+		for _, id := range m.Unlinked {
+			fmt.Fprintf(out, "[links] %s: %s: no code link\n", m.Module, id)
+		}
+	}
+	fmt.Fprintf(out, "code links: %d claim(s) not linked\n", res.CodeLinks.Incomplete())
+}
+
+func joinStepIndexes(ns []int) string {
+	parts := make([]string, 0, len(ns))
+	for _, n := range ns {
+		parts = append(parts, strconv.Itoa(n))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// codeLinkRecoveryHint is the one line an agent acts on when the code-link
+// gate refuses. The two recoveries are both in it because the wrong one is
+// tempting: a claim that genuinely produces no code is mis-roled, not
+// untagged, and tagging an unrelated file to clear the gate is the false
+// link the gate exists to refuse.
+func codeLinkRecoveryHint(res check.Result) string {
+	return fmt.Sprintf("read data.code_links.modules[].unlinked and .partial: add a dossierx-claim: or dossierx-step: tag in a source_dirs file (or dossierx claim link) for each named claim — every step of a stepped claim — or, if the claim produces no code, unlock → set build_role to orientation or out-of-scope → lock; %d claim(s) are not linked", res.CodeLinks.Incomplete())
+}
+
 func conformanceBlockingRecoveryHint(res check.Result) string {
 	return fmt.Sprintf("inspect data.conformance.results[].checks and refresh the project-owned observations until all %d blocking compare check(s) are matched", res.ConformanceBlockingChecks)
 }
@@ -1864,6 +1962,7 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	// is still refused. It prints nothing when the gate found nothing, which is
 	// why every passing project's output is unchanged.
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportCodeLinkGate(cmd, res)
 	reportProjectionError(cmd, res)
 	reportConformanceBlocking(cmd, res)
 	reportGitignoreCheck(cmd, res)

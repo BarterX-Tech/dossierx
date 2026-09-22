@@ -363,6 +363,7 @@
     "thread_resolved",
     "unknown_module",
     "unknown_track",
+    "unlinked_claims",
     "unresolved_comments",
     "unsafe_body",
     "unsupported_format",
@@ -528,23 +529,23 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:c6b4ffdea8e66344674f96d9c20d33ade0555c7b2da9327448327cfdfad904bf",
+  "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:2fdd176c9f0ed62d7d5049771cf5714576149cb345d2b920a94134848e25d685",
+    "cmd/dossierx": "sha256:279f7dc044c1984d7291f918ea34abffd8f786746c06a3002889b9370310c899",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/buildorder": "sha256:bf557239a85d4da9c7c40a4e0cdf2036eef0a0f104be3dfd14aa74506f64568f",
     "internal/catalog": "sha256:358d9aa06b14b14f5a9b52686cc328e005be4596e0fa89770ac32530f4629d31",
-    "internal/check": "sha256:6212c8747e7ab54875aa435063254be8f30ae993e513792496b6b97ed6577cce",
-    "internal/cliout": "sha256:891c91b3c31ab231e376afe3addffe9189ab9aa0942efd0977ebfe7fcbc714f9",
+    "internal/check": "sha256:bba5501642f44bd52ab9b22d63157787346ab35e3f54fd1e17d33e7c8f8bed2f",
+    "internal/cliout": "sha256:12f9b168ad540f03cae34ea07355d2e264a51f1f30d27e9a0bd713258f9fef7f",
     "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
     "internal/config": "sha256:3b6ed912d2fe5b4cd622e0d49af32c3705a5960cb907f06ddc13d1842a6a810c",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
     "internal/graph": "sha256:39c61c63e8099f25dfdb53217036a8aca7987edf49c5d7372594efb901353f63",
-    "internal/implink": "sha256:0b712a92ff26fa7e9cf90f2ed7e594c2460b0e8fbdf044d3ae69fc4aba76d677",
+    "internal/implink": "sha256:175f2fc71522b9dc3263b0063d5fe0d32b7eb00d92f405b0466d03764af71434",
     "internal/layout": "sha256:22b57470d1c8381dfee41e360c123d1633ae1c923bf8ec1f736fe9a00b6caeb3",
     "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
@@ -553,14 +554,14 @@
     "internal/readiness": "sha256:705cd7a1c00c60e1ffec82a557cd13389ce49ac4b76f9ff4a3927559e353b033",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:d06869c04c1ef0acb14bc08c153d2603145dc20fb4062736f81e7327c7e3de89",
-    "internal/render/components": "sha256:6e7bbdd0665e8449fb5fabee6a32ce648cd244759fe2a9ccca8313de5720e011",
+    "internal/render": "sha256:d28a6f3c444e00df2b334a09c48aada948a9dbc93249815a14d0ad7084c70950",
+    "internal/render/components": "sha256:9c263a323a8fdd66f5d5b3e9b52468bd229da8b1b480bcb6f9febb8e20a08a74",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:fcccefbd6cd2b8e4f3ee6984ba22bfc76c46ae5b2b43bc53d3ff098bb26d4fc3"
+    "skills": "sha256:a4c4bb8f629587d235f9c5b22877bde1cff88d9a8a080908f87818da0c10a71c"
   },
   "envelope": {
     "keys": [
@@ -614,6 +615,7 @@
       "thread_resolved": 1,
       "unknown_module": 1,
       "unknown_track": 1,
+      "unlinked_claims": 1,
       "unresolved_comments": 1,
       "unsafe_body": 1,
       "unsupported_format": 1,
@@ -687,6 +689,7 @@
         "catalog_count",
         "catalog_error",
         "catalog_path",
+        "code_links",
         "comment_digests_adopted",
         "conformance",
         "conformance_blocking_checks",
@@ -780,6 +783,11 @@
         "to",
         "would"
       ],
+      "codeLinksData": [
+        "gated",
+        "modules",
+        "scanned"
+      ],
       "commentInboxData": [
         "claims",
         "count",
@@ -828,6 +836,13 @@
         "lint_findings",
         "open_threads",
         "unlocked_dependency"
+      ],
+      "moduleCodeLinksData": [
+        "drifted",
+        "linked",
+        "module",
+        "partial",
+        "unlinked"
       ],
       "policyLockData": [
         "claim_id",
@@ -958,7 +973,7 @@
   ],
   "counts": {
     "commands": 25,
-    "error_codes": 50,
+    "error_codes": 51,
     "http_routes": 14,
     "lint_rules": 38,
     "nouns": 8

@@ -679,7 +679,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 50)
+    pinned by an invocation above (14 of 51)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -694,7 +694,7 @@ ERROR-CODE COVERAGE
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (36)
+    reachable only from states no fixture here builds (37)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
         bad_request
@@ -728,6 +728,7 @@ ERROR-CODE COVERAGE
         thread_open
         thread_resolved
         unknown_module
+        unlinked_claims
         unsafe_body
         untracked_config
         write_conflict

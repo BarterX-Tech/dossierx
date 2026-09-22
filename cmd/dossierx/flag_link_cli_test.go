@@ -268,10 +268,12 @@ func TestCLI_Check_ImplinkLine_ZeroCostWhenUnused(t *testing.T) {
 	}
 }
 
-// TestCLI_Check_ImplinkLine_PresentWhenUsed proves the fourth, non-blocking
-// step actually reports once a module has an implementation-link artifact,
-// and that it never affects check's own exit code even in the presence of
-// drift/unlinked claims.
+// TestCLI_Check_ImplinkLine_PresentWhenUsed proves the impl-link status
+// step reports once a module has an implementation-link artifact, and that
+// WITHOUT source_dirs it never affects check's own exit code even in the
+// presence of drift/unlinked claims: a project that has not said where its
+// code is has no code-link gate (see code_link_gate_cli_test.go for the
+// project that has).
 func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
@@ -307,7 +309,7 @@ func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 	if !strings.Contains(out, "check: OK") {
 		t.Fatalf("expected check: OK regardless of implink drift, got: %s", out)
 	}
-	if !strings.Contains(out, "impl-links: 1 linked, 1 drifted, 1 unlinked-in-schema/behavior/api/verification-phases") {
+	if !strings.Contains(out, "impl-links: 1 linked, 1 drifted, 0 partial, 1 unlinked-in-schema/behavior/api/verification-phases") {
 		t.Fatalf("expected an impl-links summary line reporting the drift and the unlinked claim, got: %s", out)
 	}
 	if !strings.Contains(out, "drifted: widget.contract.main widget.go") {
@@ -370,7 +372,7 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidTag(t *testing.T) {
 	if !strings.Contains(out, "check: OK") {
 		t.Fatalf("expected check: OK, got: %s", out)
 	}
-	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 unlinked-in-schema/behavior/api/verification-phases") {
+	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases") {
 		t.Fatalf("expected the status line to reflect the auto-reconciled link, got: %s", out)
 	}
 }
@@ -438,7 +440,7 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidStepTag(t *testing.T) {
 	if !strings.Contains(out, "impl-links: scanned 1 file(s), found 1 tag(s), reconciled 1 link(s) (0 error(s))") {
 		t.Fatalf("expected a scan summary line, got: %s", out)
 	}
-	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 unlinked-in-schema/behavior/api/verification-phases") {
+	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases") {
 		t.Fatalf("expected the status line to reflect the step link, got: %s", out)
 	}
 }

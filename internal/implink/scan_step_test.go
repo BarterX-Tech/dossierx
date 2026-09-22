@@ -234,3 +234,40 @@ func TestStatus_StepTagClearsUnlinked(t *testing.T) {
 		t.Fatalf("step tag should count as linked, got %+v", st)
 	}
 }
+
+// One tag on a two-step claim is NOT a linked claim. The fixture in
+// TestStatus_StepTagClearsUnlinked has a single step, so it could never tell
+// "any step tagged" from "every step tagged"; this one can, and it is the
+// shape issue #78 names as the false green: a claim that looks linked in the
+// unlinked count while most of its steps have no code behind them.
+func TestStatus_OneOfTwoStepTags_IsPartial(t *testing.T) {
+	cfg, srcDir := scanTestConfig(t, "widget")
+	claims := []model.Claim{lockedStepsClaim("widget.contract.main", "widget", []string{"alpha", "beta"})}
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+StepContentHash("alpha")+"\nfunc Foo() {}\n")
+	if _, err := Scan(claims, cfg); err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	st, err := Status(claims, cfg, "widget")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.UnlinkedCount != 0 || st.LinkedClaims != 1 {
+		t.Fatalf("one step tag still links the claim, got %+v", st)
+	}
+	if st.PartialCount != 1 || len(st.Partial) != 1 || st.Partial[0].Covered != 1 || st.Partial[0].Total != 2 || len(st.Partial[0].Missing) != 1 || st.Partial[0].Missing[0] != 2 {
+		t.Fatalf("expected partial 1 of 2 missing step 2, got %+v", st.Partial)
+	}
+
+	// Tagging the second step completes it: the same file, one more tag.
+	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+StepContentHash("alpha")+"\n// dossierx-step: widget.contract.main #2 "+StepContentHash("beta")+"\nfunc Foo() {}\n")
+	if _, err := Scan(claims, cfg); err != nil {
+		t.Fatalf("Scan (second): %v", err)
+	}
+	st, err = Status(claims, cfg, "widget")
+	if err != nil {
+		t.Fatalf("Status (second): %v", err)
+	}
+	if st.PartialCount != 0 || st.Incomplete() != 0 {
+		t.Fatalf("both steps tagged must be complete, got %+v", st)
+	}
+}

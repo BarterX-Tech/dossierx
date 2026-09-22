@@ -86,9 +86,17 @@ It takes `--dry-run`, needs no `--reason` (it records a fact, it does not change
 and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write the same generated
 `build/code-links/<module>.json` — never hand-edit it.
 
-`dossierx check` also reports, non-blocking, the drift count (a linked file changed since it was
-linked) and the unlinked count (locked `schema`/`behavior`/`api`/`verification` claims with zero
-linked files). `dossierx claim show <id>` gives the same thing for one claim, per file:
+**Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
+refuses (`unlinked_claims`, `stopped_at: links`) when any locked `schema`/`behavior`/`api`/
+`verification` claim has no linked file, or a claim with `steps:` is not tagged on every step — a
+`dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
+The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
+claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
+counts per module with `scanned` and `gated`; `--validate` and `--staged` fill it with both false
+and never refuse. Linked is not followed: the gate proves a pointer exists, never that the code still
+means what the claim says — that is the human's lock and the project's tests. It also reports the
+drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same
+thing for one claim, per file:
 
 ```json
 "implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]

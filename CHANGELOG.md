@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `dossierx check` now refuses when a project that sets `source_dirs` holds a
+  locked `schema`/`behavior`/`api`/`verification` claim with no code link, or a
+  claim with `steps:` whose `dossierx-step:` tags do not cover every step
+  (`unlinked_claims`, `stopped_at: links`, exit 1). The unlinked and partial
+  counts were computed before, but only after the run had already decided it
+  was OK, so a project with zero links exited 0 and the only trace was a
+  `next_steps` sentence. The gate sits after the ledger gate: the catalog and
+  viewer are regenerated first, and a refusal about where the code is never
+  hides one about whether the claim was approved. Projects without
+  `source_dirs` are unchanged.
+- A `dossierx-claim:` tag on a claim that carries `steps:` links the file but
+  attests no step; it now counts as 0 of N rather than clearing the claim.
+- The check envelope carries `data.code_links` (`scanned`, `gated`, and per
+  module `linked`, `drifted`, `partial[]` with the missing step indexes, and
+  `unlinked[]`) whenever the project uses code links. `check --validate` and
+  `--staged` fill it with `scanned: false, gated: false` and never refuse, so
+  a read-only green cannot pass for a linked one.
+- The viewer's claim card shows `not linked to code` on a locked code-producing
+  claim with no link and `steps linked: k of N` naming the missing steps, on
+  the same relationships row as `implemented in`, for projects with
+  `source_dirs` set.
+- The impl-links summary line gained a `partial` count.
+
 ## [0.7.19] - 2026-09-21
 
 ### Added

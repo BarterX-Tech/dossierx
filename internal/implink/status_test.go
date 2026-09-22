@@ -147,8 +147,8 @@ func TestStatus_UnlinkedCounting_DraftClaimsNeverCount(t *testing.T) {
 }
 
 func TestStatus_Summary_Format(t *testing.T) {
-	r := &StatusReport{LinkedClaims: 2, Drifted: []DriftEntry{{}}, UnlinkedCount: 3}
-	want := "impl-links: 2 linked, 1 drifted, 3 unlinked-in-schema/behavior/api/verification-phases"
+	r := &StatusReport{LinkedClaims: 2, Drifted: []DriftEntry{{}}, PartialCount: 1, UnlinkedCount: 3}
+	want := "impl-links: 2 linked, 1 drifted, 1 partial, 3 unlinked-in-schema/behavior/api/verification-phases"
 	if got := r.Summary(); got != want {
 		t.Fatalf("Summary() = %q, want %q", got, want)
 	}
@@ -203,5 +203,101 @@ func TestViewsByClaim_MarksDriftedFilePerEntry(t *testing.T) {
 	}
 	if byFile[fileA].Symbol != "FuncA" || byFile[fileB].Symbol != "FuncB" {
 		t.Fatalf("expected symbols preserved in view, got %+v", files)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Step coverage and Coverage (issue #78: one step tag must not clear a
+// whole claim, and a module with no artifact is a module of unlinked claims)
+// ---------------------------------------------------------------------
+
+func TestStepCoverage_CountsDistinctInRangeIndexes(t *testing.T) {
+	covered, missing := StepCoverage(3, []int{2, 2, 0, 7})
+	if covered != 1 || len(missing) != 2 || missing[0] != 1 || missing[1] != 3 {
+		t.Fatalf("StepCoverage(3, [2 2 0 7]) = %d, %v; want 1, [1 3]", covered, missing)
+	}
+	if covered, missing := StepCoverage(0, []int{1}); covered != 0 || missing != nil {
+		t.Fatalf("a claim with no steps must be trivially covered, got %d, %v", covered, missing)
+	}
+	if covered, missing := StepCoverage(2, []int{1, 2}); covered != 2 || missing != nil {
+		t.Fatalf("full coverage must report nothing missing, got %d, %v", covered, missing)
+	}
+}
+
+func TestStatus_ClaimTagOnSteppedClaim_IsPartialZeroOfN(t *testing.T) {
+	cfg := testConfig(t, "widget")
+	c := lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)
+	c.Steps = []string{"alpha", "beta"}
+	c.Layout = model.LayoutSteps
+	claims := []model.Claim{c}
+	file := writeSourceFile(t, cfg, "a.go", "package widget")
+	// A whole-claim link (claim link / dossierx-claim) grounds the file for
+	// drift but attests no step: the claim is linked, and 0 of 2 covered.
+	if _, err := Set(claims, cfg, "widget", c.ID, file, ""); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	report, err := Status(claims, cfg, "widget")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if report.UnlinkedCount != 0 || report.LinkedClaims != 1 {
+		t.Fatalf("a claim-tagged stepped claim is linked, not unlinked: %+v", report)
+	}
+	if report.PartialCount != 1 || len(report.Partial) != 1 {
+		t.Fatalf("expected exactly one partial entry, got %+v", report.Partial)
+	}
+	p := report.Partial[0]
+	if p.ClaimID != c.ID || p.Covered != 0 || p.Total != 2 || len(p.Missing) != 2 {
+		t.Fatalf("expected 0 of 2 with steps 1 and 2 missing, got %+v", p)
+	}
+	if report.Incomplete() != 1 {
+		t.Fatalf("Incomplete() must count the partial claim, got %d", report.Incomplete())
+	}
+}
+
+func TestCoverage_NoArtifact_ListsEveryExpectedClaimAsUnlinked(t *testing.T) {
+	cfg := testConfig(t, "widget")
+	claims := []model.Claim{
+		lockedClaim("widget.contract.a", "widget", model.BuildRoleBehavior),
+		lockedClaim("widget.contract.b", "widget", model.BuildRoleAPI),
+		lockedClaim("widget.contract.ctx", "widget", model.BuildRoleOrientation),
+	}
+	draft := lockedClaim("widget.contract.d", "widget", model.BuildRoleSchema)
+	draft.Status = model.StatusDraft
+	claims = append(claims, draft)
+
+	// Status keeps its silent-when-unused contract...
+	if _, err := Status(claims, cfg, "widget"); !errors.Is(err, ErrNoArtifact) {
+		t.Fatalf("Status on a module with no artifact must still wrap ErrNoArtifact, got %v", err)
+	}
+	// ...and Coverage evaluates the empty artifact instead.
+	report, err := Coverage(claims, cfg, "widget")
+	if err != nil {
+		t.Fatalf("Coverage: %v", err)
+	}
+	if report.LinkedClaims != 0 || report.PartialCount != 0 {
+		t.Fatalf("an empty artifact links nothing: %+v", report)
+	}
+	if report.UnlinkedCount != 2 || len(report.UnlinkedIDs) != 2 || report.UnlinkedIDs[0] != "widget.contract.a" || report.UnlinkedIDs[1] != "widget.contract.b" {
+		t.Fatalf("expected the two locked code-producing claims, sorted, as unlinked; orientation and draft excluded: %+v", report.UnlinkedIDs)
+	}
+}
+
+func TestExpects_LockedCodeProducingOnly(t *testing.T) {
+	c := lockedClaim("widget.contract.a", "widget", model.BuildRoleVerification)
+	if !Expects(c) {
+		t.Fatal("a locked verification claim is expected to be linked")
+	}
+	c.BuildRole = model.BuildRoleOutOfScope
+	if Expects(c) {
+		t.Fatal("an out-of-scope claim is never expected to be linked")
+	}
+	c.BuildRole = model.BuildRoleBehavior
+	c.Status = model.StatusDraft
+	if Expects(c) {
+		t.Fatal("a draft claim is never expected to be linked")
+	}
+	if !CodeProducing(model.BuildRoleSchema) || CodeProducing(model.BuildRoleOrientation) {
+		t.Fatal("CodeProducing must expose the same four-role set Status counts")
 	}
 }
