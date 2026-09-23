@@ -534,11 +534,6 @@ func holdsGateEvidence(in ledgerInputs) bool {
 	if in.digests != nil && in.digests.FileExists() {
 		return true
 	}
-	for _, o := range in.buildOrders {
-		if o.Present || o.Unreadable {
-			return true
-		}
-	}
 	return false
 }
 
@@ -838,14 +833,6 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	} else {
 		in.flags = flags
 	}
-
-	// The build-order artifacts come from the index for the same reason the
-	// ledger does. A locked build order read from the WORKTREE and compared
-	// against an INDEX ledger record would refuse commits over edits that are
-	// not being committed, and — the direction that matters — would pass a
-	// commit that stages a tampered artifact while the worktree copy still
-	// matches its record.
-	in.buildOrders = nil
 
 	return in, nil
 }

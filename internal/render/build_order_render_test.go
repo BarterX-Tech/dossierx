@@ -166,13 +166,6 @@ func TestRender_BuildOrderTab_PresentWhenLockedArtifactExists(t *testing.T) {
 	assertAbsent(t, out, legacyMarkers, "locked leftover artifact")
 }
 
-
-// template_HTMLEscape is what html/template does to the definition text in
-// a text node, applied here so the assertion compares rendered bytes.
-func template_HTMLEscape(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&#34;", "'", "&#39;").Replace(s)
-}
-
 func TestRender_BuildOrderTab_OtherModuleUnaffected(t *testing.T) {
 	// A project with two modules: only one has a locked build-order
 	// artifact. The other module's rendered output must be completely

@@ -26,16 +26,8 @@
 package check
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"path"
-	"sort"
-	"strings"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -280,215 +272,6 @@ const (
 	RuleBuildOrderUnreadable = "build-order-unreadable"
 )
 
-// buildOrderState is one module's build-order artifact as the gate's evidence
-// source found it: which module, where a human can open it, whether an artifact
-// is there at all, whether it says it is locked, and the signature of the bytes
-// that are actually there.
-//
-// It is a value rather than a *buildorder.Artifact so the two evidence sources —
-// the working tree and the git index — can both produce it, which is what lets
-// --staged audit build orders on the same terms it audits claims. Reading the
-// artifact from the worktree while reading the ledger from the index would
-// resurrect, for build orders, exactly the hole staged.go exists to close.
-//
-// It records the ABSENT and UNREADABLE cases instead of dropping them, which the
-// forward rules never needed and the reverse sweep cannot work without: the
-// sweep's whole question is "the ledger says this module has an approved build
-// order — is it still there?", and a collection that silently omitted the
-// missing ones could only ever answer yes.
-type buildOrderState struct {
-	Module string
-	Path   string
-	Hash   string
-
-	// LockedHash is the signature this artifact WOULD have if its own `locked`
-	// flag said true, with every other byte left exactly as found. For a locked
-	// artifact it is identical to Hash; for an unlocked one it is what makes
-	// "somebody flipped one boolean" separable from "somebody re-proposed",
-	// which is the whole of RuleBuildOrderLedgerOrphan.
-	LockedHash string
-
-	// Present is true when an artifact file was found and decoded.
-	Present bool
-	// Locked is the artifact's own locked flag (meaningful only when Present).
-	Locked bool
-	// Unreadable is true when a file IS there but could not be read, decoded or
-	// hashed. Distinct from !Present on purpose: absence is evidence about the
-	// ledger, a corrupt file is not (see collectBuildOrderStates) — so it stays
-	// out of the reverse sweep and is reported by its own rule,
-	// RuleBuildOrderUnreadable, in the forward loop. It used to be audited by
-	// NOTHING, on the strength of a doc comment deferring it to a reporter that
-	// was never built, which made corrupting an approved implementation sequence
-	// quieter than deleting it.
-	Unreadable bool
-
-	// Err is the decode/hash failure behind Unreadable, kept so the finding can
-	// name the actual error rather than "something went wrong" — the same reason
-	// ledgerInputs keeps storeErr/digestErr.
-	Err error
-}
-
-// collectBuildOrderStates reduces every module's artifact, as read by the
-// caller's `load` function, to a buildOrderState.
-//
-// Only LOCKED artifacts are audited by the forward rules. An unlocked (merely
-// proposed) artifact is a working document that "build-order propose" overwrites
-// freely and that nobody has approved, so it has no record to disagree with and
-// demanding one would refuse every commit between propose and lock.
-//
-// An artifact that cannot be read or hashed is marked Unreadable and audited by
-// nothing. "Not proposed" is the normal state of most modules, and an unreadable
-// artifact is not evidence about the LEDGER — check's own build-order reporting
-// is where a corrupt artifact belongs. Crucially it is not evidence of DELETION
-// either, so it must not reach the reverse sweep.
-func collectBuildOrderStates(cfg *config.Config, load func(module string) (*buildorder.Artifact, error)) []buildOrderState {
-	if cfg == nil {
-		return nil
-	}
-	var states []buildOrderState
-	for _, module := range cfg.Modules {
-		state := buildOrderState{Module: module, Path: buildorder.ArtifactPath(cfg, module)}
-
-		artifact, err := load(module)
-		switch {
-		case errors.Is(err, buildorder.ErrNotProposed) || (err == nil && artifact == nil):
-			// No artifact: the ordinary state of most modules, and the state the
-			// reverse sweep is looking for when a record still stands.
-		case err != nil:
-			state.Unreadable = true
-			state.Err = err
-		default:
-			hash, hashErr := buildOrderSignature(artifact)
-			if hashErr != nil {
-				state.Unreadable = true
-				state.Err = hashErr
-				break
-			}
-			// The as-if-locked signature is computed from a COPY: the gate is
-			// read-only, and mutating the decoded artifact would leak into
-			// whatever else the caller does with it.
-			relocked := *artifact
-			relocked.Locked = true
-			lockedHash, lockedErr := buildOrderSignature(&relocked)
-			if lockedErr != nil {
-				state.Unreadable = true
-				state.Err = lockedErr
-				break
-			}
-			state.Present = true
-			state.Locked = artifact.Locked
-			state.Hash = hash
-			state.LockedHash = lockedHash
-		}
-		states = append(states, state)
-	}
-	return states
-}
-
-// buildOrderGate evaluates the build-order ledger rules over the artifacts the
-// caller collected.
-//
-// A nil store means the ledger could not be read at all, which
-// RuleLedgerUnreadable has already reported; adding "and every build order is
-// unapproved" on top would be noise attributing one cause to many symptoms.
-//
-// It takes the whole ledgerInputs rather than the store alone because the
-// pre-ledger exemption needs the SAME evidence lock.Audit needs: whether this
-// project has ever been through a ledger-aware build (see
-// lock.Store.PreLedgerUnadopted). A build order locked by a v0.2.x build has no
-// record either, and reporting it as build-order-ledger-missing — telling the
-// human to re-propose and re-lock an order they never touched — was the same
-// false accusation the claim half used to make.
-func buildOrderGate(in ledgerInputs) []lock.Finding {
-	// NIT-15: leftover artifacts and SubjectBuildOrder rows are not a gate.
-	// Rule name constants stay so FORMAT.md's table still names them; the
-	// function is kept as the documented no-op so a later caller cannot
-	// accidentally re-arm the old findings.
-	_ = in
-	return nil
-}
-
-// abandonedBuildOrders is the reverse sweep: the LEDGER's own build-order
-// records, checked against the artifacts that are actually there.
-//
-// Every rule in buildOrderGate's forward loop starts from a file on disk, so the
-// gate's entire evidence set was chosen by two properties of the audited file
-// itself — that it exists, and that its own `locked` flag says true. Deleting
-// the artifact removed it from the evidence set altogether and the standing
-// record was never consulted again: `rm .build-order.widget.json` produced a
-// completely silent gate over an approved implementation sequence. This walks
-// the other way, exactly as lock.Audit's lock-ledger-abandoned sweep does for
-// claims.
-//
-// It is skipped when the store file is absent, on the same terms lock.Audit
-// skips its sweep: an absent ledger is already reported once as
-// lock-ledger-absent, and an in-memory store assembled by a caller must not have
-// every module it did not know about reported as deleted.
-//
-// It deliberately does NOT fire on an artifact that is PRESENT but unlocked —
-// that is the forward loop's business, not a deletion. The forward loop reports
-// it as RuleBuildOrderLedgerOrphan whenever the record still STANDS, which it no
-// longer does after an honest re-propose: "build-order propose" releases the
-// module's record as it overwrites the artifact. So the window between a
-// re-propose and the lock that follows it stays silent here and there, without
-// either rule having to guess which unlocked artifact is honest.
-func abandonedBuildOrders(orders []buildOrderState, store *lock.Store) []lock.Finding {
-	if store == nil || !store.FileExists() {
-		return nil
-	}
-
-	byModule := make(map[string]buildOrderState, len(orders))
-	for _, o := range orders {
-		byModule[o.Module] = o
-	}
-
-	// The key prefix is taken from the key builder itself rather than spelled
-	// out again, so the two cannot drift apart.
-	prefix := lock.BuildOrderLedgerKey("")
-
-	var findings []lock.Finding
-	for key, record := range store.Ledger {
-		if record.Subject != lock.SubjectBuildOrder || record.Released() {
-			continue
-		}
-		module := strings.TrimPrefix(key, prefix)
-		// A present artifact — locked or not — is the forward loop's business.
-		// An unreadable one is not evidence of deletion (see buildOrderState).
-		if state, known := byModule[module]; known && (state.Present || state.Unreadable) {
-			continue
-		}
-		findings = append(findings, lock.Finding{
-			Rule: RuleBuildOrderLedgerAbandoned,
-			Message: fmt.Sprintf(
-				"module %q has a standing build-order lock-ledger record from %s (%q), but no build-order artifact can be found for it: the file was deleted, or the module was removed from project.config.yaml's modules list so nothing audits it any more. A locked build order is the implementation sequence an agent follows — restore %s from version control, or re-propose and lock it with the human's approval.",
-				module, record.At, record.Reason, buildOrderDisplayPath(module)),
-		})
-	}
-	// Map iteration is random; the gate's output is diffed between a hook run
-	// and a CI log, so it has to be deterministic.
-	sort.SliceStable(findings, func(i, j int) bool { return findings[i].Message < findings[j].Message })
-	return findings
-}
-
-// buildOrderSignature hashes a build-order artifact exactly as
-// cmd/dossierx.recordBuildOrderApproval does when it writes the record: sha256
-// over encoding/json's canonical marshalling of the whole artifact.
-//
-// The two must agree byte-for-byte or the gate reports drift on artifacts nobody
-// touched, so TestBuildOrderSignatureMatchesTheWriter pins them against each
-// other. json.Marshal is deterministic for this type — struct fields in
-// declaration order, and the one map (Hashes) is emitted with sorted keys by
-// encoding/json's own contract — which is what makes hashing the marshalled form
-// safe rather than merely convenient.
-func buildOrderSignature(a *buildorder.Artifact) (string, error) {
-	raw, err := json.Marshal(a)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:]), nil
-}
-
 // ledgerInputs is the read-only state the gate is evaluated against: the lock
 // ledger, the comment digests, and whichever of the two failed to load.
 //
@@ -510,14 +293,6 @@ type ledgerInputs struct {
 	// empty store, which reports every claim as unknown rather than drifted.
 	digests *digest.Store
 	flags   *reaudit.FlagStore
-
-	// buildOrders is every module's build-order artifact, reduced to the state
-	// the gate needs — including the modules whose artifact is absent, which is
-	// what the reverse sweep reads. It comes from the same
-	// evidence source as the two stores above — the working tree on the plain
-	// path, the git index under --staged — so a build order can no more be
-	// audited against the wrong copy than a claim can.
-	buildOrders []buildOrderState
 
 	// storeErr / digestErr are the load failures behind a nil above, kept so
 	// the finding can name the actual decode error rather than "something went
@@ -575,8 +350,6 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 		in.flags = flags
 	}
 
-	in.buildOrders = nil
-
 	return in
 }
 
@@ -624,48 +397,6 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	// unreadable sequences, and do not treat a locked leftover order as
 	// the pre-ledger "still holds locked artifacts" half.
 	return findings
-}
-
-// preLedgerBuildOrdersOnly emits the HALF of RuleLockLedgerPreLedger that
-// lock.Audit structurally cannot: a pre-ledger project holding a locked BUILD
-// ORDER and ZERO locked claims.
-//
-// lock.Audit takes claims and two stores, and it cannot take build orders —
-// internal/buildorder imports internal/lock, so lock can never read an artifact
-// back (the same constraint this file's build-order rules exist for). This
-// package is the one place that holds both inputs, which is why the union is
-// split here rather than by widening lock.Audit.
-//
-// THE STATE IT CLOSES IS REACHABLE, and it was silent before. `claim unlock`
-// never touches the build-order artifact and internal/buildorder never clears
-// Locked on unlock, so locking a module, locking its order and then unlocking
-// every claim leaves a locked order with no locked claims. In that state
-// lock.Audit's claims-only term is zero and buildOrderGate suppresses
-// build-order-ledger-missing under the pre-ledger exemption — while BOTH write
-// paths refuse with pre_ledger_unadopted. A refusal with no finding naming it
-// and no recovery text reachable from `check` is exactly what
-// RuleLockLedgerPreLedger exists to prevent, one artifact type over.
-//
-// The two terms are mutually exclusive by construction (this one requires zero
-// locked claims, lock.Audit's requires at least one), so the finding appears
-// exactly once in every state — never twice, and never once per module.
-func preLedgerBuildOrdersOnly(claims []model.Claim, in ledgerInputs) []lock.Finding {
-	if in.store == nil || !in.store.PreLedgerUnadopted(in.digests != nil && in.digests.FileExists()) {
-		return nil
-	}
-	if countLockedClaims(claims) > 0 {
-		return nil // lock.Audit's half owns this state
-	}
-	locked := 0
-	for _, o := range in.buildOrders {
-		if o.Present && o.Locked {
-			locked++
-		}
-	}
-	if locked == 0 {
-		return nil
-	}
-	return []lock.Finding{lock.PreLedgerFinding(in.store, 0, locked)}
 }
 
 // countLockedClaims is lock.Audit's own countLocked, which is unexported there.
@@ -776,11 +507,4 @@ func commentDigestAbsent(claims []model.Claim, in ledgerInputs) (lock.Finding, b
 			"this project has a lock ledger but no comment digest store (%s), so comment-thread drift is not being checked AT ALL on this run — for any of its %d claim(s). The engine writes that file the moment a project acquires a lock ledger, so its absence means it was deleted (which is how an edited-away review thread stops being reported, and it stays quiet even when the last thread went with it) or it is not part of this commit. Restore it from version control, or git add it if this commit is the one that created it. Do not re-create it by running a comment op: a re-created store records whatever the claims say NOW as the truth, which is exactly what a deletion was for.",
 			config.CommentDigestDisplayPath, len(claims)),
 	}, true
-}
-
-// buildOrderDisplayPath is a module's build-order artifact as a reader sees it
-// from the project directory with the default build_dir — a display form for
-// messages, not a path to open (see config.LockStoreDisplayPath).
-func buildOrderDisplayPath(module string) string {
-	return path.Join(config.DefaultBuildDir, config.BuildOrderDirName, module+".json")
 }

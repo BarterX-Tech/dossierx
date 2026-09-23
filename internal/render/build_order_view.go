@@ -35,17 +35,14 @@ package render
 //     is a defect in this package's own template, not in a project's file.
 
 import (
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"strings"
 	"time"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
-	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
 
 // legacyBuildOrderOverrideName is the file name build_order.html was
@@ -72,254 +69,14 @@ type BuildOrderModule struct {
 	HTML template.HTML
 }
 
-// buildOrderPhaseData is one .bo-phase block as build-order.html sees it.
-type buildOrderPhaseData struct {
-	ModuleID   string
-	Module     string
-	Name       string
-	Number     int
-	NumLabel   string
-	Definition string
-	Count      int
-	Levels     int
-	Locked     int
-	Counts     string
-	Mermaid    string
-	Cross      []buildOrderCross
-	Excluded   []string // the excluded block's ids
-	IsExcluded bool
-	// ExcludedDeps are the block's rests_on targets that are excluded claims.
-	ExcludedDeps []string
-}
-
-type buildOrderCross struct {
-	Module string
-	IDs    []string
-}
-
-type buildOrderModuleData struct {
-	ID                     string
-	Module                 string
-	Label                  string
-	HasMissingCatalogClaim bool
-	Phases                 []buildOrderPhaseData
-}
-
-// ---- the JSON payload ----
-
-type buildOrderPayload struct {
-	GeneratedAt string                    `json:"generated_at"`
-	Phases      []buildOrderPayloadPhase  `json:"phases"`
-	Modules     []buildOrderPayloadModule `json:"modules"`
-}
-
-type buildOrderPayloadPhase struct {
-	ID         string `json:"id"`
-	Number     int    `json:"number"`
-	Name       string `json:"name"`
-	Definition string `json:"definition"`
-}
-
-type buildOrderPayloadModule struct {
-	ID         string                            `json:"id"`
-	Module     string                            `json:"module"`
-	Label      string                            `json:"label"`
-	LockedAt   string                            `json:"locked_at"`
-	Stale      bool                              `json:"stale"`
-	Artifact   *buildorder.Artifact              `json:"artifact"`
-	Claims     map[string]buildOrderPayloadClaim `json:"claims"`
-	PhaseViews []buildOrderPayloadView           `json:"phase_views"`
-	NodeIDs    map[string]string                 `json:"node_ids"`
-}
-
-// buildOrderPayloadClaim is the per-claim presentation fact the artifact
-// does not carry, for every claim of the module's artifact that the catalog
-// STILL holds. A claim gone from the catalog has no entry, which is what the
-// client's click handler reads as "no longer in the catalog".
-type buildOrderPayloadClaim struct {
-	Facet  string `json:"facet"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-	Phase  string `json:"phase"`
-	Level  int    `json:"level"`
-}
-
-type buildOrderPayloadView struct {
-	Phase        string              `json:"phase"`
-	Number       int                 `json:"number"`
-	Definition   string              `json:"definition"`
-	Claims       []string            `json:"claims"`
-	Levels       [][]string          `json:"levels"`
-	Ghosts       []buildorder.Ghost  `json:"ghosts"`
-	CrossModule  map[string][]string `json:"cross_module"`
-	ExcludedDeps []string            `json:"excluded_deps"`
-	Locked       int                 `json:"locked"`
-}
-
-// buildOrderViewClaims gives Views the standalone claim facts a locked
-// artifact still carries when a claim file has since been deleted. The
-// synthetic entries are intentionally presentation-only: buildOrderTabData's
-// byID map remains the current catalog, so the payload has no fabricated claim
-// card to navigate to and the client can show its honest missing-catalog path.
-func buildOrderViewClaims(artifact *buildorder.Artifact, claims []model.Claim) []model.Claim {
-	if artifact == nil {
-		return claims
-	}
-	viewClaims := append([]model.Claim(nil), claims...)
-	known := make(map[string]bool, len(claims))
-	for _, c := range claims {
-		known[c.ID] = true
-	}
-	add := func(id string, restsOn []string) {
-		if id == "" || known[id] {
-			return
-		}
-		viewClaims = append(viewClaims, model.Claim{
-			ID:      id,
-			Module:  artifact.Module,
-			RestsOn: append([]string(nil), restsOn...),
-			Status:  model.StatusDraft,
-		})
-		known[id] = true
-	}
-	for _, phase := range artifact.Phases {
-		for _, claim := range phase.Claims {
-			add(claim.ID, claim.RestsOn)
-		}
-	}
-	for _, id := range artifact.Excluded {
-		add(id, nil)
-	}
-	return viewClaims
-}
-
-// buildOrderTabData loads every module's artifact, keeps the locked ones,
-// computes their PhaseViews, executes tmpl per module and marshals the
-// payload. Modules are visited in cfg.Modules order (a claim's module that
-// the config does not declare has no artifact path of its own and is not
-// visited). A nil cfg is a project with no modules: an empty tab.
+// buildOrderTabData used to load locked artifacts into the viewer tab.
+// The tab is gone: leftover artifacts are not a viewer obligation.
 func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.Template, generatedAt time.Time) (BuildOrderTab, template.JS, error) {
 	return buildOrderTabDataWithBudget(cat, cfg, tmpl, generatedAt, nil)
 }
 
-func buildOrderTabDataWithBudget(cat *catalog.Catalog, cfg *config.Config, tmpl *template.Template, generatedAt time.Time, budget *renderByteBudget) (BuildOrderTab, template.JS, error) {
-	// The Build order tab is gone: leftover artifacts are not a viewer
-	// obligation and must not appear as a product surface.
+func buildOrderTabDataWithBudget(_ *catalog.Catalog, _ *config.Config, _ *template.Template, _ time.Time, _ *renderByteBudget) (BuildOrderTab, template.JS, error) {
 	return BuildOrderTab{}, "", nil
-	var tab BuildOrderTab
-	if cfg == nil || tmpl == nil {
-		return tab, "", nil
-	}
-	if cat == nil {
-		cat = &catalog.Catalog{}
-	}
-
-	payload := buildOrderPayload{GeneratedAt: generatedAt.UTC().Format(time.RFC3339)}
-	for _, phase := range buildorder.Phases {
-		payload.Phases = append(payload.Phases, buildOrderPayloadPhase{
-			ID: string(phase), Number: buildorder.PhaseNumber(phase), Name: string(phase), Definition: buildorder.PhaseDefinition(phase),
-		})
-	}
-	payload.Phases = append(payload.Phases, buildOrderPayloadPhase{
-		ID: string(model.BuildRoleOutOfScope), Number: 0, Name: buildorder.ExcludedPhaseName, Definition: buildorder.PhaseDefinition(model.BuildRoleOutOfScope),
-	})
-	payload.Modules = []buildOrderPayloadModule{}
-
-	byID := make(map[string]model.Claim, len(cat.Claims))
-	for _, c := range cat.Claims {
-		byID[c.ID] = c
-	}
-
-	for _, module := range cfg.Modules {
-		artifact, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module))
-		if err != nil || !artifact.Locked {
-			continue // the skip half of the policy above
-		}
-		views, nodeIDs, err := buildorder.Views(artifact, buildOrderViewClaims(artifact, cat.Claims))
-		if err != nil {
-			continue // the skip half of the policy above; BuildOrderWarnings names it
-		}
-
-		id := slugify(module)
-		label := components.DisplayCase(module)
-		hasMissingCatalogClaim := false
-		for _, claimID := range artifact.ClaimIDs() {
-			if _, ok := byID[claimID]; !ok {
-				hasMissingCatalogClaim = true
-				break
-			}
-		}
-		data := buildOrderModuleData{ID: id, Module: module, Label: label, HasMissingCatalogClaim: hasMissingCatalogClaim}
-		pm := buildOrderPayloadModule{
-			ID: id, Module: module, Label: label, LockedAt: artifact.LockedAt, Stale: artifact.Stale,
-			Artifact: artifact, Claims: map[string]buildOrderPayloadClaim{}, PhaseViews: []buildOrderPayloadView{}, NodeIDs: nodeIDs,
-		}
-		for _, v := range views {
-			pd := buildOrderPhaseData{
-				ModuleID: id, Module: module, Name: v.Name, Number: v.Number, Definition: v.Definition,
-				Count: v.Count(), Levels: len(v.Levels), Locked: v.Locked, Counts: v.Counts(),
-				ExcludedDeps: v.ExcludedDeps, IsExcluded: v.Number == 0,
-			}
-			if pd.IsExcluded {
-				pd.NumLabel = buildorder.ExcludedPhaseName
-				for _, c := range v.Claims {
-					pd.Excluded = append(pd.Excluded, c.ID)
-				}
-			} else {
-				pd.NumLabel = fmt.Sprintf("phase %d of %d", v.Number, len(buildorder.Phases))
-				pd.Mermaid = buildorder.Mermaid(v, buildorder.MermaidOptions{Palette: buildorder.PaletteCSS})
-			}
-			for _, m := range v.CrossModuleNames() {
-				pd.Cross = append(pd.Cross, buildOrderCross{Module: m, IDs: v.CrossModule[m]})
-			}
-			data.Phases = append(data.Phases, pd)
-
-			pv := buildOrderPayloadView{
-				Phase: v.Name, Number: v.Number, Definition: v.Definition, Claims: []string{},
-				Levels: v.Levels, Ghosts: v.Ghosts, CrossModule: v.CrossModule, ExcludedDeps: v.ExcludedDeps, Locked: v.Locked,
-			}
-			levelOf := map[string]int{}
-			for i, level := range v.Levels {
-				for _, cid := range level {
-					levelOf[cid] = i
-				}
-			}
-			for _, c := range v.Claims {
-				pv.Claims = append(pv.Claims, c.ID)
-				cc, ok := byID[c.ID]
-				if !ok {
-					continue
-				}
-				pm.Claims[c.ID] = buildOrderPayloadClaim{
-					Facet: cc.Facet, Label: components.ClaimLabel(c.ID), Status: string(cc.Status), Phase: v.Name, Level: levelOf[c.ID],
-				}
-			}
-			pm.PhaseViews = append(pm.PhaseViews, pv)
-		}
-
-		buf := budgetBuffer{budget: budget}
-		if err := tmpl.Execute(&buf, data); err != nil {
-			return BuildOrderTab{}, "", fmt.Errorf("render: execute %s for module %q: %w", buildOrderFileName, module, err)
-		}
-		tab.Modules = append(tab.Modules, BuildOrderModule{ID: id, Module: module, Label: label, HTML: template.HTML(buf.String())})
-		payload.Modules = append(payload.Modules, pm)
-	}
-	if len(tab.Modules) == 0 {
-		return BuildOrderTab{}, "", nil
-	}
-	tab.FirstModuleID = tab.Modules[0].ID
-
-	// encoding/json's DEFAULT HTML escaping is the whole guard between an
-	// author-authored id and a </script> breakout in the JSON block; the
-	// bytes reach template.JS verbatim (see shellData.GraphPayload).
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return BuildOrderTab{}, "", fmt.Errorf("render: encode build-order payload: %w", err)
-	}
-	if err := budget.consume(len(b)); err != nil {
-		return BuildOrderTab{}, "", fmt.Errorf("render: build-order payload: %w", err)
-	}
-	return tab, template.JS(b), nil
 }
 
 // buildOrderSectionID is the id of the tab's own section, and the prefix

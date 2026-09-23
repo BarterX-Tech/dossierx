@@ -253,17 +253,6 @@ type BuildOrderReport struct {
 	StaleIDs []string `json:"stale_ids,omitempty"`
 }
 
-// buildOrderReports returns one BuildOrderReport per module in cfg.Modules that
-// HAS an artifact, in cfg.Modules order. A module with no artifact is omitted
-// entirely (that is the ordinary state of most modules, and nextSteps already
-// has its own hint for a fully-locked module that has never proposed one), and a
-// module whose artifact cannot be read is omitted too — the ledger gate reports
-// that as build-order-unreadable, and a report that guessed at its contents
-// would be worse than one that says nothing.
-func buildOrderReports(_ *config.Config, _ []model.Claim) []BuildOrderReport {
-	return nil
-}
-
 // Run executes the check pipeline against claims (already loaded and
 // review_pending-reconciled by the caller) and cfg, returning a fully
 // populated Result and the first step's error (nil on success). The error is

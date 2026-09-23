@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -526,21 +525,4 @@ func TestReloadZeroToOneLockedOrderReloadsForTheRenderer(t *testing.T) {
 	if evalBool(t, ctx, `!!document.getElementById('dossierx-build-order')`) {
 		t.Fatal("a fragment swap must not create a Build order tab")
 	}
-}
-
-// pollTrueAcrossNavigation is pollTrue for a condition that becomes true on
-// the OTHER side of a full page reload: chromedp.Poll aborts with "Inspected
-// target navigated" when the document it is polling goes away, so this one
-// re-evaluates until the deadline, treating an evaluation error as "not yet".
-func pollTrueAcrossNavigation(t *testing.T, ctx context.Context, expr string) {
-	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		var ok bool
-		if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &ok)); err == nil && ok {
-			return
-		}
-		time.Sleep(40 * time.Millisecond)
-	}
-	t.Fatalf("condition never became true within timeout (across a navigation):\n  %s", expr)
 }

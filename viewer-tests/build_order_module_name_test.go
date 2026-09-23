@@ -31,10 +31,6 @@ modules:
 claims_dir: claims
 `
 
-// gammaSVGs is the number of non-empty phases in gamma's order: schema (1
-// claim) and behavior (1).
-const gammaSVGs = 2
-
 // newCollidingProject writes the build-order module (one draft orientation
 // claim, never ordered) and gamma (two locked claims across two phases),
 // and locks gamma's order through the CLI when lockGamma is set.
@@ -85,12 +81,11 @@ func TestBuildOrderTabSurvivesAModuleNamedBuildOrder(t *testing.T) {
 // after it, and with an order the diagrams come back rendered.
 func TestReloadSwapsInPlaceWithAModuleNamedBuildOrder(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		lockGamma   bool
-		wantSection bool
+		name      string
+		lockGamma bool
 	}{
-		{"locked order", true, true},
-		{"no order", false, false},
+		{"locked order", true},
+		{"no order", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newCollidingProject(t, tc.lockGamma)

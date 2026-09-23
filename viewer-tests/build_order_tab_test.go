@@ -107,13 +107,6 @@ func newBuildOrderProjectFrom(t *testing.T, config string, extra []extraClaim) *
 	return p
 }
 
-// widgetSVGs is the number of non-empty phases in widget's order: schema (1
-// claim), behavior (2), api (1). gadgetSVGs: orientation only.
-const (
-	widgetSVGs = 3
-	gadgetSVGs = 1
-)
-
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------
@@ -182,47 +175,6 @@ func assertNoPageErrors(t *testing.T, ctx context.Context, pe *pageErrors) {
 	}
 }
 
-// openBuildOrderTab clicks the sidebar's Build order entry and waits for the
-// section to be the visible one.
-func openBuildOrderTab(t *testing.T, ctx context.Context) {
-	t.Helper()
-	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#dossierx-build-order"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, `!!document.getElementById('dossierx-build-order') && !document.getElementById('dossierx-build-order').hidden`)
-}
-
-func svgCountExpr(moduleID string) string {
-	return `document.querySelectorAll('#dossierx-build-order-` + moduleID + ` .bo-phase svg').length`
-}
-
-func waitDiagrams(t *testing.T, ctx context.Context, moduleID string, n int) {
-	t.Helper()
-	pollTrue(t, ctx, fmt.Sprintf(`%s === %d && document.querySelectorAll('#dossierx-build-order-%s .bo-diagram pre.mermaid:not([data-processed])').length === 0`, svgCountExpr(moduleID), n, moduleID))
-}
-
-func assertBuildOrderLiveDocument(t *testing.T, ctx context.Context) {
-	t.Helper()
-	var state struct {
-		Ready, Mermaid, Payload, Section, Visible bool
-	}
-	evalInto(t, ctx, `(function(){var s=document.getElementById('dossierx-build-order');return {Ready:document.readyState==='complete',Mermaid:typeof window.mermaid==='object',Payload:!!document.getElementById('dossierx-build-orders'),Section:!!s,Visible:!!s&&!s.hidden};})()`, &state)
-	if !state.Ready || !state.Mermaid || !state.Payload || !state.Section || !state.Visible {
-		t.Fatalf("live Build order state after document-ready = %+v", state)
-	}
-}
-
-func assertMissingCatalogPresentation(t *testing.T, ctx context.Context) {
-	t.Helper()
-	var state struct {
-		Text   string
-		Before bool
-		SVGs   int
-	}
-	evalInto(t, ctx, `(function(){var m=document.querySelector('#dossierx-build-order-widget .bo-missing-claim'),p=document.querySelector('#dossierx-build-order-widget .bo-phase');return {Text:m?m.textContent:'',Before:!!m&&!!p&&!!(m.compareDocumentPosition(p)&Node.DOCUMENT_POSITION_FOLLOWING),SVGs:document.querySelectorAll('#dossierx-build-order-widget .bo-phase svg').length};})()`, &state)
-	if state.Text != "Claim not found" || !state.Before || state.SVGs != widgetSVGs {
-		t.Fatalf("missing-catalog presentation = %+v, want visible message before %d surviving diagrams", state, widgetSVGs)
-	}
-}
-
 // staticBuildOrderTab renders p statically, opens the file:// URL with the
 // error listener attached before navigation, and returns the context.
 func staticBuildOrderTab(t *testing.T, p *project) (context.Context, *pageErrors, string) {
@@ -234,61 +186,6 @@ func staticBuildOrderTab(t *testing.T, p *project) (context.Context, *pageErrors
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 	return ctx, pe, url
-}
-
-// tokenColourProbe resolves a custom property through a throwaway element's
-// color, so both sides of every colour comparison are BROWSER-serialised: a
-// custom property's getPropertyValue returns its authored text
-// ("rgba(40, 112, 82, .12)", "#536179") while a computed colour property
-// serialises differently ("rgba(40, 112, 82, 0.12)", "rgb(83, 97, 121)"),
-// and a string comparison of the two fails on a correct implementation.
-const tokenColourProbe = `function tok(name){var p=document.createElement('span');p.style.color='var('+name+')';document.body.appendChild(p);var c=getComputedStyle(p).color;p.remove();return c;}`
-
-type diagramColours struct {
-	RectFill, AccentBg, LinkStroke, Muted, GhostFill, GhostStroke, CardBg, Border string
-	Locked, Links, Ghosts                                                         int
-}
-
-func readDiagramColours(t *testing.T, ctx context.Context, moduleID string) diagramColours {
-	t.Helper()
-	var out diagramColours
-	evalInto(t, ctx, `(function(){`+tokenColourProbe+`
-		var root=document.getElementById('dossierx-build-order-`+moduleID+`');
-		var locked=root.querySelectorAll('.bo-diagram .node.locked_con > rect');
-		var links=root.querySelectorAll('.bo-diagram .flowchart-link');
-		var ghosts=root.querySelectorAll('.bo-diagram .node.ghost path');
-		if(!locked.length||!links.length||!ghosts.length){return {Locked:locked.length,Links:links.length,Ghosts:ghosts.length};}
-		return {Locked:locked.length,Links:links.length,Ghosts:ghosts.length,
-			RectFill:getComputedStyle(locked[0]).fill, AccentBg:tok('--accent-bg'),
-			LinkStroke:getComputedStyle(links[0]).stroke, Muted:tok('--muted'),
-			GhostFill:getComputedStyle(ghosts[0]).fill, GhostStroke:getComputedStyle(ghosts[0]).stroke,
-			CardBg:tok('--card-bg'), Border:tok('--border')};
-	})()`, &out)
-	return out
-}
-
-func assertDiagramColours(t *testing.T, mode string, c diagramColours) {
-	t.Helper()
-	if c.Locked == 0 || c.Links == 0 || c.Ghosts == 0 {
-		t.Fatalf("%s: selector matched nothing (locked_con rect %d, flowchart-link %d, ghost path %d); a mermaid shape or class rename fails here by name", mode, c.Locked, c.Links, c.Ghosts)
-	}
-	if c.RectFill != c.AccentBg {
-		t.Errorf("%s: locked node fill %q != --accent-bg %q (mermaid's id-scoped stylesheet won over the page rule)", mode, c.RectFill, c.AccentBg)
-	}
-	if c.LinkStroke != c.Muted {
-		t.Errorf("%s: edge stroke %q != --muted %q", mode, c.LinkStroke, c.Muted)
-	}
-	if c.GhostFill != c.CardBg || c.GhostStroke != c.Border {
-		t.Errorf("%s: ghost fill/stroke %q/%q != --card-bg/--border %q/%q", mode, c.GhostFill, c.GhostStroke, c.CardBg, c.Border)
-	}
-}
-
-// dispatchNodeClick fires a bubbling click on the first g.node the selector
-// finds, through the same document-level delegated listener a real click
-// reaches. It returns false when the selector matched nothing.
-func dispatchNodeClick(t *testing.T, ctx context.Context, sel string) bool {
-	t.Helper()
-	return evalBool(t, ctx, `(function(){var n=document.querySelector('`+sel+`');if(!n){return false;}n.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));return true;})()`)
 }
 
 // ---------------------------------------------------------------------

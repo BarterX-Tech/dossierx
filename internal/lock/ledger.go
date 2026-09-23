@@ -671,7 +671,6 @@ func ReleaseBuildOrderApproval(store *Store, module string, ap Approval) bool {
 // preLedgerCrossingSteps is the recovery every pre-ledger refusal names, and it
 // is the same words everywhere so the write path, the audit gate and the CLI
 // hint cannot send a reader three different ways.
-//
 const preLedgerCrossingSteps = `Cross onto the ledger by emptying the project of everything that predates it, in this order:
   1. dossierx claim unlock <id> --reason "..."
      for every locked claim. Unlock is gateless and always has been.

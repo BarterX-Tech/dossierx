@@ -828,4 +828,3 @@ func TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld(t *testing.T) {
 		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
 	}
 }
-

@@ -801,7 +801,6 @@ func TestEnvelope_BuildOrderVerbsAreRetired(t *testing.T) {
 	}
 }
 
-
 func TestDryRun_ImplinkSetChecksTheClaimIsLocked(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
