@@ -552,8 +552,8 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// EDGE_TYPES rather than a literal, plus the two View controls.
 	types := evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-type]'))
 		.map(function (e) { return e.getAttribute('data-dxg-type'); })`)
-	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on", "mirrors", "governed_by"}) {
-		t.Fatalf("edge-type toggles = %v, want the three relation types", types)
+	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on", "governed_by"}) {
+		t.Fatalf("edge-type toggles = %v, want the two remaining relation types", types)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-labels], [data-dxg-relayout]').length`); n != 2 {
 		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
@@ -832,7 +832,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 
 	// Now paste a full deep link: a reading-view target AND a graph state.
 	// Both halves must apply.
-	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=rmg&lb=1&ex=&se=';`)
+	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=rg&lb=1&ex=&se=';`)
 	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'governance'`)
 	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {

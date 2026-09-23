@@ -209,8 +209,12 @@ func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing
 
 func TestCatalogProjectionUpperBoundCoversEscapedIndentedOutput(t *testing.T) {
 	claim := model.Claim{
-		ID: "widget.contract.escaped", Module: "widget<&>", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard,
-		RestsOn: []string{"widget.contract.\x00quoted\"", "widget.contract.<rest>"},
+		ID:       "widget.contract.escaped",
+		Module:   "widget<&>",
+		Facet:    "contract",
+		Status:   model.StatusDraft,
+		Layout:   model.LayoutCard,
+		RestsOn:  []string{"widget.contract.\x00quoted\"", "widget.contract.<rest>"},
 		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "<&>\\\"\n"},
 	}
 	cat, err := Build([]model.Claim{claim}, nil)

@@ -820,7 +820,8 @@
   }
 
   // selfEdges returns the ids in nodeIds that are their own target under ANY
-  // edge type — rests_on, mirrors or governed_by. It is reported separately
+  // edge type — rests_on or governed_by, plus any retired kind still present
+  // in a payload. It is reported separately
   // from scc() and never merged into the cycle list, because the engine
   // already has a dedicated error-severity `self-edge` lint distinct from
   // `cycle`, and a pane that folded the two together would be telling a
@@ -1479,9 +1480,11 @@
     'status'
   ]);
 
-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
-  var TYPE_LETTERS = 'rmg';
+  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
+  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
+  // two cannot drift. Letter identity is stable across the retired `mirrors`
+  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
+  var TYPE_LETTERS = 'rg';
 
   // defaultState returns a fresh state object — everything on, nothing
   // filtered, nothing selected. Fresh rather than shared: a caller that

@@ -373,9 +373,9 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 	openGraphPane(t, ctx)
 
 	// Re-pinned for 13 §4.5 (RETRY fix list item 12): "Legend order,
-	// exactly" puts governed by first, then depends on, then mirrors —
+	// exactly" puts governed by first, then depends on —
 	// not graph-core.js's EDGE_TYPES declaration order.
-	wantEdges := []string{"governed_by", "rests_on", "mirrors"}
+	wantEdges := []string{"governed_by", "rests_on"}
 
 	cases := []struct {
 		name     string
@@ -420,16 +420,16 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setOverlay(t, ctx, tc.overlay)
 
-			// ALL THREE RELATIONS, ALWAYS. The strip used to name governed_by
-			// alone, leaving rests_on and mirrors to be told apart by an
+			// BOTH REMAINING RELATIONS, ALWAYS. The strip used to name
+			// governed_by alone, leaving rests_on to be told apart by an
 			// arrowhead — the part of an edge most often hidden under the node
 			// it points at. An overlay recolours fills and never changes what
 			// a line means, so this block is invariant across the table.
 			if got := legendEdgeRows(t, ctx); fmt.Sprint(got) != fmt.Sprint(wantEdges) {
 				t.Fatalf("legend edge rows under overlay %q = %v, want %v", tc.overlay, got, wantEdges)
 			}
-			if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-legend [data-dxg-edge] svg').length`); n != 3 {
-				t.Fatalf("legend edge samples that actually draw a line = %d, want 3", n)
+			if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-legend [data-dxg-edge] svg').length`); n != 2 {
+				t.Fatalf("legend edge samples that actually draw a line = %d, want 2", n)
 			}
 
 			// Re-pinned for screen 13 §4.5 / §6: the legend's second caption
@@ -456,14 +456,14 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 
 	// An edge type the reader turned off is not on the canvas, and the strip
 	// says so rather than describing a line that is not there.
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-type="mirrors"]`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Click(`[data-dxg-type="rests_on"]`, chromedp.ByQuery))
 	hidden := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-legend [data-dxg-edge]'))
 		.filter(function (e) { return e.textContent.indexOf('(hidden)') >= 0; })
 		.map(function (e) { return e.getAttribute('data-dxg-edge'); })`)
-	if fmt.Sprint(hidden) != fmt.Sprint([]string{"mirrors"}) {
-		t.Fatalf("legend rows marked hidden = %v, want [mirrors] after toggling it off", hidden)
+	if fmt.Sprint(hidden) != fmt.Sprint([]string{"rests_on"}) {
+		t.Fatalf("legend rows marked hidden = %v, want [rests_on] after toggling it off", hidden)
 	}
 	if got := legendEdgeRows(t, ctx); fmt.Sprint(got) != fmt.Sprint(wantEdges) {
-		t.Fatalf("legend edge rows after a toggle = %v, want all three still described %v", got, wantEdges)
+		t.Fatalf("legend edge rows after a toggle = %v, want both remaining relations still described %v", got, wantEdges)
 	}
 }

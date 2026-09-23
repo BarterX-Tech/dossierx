@@ -46,8 +46,8 @@ explained  2 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (+23 -49)
-    size            23276 lines / 1234179 bytes -> 23250 lines / 1232327 bytes
+testdata/fixture-basic/build/viewer/index.html  (+30 -53)
+    size            23276 lines / 1234179 bytes -> 23253 lines / 1232529 bytes
 @@ -17037,7 +17037,7 @@
    // suite off these names.
    //
@@ -74,7 +74,32 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -18817,15 +18818,12 @@
+@@ -17825,7 +17826,8 @@
+   }
+
+   // selfEdges returns the ids in nodeIds that are their own target under ANY
+-  // edge type — rests_on, mirrors or governed_by. It is reported separately
++  // edge type — rests_on or governed_by, plus any retired kind still present
++  // in a payload. It is reported separately
+   // from scc() and never merged into the cycle list, because the engine
+   // already has a dedicated error-severity `self-edge` lint distinct from
+   // `cycle`, and a pane that folded the two together would be telling a
+@@ -18484,9 +18486,11 @@
+     'status'
+   ]);
+
+-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
+-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
+-  var TYPE_LETTERS = 'rmg';
++  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
++  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
++  // two cannot drift. Letter identity is stable across the retired `mirrors`
++  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
++  var TYPE_LETTERS = 'rg';
+
+   // defaultState returns a fresh state object — everything on, nothing
+   // filtered, nothing selected. Fresh rather than shared: a caller that
+@@ -18817,15 +18821,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -94,7 +119,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
      governed_by: 'Governed by',
    };
 
-@@ -18838,9 +18836,8 @@
+@@ -18838,9 +18839,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -105,7 +130,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19631,15 +19628,9 @@
+@@ -19631,15 +19631,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -122,7 +147,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19647,11 +19638,6 @@
+@@ -19647,11 +19641,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -134,7 +159,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -19888,7 +19874,7 @@
+@@ -19888,7 +19877,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -143,7 +168,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21626,12 +21612,7 @@
+@@ -21626,12 +21615,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -157,7 +182,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21647,17 +21628,13 @@
+@@ -21647,17 +21631,13 @@
        }
        ctx.stroke();
 
@@ -182,7 +207,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -22841,9 +22818,7 @@
+@@ -22841,9 +22821,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -193,7 +218,7 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -22859,8 +22834,7 @@
+@@ -22859,8 +22837,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -204,8 +229,8 @@ testdata/fixture-basic/build/viewer/index.html  (+23 -49)
      var any = false;
      for (var i = 0; i < plan.length; i++) {
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
-    size            23601 lines / 1288309 bytes -> 23575 lines / 1286457 bytes
+testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
+    size            23601 lines / 1288309 bytes -> 23578 lines / 1286659 bytes
 @@ -17362,7 +17362,7 @@
    // suite off these names.
    //
@@ -232,7 +257,32 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -19142,15 +19143,12 @@
+@@ -18150,7 +18151,8 @@
+   }
+
+   // selfEdges returns the ids in nodeIds that are their own target under ANY
+-  // edge type — rests_on, mirrors or governed_by. It is reported separately
++  // edge type — rests_on or governed_by, plus any retired kind still present
++  // in a payload. It is reported separately
+   // from scc() and never merged into the cycle list, because the engine
+   // already has a dedicated error-severity `self-edge` lint distinct from
+   // `cycle`, and a pane that folded the two together would be telling a
+@@ -18809,9 +18811,11 @@
+     'status'
+   ]);
+
+-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
+-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
+-  var TYPE_LETTERS = 'rmg';
++  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
++  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
++  // two cannot drift. Letter identity is stable across the retired `mirrors`
++  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
++  var TYPE_LETTERS = 'rg';
+
+   // defaultState returns a fresh state object — everything on, nothing
+   // filtered, nothing selected. Fresh rather than shared: a caller that
+@@ -19142,15 +19146,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -252,7 +302,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
      governed_by: 'Governed by',
    };
 
-@@ -19163,9 +19161,8 @@
+@@ -19163,9 +19164,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -263,7 +313,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19956,15 +19953,9 @@
+@@ -19956,15 +19956,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -280,7 +330,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19972,11 +19963,6 @@
+@@ -19972,11 +19966,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -292,7 +342,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -20213,7 +20199,7 @@
+@@ -20213,7 +20202,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -301,7 +351,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21951,12 +21937,7 @@
+@@ -21951,12 +21940,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -315,7 +365,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21972,17 +21953,13 @@
+@@ -21972,17 +21956,13 @@
        }
        ctx.stroke();
 
@@ -340,7 +390,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -23166,9 +23143,7 @@
+@@ -23166,9 +23146,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -351,7 +401,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23184,8 +23159,7 @@
+@@ -23184,8 +23162,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -362,8 +412,8 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+23 -49)
      var any = false;
      for (var i = 0; i < plan.length; i++) {
 
-testdata/fixture-portability/build/viewer/index.html  (+23 -49)
-    size            23267 lines / 1238682 bytes -> 23241 lines / 1236830 bytes
+testdata/fixture-portability/build/viewer/index.html  (+30 -53)
+    size            23267 lines / 1238682 bytes -> 23244 lines / 1237032 bytes
 @@ -17028,7 +17028,7 @@
    // suite off these names.
    //
@@ -390,7 +440,32 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -18808,15 +18809,12 @@
+@@ -17816,7 +17817,8 @@
+   }
+
+   // selfEdges returns the ids in nodeIds that are their own target under ANY
+-  // edge type — rests_on, mirrors or governed_by. It is reported separately
++  // edge type — rests_on or governed_by, plus any retired kind still present
++  // in a payload. It is reported separately
+   // from scc() and never merged into the cycle list, because the engine
+   // already has a dedicated error-severity `self-edge` lint distinct from
+   // `cycle`, and a pane that folded the two together would be telling a
+@@ -18475,9 +18477,11 @@
+     'status'
+   ]);
+
+-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
+-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
+-  var TYPE_LETTERS = 'rmg';
++  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
++  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
++  // two cannot drift. Letter identity is stable across the retired `mirrors`
++  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
++  var TYPE_LETTERS = 'rg';
+
+   // defaultState returns a fresh state object — everything on, nothing
+   // filtered, nothing selected. Fresh rather than shared: a caller that
+@@ -18808,15 +18812,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -410,7 +485,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
      governed_by: 'Governed by',
    };
 
-@@ -18829,9 +18827,8 @@
+@@ -18829,9 +18830,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -421,7 +496,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19622,15 +19619,9 @@
+@@ -19622,15 +19622,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -438,7 +513,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19638,11 +19629,6 @@
+@@ -19638,11 +19632,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -450,7 +525,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -19879,7 +19865,7 @@
+@@ -19879,7 +19868,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -459,7 +534,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21617,12 +21603,7 @@
+@@ -21617,12 +21606,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -473,7 +548,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21638,17 +21619,13 @@
+@@ -21638,17 +21622,13 @@
        }
        ctx.stroke();
 
@@ -498,7 +573,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -22832,9 +22809,7 @@
+@@ -22832,9 +22812,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -509,7 +584,7 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -22850,8 +22825,7 @@
+@@ -22850,8 +22828,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -520,8 +595,8 @@ testdata/fixture-portability/build/viewer/index.html  (+23 -49)
      var any = false;
      for (var i = 0; i < plan.length; i++) {
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
-    size            27403 lines / 4877586 bytes -> 27377 lines / 4875734 bytes
+testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
+    size            27403 lines / 4877586 bytes -> 27380 lines / 4875936 bytes
 @@ -17301,7 +17301,7 @@
    // suite off these names.
    //
@@ -548,7 +623,32 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -19081,15 +19082,12 @@
+@@ -18089,7 +18090,8 @@
+   }
+
+   // selfEdges returns the ids in nodeIds that are their own target under ANY
+-  // edge type — rests_on, mirrors or governed_by. It is reported separately
++  // edge type — rests_on or governed_by, plus any retired kind still present
++  // in a payload. It is reported separately
+   // from scc() and never merged into the cycle list, because the engine
+   // already has a dedicated error-severity `self-edge` lint distinct from
+   // `cycle`, and a pane that folded the two together would be telling a
+@@ -18748,9 +18750,11 @@
+     'status'
+   ]);
+
+-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
+-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
+-  var TYPE_LETTERS = 'rmg';
++  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
++  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
++  // two cannot drift. Letter identity is stable across the retired `mirrors`
++  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
++  var TYPE_LETTERS = 'rg';
+
+   // defaultState returns a fresh state object — everything on, nothing
+   // filtered, nothing selected. Fresh rather than shared: a caller that
+@@ -19081,15 +19085,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -568,7 +668,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
      governed_by: 'Governed by',
    };
 
-@@ -19102,9 +19100,8 @@
+@@ -19102,9 +19103,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -579,7 +679,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19895,15 +19892,9 @@
+@@ -19895,15 +19895,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -596,7 +696,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19911,11 +19902,6 @@
+@@ -19911,11 +19905,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -608,7 +708,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -20152,7 +20138,7 @@
+@@ -20152,7 +20141,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -617,7 +717,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21890,12 +21876,7 @@
+@@ -21890,12 +21879,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -631,7 +731,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21911,17 +21892,13 @@
+@@ -21911,17 +21895,13 @@
        }
        ctx.stroke();
 
@@ -656,7 +756,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -23105,9 +23082,7 @@
+@@ -23105,9 +23085,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -667,7 +767,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+23 -49)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23123,8 +23098,7 @@
+@@ -23123,8 +23101,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -706,10 +806,10 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+0 -6)
            "type": "engine.decision.single-source-of-truth"
          }
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
+testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
     inputs changed  testdata/fixture-graph-demo/claims/engine-facts-not-verdicts.yaml
                     testdata/fixture-graph-demo/claims/viewer-facts-not-verdicts.yaml
-    size            23990 lines / 1496790 bytes -> 23964 lines / 1493788 bytes
+    size            23990 lines / 1496790 bytes -> 23967 lines / 1493990 bytes
 @@ -11988,7 +11988,7 @@
    <div class="k" data-claim-id="engine.decision.facts-not-verdicts" title="engine.decision.facts-not-verdicts"><span class="label"><span class="k-title">Facts Not Verdicts</span> <span class="pill pv"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock-open"/></svg>Draft</span><span class="k-id">engine.decision.facts-not-verdicts</span></span></div>
  <div class="claim-body"><p>The engine states facts and the reader&#39;s browser computes verdicts. A gap list precomputed while rendering would be wrong the moment a reader narrows the view to one module, because every connectivity question is relative to what is currently on screen.</p></div>
@@ -763,7 +863,32 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -19531,15 +19532,12 @@
+@@ -18539,7 +18540,8 @@
+   }
+
+   // selfEdges returns the ids in nodeIds that are their own target under ANY
+-  // edge type — rests_on, mirrors or governed_by. It is reported separately
++  // edge type — rests_on or governed_by, plus any retired kind still present
++  // in a payload. It is reported separately
+   // from scc() and never merged into the cycle list, because the engine
+   // already has a dedicated error-severity `self-edge` lint distinct from
+   // `cycle`, and a pane that folded the two together would be telling a
+@@ -19198,9 +19200,11 @@
+     'status'
+   ]);
+
+-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
+-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
+-  var TYPE_LETTERS = 'rmg';
++  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
++  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
++  // two cannot drift. Letter identity is stable across the retired `mirrors`
++  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
++  var TYPE_LETTERS = 'rg';
+
+   // defaultState returns a fresh state object — everything on, nothing
+   // filtered, nothing selected. Fresh rather than shared: a caller that
+@@ -19531,15 +19535,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -783,7 +908,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
      governed_by: 'Governed by',
    };
 
-@@ -19552,9 +19550,8 @@
+@@ -19552,9 +19553,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -794,7 +919,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -20345,15 +20342,9 @@
+@@ -20345,15 +20345,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -811,7 +936,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -20361,11 +20352,6 @@
+@@ -20361,11 +20355,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -823,7 +948,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -20602,7 +20588,7 @@
+@@ -20602,7 +20591,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -832,7 +957,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -22340,12 +22326,7 @@
+@@ -22340,12 +22329,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -846,7 +971,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -22361,17 +22342,13 @@
+@@ -22361,17 +22345,13 @@
        }
        ctx.stroke();
 
@@ -871,7 +996,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -23555,9 +23532,7 @@
+@@ -23555,9 +23535,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -882,7 +1007,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+26 -52)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23573,8 +23548,7 @@
+@@ -23573,8 +23551,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
