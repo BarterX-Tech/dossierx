@@ -193,6 +193,36 @@
       }
     },
     {
+      "id": "cli.contract.six-nouns",
+      "facet": "contract",
+      "module": "cli",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      },
+      "readiness": {
+        "claim_id": "cli.contract.six-nouns",
+        "policy_version": 0,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
       "id": "cli.decision.agent-operates-human-reviews",
       "facet": "decision",
       "module": "cli",
@@ -261,36 +291,6 @@
       },
       "readiness": {
         "claim_id": "cli.decision.no-new-noun-for-the-graph",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.overview.six-nouns",
-      "facet": "overview",
-      "module": "cli",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.overview.six-nouns",
         "policy_version": 0,
         "local_approved": false,
         "locally_approved": false,
@@ -570,6 +570,36 @@
       }
     },
     {
+      "id": "engine.contract.start-here",
+      "facet": "contract",
+      "module": "engine",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      },
+      "readiness": {
+        "claim_id": "engine.contract.start-here",
+        "policy_version": 0,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
       "id": "engine.decision.facts-not-verdicts",
       "facet": "decision",
       "module": "engine",
@@ -645,36 +675,6 @@
         "dependency_ready": true,
         "ready": true,
         "review_pending": false
-      }
-    },
-    {
-      "id": "engine.overview.start-here",
-      "facet": "overview",
-      "module": "engine",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.overview.start-here",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     },
     {
@@ -890,6 +890,36 @@
       }
     },
     {
+      "id": "lock.contract.ledger-first",
+      "facet": "contract",
+      "module": "lock",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.schema.lock-store"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      },
+      "readiness": {
+        "claim_id": "lock.contract.ledger-first",
+        "policy_version": 0,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
       "id": "lock.contract.lock-is-human-approved",
       "facet": "contract",
       "module": "lock",
@@ -962,36 +992,6 @@
       },
       "readiness": {
         "claim_id": "lock.decision.no-migration-command",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.overview.ledger-first",
-      "facet": "overview",
-      "module": "lock",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "lock.schema.lock-store"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.overview.ledger-first",
         "policy_version": 0,
         "local_approved": false,
         "locally_approved": false,
@@ -1356,6 +1356,58 @@
       }
     },
     {
+      "id": "telemetry.contract.what-this-module-is",
+      "facet": "contract",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.schema.counter-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      },
+      "readiness": {
+        "claim_id": "telemetry.contract.what-this-module-is",
+        "policy_version": 0,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": false,
+        "ready": false,
+        "review_pending": false,
+        "dependency_conditions": [
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "telemetry.schema.counter-shape",
+            "path": [
+              "telemetry.contract.what-this-module-is",
+              "telemetry.schema.counter-shape"
+            ],
+            "detail": "required dependency is not locally approved"
+          }
+        ],
+        "conditions": [
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "telemetry.schema.counter-shape",
+            "path": [
+              "telemetry.contract.what-this-module-is",
+              "telemetry.schema.counter-shape"
+            ],
+            "detail": "required dependency is not locally approved"
+          }
+        ],
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
       "id": "telemetry.decision.counters-are-local",
       "facet": "decision",
       "module": "telemetry",
@@ -1376,58 +1428,6 @@
         "dependency_ready": true,
         "ready": false,
         "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.overview.what-this-module-is",
-      "facet": "overview",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.overview.what-this-module-is",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.overview.what-this-module-is",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.overview.what-this-module-is",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -1814,6 +1814,36 @@
       }
     },
     {
+      "id": "viewer.contract.read-me-first",
+      "facet": "contract",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.payload-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      },
+      "readiness": {
+        "claim_id": "viewer.contract.read-me-first",
+        "policy_version": 0,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
       "id": "viewer.contract.render-is-pure",
       "facet": "contract",
       "module": "viewer",
@@ -1912,36 +1942,6 @@
       },
       "readiness": {
         "claim_id": "viewer.decision.facts-not-verdicts",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.overview.read-me-first",
-      "facet": "overview",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.overview.read-me-first",
         "policy_version": 0,
         "local_approved": false,
         "locally_approved": false,
@@ -2060,13 +2060,18 @@
       "cli.contract.check-noun",
       "cli.contract.noun-list-is-fixed",
       "cli.contract.serve-noun",
+      "cli.contract.six-nouns",
       "engine.contract.build-is-pure",
       "engine.contract.check-is-fail-fast",
+      "engine.contract.start-here",
+      "lock.contract.ledger-first",
       "lock.contract.lock-is-human-approved",
       "lock.contract.review-pending-is-engine-managed",
       "telemetry.contract.disabled-by-default",
       "telemetry.contract.no-egress",
+      "telemetry.contract.what-this-module-is",
       "viewer.contract.no-network-at-runtime",
+      "viewer.contract.read-me-first",
       "viewer.contract.render-is-pure"
     ],
     "decision": [
@@ -2080,13 +2085,6 @@
       "viewer.decision.canvas-not-svg",
       "viewer.decision.colour-is-not-the-only-channel",
       "viewer.decision.facts-not-verdicts"
-    ],
-    "overview": [
-      "cli.overview.six-nouns",
-      "engine.overview.start-here",
-      "lock.overview.ledger-first",
-      "telemetry.overview.what-this-module-is",
-      "viewer.overview.read-me-first"
     ],
     "schema": [
       "cli.schema.error-codes",
@@ -2117,9 +2115,9 @@
       "cli.contract.check-noun",
       "cli.contract.noun-list-is-fixed",
       "cli.contract.serve-noun",
+      "cli.contract.six-nouns",
       "cli.decision.agent-operates-human-reviews",
       "cli.decision.no-new-noun-for-the-graph",
-      "cli.overview.six-nouns",
       "cli.schema.error-codes",
       "cli.schema.json-envelope"
     ],
@@ -2130,10 +2128,10 @@
       "engine.behavior.loader-walks-claims-dir",
       "engine.contract.build-is-pure",
       "engine.contract.check-is-fail-fast",
+      "engine.contract.start-here",
       "engine.decision.facts-not-verdicts",
       "engine.decision.no-code-nodes",
       "engine.decision.single-source-of-truth",
-      "engine.overview.start-here",
       "engine.schema.catalog-shape",
       "engine.schema.claim-shape",
       "engine.schema.edge-kinds",
@@ -2144,10 +2142,10 @@
       "lock.behavior.comment-digest",
       "lock.behavior.lock-gates",
       "lock.behavior.unlock-keeps-the-record",
+      "lock.contract.ledger-first",
       "lock.contract.lock-is-human-approved",
       "lock.contract.review-pending-is-engine-managed",
       "lock.decision.no-migration-command",
-      "lock.overview.ledger-first",
       "lock.schema.ledger-record",
       "lock.schema.lock-store",
       "lock.verification.ledger-audit-suite"
@@ -2157,8 +2155,8 @@
       "telemetry.behavior.flush-on-exit",
       "telemetry.contract.disabled-by-default",
       "telemetry.contract.no-egress",
+      "telemetry.contract.what-this-module-is",
       "telemetry.decision.counters-are-local",
-      "telemetry.overview.what-this-module-is",
       "telemetry.schema.counter-shape",
       "telemetry.schema.event-names",
       "telemetry.verification.offline-suite"
@@ -2169,11 +2167,11 @@
       "viewer.behavior.representative-node-rule",
       "viewer.behavior.scope-filter",
       "viewer.contract.no-network-at-runtime",
+      "viewer.contract.read-me-first",
       "viewer.contract.render-is-pure",
       "viewer.decision.canvas-not-svg",
       "viewer.decision.colour-is-not-the-only-channel",
       "viewer.decision.facts-not-verdicts",
-      "viewer.overview.read-me-first",
       "viewer.schema.node-fields",
       "viewer.schema.payload-shape",
       "viewer.verification.browser-suite"

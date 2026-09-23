@@ -6,6 +6,8 @@ layout: card
 kind: orientation-note
 body: |
   A leftover orientation-note kind. kind-shape refuses every value other than fact.
+rests_on:
+  - kindshapemod.contract.helper
 governed_by:
   type: none
   reason: fixture claim, not backed by any real doctrine
