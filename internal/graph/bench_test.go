@@ -10,7 +10,7 @@ import (
 )
 
 // syntheticCorpus builds an n-claim corpus with a realistic edge density:
-// two rests_on edges per claim after the third, a mirrors edge on every
+// two rests_on edges per claim after the third, an extra rests_on on every
 // fifth, and a governed_by edge on every seventh pointing at one of five
 // doctrine claims. That is deliberately denser than a typical project — a
 // benchmark that flatters the implementation measures nothing.

@@ -800,10 +800,6 @@ edge, each with a different meaning:
   `claim reaudit`, so the first governor edit after upgrading does not
   flag it.
 
-There is no `mirrors` edge. The YAML key still decodes so existing lock
-signatures stay byte-identical, but a non-empty list is a lint error
-(`mirrors-retired`). Delete the key; the engine does not walk it.
-
 ### Graph invariants
 
 Each edge kind is not just a per-claim field but a directed graph over the

@@ -324,7 +324,7 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 	if !strings.Contains(got, `<div class="claim-footer">`) || !strings.Contains(got, `class="claim-edges`) {
 		t.Fatalf("a claim with one edge must still render the footer strip and its edges ul, got: %s", got)
 	}
-	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-governed", "claim-mirrors", "claim-rests-on", "claim-review-pending"} {
+	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-governed", "claim-rests-on", "claim-review-pending"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("edgesHTML should omit %q, got: %s", absent, got)
 		}
@@ -341,7 +341,7 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 // a-time.md §6's "a noun and a count, never a score" (R-F.1), now
 // "N relationship"/"N relationships" rather than the pre-redesign "N links".
 // links counts what the reader FINDS ON EXPANDING — one per id inside the
-// three R09.4 direction blocks and the "extra" mirrors/migrated_from/
+// three R09.4 direction blocks and the "extra" migrated_from/
 // review_pending rows — never the linked files or sources, which are their
 // own doors (§6: "files and drifted do not appear in the strip"; sources is
 // its own door per R09.5) and no longer ride in this chip's count at all.
@@ -971,7 +971,7 @@ func TestEdgesHTMLWithLinks_NilDependedBy_OmitsLine(t *testing.T) {
 // BY/GOVERNED BY rows specifically: writeRelationshipRow passes a nil
 // targetStatuses to the shared writeClaimRef so the old pill never doubles
 // up beside the new dot+badge. targetPillHTML's original actionable-only
-// contract still holds for the "extra" rows (mirrors) below.
+// contract still holds for the "extra" rows below.
 func TestEdgesHTMLWithLinks_TargetPill_DraftTarget(t *testing.T) {
 	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
 	statuses := map[string]TargetStatus{
@@ -1271,7 +1271,7 @@ func TestClaimLabel_DerivesFromSlugOrFallsBackToRawID(t *testing.T) {
 // (writeRelationshipMeta) instead, shown on every row regardless of how far
 // the target is from the reader's own context. The three-tier elision this
 // test used to pin is real, but it now lives in writeClaimRef's OTHER
-// caller, writeIDListItems (mirrors, migrated_from-adjacent extras) — see
+// caller, writeIDListItems (migrated_from-adjacent extras) — see
 // TestEdgesHTML_ElisionTiers_ExtrasStillElide below for that half.
 func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	c := model.Claim{
@@ -1305,7 +1305,7 @@ func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	}
 
 	// No prefix spans at all: the elided inline prefix is exclusively
-	// writeIDListItems' territory now (mirrors/migrated_from-adjacent
+	// writeIDListItems' territory now (migrated_from-adjacent
 	// extras), never a fixed-direction relationship row's.
 	if strings.Contains(got, "claim-ref-prefix") {
 		t.Errorf("a fixed-direction relationship row must carry no inline prefix span, got: %s", got)

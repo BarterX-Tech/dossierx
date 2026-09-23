@@ -2850,8 +2850,8 @@
   //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
   //               ramp, so a governance edge can never be mistaken for a
   //               facet's colour at any facet count in either theme
-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
+  //   2. ROUTING  a quadratic curve, where rests_on is straight
+  //   3. HEAD     a double chevron, where rests_on has one
   //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
   //               so a doctrine claim is findable without following any line
   //

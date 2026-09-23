@@ -1209,7 +1209,7 @@ func TestLockRecordsAGovernanceBaseline(t *testing.T) {
 	withRegistry(t) // empty registry: lint always passes
 
 	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "the governing doctrine"}
-	// governed_by is the ONLY edge: no mirrors, no rests_on naming the hub.
+	// governed_by is the ONLY edge: no rests_on naming the hub.
 	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "child", Governed: model.Governed{Type: hub.ID}}
 	claims := []model.Claim{hub, child}
 

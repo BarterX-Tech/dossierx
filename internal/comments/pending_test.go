@@ -22,7 +22,7 @@ import (
 )
 
 // governedPair returns a locked doctrine hub and a locked claim governed by it
-// through governed_by.type ONLY — no mirrors, no rests_on naming the hub — plus
+// through governed_by.type ONLY — no rests_on naming the hub — plus
 // a store already baselined at the hub's current content.
 func governedPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 	t.Helper()

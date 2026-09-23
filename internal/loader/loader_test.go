@@ -601,7 +601,7 @@ governed_by:
 
 // TestLoadClaims_RetiredMirrorsField_StillParses: leftover mirrors: must
 // still decode so LockedClaimHash of a claim that never declared it stays
-// byte-identical. The refusal is the mirrors-retired lint, not a parse error.
+// byte-identical. The field is not walked.
 func TestLoadClaims_RetiredMirrorsField_StillParses(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "a.yaml", `id: widget.contract.a

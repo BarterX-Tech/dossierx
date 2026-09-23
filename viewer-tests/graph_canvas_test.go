@@ -664,8 +664,7 @@ func TestGraphEmptyOverlayIsStatedAndDoesNotGhostTheGraph(t *testing.T) {
 // readiness dependencies: this is a canvas-label fixture, and draft rests_on
 // edges now correctly opt the generated viewer into the independent readiness
 // UI (and its deliberately complete diagnostic payload), which would make this
-// test measure that workload too. Isolated claims still draw labels; they do
-// not need a retired mirrors chain to stay connected.
+// test measure that workload too. Isolated claims still draw labels.
 func newLabelProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, graphConfig)

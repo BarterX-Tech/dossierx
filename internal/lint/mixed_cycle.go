@@ -27,10 +27,6 @@
 // needs a different frame anyway (each frame has to remember which edge kind
 // entered it).
 //
-// mirrors is not in the union. It is reciprocal by design -- mirror_reciprocal.go
-// requires the pair -- so every mirrored pair would be a "cycle" and the rule
-// would fire on correct corpora.
-//
 // Severity is error, matching cycle and governed-cycle. There is no migration
 // document: a corpus containing this shape was always malformed, the engine
 // simply could not see it.

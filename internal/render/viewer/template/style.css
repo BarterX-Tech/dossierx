@@ -481,7 +481,7 @@ body {
 }
 
 /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
-   specific claim card (an edges-footer rests_on/mirrors/governed_by link,
+   specific claim card (an edges-footer rests_on/governed_by link,
    or a deep link), so the reader's eye lands on the right card instead of
    just the top of the right tab. outline (not border/box-shadow) so it
    doesn't shift layout or fight .claim-card--warn's own border-color. */
@@ -2174,7 +2174,7 @@ th {
 /* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
    left side): the target's own `module · facet`, ALWAYS shown — never the
    elided, reader-context-relative prefix `writeClaimRef` draws for every
-   other edge list in this footer (mirrors/rests_on extras). It is its own
+   other edge list in this footer (rests_on extras). It is its own
    column between the title and the badge, not text folded into the title,
    because 05 §4.10 counts it as one of the row's four columns. See
    components.go's writeRelationshipRow/writeRelationshipMeta. */
@@ -2296,7 +2296,7 @@ th {
 }
 
 /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
-   governed_by/mirrors/rests_on/depended-on-by/migrated_from/review_pending/
+   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
    implemented-in fact is its own <li>, stacked vertically rather than
    wrapped inline, so a card with many edges reads as a scannable list
    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
@@ -2336,7 +2336,7 @@ th {
   color: var(--link);
 }
 
-/* claim-edge-id-list is the nested <ul> a multi-id edge (mirrors,
+/* claim-edge-id-list is the nested <ul> a multi-id edge (
    rests_on, depended-on-by) renders under its own <li> — one id per
    line, indented under its "label:" parent so it reads as a sub-list
    rather than colliding with the parent bullet's own marker. */
@@ -2360,7 +2360,7 @@ th {
 }
 
 /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
-   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
+   (components.go's writeClaimRef): governed_by, rests_on and
    depended-on-by, all inside the shared claim footer. Its two inner spans carry
    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
    when the target is outside the reading claim's own module/facet, and the

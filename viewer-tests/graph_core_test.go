@@ -129,14 +129,12 @@ func coreNodes() []any {
 }
 
 // coreEdges pairs with coreNodes: one cross-module rests_on and one
-// intra-module retired mirrors edge, so scope, aggregation and the
-// connectivity rules all have something to disagree about. mirrors is no
-// longer an enabled type; the payload still carries the kind so the suite
-// can prove a retired type does not connect.
+// intra-module rests_on, so scope, aggregation and the connectivity
+// rules all have something to disagree about.
 func coreEdges() []any {
 	return []any{
 		map[string]any{"from": "a.one", "to": "b.one", "type": "rests_on"},
-		map[string]any{"from": "a.two", "to": "a.one", "type": "mirrors"},
+		map[string]any{"from": "a.two", "to": "a.one", "type": "rests_on"},
 	}
 }
 
@@ -365,16 +363,16 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 			args: []any{coreNodes(), "facet", []any{}}, post: ".repByClaim",
 			want: map[string]any{"a.one": "facet:contract", "a.two": "facet:contract", "b.one": "facet:contract", "c.one": "facet:schema"}},
 
-		// Aggregation: the type toggle drops mirrors, two claim-level edges
-		// collapse into one weighted group edge, and the intra-module edge
-		// becomes a self-loop and is dropped rather than drawn.
+		// Aggregation: the type toggle drops governed_by, two claim-level
+		// edges collapse into one weighted group edge, and the intra-module
+		// edge becomes a self-loop and is dropped rather than drawn.
 		{name: "aggregateEdges collapses, weights and drops self-loops", fn: "aggregateEdges",
 			args: []any{
 				[]any{
 					edge("a.one", "b.one", "rests_on"),
 					edge("a.two", "b.one", "rests_on"),
 					edge("a.one", "a.two", "rests_on"),
-					edge("a.one", "b.one", "mirrors"),
+					edge("a.one", "b.one", "governed_by"),
 				},
 				map[string]any{"a.one": "module:a", "a.two": "module:a", "b.one": "module:b"},
 				[]any{"rests_on"},
@@ -394,7 +392,7 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "degrees are scope-relative and count both ends", fn: "degrees",
 			args: []any{
 				[]any{"x", "y"},
-				[]any{[]any{"x", "y"}, edge("y", "x", "mirrors"), edge("x", "q", "rests_on")},
+				[]any{[]any{"x", "y"}, edge("y", "x", "governed_by"), edge("x", "q", "rests_on")},
 			},
 			want: map[string]any{
 				"x": map[string]any{"in": 1, "out": 2, "total": 3},
@@ -436,16 +434,16 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 		{name: "scc finds a mixed rests_on/governed_by cycle", fn: "scc",
 			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "rests_on"), edge("b", "a", "governed_by")}},
 			want: []any{[]any{"a", "b"}}},
-		{name: "scc ignores mirrors", fn: "scc",
-			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "mirrors"), edge("b", "a", "mirrors")}},
+		{name: "scc ignores an unknown edge type", fn: "scc",
+			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "unknown"), edge("b", "a", "unknown")}},
 			want: []any{}},
 		// A singleton is a component only when it carries a literal directed
 		// self-edge; every other singleton is just a node.
 		{name: "scc returns a singleton only for a self-edge", fn: "scc",
 			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "rests_on")}},
 			want: []any{[]any{"a"}}},
-		{name: "scc does not count a mirrors self-edge", fn: "scc",
-			args: []any{[]any{"a"}, []any{edge("a", "a", "mirrors")}},
+		{name: "scc does not count an unknown-type self-edge", fn: "scc",
+			args: []any{[]any{"a"}, []any{edge("a", "a", "unknown")}},
 			want: []any{}},
 		{name: "scc separates disjoint components, ordered by smallest member", fn: "scc",
 			args: []any{
@@ -491,7 +489,7 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 		// because the engine has a dedicated self-edge lint distinct from
 		// cycle and the rail must tell the same story check does.
 		{name: "selfEdges spans every edge type", fn: "selfEdges",
-			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "mirrors"), edge("b", "b", "governed_by")}},
+			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "rests_on"), edge("b", "b", "governed_by")}},
 			want: []any{"a", "b"}},
 		{name: "selfEdges ignores an id outside the node set", fn: "selfEdges",
 			args: []any{[]any{"a"}, []any{edge("z", "z", "rests_on")}},
@@ -551,16 +549,15 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: []any{
 				fact("cycle"),
 				fact("self_edge"),
-				fact("isolated", "a.two", "c.one"),
-				fact("weakly_linked", "a.one", "b.one"),
+				fact("isolated", "c.one"),
+				fact("weakly_linked", "a.two", "b.one"),
 				fact("review_pending", "a.one"),
 				fact("open_threads", "a.two"),
 				fact("sink_group", "module:a"),
 				fact("orphan_group", "module:c"),
 			}},
-		// Turning rests_on off isolates every claim: the retired mirrors
-		// edge never counts, so "connected" means connected by the relations
-		// the reader is currently looking at.
+		// Turning rests_on off isolates every claim: "connected" means
+		// connected by the relations the reader is currently looking at.
 		{name: "connectivity rules honour the edge-type toggles", fn: "gapRules",
 			args: []any{coreNodes(), coreEdges(), map[string]any{"enabledTypes": []any{"governed_by"}}},
 			post: ".facts.filter(function (f) { return f.rule === 'isolated' || f.rule === 'weakly_linked'; })",

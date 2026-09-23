@@ -188,7 +188,7 @@ type Node struct {
 // NodeTrack is one claim's membership in one track.
 //
 // MEMBERSHIP IS NOT AN EDGE, and this type existing beside Edge rather than
-// inside it is the whole statement. RestsOn, Mirrors and Governed are
+// inside it is the whole statement. RestsOn and Governed are
 // semantic dependencies between claims and carry cycle lints; a track is a
 // SET, and a set has no direction to run in a circle. Emitting membership as
 // an Edge would put it into the client's scc() walk and ring every track

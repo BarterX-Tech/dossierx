@@ -187,7 +187,7 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 
 	// --validate first, on a clean tree: it must report the lint verdict and
 	// leave the two artifacts ABSENT. The fixture claims carry no
-	// mirrors/rests_on edges, which trips the warning-severity "orphan" lint —
+	// rests_on edges, which trips the warning-severity "orphan" lint —
 	// expected and non-fatal (only an error-severity finding fails a run).
 	out, _, err := execCLI(t, "--config", cfgPath, "check", "--validate")
 	if err != nil {

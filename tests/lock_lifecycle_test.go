@@ -59,7 +59,7 @@ func llWriteConfig(t *testing.T, root string, facets, modules []string, doctrine
 
 type llClaimSpec struct {
 	id, facet, module, status, body string
-	restsOn, mirrors                []string
+	restsOn                         []string
 	reviewPending                   bool
 }
 
@@ -78,12 +78,6 @@ func llWriteClaim(t *testing.T, root string, spec llClaimSpec) string {
 		b.WriteString("rests_on:\n")
 		for _, r := range spec.restsOn {
 			b.WriteString("  - " + r + "\n")
-		}
-	}
-	if len(spec.mirrors) > 0 {
-		b.WriteString("mirrors:\n")
-		for _, m := range spec.mirrors {
-			b.WriteString("  - " + m + "\n")
 		}
 	}
 	b.WriteString("governed_by:\n  type: none\n  reason: lock-lifecycle test fixture, not backed by any doctrine claim\n")

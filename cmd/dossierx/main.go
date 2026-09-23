@@ -913,7 +913,7 @@ func reportLedgerFindings(cmd *cobra.Command, findings []lock.Finding) {
 
 // reconcileReviewPending runs "check"'s only claim-file-writing phase under
 // the project-wide claims sentinel: it loads claims, flips every locked claim
-// whose mirrors/rests_on content has drifted since its last lock or confirmed
+// whose rests_on content has drifted since its last lock or confirmed
 // reaudit — OR that carries an unresolved comment thread — to
 // locked+review_pending, and persists each flip back to the claim's
 // own file so it survives to the next run and shows up in "dossierx claim list\n// --review-pending". It
@@ -3472,7 +3472,7 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 // dependency, since ProposeDiff's stub only uses this for its note text.
 //
 // It walks lock.BaselineDependencyIDs rather than a hand-copied
-// mirrors ++ rests_on: the drift trigger that flips the claim to
+// rests_on list: the drift trigger that flips the claim to
 // review_pending includes a claim-valued governed_by.type, so a copy without it
 // answers "dependency "" changed but no proposal was generated" for exactly the
 // claims a governor edit flagged.

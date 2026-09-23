@@ -63,8 +63,7 @@ it out.
 - Edges: `rests_on` (semantic dependency; the target must exist), `governed_by: {type, reason}` —
   `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
   changing under a locked claim flags `review_pending`) but never a gating one, so it cannot block
-  a   lock. There is no `mirrors` edge; leftover non-empty `mirrors:` YAML is
-  `mirrors-retired` (error). Delete the key.
+  a   lock.
 - **Loops are refused in all three shapes**, at ERROR: `rests_on` → `cycle`, `governed_by` →
   `governed-cycle`, and as of v0.5.0 one *alternating* the two → `mixed-cycle`. "B is governed by A"
   buys no free back edge when A already rests on B. The router's `mixed-cycle`

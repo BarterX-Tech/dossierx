@@ -312,7 +312,7 @@ func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
 }
 
 // edgesHTML renders the edge/metadata footer shared by every non-banner
-// component: governed_by, mirrors, rests_on, migrated_from, and a
+// component: governed_by, rests_on, migrated_from, and a
 // review_pending flag. It is a Go helper rather than template markup so
 // every component gets identical, balanced markup without duplicating it
 // six times; values are HTML-escaped by hand since a FuncMap-returned
@@ -378,7 +378,7 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // docs/design/screens/05-claim-one-expansion-at-a-time.md's "one strip, four
 // doors" redesign (R09.1/R-F.1) — for the two doors this package owns:
 // RELATIONSHIPS (R09.4's three fixed directions, GOVERNED BY / DEPENDS ON /
-// DEPENDED ON BY, plus the mirrors/migrated_from/review_pending/implemented-in
+// DEPENDED ON BY, plus the migrated_from/review_pending/implemented-in
 // facts that ride along after them) and SOURCES, split out into its own peer
 // disclosure per R09.5. The other two doors the board names — readiness and
 // implementation checks — are rendered by sibling components
@@ -504,7 +504,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		}
 	}
 
-	// Facts that do not fit R09.4's three fixed directions (mirrors,
+	// Facts that do not fit R09.4's three fixed directions (
 	// migrated_from, review_pending, implemented-in/drifted) ride after the
 	// three direction blocks inside the same relationships panel, in the
 	// same hairline-divided row form, rather than inventing a fourth
@@ -763,7 +763,7 @@ func writeRelationshipDirection(b *strings.Builder, arrow, label string, count i
 // the shared writeClaimRef anchor (title only — showPrefix=false, see below),
 // the target's own `module · facet` meta column, and a right-ranged
 // lifecycle badge — 05 §4.10's four columns. Unlike targetPillHTML (which
-// still governs the "extra" mirrors/rests-on-adjacent rows via
+// still governs the "extra" rests_on-adjacent rows via
 // writeIDListItems), a fixed-direction relationship row ALWAYS carries a
 // badge when the target's lifecycle is known — a healthy locked target gets
 // "LOCKED" rather than nothing, because R-I.2 states the badge is the row's
@@ -809,7 +809,7 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 // and 07 §4.10 ("Row meta … text form Module · Facet") measure it
 // unqualified — there is no same-module/same-facet special case for this
 // column, only for writeClaimRef's own inline prefix on every OTHER edge
-// list this footer renders (mirrors, rests_on-adjacent extras).
+// list this footer renders (rests_on-adjacent extras).
 //
 // An unshaped id (splitClaimID fails) has no module/facet to show and
 // writes no meta span at all — the same graceful degradation writeClaimRef's
@@ -1170,8 +1170,8 @@ func ClaimLabel(id string) string {
 // writeRelationshipRow) now carries the target's module/facet in its own,
 // UNCONDITIONAL meta column (writeRelationshipMeta), so folding the same
 // information into an elided inline prefix here as well would print it
-// twice on those rows. Every other caller — writeIDListItems, for mirrors
-// and rests_on-adjacent "extra" rows, which have no meta column of their
+// twice on those rows. Every other caller — writeIDListItems, for
+// rests_on-adjacent "extra" rows, which have no meta column of their
 // own — passes true and keeps this function's original elision behaviour
 // exactly as it was.
 func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus, showPrefix bool) {

@@ -6,7 +6,7 @@ layout: card
 body: |
   A grounded claim the cycle pair rests on. It exists only so the two
   cycle claims carry a rests_on edge and the orphan warning (which counts
-  mirrors and rests_on, deliberately not governed_by) stays out of this
+  rests_on, deliberately not governed_by) stays out of this
   fixture.
 governed_by:
   type: none

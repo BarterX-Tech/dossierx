@@ -1098,8 +1098,8 @@ func mdImagesIn(source string) []mdImageRef {
 // the off-origin question separately from the relative-path one: a
 // "../other-facet/assets/x.png" is refused by the renderer AND is the canonical
 // co-location mistake, so asset-scope reports it too rather than deferring
-// (deliberate co-firing, on the package's existing cycle/self-edge and
-// dangling/mirror-unanchored precedent), whereas an OFF-ORIGIN src is not a
+	// (deliberate co-firing, on the package's existing cycle/self-edge and
+	// dangling/validated-on-missing precedent), whereas an OFF-ORIGIN src is not a
 // path at all and has no directory to be in or out of, so asset-scope stays
 // silent on it and markdown-sanity alone reports it.
 
