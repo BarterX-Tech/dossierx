@@ -46,8 +46,90 @@ explained  2 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (+30 -53)
-    size            23276 lines / 1234179 bytes -> 23253 lines / 1232529 bytes
+testdata/fixture-basic/build/viewer/index.html  (+50 -75)
+    size            23276 lines / 1234179 bytes -> 23251 lines / 1232276 bytes
+@@ -1003,13 +1003,13 @@
+    rows come back when the overlay is cleared. graph-ui.js builds the rows;
+    this file only styles them.
+
+-   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
+-   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
+-   the part of an edge that ends up hidden under the node it points at — so a
+-   legend naming only the third relation left a reader with two lines that
+-   looked identical and no way to find out which was which. Each row draws the
+-   same sample the canvas draws: solid with one chevron, dashed with none, and
+-   the reserved hue curved with a double chevron. */
++   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
++   rests_on and governed_by differ on the canvas by routing and arrowhead —
++   an arrowhead is exactly the part of an edge that ends up hidden under the
++   node it points at — so a legend naming only one relation left a reader
++   with two lines and no way to find out which was which. Each row draws the
++   same sample the canvas draws: solid with one chevron, and the reserved
++   hue curved with a double chevron. */
+
+ .dxg-legend {
+   flex-shrink: 0;
+@@ -2253,7 +2253,7 @@
+ }
+
+ /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
+-   specific claim card (an edges-footer rests_on/mirrors/governed_by link,
++   specific claim card (an edges-footer rests_on/governed_by link,
+    or a deep link), so the reader's eye lands on the right card instead of
+    just the top of the right tab. outline (not border/box-shadow) so it
+    doesn't shift layout or fight .claim-card--warn's own border-color. */
+@@ -3946,7 +3946,7 @@
+ /* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
+    left side): the target's own `module · facet`, ALWAYS shown — never the
+    elided, reader-context-relative prefix `writeClaimRef` draws for every
+-   other edge list in this footer (mirrors/rests_on extras). It is its own
++   other edge list in this footer (rests_on extras). It is its own
+    column between the title and the badge, not text folded into the title,
+    because 05 §4.10 counts it as one of the row's four columns. See
+    components.go's writeRelationshipRow/writeRelationshipMeta. */
+@@ -4068,7 +4068,7 @@
+ }
+
+ /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
+-   governed_by/mirrors/rests_on/depended-on-by/migrated_from/review_pending/
++   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
+    implemented-in fact is its own <li>, stacked vertically rather than
+    wrapped inline, so a card with many edges reads as a scannable list
+    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
+@@ -4108,7 +4108,7 @@
+   color: var(--link);
+ }
+
+-/* claim-edge-id-list is the nested <ul> a multi-id edge (mirrors,
++/* claim-edge-id-list is the nested <ul> a multi-id edge (
+    rests_on, depended-on-by) renders under its own <li> — one id per
+    line, indented under its "label:" parent so it reads as a sub-list
+    rather than colliding with the parent bullet's own marker. */
+@@ -4132,7 +4132,7 @@
+ }
+
+ /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
+-   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
++   (components.go's writeClaimRef): governed_by, rests_on and
+    depended-on-by, all inside the shared claim footer. Its two inner spans carry
+    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
+    when the target is outside the reading claim's own module/facet, and the
+@@ -16910,12 +16910,12 @@
+
+   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
+   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
+-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
++  // labels back to "Rests On" / "Governed By" and renamed the
+   // "edge types" / "edges" headings to "Relationships" — a fixup for a
+   // pre-13 build of the pane that had no display-label map of its own.
+   // graph-ui.js now builds every one of those labels correctly at the
+-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
+-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
++  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
++  // "Governed by", the "Relations" eyebrow, the "marks"
+   // legend group), and this shim was firing on every rebuild and silently
+   // reverting all of it back to the pre-13 wording — removed here rather
+   // than left to fight graph-ui.js on every interaction. Found via
 @@ -17037,7 +17037,7 @@
    // suite off these names.
    //
@@ -74,7 +156,22 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -17825,7 +17826,8 @@
+@@ -17663,11 +17664,9 @@
+   // ------------------------------------------------------------------
+
+   // isDirectedType reports whether an edge type participates in cycle
+-  // detection. `mirrors` does not: reciprocity is the lint's job and a
+-  // mirrored pair is a two-cycle by construction, so including it would ring
+-  // every correctly mirrored claim red. An untyped edge ("") is treated as
+-  // directed, which is what makes the [from, to] pair form usable in a
+-  // one-liner harness.
++  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
++  // An untyped edge ("") is treated as directed, which is what makes
++  // the [from, to] pair form usable in a one-liner harness.
+   function isDirectedType(type) {
+     if (type === '') {
+       return true;
+@@ -17825,7 +17824,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -84,7 +181,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -18484,9 +18486,11 @@
+@@ -18484,9 +18484,11 @@
      'status'
    ]);
 
@@ -99,7 +196,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -18817,15 +18821,12 @@
+@@ -18817,15 +18819,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -119,7 +216,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
      governed_by: 'Governed by',
    };
 
-@@ -18838,9 +18839,8 @@
+@@ -18838,9 +18837,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -130,7 +227,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19631,15 +19631,9 @@
+@@ -19631,15 +19629,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -147,7 +244,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19647,11 +19641,6 @@
+@@ -19647,11 +19639,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -159,7 +256,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -19888,7 +19877,7 @@
+@@ -19888,7 +19875,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -168,7 +265,18 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21626,12 +21615,7 @@
+@@ -21572,8 +21559,8 @@
+   //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
+   //               ramp, so a governance edge can never be mistaken for a
+   //               facet's colour at any facet count in either theme
+-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
+-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
++  //   2. ROUTING  a quadratic curve, where rests_on is straight
++  //   3. HEAD     a double chevron, where rests_on has one
+   //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
+   //               so a doctrine claim is findable without following any line
+   //
+@@ -21626,12 +21613,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -182,7 +290,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21647,17 +21631,13 @@
+@@ -21647,17 +21629,13 @@
        }
        ctx.stroke();
 
@@ -207,7 +315,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -22841,9 +22821,7 @@
+@@ -22841,9 +22819,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -218,7 +326,7 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -22859,8 +22837,7 @@
+@@ -22859,8 +22835,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -229,8 +337,90 @@ testdata/fixture-basic/build/viewer/index.html  (+30 -53)
      var any = false;
      for (var i = 0; i < plan.length; i++) {
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
-    size            23601 lines / 1288309 bytes -> 23578 lines / 1286659 bytes
+testdata/fixture-conformance-v1/build/viewer/index.html  (+50 -75)
+    size            23601 lines / 1288309 bytes -> 23576 lines / 1286406 bytes
+@@ -1003,13 +1003,13 @@
+    rows come back when the overlay is cleared. graph-ui.js builds the rows;
+    this file only styles them.
+
+-   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
+-   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
+-   the part of an edge that ends up hidden under the node it points at — so a
+-   legend naming only the third relation left a reader with two lines that
+-   looked identical and no way to find out which was which. Each row draws the
+-   same sample the canvas draws: solid with one chevron, dashed with none, and
+-   the reserved hue curved with a double chevron. */
++   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
++   rests_on and governed_by differ on the canvas by routing and arrowhead —
++   an arrowhead is exactly the part of an edge that ends up hidden under the
++   node it points at — so a legend naming only one relation left a reader
++   with two lines and no way to find out which was which. Each row draws the
++   same sample the canvas draws: solid with one chevron, and the reserved
++   hue curved with a double chevron. */
+
+ .dxg-legend {
+   flex-shrink: 0;
+@@ -2253,7 +2253,7 @@
+ }
+
+ /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
+-   specific claim card (an edges-footer rests_on/mirrors/governed_by link,
++   specific claim card (an edges-footer rests_on/governed_by link,
+    or a deep link), so the reader's eye lands on the right card instead of
+    just the top of the right tab. outline (not border/box-shadow) so it
+    doesn't shift layout or fight .claim-card--warn's own border-color. */
+@@ -3946,7 +3946,7 @@
+ /* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
+    left side): the target's own `module · facet`, ALWAYS shown — never the
+    elided, reader-context-relative prefix `writeClaimRef` draws for every
+-   other edge list in this footer (mirrors/rests_on extras). It is its own
++   other edge list in this footer (rests_on extras). It is its own
+    column between the title and the badge, not text folded into the title,
+    because 05 §4.10 counts it as one of the row's four columns. See
+    components.go's writeRelationshipRow/writeRelationshipMeta. */
+@@ -4068,7 +4068,7 @@
+ }
+
+ /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
+-   governed_by/mirrors/rests_on/depended-on-by/migrated_from/review_pending/
++   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
+    implemented-in fact is its own <li>, stacked vertically rather than
+    wrapped inline, so a card with many edges reads as a scannable list
+    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
+@@ -4108,7 +4108,7 @@
+   color: var(--link);
+ }
+
+-/* claim-edge-id-list is the nested <ul> a multi-id edge (mirrors,
++/* claim-edge-id-list is the nested <ul> a multi-id edge (
+    rests_on, depended-on-by) renders under its own <li> — one id per
+    line, indented under its "label:" parent so it reads as a sub-list
+    rather than colliding with the parent bullet's own marker. */
+@@ -4132,7 +4132,7 @@
+ }
+
+ /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
+-   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
++   (components.go's writeClaimRef): governed_by, rests_on and
+    depended-on-by, all inside the shared claim footer. Its two inner spans carry
+    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
+    when the target is outside the reading claim's own module/facet, and the
+@@ -17235,12 +17235,12 @@
+
+   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
+   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
+-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
++  // labels back to "Rests On" / "Governed By" and renamed the
+   // "edge types" / "edges" headings to "Relationships" — a fixup for a
+   // pre-13 build of the pane that had no display-label map of its own.
+   // graph-ui.js now builds every one of those labels correctly at the
+-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
+-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
++  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
++  // "Governed by", the "Relations" eyebrow, the "marks"
+   // legend group), and this shim was firing on every rebuild and silently
+   // reverting all of it back to the pre-13 wording — removed here rather
+   // than left to fight graph-ui.js on every interaction. Found via
 @@ -17362,7 +17362,7 @@
    // suite off these names.
    //
@@ -257,7 +447,22 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -18150,7 +18151,8 @@
+@@ -17988,11 +17989,9 @@
+   // ------------------------------------------------------------------
+
+   // isDirectedType reports whether an edge type participates in cycle
+-  // detection. `mirrors` does not: reciprocity is the lint's job and a
+-  // mirrored pair is a two-cycle by construction, so including it would ring
+-  // every correctly mirrored claim red. An untyped edge ("") is treated as
+-  // directed, which is what makes the [from, to] pair form usable in a
+-  // one-liner harness.
++  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
++  // An untyped edge ("") is treated as directed, which is what makes
++  // the [from, to] pair form usable in a one-liner harness.
+   function isDirectedType(type) {
+     if (type === '') {
+       return true;
+@@ -18150,7 +18149,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -267,7 +472,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -18809,9 +18811,11 @@
+@@ -18809,9 +18809,11 @@
      'status'
    ]);
 
@@ -282,7 +487,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -19142,15 +19146,12 @@
+@@ -19142,15 +19144,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -302,7 +507,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
      governed_by: 'Governed by',
    };
 
-@@ -19163,9 +19164,8 @@
+@@ -19163,9 +19162,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -313,7 +518,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19956,15 +19956,9 @@
+@@ -19956,15 +19954,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -330,7 +535,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19972,11 +19966,6 @@
+@@ -19972,11 +19964,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -342,7 +547,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -20213,7 +20202,7 @@
+@@ -20213,7 +20200,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -351,7 +556,18 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21951,12 +21940,7 @@
+@@ -21897,8 +21884,8 @@
+   //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
+   //               ramp, so a governance edge can never be mistaken for a
+   //               facet's colour at any facet count in either theme
+-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
+-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
++  //   2. ROUTING  a quadratic curve, where rests_on is straight
++  //   3. HEAD     a double chevron, where rests_on has one
+   //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
+   //               so a doctrine claim is findable without following any line
+   //
+@@ -21951,12 +21938,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -365,7 +581,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21972,17 +21956,13 @@
+@@ -21972,17 +21954,13 @@
        }
        ctx.stroke();
 
@@ -390,7 +606,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -23166,9 +23146,7 @@
+@@ -23166,9 +23144,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -401,7 +617,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23184,8 +23162,7 @@
+@@ -23184,8 +23160,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -412,8 +628,90 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+30 -53)
      var any = false;
      for (var i = 0; i < plan.length; i++) {
 
-testdata/fixture-portability/build/viewer/index.html  (+30 -53)
-    size            23267 lines / 1238682 bytes -> 23244 lines / 1237032 bytes
+testdata/fixture-portability/build/viewer/index.html  (+50 -75)
+    size            23267 lines / 1238682 bytes -> 23242 lines / 1236779 bytes
+@@ -1003,13 +1003,13 @@
+    rows come back when the overlay is cleared. graph-ui.js builds the rows;
+    this file only styles them.
+
+-   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
+-   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
+-   the part of an edge that ends up hidden under the node it points at — so a
+-   legend naming only the third relation left a reader with two lines that
+-   looked identical and no way to find out which was which. Each row draws the
+-   same sample the canvas draws: solid with one chevron, dashed with none, and
+-   the reserved hue curved with a double chevron. */
++   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
++   rests_on and governed_by differ on the canvas by routing and arrowhead —
++   an arrowhead is exactly the part of an edge that ends up hidden under the
++   node it points at — so a legend naming only one relation left a reader
++   with two lines and no way to find out which was which. Each row draws the
++   same sample the canvas draws: solid with one chevron, and the reserved
++   hue curved with a double chevron. */
+
+ .dxg-legend {
+   flex-shrink: 0;
+@@ -2253,7 +2253,7 @@
+ }
+
+ /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
+-   specific claim card (an edges-footer rests_on/mirrors/governed_by link,
++   specific claim card (an edges-footer rests_on/governed_by link,
+    or a deep link), so the reader's eye lands on the right card instead of
+    just the top of the right tab. outline (not border/box-shadow) so it
+    doesn't shift layout or fight .claim-card--warn's own border-color. */
+@@ -3946,7 +3946,7 @@
+ /* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
+    left side): the target's own `module · facet`, ALWAYS shown — never the
+    elided, reader-context-relative prefix `writeClaimRef` draws for every
+-   other edge list in this footer (mirrors/rests_on extras). It is its own
++   other edge list in this footer (rests_on extras). It is its own
+    column between the title and the badge, not text folded into the title,
+    because 05 §4.10 counts it as one of the row's four columns. See
+    components.go's writeRelationshipRow/writeRelationshipMeta. */
+@@ -4068,7 +4068,7 @@
+ }
+
+ /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
+-   governed_by/mirrors/rests_on/depended-on-by/migrated_from/review_pending/
++   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
+    implemented-in fact is its own <li>, stacked vertically rather than
+    wrapped inline, so a card with many edges reads as a scannable list
+    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
+@@ -4108,7 +4108,7 @@
+   color: var(--link);
+ }
+
+-/* claim-edge-id-list is the nested <ul> a multi-id edge (mirrors,
++/* claim-edge-id-list is the nested <ul> a multi-id edge (
+    rests_on, depended-on-by) renders under its own <li> — one id per
+    line, indented under its "label:" parent so it reads as a sub-list
+    rather than colliding with the parent bullet's own marker. */
+@@ -4132,7 +4132,7 @@
+ }
+
+ /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
+-   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
++   (components.go's writeClaimRef): governed_by, rests_on and
+    depended-on-by, all inside the shared claim footer. Its two inner spans carry
+    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
+    when the target is outside the reading claim's own module/facet, and the
+@@ -16901,12 +16901,12 @@
+
+   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
+   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
+-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
++  // labels back to "Rests On" / "Governed By" and renamed the
+   // "edge types" / "edges" headings to "Relationships" — a fixup for a
+   // pre-13 build of the pane that had no display-label map of its own.
+   // graph-ui.js now builds every one of those labels correctly at the
+-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
+-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
++  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
++  // "Governed by", the "Relations" eyebrow, the "marks"
+   // legend group), and this shim was firing on every rebuild and silently
+   // reverting all of it back to the pre-13 wording — removed here rather
+   // than left to fight graph-ui.js on every interaction. Found via
 @@ -17028,7 +17028,7 @@
    // suite off these names.
    //
@@ -440,7 +738,22 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -17816,7 +17817,8 @@
+@@ -17654,11 +17655,9 @@
+   // ------------------------------------------------------------------
+
+   // isDirectedType reports whether an edge type participates in cycle
+-  // detection. `mirrors` does not: reciprocity is the lint's job and a
+-  // mirrored pair is a two-cycle by construction, so including it would ring
+-  // every correctly mirrored claim red. An untyped edge ("") is treated as
+-  // directed, which is what makes the [from, to] pair form usable in a
+-  // one-liner harness.
++  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
++  // An untyped edge ("") is treated as directed, which is what makes
++  // the [from, to] pair form usable in a one-liner harness.
+   function isDirectedType(type) {
+     if (type === '') {
+       return true;
+@@ -17816,7 +17815,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -450,7 +763,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -18475,9 +18477,11 @@
+@@ -18475,9 +18475,11 @@
      'status'
    ]);
 
@@ -465,7 +778,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -18808,15 +18812,12 @@
+@@ -18808,15 +18810,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -485,7 +798,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
      governed_by: 'Governed by',
    };
 
-@@ -18829,9 +18830,8 @@
+@@ -18829,9 +18828,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -496,7 +809,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19622,15 +19622,9 @@
+@@ -19622,15 +19620,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -513,7 +826,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19638,11 +19632,6 @@
+@@ -19638,11 +19630,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -525,7 +838,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -19879,7 +19868,7 @@
+@@ -19879,7 +19866,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -534,7 +847,18 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21617,12 +21606,7 @@
+@@ -21563,8 +21550,8 @@
+   //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
+   //               ramp, so a governance edge can never be mistaken for a
+   //               facet's colour at any facet count in either theme
+-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
+-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
++  //   2. ROUTING  a quadratic curve, where rests_on is straight
++  //   3. HEAD     a double chevron, where rests_on has one
+   //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
+   //               so a doctrine claim is findable without following any line
+   //
+@@ -21617,12 +21604,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -548,7 +872,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21638,17 +21622,13 @@
+@@ -21638,17 +21620,13 @@
        }
        ctx.stroke();
 
@@ -573,7 +897,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -22832,9 +22812,7 @@
+@@ -22832,9 +22810,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -584,7 +908,7 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -22850,8 +22828,7 @@
+@@ -22850,8 +22826,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -595,8 +919,90 @@ testdata/fixture-portability/build/viewer/index.html  (+30 -53)
      var any = false;
      for (var i = 0; i < plan.length; i++) {
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
-    size            27403 lines / 4877586 bytes -> 27380 lines / 4875936 bytes
+testdata/fixture-theme-flat/build/viewer/index.html  (+50 -75)
+    size            27403 lines / 4877586 bytes -> 27378 lines / 4875683 bytes
+@@ -1003,13 +1003,13 @@
+    rows come back when the overlay is cleared. graph-ui.js builds the rows;
+    this file only styles them.
+
+-   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
+-   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
+-   the part of an edge that ends up hidden under the node it points at — so a
+-   legend naming only the third relation left a reader with two lines that
+-   looked identical and no way to find out which was which. Each row draws the
+-   same sample the canvas draws: solid with one chevron, dashed with none, and
+-   the reserved hue curved with a double chevron. */
++   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
++   rests_on and governed_by differ on the canvas by routing and arrowhead —
++   an arrowhead is exactly the part of an edge that ends up hidden under the
++   node it points at — so a legend naming only one relation left a reader
++   with two lines and no way to find out which was which. Each row draws the
++   same sample the canvas draws: solid with one chevron, and the reserved
++   hue curved with a double chevron. */
+
+ .dxg-legend {
+   flex-shrink: 0;
+@@ -2253,7 +2253,7 @@
+ }
+
+ /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
+-   specific claim card (an edges-footer rests_on/mirrors/governed_by link,
++   specific claim card (an edges-footer rests_on/governed_by link,
+    or a deep link), so the reader's eye lands on the right card instead of
+    just the top of the right tab. outline (not border/box-shadow) so it
+    doesn't shift layout or fight .claim-card--warn's own border-color. */
+@@ -3946,7 +3946,7 @@
+ /* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
+    left side): the target's own `module · facet`, ALWAYS shown — never the
+    elided, reader-context-relative prefix `writeClaimRef` draws for every
+-   other edge list in this footer (mirrors/rests_on extras). It is its own
++   other edge list in this footer (rests_on extras). It is its own
+    column between the title and the badge, not text folded into the title,
+    because 05 §4.10 counts it as one of the row's four columns. See
+    components.go's writeRelationshipRow/writeRelationshipMeta. */
+@@ -4068,7 +4068,7 @@
+ }
+
+ /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
+-   governed_by/mirrors/rests_on/depended-on-by/migrated_from/review_pending/
++   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
+    implemented-in fact is its own <li>, stacked vertically rather than
+    wrapped inline, so a card with many edges reads as a scannable list
+    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
+@@ -4108,7 +4108,7 @@
+   color: var(--link);
+ }
+
+-/* claim-edge-id-list is the nested <ul> a multi-id edge (mirrors,
++/* claim-edge-id-list is the nested <ul> a multi-id edge (
+    rests_on, depended-on-by) renders under its own <li> — one id per
+    line, indented under its "label:" parent so it reads as a sub-list
+    rather than colliding with the parent bullet's own marker. */
+@@ -4132,7 +4132,7 @@
+ }
+
+ /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
+-   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
++   (components.go's writeClaimRef): governed_by, rests_on and
+    depended-on-by, all inside the shared claim footer. Its two inner spans carry
+    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
+    when the target is outside the reading claim's own module/facet, and the
+@@ -17174,12 +17174,12 @@
+
+   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
+   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
+-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
++  // labels back to "Rests On" / "Governed By" and renamed the
+   // "edge types" / "edges" headings to "Relationships" — a fixup for a
+   // pre-13 build of the pane that had no display-label map of its own.
+   // graph-ui.js now builds every one of those labels correctly at the
+-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
+-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
++  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
++  // "Governed by", the "Relations" eyebrow, the "marks"
+   // legend group), and this shim was firing on every rebuild and silently
+   // reverting all of it back to the pre-13 wording — removed here rather
+   // than left to fight graph-ui.js on every interaction. Found via
 @@ -17301,7 +17301,7 @@
    // suite off these names.
    //
@@ -623,7 +1029,22 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -18089,7 +18090,8 @@
+@@ -17927,11 +17928,9 @@
+   // ------------------------------------------------------------------
+
+   // isDirectedType reports whether an edge type participates in cycle
+-  // detection. `mirrors` does not: reciprocity is the lint's job and a
+-  // mirrored pair is a two-cycle by construction, so including it would ring
+-  // every correctly mirrored claim red. An untyped edge ("") is treated as
+-  // directed, which is what makes the [from, to] pair form usable in a
+-  // one-liner harness.
++  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
++  // An untyped edge ("") is treated as directed, which is what makes
++  // the [from, to] pair form usable in a one-liner harness.
+   function isDirectedType(type) {
+     if (type === '') {
+       return true;
+@@ -18089,7 +18088,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -633,7 +1054,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -18748,9 +18750,11 @@
+@@ -18748,9 +18748,11 @@
      'status'
    ]);
 
@@ -648,7 +1069,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -19081,15 +19085,12 @@
+@@ -19081,15 +19083,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -668,7 +1089,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
      governed_by: 'Governed by',
    };
 
-@@ -19102,9 +19103,8 @@
+@@ -19102,9 +19101,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -679,7 +1100,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19895,15 +19895,9 @@
+@@ -19895,15 +19893,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -696,7 +1117,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -19911,11 +19905,6 @@
+@@ -19911,11 +19903,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -708,7 +1129,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -20152,7 +20141,7 @@
+@@ -20152,7 +20139,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -717,7 +1138,18 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -21890,12 +21879,7 @@
+@@ -21836,8 +21823,8 @@
+   //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
+   //               ramp, so a governance edge can never be mistaken for a
+   //               facet's colour at any facet count in either theme
+-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
+-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
++  //   2. ROUTING  a quadratic curve, where rests_on is straight
++  //   3. HEAD     a double chevron, where rests_on has one
+   //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
+   //               so a doctrine claim is findable without following any line
+   //
+@@ -21890,12 +21877,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -731,7 +1163,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -21911,17 +21895,13 @@
+@@ -21911,17 +21893,13 @@
        }
        ctx.stroke();
 
@@ -756,7 +1188,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -23105,9 +23085,7 @@
+@@ -23105,9 +23083,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -767,7 +1199,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+30 -53)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23123,8 +23101,7 @@
+@@ -23123,8 +23099,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],
@@ -806,10 +1238,76 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+0 -6)
            "type": "engine.decision.single-source-of-truth"
          }
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
+testdata/fixture-graph-demo/build/viewer/index.html  (+53 -78)
     inputs changed  testdata/fixture-graph-demo/claims/engine-facts-not-verdicts.yaml
                     testdata/fixture-graph-demo/claims/viewer-facts-not-verdicts.yaml
-    size            23990 lines / 1496790 bytes -> 23967 lines / 1493990 bytes
+    size            23990 lines / 1496790 bytes -> 23965 lines / 1493737 bytes
+@@ -1003,13 +1003,13 @@
+    rows come back when the overlay is cleared. graph-ui.js builds the rows;
+    this file only styles them.
+
+-   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
+-   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
+-   the part of an edge that ends up hidden under the node it points at — so a
+-   legend naming only the third relation left a reader with two lines that
+-   looked identical and no way to find out which was which. Each row draws the
+-   same sample the canvas draws: solid with one chevron, dashed with none, and
+-   the reserved hue curved with a double chevron. */
++   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
++   rests_on and governed_by differ on the canvas by routing and arrowhead —
++   an arrowhead is exactly the part of an edge that ends up hidden under the
++   node it points at — so a legend naming only one relation left a reader
++   with two lines and no way to find out which was which. Each row draws the
++   same sample the canvas draws: solid with one chevron, and the reserved
++   hue curved with a double chevron. */
+
+ .dxg-legend {
+   flex-shrink: 0;
+@@ -2253,7 +2253,7 @@
+ }
+
+ /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
+-   specific claim card (an edges-footer rests_on/mirrors/governed_by link,
++   specific claim card (an edges-footer rests_on/governed_by link,
+    or a deep link), so the reader's eye lands on the right card instead of
+    just the top of the right tab. outline (not border/box-shadow) so it
+    doesn't shift layout or fight .claim-card--warn's own border-color. */
+@@ -3946,7 +3946,7 @@
+ /* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
+    left side): the target's own `module · facet`, ALWAYS shown — never the
+    elided, reader-context-relative prefix `writeClaimRef` draws for every
+-   other edge list in this footer (mirrors/rests_on extras). It is its own
++   other edge list in this footer (rests_on extras). It is its own
+    column between the title and the badge, not text folded into the title,
+    because 05 §4.10 counts it as one of the row's four columns. See
+    components.go's writeRelationshipRow/writeRelationshipMeta. */
+@@ -4068,7 +4068,7 @@
+ }
+
+ /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
+-   governed_by/mirrors/rests_on/depended-on-by/migrated_from/review_pending/
++   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
+    implemented-in fact is its own <li>, stacked vertically rather than
+    wrapped inline, so a card with many edges reads as a scannable list
+    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
+@@ -4108,7 +4108,7 @@
+   color: var(--link);
+ }
+
+-/* claim-edge-id-list is the nested <ul> a multi-id edge (mirrors,
++/* claim-edge-id-list is the nested <ul> a multi-id edge (
+    rests_on, depended-on-by) renders under its own <li> — one id per
+    line, indented under its "label:" parent so it reads as a sub-list
+    rather than colliding with the parent bullet's own marker. */
+@@ -4132,7 +4132,7 @@
+ }
+
+ /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
+-   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
++   (components.go's writeClaimRef): governed_by, rests_on and
+    depended-on-by, all inside the shared claim footer. Its two inner spans carry
+    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
+    when the target is outside the reading claim's own module/facet, and the
 @@ -11988,7 +11988,7 @@
    <div class="k" data-claim-id="engine.decision.facts-not-verdicts" title="engine.decision.facts-not-verdicts"><span class="label"><span class="k-title">Facts Not Verdicts</span> <span class="pill pv"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock-open"/></svg>Draft</span><span class="k-id">engine.decision.facts-not-verdicts</span></span></div>
  <div class="claim-body"><p>The engine states facts and the reader&#39;s browser computes verdicts. A gap list precomputed while rendering would be wrong the moment a reader narrows the view to one module, because every connectivity question is relative to what is currently on screen.</p></div>
@@ -837,6 +1335,22 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
 
    <script>    (function () {
        'use strict';
+@@ -17624,12 +17624,12 @@
+
+   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
+   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
+-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
++  // labels back to "Rests On" / "Governed By" and renamed the
+   // "edge types" / "edges" headings to "Relationships" — a fixup for a
+   // pre-13 build of the pane that had no display-label map of its own.
+   // graph-ui.js now builds every one of those labels correctly at the
+-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
+-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
++  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
++  // "Governed by", the "Relations" eyebrow, the "marks"
+   // legend group), and this shim was firing on every rebuild and silently
+   // reverting all of it back to the pre-13 wording — removed here rather
+   // than left to fight graph-ui.js on every interaction. Found via
 @@ -17751,7 +17751,7 @@
    // suite off these names.
    //
@@ -863,7 +1377,22 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
    var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
-@@ -18539,7 +18540,8 @@
+@@ -18377,11 +18378,9 @@
+   // ------------------------------------------------------------------
+
+   // isDirectedType reports whether an edge type participates in cycle
+-  // detection. `mirrors` does not: reciprocity is the lint's job and a
+-  // mirrored pair is a two-cycle by construction, so including it would ring
+-  // every correctly mirrored claim red. An untyped edge ("") is treated as
+-  // directed, which is what makes the [from, to] pair form usable in a
+-  // one-liner harness.
++  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
++  // An untyped edge ("") is treated as directed, which is what makes
++  // the [from, to] pair form usable in a one-liner harness.
+   function isDirectedType(type) {
+     if (type === '') {
+       return true;
+@@ -18539,7 +18538,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -873,7 +1402,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -19198,9 +19200,11 @@
+@@ -19198,9 +19198,11 @@
      'status'
    ]);
 
@@ -888,7 +1417,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -19531,15 +19535,12 @@
+@@ -19531,15 +19533,12 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -908,7 +1437,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
      governed_by: 'Governed by',
    };
 
-@@ -19552,9 +19553,8 @@
+@@ -19552,9 +19551,8 @@
    var LEGEND_EDGE_LABELS = {
      governed_by: 'governed by',
      rests_on: 'depends on',
@@ -919,7 +1448,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -20345,15 +20345,9 @@
+@@ -20345,15 +20343,9 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -936,7 +1465,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
    //   governed_by  the reserved hue, curved, two chevrons
    var EDGE_SAMPLES = {
      rests_on:
-@@ -20361,11 +20355,6 @@
+@@ -20361,11 +20353,6 @@
        '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
        '</svg>',
@@ -948,7 +1477,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
      governed_by:
        '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
        '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-@@ -20602,7 +20591,7 @@
+@@ -20602,7 +20589,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -957,7 +1486,18 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -22340,12 +22329,7 @@
+@@ -22286,8 +22273,8 @@
+   //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
+   //               ramp, so a governance edge can never be mistaken for a
+   //               facet's colour at any facet count in either theme
+-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
+-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
++  //   2. ROUTING  a quadratic curve, where rests_on is straight
++  //   3. HEAD     a double chevron, where rests_on has one
+   //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
+   //               so a doctrine claim is findable without following any line
+   //
+@@ -22340,12 +22327,7 @@
        if (curved) {
          ctx.lineWidth += 0.6;
        }
@@ -971,7 +1511,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
 
        var target = scene.byId[edge.to];
        var stop = target ? radiusOf(target) + 2 : 4;
-@@ -22361,17 +22345,13 @@
+@@ -22361,17 +22343,13 @@
        }
        ctx.stroke();
 
@@ -996,7 +1536,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
        var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
        if (edge.type === 'governed_by') {
          chevron(ctx, end.x, end.y, angle, 6.5);
-@@ -23555,9 +23535,7 @@
+@@ -23555,9 +23533,7 @@
    // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
    // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
    // dropped; it leaves the rail and becomes its own edge group, where it
@@ -1007,7 +1547,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+33 -56)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23573,8 +23551,7 @@
+@@ -23573,8 +23549,7 @@
      var plan = [
        ['governed_by', 'out', 'GOVERNED BY'],
        ['rests_on', 'out', 'DEPENDS ON'],

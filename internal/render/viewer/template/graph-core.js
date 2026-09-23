@@ -658,11 +658,9 @@
   // ------------------------------------------------------------------
 
   // isDirectedType reports whether an edge type participates in cycle
-  // detection. `mirrors` does not: reciprocity is the lint's job and a
-  // mirrored pair is a two-cycle by construction, so including it would ring
-  // every correctly mirrored claim red. An untyped edge ("") is treated as
-  // directed, which is what makes the [from, to] pair form usable in a
-  // one-liner harness.
+  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
+  // An untyped edge ("") is treated as directed, which is what makes
+  // the [from, to] pair form usable in a one-liner harness.
   function isDirectedType(type) {
     if (type === '') {
       return true;
