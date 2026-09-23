@@ -101,16 +101,6 @@
       ]
     },
     {
-      "path": "claim migrate-lock-policy",
-      "short": "Adopt the local-approval lock policy without rewriting existing approvals",
-      "flags": [
-        "--config",
-        "--dry-run",
-        "--format",
-        "--reason"
-      ]
-    },
-    {
       "path": "claim new",
       "short": "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
       "flags": [
@@ -265,6 +255,7 @@
   ],
   "retired": [
     "catalog",
+    "claim migrate-lock-policy",
     "comment delete",
     "comment edit",
     "comment reopen",
@@ -533,7 +524,7 @@
   ],
   "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:8a4d290c74ad162ae729dbcaf1aa3cf6f3228fc5234a3e08e4d45472f0bdd65c",
+    "cmd/dossierx": "sha256:936a958bdcdc277a0685365638d0bd2df3e9732b314908f31a99f2552a8f91eb",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -563,7 +554,7 @@
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:1bcd6aebec312325f2e0103e57e85c2039f4ffbf673fa78d6031bcf94ee1089a"
+    "skills": "sha256:769db1900a8cf016edf103a45d559c6712cef6be7751e407769cfde1ff9513ef"
   },
   "envelope": {
     "keys": [
@@ -869,12 +860,6 @@
         "to",
         "would"
       ],
-      "policyMigrationData": [
-        "from",
-        "migrated_at",
-        "reason",
-        "to"
-      ],
       "reauditData": [
         "applied",
         "body_diff_html",
@@ -984,7 +969,7 @@
     }
   ],
   "counts": {
-    "commands": 25,
+    "commands": 24,
     "error_codes": 52,
     "http_routes": 14,
     "lint_rules": 38,

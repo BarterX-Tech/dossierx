@@ -10,10 +10,9 @@ specific project, module, or facet. All project-specific vocabulary
 
 The lock store has a separate `policy_version` from its JSON `version`. A
 missing store is a new project and begins at policy v1. A store written before
-this policy remains on its recorded legacy rule until a human explicitly runs
-`dossierx claim migrate-lock-policy --reason "..."`. Migration records its
-time and reason but does not rewrite claims, approvals, dependency baselines,
-receipts or review causes.
+this policy remains on its recorded legacy rule. Loading a newer binary does
+not reinterpret old approvals, refresh baselines, or clear review causes, and
+there is no everyday command that adopts policy v1 on an existing store.
 
 Policy v1 evaluates a requested claim set as one final candidate state. A set
 of one uses the same evaluator as a group. `claim lock ... --dry-run` returns

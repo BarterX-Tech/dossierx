@@ -271,16 +271,6 @@ claim lock / already locked
     error.code    already_locked
     error.details claim_id:string
 
-claim migrate-lock-policy / preview
-    argv          claim migrate-lock-policy --dry-run
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       claim migrate-lock-policy
-    data          from:number
-                  reason:string
-                  to:number
-
 claim recover-approved-content / nothing to recover
     argv          claim recover-approved-content --dry-run
     exit          0

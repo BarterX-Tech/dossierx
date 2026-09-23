@@ -168,10 +168,10 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-six leaves, and not one more.
+	// The whole surface: eight nouns, twenty-four leaves, and not one more.
 	//
 	//	check                                                            1
-	//	claim   show list new lock unlock flag reaudit link migrate-lock-policy 9
+	//	claim   show list new lock unlock flag reaudit link recover-approved-content 9
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock show                              4
 	//	track   list show status                                          3

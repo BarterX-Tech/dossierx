@@ -58,13 +58,13 @@ func newClaimCmd() *cobra.Command {
 		newClaimListCmd(),
 		newClaimNewCmd(),
 		newLockCmd(),
-		newLockPolicyMigrateCmd(),
 		newClaimRecoverApprovedContentCmd(),
 		newUnlockCmd(),
 		newFlagCmd(),
 		newReauditCmd(),
 		newClaimLinkCmd(),
 	)
+	cmd.AddCommand(retiredClaimVerbs()...)
 	return commandGroup(cmd)
 }
 

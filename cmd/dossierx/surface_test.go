@@ -1192,7 +1192,6 @@ func surfacePayloadTypes() map[string]any {
 		"lockData":                lockData{},
 		"policyLockPreviewData":   policyLockPreviewData{},
 		"policyLockData":          policyLockData{},
-		"policyMigrationData":     policyMigrationData{},
 		"recoverData":             recoverData{},
 		"lockRefusedData":         lockRefusedData{},
 		"batchLockData":           batchLockData{},

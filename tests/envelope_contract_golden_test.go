@@ -514,7 +514,6 @@ func envelopeCases() []envelopeCase {
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / previewed", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"}},
 		{"claim lock / already locked", envLocked, []string{"claim", "lock", "widget.contract.overview", "--reason", "again"}},
-		{"claim migrate-lock-policy / preview", envFresh, []string{"claim", "migrate-lock-policy", "--dry-run"}},
 		// Both branches of the recovery verb: nothing eligible needs no git
 		// and succeeds, something eligible with no work tree refuses. Pinning
 		// only the first would leave an agent unable to tell them apart.

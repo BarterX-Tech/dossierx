@@ -451,6 +451,11 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 		// flag parsing runs first — so without the stub, `--adopt` surfaces as
 		// `unknown flag` and the removal is never named at all.
 		{"migrate --adopt", []string{"migrate", "--adopt"}, "dossierx claim unlock", "removed in v0.4.0"},
+
+		// The policy-adoption leaf was a live command, not a top-level memory.
+		// Agents treated it as a normal recovery; the stub names the removal
+		// even when the remembered flags are present.
+		{"claim migrate-lock-policy --reason", []string{"claim", "migrate-lock-policy", "--reason", "adopt"}, "recorded policy", "removed"},
 	}
 
 	for _, tc := range cases {
@@ -524,6 +529,16 @@ func TestRetiredVerbsAreNotSurface(t *testing.T) {
 		if strings.Contains(env.Error.Hint, gone) {
 			t.Fatalf("the comment group's leaf list must not advertise the removed verb %q: %q", gone, env.Error.Hint)
 		}
+	}
+	claimEnv, _, claimErr := execReviewedCLIJSON(t, "claim")
+	if claimErr == nil {
+		t.Fatal("a bare noun must fail")
+	}
+	if claimEnv.Error == nil {
+		t.Fatalf("expected an error envelope, got %+v", claimEnv)
+	}
+	if strings.Contains(claimEnv.Error.Hint, "migrate-lock-policy") {
+		t.Fatalf("the claim group's leaf list must not advertise the removed verb %q: %q", "migrate-lock-policy", claimEnv.Error.Hint)
 	}
 	for _, cmd := range newRootCmd().Commands() {
 		if retired(cmd) && !cmd.Hidden {

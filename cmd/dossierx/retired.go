@@ -31,9 +31,9 @@
 //
 // They are HIDDEN (absent from --help, from the completion script, and from
 // requireSubcommand's "run one of:" list) because they are not surface: nothing
-// should discover them, and the nine-noun/twenty-six-leaf contract is a design
+// should discover them, and the eight-noun/twenty-four-leaf contract is a design
 // constraint the release argues for. annotationRetired is what keeps
-// TestSurfaceIsTwentySixLeavesUnderNineNouns honest about that — it excludes these
+// TestSurfaceIsTwentyFourLeavesUnderEightNouns honest about that — it excludes these
 // by MARK, not by hidden-ness, so a real leaf can never be smuggled past the
 // count by hiding it.
 package main
@@ -86,6 +86,16 @@ const viewerOnlyHint = `resolving or reopening a thread is the human's approval 
 // They are still fully implemented in internal/comments and still served over
 // internal/serve's HTTP API — see comment.go's package doc for why the CLI is
 // not where they belong.
+// retiredClaimVerbs are the claim-group leaves that were one-shot adoption
+// surfaces, not everyday lifecycle. Agents treated them as a normal path.
+func retiredClaimVerbs() []*cobra.Command {
+	return []*cobra.Command{
+		retiredCmd("migrate-lock-policy",
+			`claim migrate-lock-policy: removed; lock-policy adoption is not an everyday command`,
+			`existing stores stay on their recorded policy; a new project starts on policy v1`),
+	}
+}
+
 func retiredCommentVerbs() []*cobra.Command {
 	return []*cobra.Command{
 		retiredCmd("resolve",

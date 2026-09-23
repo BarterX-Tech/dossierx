@@ -140,10 +140,9 @@
 # There is no **ledger** migration command any more. v0.4.0 removed `dossierx
 # migrate` outright, because ledger adoption would manufacture approval out of
 # nothing, and no evidence inside a repository distinguishes an honest pre-ledger
-# store from a downgraded one. `dossierx claim migrate-lock-policy --reason "..."`
-# is separate: it adopts policy v1 only after the ledger crossing, and preserves
-# existing approval records, baselines, receipts, and pending review state. So if
-# you are upgrading a project that
+# store from a downgraded one. There is also no everyday policy-adoption leaf:
+# existing stores stay on their recorded lock policy, and a new project starts
+# on policy v1. So if you are upgrading a project that
 # locked claims before v0.3.0, this job will fail until you do this ONCE,
 # locally, at a keyboard, IN THIS ORDER. Decide per module, before the first
 # command, whether you will re-lock every claim in it: a build order exists
