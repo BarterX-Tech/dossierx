@@ -5772,9 +5772,6 @@ body.shell-body {
    block below. */
 .facet-toc-trigger { display: none; }
 
-.facet-toc { display: none; }
-}
-
 /* R11.3: the freed width goes to the evidence, not the prose — the page
    grows to 1140px (docs/design/tokens.md §Open decisions: board 11 states
    this for both the desktop card column and its 1140px-wide header, and

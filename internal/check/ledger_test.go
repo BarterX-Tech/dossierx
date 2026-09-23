@@ -587,7 +587,7 @@ func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *test
 		switch r {
 		case lock.RuleLockLedgerPreLedger:
 			preLedger++
-		case check.RuleBuildOrderLedgerMissing:
+		case "build-order-ledger-missing":
 			missing++
 		}
 	}
@@ -595,7 +595,7 @@ func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *test
 		t.Fatalf("a leftover locked build order is not a pre-ledger obligation, got %d in %v", preLedger, got)
 	}
 	if missing != 0 {
-		t.Fatalf("the pre-ledger exemption still covers the build order itself; got %d %s in %v", missing, check.RuleBuildOrderLedgerMissing, got)
+		t.Fatalf("the pre-ledger exemption still covers the leftover artifact itself; got %d %s in %v", missing, "build-order-ledger-missing", got)
 	}
 }
 

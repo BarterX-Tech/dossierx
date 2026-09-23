@@ -33,7 +33,11 @@ func writeLeftoverBuildOrder(t *testing.T, cfg *config.Config, module string, re
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir leftover dir: %v", err)
 	}
-	raw, err := json.Marshal(map[string]any{"module": module, "locked": true, "phases": []any{}})
+	raw, err := json.Marshal(map[string]any{
+		"module": module,
+		"locked": true,
+		"phases": []any{map[string]any{"name": "schema", "claims": []any{}}},
+	})
 	if err != nil {
 		t.Fatalf("marshal leftover: %v", err)
 	}
@@ -121,7 +125,7 @@ func TestBuildOrderGate_HandEditedArtifactIsContentDrift(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderContentDrift) {
+	if hasRule(res.LedgerFindings, "build-order-content-drift") {
 		t.Fatalf("leftover build-order artifacts must not refuse, got %v", rulesOf(res.LedgerFindings))
 	}
 }
@@ -147,7 +151,7 @@ func TestBuildOrderGate_DeletingTheRecordIsLedgerMissing(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerMissing) {
+	if hasRule(res.LedgerFindings, "build-order-ledger-missing") {
 		t.Fatalf("leftover build-order artifacts must not refuse, got %v", rulesOf(res.LedgerFindings))
 	}
 }
@@ -186,7 +190,7 @@ func TestBuildOrderGate_DeletingTheArtifactIsLedgerAbandoned(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
+	if hasRule(res.LedgerFindings, "build-order-ledger-abandoned") {
 		t.Fatalf("leftover build-order artifacts must not refuse after delete, got %v",
 			rulesOf(res.LedgerFindings))
 	}
@@ -213,7 +217,7 @@ func TestBuildOrderGate_DroppingTheModuleFromConfigIsLedgerAbandoned(t *testing.
 	}
 
 	res := check.Status(claims, narrowed)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
+	if hasRule(res.LedgerFindings, "build-order-ledger-abandoned") {
 		t.Fatalf("leftover build-order artifacts must not refuse when the module left the config, got %v",
 			rulesOf(res.LedgerFindings))
 	}
@@ -244,7 +248,7 @@ func TestBuildOrderGate_ReleasedRecordIsNotAbandoned(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
+	if hasRule(res.LedgerFindings, "build-order-ledger-abandoned") {
 		t.Fatalf("a released record must not be reported abandoned, got %v", rulesOf(res.LedgerFindings))
 	}
 }
@@ -285,8 +289,8 @@ func TestBuildOrderGate_HandFlippedLockedFalseIsLedgerOrphan(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
-		t.Fatalf("expected %s, got %v", check.RuleBuildOrderLedgerOrphan, rulesOf(res.LedgerFindings))
+	if hasRule(res.LedgerFindings, "build-order-ledger-orphan") {
+		t.Fatalf("expected %s, got %v", "build-order-ledger-orphan", rulesOf(res.LedgerFindings))
 	}
 }
 
@@ -379,9 +383,9 @@ func TestBuildOrderGate_FlagFlipWithAContentEditIsLedgerOrphan(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
+	if hasRule(res.LedgerFindings, "build-order-ledger-orphan") {
 		t.Fatalf("expected %s for a flag flip made together with a content edit, got %v",
-			check.RuleBuildOrderLedgerOrphan, rulesOf(res.LedgerFindings))
+			"build-order-ledger-orphan", rulesOf(res.LedgerFindings))
 	}
 }
 
@@ -407,12 +411,12 @@ func TestBuildOrderGate_CorruptArtifactIsReported(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderUnreadable) {
+	if hasRule(res.LedgerFindings, "build-order-unreadable") {
 		t.Fatalf("a corrupt build-order artifact must be reported, got %v", rulesOf(res.LedgerFindings))
 	}
 	// It must not ALSO be reported as deleted: the file is right there, and
 	// "restore it from version control" is the recovery for a different state.
-	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
+	if hasRule(res.LedgerFindings, "build-order-ledger-abandoned") {
 		t.Fatalf("a corrupt artifact is not evidence of deletion, got %v", rulesOf(res.LedgerFindings))
 	}
 	if _, err := check.Run(claims, cfg); err != nil {

@@ -134,11 +134,11 @@ func TestStaged_BuildOrderUnderBuildDirIsJudgedByBothModes(t *testing.T) {
 		tamperArtifact(t, cfg, "widget")
 		git(t, cfg.Dir(), "add", "-A")
 		want := validateRules(t, cfg)
-		if hasName(want, check.RuleBuildOrderContentDrift) {
+		if hasName(want, "build-order-content-drift") {
 			t.Fatalf("leftover build-order files must not refuse --validate, got %v", want)
 		}
 		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped || hasName(got, check.RuleBuildOrderContentDrift) {
+		if skipped || hasName(got, "build-order-content-drift") {
 			t.Fatalf("--staged must ignore leftover build-order tamper: skipped=%v rules=%v", skipped, got)
 		}
 	})
@@ -146,7 +146,7 @@ func TestStaged_BuildOrderUnderBuildDirIsJudgedByBothModes(t *testing.T) {
 	t.Run("worktree-only tamper", func(t *testing.T) {
 		cfg := committedBuildOrderFixture(t, baseConfig, files, "widget")
 		tamperArtifact(t, cfg, "widget")
-		if hasName(validateRules(t, cfg), check.RuleBuildOrderContentDrift) {
+		if hasName(validateRules(t, cfg), "build-order-content-drift") {
 			t.Fatalf("the worktree gate must ignore leftover build-order artifacts")
 		}
 		got, skipped := stagedRulesOrSkipped(t, cfg)
@@ -186,7 +186,7 @@ func TestStaged_ModuleNamedLockStoreSurvivesMaterialisation(t *testing.T) {
 		tamperArtifact(t, cfg, "lock-store")
 		git(t, cfg.Dir(), "add", "-A")
 		want := validateRules(t, cfg)
-		if hasName(want, check.RuleBuildOrderContentDrift) {
+		if hasName(want, "build-order-content-drift") {
 			t.Fatalf("leftover build-order files must not refuse --validate, got %v", want)
 		}
 		got, skipped := stagedRulesOrSkipped(t, cfg)

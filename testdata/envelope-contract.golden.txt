@@ -607,7 +607,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (13 of 52)
+    pinned by an invocation above (13 of 48)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -621,14 +621,11 @@ ERROR-CODE COVERAGE
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (39)
+    reachable only from states no fixture here builds (35)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
         bad_request
         banner_claim
-        build_order_hand_edited
-        build_order_refused
-        build_order_stale
         claim_file_changed
         claim_not_serializable
         comment_digest_drift
@@ -644,7 +641,6 @@ ERROR-CODE COVERAGE
         layout_legacy
         missing_flag
         no_artifact
-        not_proposed
         pre_ledger_unadopted
         read_only
         reply_not_found
