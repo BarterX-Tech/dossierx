@@ -115,8 +115,8 @@ func TestBuildOrderGate_HandEditedArtifactIsContentDrift(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderContentDrift) {
-		t.Fatalf("expected %s, got %v", check.RuleBuildOrderContentDrift, rulesOf(res.LedgerFindings))
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderContentDrift) {
+		t.Fatalf("leftover build-order artifacts must not refuse, got %v", rulesOf(res.LedgerFindings))
 	}
 }
 
@@ -141,8 +141,8 @@ func TestBuildOrderGate_DeletingTheRecordIsLedgerMissing(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerMissing) {
-		t.Fatalf("expected %s, got %v", check.RuleBuildOrderLedgerMissing, rulesOf(res.LedgerFindings))
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerMissing) {
+		t.Fatalf("leftover build-order artifacts must not refuse, got %v", rulesOf(res.LedgerFindings))
 	}
 }
 
@@ -186,9 +186,9 @@ func TestBuildOrderGate_DeletingTheArtifactIsLedgerAbandoned(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
-		t.Fatalf("expected %s after the locked artifact was deleted, got %v",
-			check.RuleBuildOrderLedgerAbandoned, rulesOf(res.LedgerFindings))
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
+		t.Fatalf("leftover build-order artifacts must not refuse after delete, got %v",
+			rulesOf(res.LedgerFindings))
 	}
 }
 
@@ -213,9 +213,9 @@ func TestBuildOrderGate_DroppingTheModuleFromConfigIsLedgerAbandoned(t *testing.
 	}
 
 	res := check.Status(claims, narrowed)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
-		t.Fatalf("expected %s when the module left the config, got %v",
-			check.RuleBuildOrderLedgerAbandoned, rulesOf(res.LedgerFindings))
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
+		t.Fatalf("leftover build-order artifacts must not refuse when the module left the config, got %v",
+			rulesOf(res.LedgerFindings))
 	}
 }
 
@@ -285,7 +285,7 @@ func TestBuildOrderGate_HandFlippedLockedFalseIsLedgerOrphan(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
 		t.Fatalf("expected %s, got %v", check.RuleBuildOrderLedgerOrphan, rulesOf(res.LedgerFindings))
 	}
 }
@@ -385,7 +385,7 @@ func TestBuildOrderGate_FlagFlipWithAContentEditIsLedgerOrphan(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
 		t.Fatalf("expected %s for a flag flip made together with a content edit, got %v",
 			check.RuleBuildOrderLedgerOrphan, rulesOf(res.LedgerFindings))
 	}
@@ -413,7 +413,7 @@ func TestBuildOrderGate_CorruptArtifactIsReported(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if !hasRule(res.LedgerFindings, check.RuleBuildOrderUnreadable) {
+	if hasRule(res.LedgerFindings, check.RuleBuildOrderUnreadable) {
 		t.Fatalf("a corrupt build-order artifact must be reported, got %v", rulesOf(res.LedgerFindings))
 	}
 	// It must not ALSO be reported as deleted: the file is right there, and
@@ -441,10 +441,9 @@ func TestNextSteps_StaleLockedBuildOrderIsReported(t *testing.T) {
 	})
 	lockBuildOrder(t, cfg, claims, "widget")
 
-	// Precondition: a fresh locked order is silent, in the hint and in the data.
 	res := check.Status(claims, cfg)
-	if len(res.BuildOrders) != 1 || res.BuildOrders[0].Stale {
-		t.Fatalf("fixture precondition: the locked order must start fresh, got %+v", res.BuildOrders)
+	if len(res.BuildOrders) != 0 {
+		t.Fatalf("leftover build orders are not a check surface, got %+v", res.BuildOrders)
 	}
 
 	// The sanctioned change: the claim's build_role moves (unlock -> edit ->
@@ -467,25 +466,13 @@ func TestNextSteps_StaleLockedBuildOrderIsReported(t *testing.T) {
 	armLedger(t, cfg, claims) // the re-lock's approval record
 
 	res = check.Status(claims, cfg)
-	if len(res.BuildOrders) != 1 || !res.BuildOrders[0].Stale {
-		t.Fatalf("expected the build order reported stale in the data, got %+v", res.BuildOrders)
+	if len(res.BuildOrders) != 0 {
+		t.Fatalf("leftover build orders are not a check surface, got %+v", res.BuildOrders)
 	}
-	if got := res.BuildOrders[0].StaleIDs; len(got) != 1 || got[0] != "widget.contract.a" {
-		t.Fatalf("expected the changed claim named, got %v", got)
-	}
-
-	var hint string
 	for _, h := range res.NextSteps {
-		if strings.Contains(h, "stale") {
-			hint = h
+		if strings.Contains(h, "build-order") || strings.Contains(h, "stale") {
+			t.Fatalf("check must not require a stale build-order recovery, got %v", res.NextSteps)
 		}
-	}
-	if hint == "" {
-		t.Fatalf("expected a stale build-order next step, got %v", res.NextSteps)
-	}
-	if !strings.Contains(hint, "build-order propose --module widget") ||
-		!strings.Contains(hint, "build-order lock --module widget") {
-		t.Fatalf("the hint must name the two commands that fix it, got %q", hint)
 	}
 }
 
@@ -504,16 +491,12 @@ func TestNextSteps_UnlockedBuildOrderIsReported(t *testing.T) {
 	}
 
 	res := check.Status(claims, cfg)
-	if len(res.BuildOrders) != 1 || res.BuildOrders[0].Locked {
-		t.Fatalf("expected one unlocked build order reported, got %+v", res.BuildOrders)
+	if len(res.BuildOrders) != 0 {
+		t.Fatalf("leftover build orders are not a check surface, got %+v", res.BuildOrders)
 	}
-	found := false
 	for _, h := range res.NextSteps {
-		if strings.Contains(h, "never locked") {
-			found = true
+		if strings.Contains(h, "build-order") || strings.Contains(h, "never locked") {
+			t.Fatalf("check must not require locking a leftover proposal, got %v", res.NextSteps)
 		}
-	}
-	if !found {
-		t.Fatalf("expected a hint for the abandoned propose->lock flow, got %v", res.NextSteps)
 	}
 }

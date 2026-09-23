@@ -90,8 +90,6 @@ governed_by:
 `)
 	p.run("claim", "lock", "widget.contract.orientation", "--reason", "viewer-test fixture")
 	p.run("claim", "lock", "widget.internals.detail", "--reason", "viewer-test fixture")
-	p.run("build-order", "propose", "--module", "widget")
-	p.run("build-order", "lock", "--module", "widget", "--reason", "viewer-test fixture")
 	return p
 }
 

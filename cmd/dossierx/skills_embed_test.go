@@ -37,7 +37,6 @@ var wantSkillNames = []string{
 	"dossierx",
 	"dossierx-claims",
 	"dossierx-comments",
-	"dossierx-build-order",
 	"dossierx-code-links",
 }
 
@@ -605,14 +604,12 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		{"dossierx-comments", "you never resolve", "the agent replies and waits"},
 		{"dossierx-comments", "inclusive", "the inbox cursor re-reports its boundary second"},
 		// Issue #82: the decision trees, pinned where the wrong verb is chosen.
-		{"dossierx", "Which command", "the flag/unlock/reaudit and track/build-order tables"},
+		{"dossierx", "Which command", "the flag/unlock/reaudit table"},
 		{"dossierx", "`structured_layout`)", "flag refuses a structured claim; unlock is the path"},
 		{"dossierx", "gates nothing and orders nothing", "a track is never a lock gate or a build sequence"},
-		{"dossierx", "never a recompute", "build-order show reads the stored artifact"},
 		{"dossierx-comments", "structured_layout", "the discriminator's third arm"},
 		{"dossierx-code-links", "structured_layout", "the same third arm, same words"},
 		{"dossierx-claims", "never a gate, never a build sequence", "track verbs are the read-only axis"},
-		{"dossierx-build-order", "never recomputes", "status answers stale; show only renders"},
 		// Issue #78 Phase 1A: what a green check proves.
 		{"dossierx-code-links", "Linked is not followed", "the gate proves a pointer, not meaning"},
 		{"dossierx", "neither proves code links", "--validate and --staged are not sync"},
@@ -714,8 +711,8 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if err := json.Unmarshal(rawLock, &lock); err != nil {
 		t.Fatalf("decode lock: %v", err)
 	}
-	staleBody := []byte("---\nname: dossierx-build-order\n---\nan older release's guide\n")
-	lock.Files["dossierx-build-order/SKILL.md"] = sha256Hex(staleBody)
+	staleBody := []byte("---\nname: dossierx-code-links\n---\nan older release's guide\n")
+	lock.Files["dossierx-code-links/SKILL.md"] = sha256Hex(staleBody)
 	encoded, encErr := json.Marshal(lock)
 	if encErr != nil {
 		t.Fatalf("encode lock: %v", encErr)
@@ -723,7 +720,7 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if err := os.WriteFile(lockPath, encoded, 0o644); err != nil {
 		t.Fatalf("write lock: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(targetDir, "dossierx-build-order", "SKILL.md"), staleBody, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, "dossierx-code-links", "SKILL.md"), staleBody, 0o644); err != nil {
 		t.Fatalf("write stale: %v", err)
 	}
 	// And delete a third.
@@ -752,8 +749,8 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if !namesExactly(data.HandEdited, "dossierx-claims/SKILL.md") {
 		t.Fatalf("hand_edited should name the edited claims skill only, got %+v", data)
 	}
-	if !namesExactly(data.Stale, "dossierx-build-order/SKILL.md") {
-		t.Fatalf("stale should name the build-order skill only, got %+v", data)
+	if !namesExactly(data.Stale, "dossierx-code-links/SKILL.md") {
+		t.Fatalf("stale should name the code-links skill only, got %+v", data)
 	}
 	if !namesExactly(data.Missing, "dossierx-comments/SKILL.md") {
 		t.Fatalf("missing should name the deleted comments skill only, got %+v", data)

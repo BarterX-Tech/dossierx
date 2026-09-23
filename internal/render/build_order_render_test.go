@@ -162,96 +162,10 @@ func TestRender_BuildOrderTab_PresentWhenLockedArtifactExists(t *testing.T) {
 	claims := buildOrderTestClaims(module)
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
-
-	for _, want := range []string{
-		// the sidebar utility, beside Claims graph and never under a facet
-		`<span>Build order</span>`,
-		`<button class="nav-utility sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-widget">`,
-		// the section, the strip, the module group
-		`<section class="module-section build-order-section" id="dossierx-build-order" hidden>`,
-		`<div class="bo-modules">`,
-		`<button class="subtab" data-target="#dossierx-build-order-widget">Widget</button>`,
-		`<section class="claim-group bo-module" id="dossierx-build-order-widget" hidden>`,
-		// the payload block, inside .content-area
-		`<main class="content-area"><script type="application/json" id="dossierx-build-orders">`,
-		// the two client files, after graph-ui
-		"__esbuild_esm_mermaid_nm",
-		"build-order-ui.js",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("expected %q in a viewer with a locked order", want)
-		}
-	}
-
-	// Six blocks in the fixed sequence, each with its definition and counts.
-	phases := []string{"orientation", "schema", "behavior", "api", "verification", "excluded"}
-	if got := strings.Count(out, `<section class="bo-phase" data-phase="`); got != 6 {
-		t.Errorf("got %d .bo-phase blocks, want 6", got)
-	}
-	last := -1
-	for i, phase := range phases {
-		at := strings.Index(out, `<section class="bo-phase" data-phase="`+phase+`"`)
-		if at < 0 {
-			t.Errorf("no .bo-phase block for %s", phase)
-			continue
-		}
-		if at < last {
-			t.Errorf("%s block appears before the previous phase's; the sequence is fixed", phase)
-		}
-		last = at
-		role := model.BuildRole(phase)
-		if phase == "excluded" {
-			role = model.BuildRoleOutOfScope
-		}
-		def := template_HTMLEscape(buildorder.PhaseDefinition(role))
-		if !strings.Contains(out, `<p class="bo-phase__def">`+def+`</p>`) {
-			t.Errorf("%s block lacks its definition from PhaseDefinition: want %q", phase, def)
-		}
-		_ = i
-	}
-	for _, want := range []string{
-		`data-phase="schema" data-number="2" data-count="1" data-levels="1" data-locked="1"`,
-		`data-phase="orientation" data-number="1" data-count="0" data-levels="0" data-locked="0"`,
-		`data-phase="excluded" data-number="0" data-count="0"`,
-		`<span class="bo-phase__num">phase 2 of 5</span>`,
-		`<span class="bo-phase__num">excluded</span>`,
-		`<p class="bo-phase__meta">1 claim · 1 level · 1 locked</p>`,
-		`<p class="bo-empty">no claims in this module</p>`,
-		`<p class="bo-empty">no excluded claims in this module</p>`,
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("expected %q in the block markup", want)
-		}
-	}
-
-	// The diagram text: a <pre class="mermaid"> whose text carries the
-	// flowchart and, under the CSS palette, no colour literal.
-	pre := `<pre class="mermaid" data-module="widget" data-phase="behavior">`
-	at := strings.Index(out, pre)
-	if at < 0 {
-		t.Fatalf("no mermaid block for the behavior phase")
-	}
-	end := strings.Index(out[at:], "</pre>")
-	text := out[at+len(pre) : at+end]
-	if !strings.Contains(text, "flowchart TD") {
-		t.Errorf("behavior diagram text lacks flowchart TD: %q", text)
-	}
-	if strings.Contains(text, "fill:") {
-		t.Errorf("the page's diagram must carry no colour literal (CSS palette): %q", text)
-	}
-	if !strings.Contains(text, "widget_contract_schema -.-&gt; widget_contract_behavior") {
-		t.Errorf("expected the ghost edge, html-escaped, in the pre text: %q", text)
-	}
-	if got := strings.Count(out, `<pre class="mermaid" data-module=`); got != 2 {
-		t.Errorf("expected exactly two diagrams (schema, behavior), got %d", got)
-	}
-
-	assertAbsent(t, out, legacyMarkers, "locked order")
-	// No per-module "Build Order" sub-tab and no card list under a diagram.
-	if strings.Contains(out, `id="dossierx-build-order-widget.contract.schema"`) {
-		t.Error("the old per-claim build-order card id survives")
-	}
+	assertAbsent(t, out, buildOrderMarkers, "locked leftover artifact")
+	assertAbsent(t, out, legacyMarkers, "locked leftover artifact")
 }
+
 
 // template_HTMLEscape is what html/template does to the definition text in
 // a text node, applied here so the assertion compares rendered bytes.
@@ -285,9 +199,10 @@ func TestRender_BuildOrderTab_OtherModuleUnaffected(t *testing.T) {
 	all := append(append([]model.Claim{}, widgetClaims...), gadgetClaim)
 	lockBuildOrder(t, cfg, widgetClaims, "widget")
 	out := renderClaimsFor(t, cfg, all)
+	assertAbsent(t, out, buildOrderMarkers, "locked leftover artifact")
 
-	if !strings.Contains(out, `id="dossierx-build-order-widget"`) {
-		t.Fatalf("expected widget's Build order group present")
+	if strings.Contains(out, `id="dossierx-build-order-widget"`) {
+		t.Fatalf("Build order tab is gone")
 	}
 	if !strings.Contains(out, "gadget.contract.overview") {
 		t.Fatalf("expected gadget's ordinary claim content still rendered")
@@ -295,8 +210,8 @@ func TestRender_BuildOrderTab_OtherModuleUnaffected(t *testing.T) {
 	if strings.Contains(out, `id="dossierx-build-order-gadget"`) || strings.Contains(out, `data-target="#dossierx-build-order-gadget"`) {
 		t.Fatalf("expected no Build order entry for gadget (never proposed)")
 	}
-	if got := strings.Count(out, `class="subtab" data-target="#dossierx-build-order-`); got != 1 {
-		t.Errorf("module strip holds %d buttons, want 1", got)
+	if got := strings.Count(out, `class="subtab" data-target="#dossierx-build-order-`); got != 0 {
+		t.Errorf("module strip holds %d build-order buttons, want 0", got)
 	}
 	// gadget is a single-facet module: no .sub-nav is synthesised for it.
 	gadgetAt := strings.Index(out, `<section class="module-section" id="gadget"`)
@@ -318,22 +233,16 @@ func TestRender_BuildOrderSectionVisibleNotAFacetGroup(t *testing.T) {
 	claims := buildOrderTestClaims(module)
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
+	assertAbsent(t, out, buildOrderMarkers, "locked leftover artifact")
 
 	sectionAt := strings.Index(out, `<section class="module-section build-order-section" id="dossierx-build-order" hidden>`)
 	moduleAt := strings.Index(out, `<section class="module-section" id="widget" hidden`)
 	mainEnd := strings.Index(out, "</main>")
-	if sectionAt < 0 || moduleAt < 0 || mainEnd < 0 {
-		t.Fatalf("missing section/module/main markers: %d %d %d", sectionAt, moduleAt, mainEnd)
+	if sectionAt >= 0 {
+		t.Fatalf("Build order section must be absent, got at %d", sectionAt)
 	}
-	if sectionAt < moduleAt {
-		t.Error("the Build order section must come AFTER every module section")
-	}
-	if sectionAt > mainEnd {
-		t.Error("the Build order section must be inside <main class=\"content-area\">")
-	}
-	payloadAt := strings.Index(out, `id="dossierx-build-orders"`)
-	if payloadAt < 0 || payloadAt > moduleAt {
-		t.Error("the payload block must be the first child of .content-area, before the first module")
+	if moduleAt < 0 || mainEnd < 0 {
+		t.Fatalf("missing module/main markers: %d %d", moduleAt, mainEnd)
 	}
 	if strings.Contains(out, "buildOrderToModule") {
 		t.Error("the dedicated buildOrderToModule resolver is gone; the group resolves as a facet")
@@ -361,15 +270,9 @@ func TestRender_BuildOrderTab_RefusesAModuleWhoseIDIsTheTabs(t *testing.T) {
 	claims := buildOrderTestClaims(module)
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
-	for _, want := range []string{
-		`<section class="module-section" id="build-order" hidden`,
-		`<section class="module-section build-order-section" id="dossierx-build-order" hidden>`,
-		`<section class="claim-group bo-module" id="dossierx-build-order-build-order" hidden>`,
-		`data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-build-order"`,
-	} {
-		if got := strings.Count(out, want); got != 1 {
-			t.Errorf("%q appears %d times, want exactly once", want, got)
-		}
+	assertAbsent(t, out, buildOrderMarkers, "module named build-order")
+	if got := strings.Count(out, `<section class="module-section" id="build-order" hidden`); got != 1 {
+		t.Errorf("module section id=build-order appears %d times, want 1", got)
 	}
 	if got := strings.Count(out, ` id="build-order"`); got != 1 {
 		t.Errorf(`id="build-order" appears %d times, want exactly once (the module's own section)`, got)
@@ -387,8 +290,8 @@ func TestRender_BuildOrderTab_RefusesAModuleWhoseIDIsTheTabs(t *testing.T) {
 			t.Fatalf("catalog.Build: %v", err)
 		}
 		_, err = Render(cat, cfg)
-		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-			t.Errorf("module %q: Render error = %v, want one containing %q", tc.module, err, tc.wantErr)
+		if err != nil {
+			t.Errorf("module %q: leftover artifact must not collide, Render error = %v", tc.module, err)
 		}
 		// With no locked order there is no tab and nothing to collide with.
 		if err := os.Remove(buildorder.ArtifactPath(cfg, tc.module)); err != nil {

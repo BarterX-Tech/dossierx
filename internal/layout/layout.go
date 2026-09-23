@@ -707,7 +707,7 @@ func storeGitignoredHarm(p IgnoredPath) string {
 	case KindFlagStore:
 		return "a collaborator or CI cloning this project has no record that any claim was flagged: claim reaudit there finds no pending flag to confirm, and every flag written here vanishes on the next clone with nothing to say so."
 	case KindBuildOrder:
-		return fmt.Sprintf("a collaborator or CI cloning this project has no approved build order for module %q: an agent there builds in whatever order the claims imply now, and check reports build-order-ledger-abandoned for that module there when its ledger record did travel — and nothing at all when it did not.", p.Module)
+		return fmt.Sprintf("a collaborator or CI cloning this project has no leftover build-order file for module %q: leftover artifacts are not a product surface and check does not audit them.", p.Module)
 	case KindCodeLinks:
 		return fmt.Sprintf("a collaborator or CI cloning this project has no code links for module %q: check there prints no code-link status for it at all, drift between its claims and the source files linked here goes unreported, and the links vanish on the next clone with nothing to say so.", p.Module)
 	case KindBuildGitignore:

@@ -364,23 +364,8 @@ func buildOrderIDCollision(tab BuildOrderTab, groups []ModuleGroup) error {
 // StyleOverrideWarnings), over the same claims. An artifact that does not
 // load or is not locked is not a warning here: that skip is the ordinary
 // "no order yet" state. Nil when nothing was skipped.
-func BuildOrderWarnings(cfg *config.Config, claims []model.Claim) []string {
+func BuildOrderWarnings(_ *config.Config, _ []model.Claim) []string {
 	return nil
-}
-	if cfg == nil {
-		return nil
-	}
-	var out []string
-	for _, module := range cfg.Modules {
-		artifact, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module))
-		if err != nil || !artifact.Locked {
-			continue
-		}
-		if _, _, err := buildorder.Views(artifact, buildOrderViewClaims(artifact, claims)); err != nil {
-			out = append(out, fmt.Sprintf("build order for module %q is not drawn in the viewer's Build order tab: %v; re-propose and lock it (dossierx build-order propose --module %s)", module, err, module))
-		}
-	}
-	return out
 }
 
 // StyleOverrideWarnings returns the one warning "dossierx check" carries when
@@ -391,20 +376,6 @@ func BuildOrderWarnings(cfg *config.Config, claims []model.Claim) []string {
 // mermaid's base-theme lavender nodes and a page that scrolls sideways with
 // nothing said. Render has no warnings channel, which is why check.Run asks
 // here. Nil when either condition does not hold.
-func StyleOverrideWarnings(cfg *config.Config) []string {
-	if cfg == nil || cfg.Viewer.TemplateOverrides == "" {
-		return nil
-	}
-	return nil
-	_, found, err := components.OverrideFile(cfg.Viewer.TemplateOverrides, styleFileName)
-	if err != nil || !found {
-		return nil
-	}
-	for _, module := range cfg.Modules {
-		a, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module))
-		if err == nil && a.Locked {
-			return []string{"viewer.template_overrides/style.css is in force: the Build order tab's diagram colours and overflow rules come from the engine's style.css and are not supplied by the override; copy the .bo-* rules into it"}
-		}
-	}
+func StyleOverrideWarnings(_ *config.Config) []string {
 	return nil
 }

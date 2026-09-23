@@ -246,8 +246,8 @@ func TestEngineOwnedViewerAssetsHaveNoTrailingWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read embedded Mermaid: %v", err)
 	}
-	if got := strings.Count(out, string(mermaid)); got != 1 {
-		t.Fatalf("rendered Mermaid asset count = %d, want one exact injection", got)
+	if got := strings.Count(out, string(mermaid)); got != 0 {
+		t.Fatalf("Build order is gone: Mermaid asset count = %d, want 0", got)
 	}
 }
 

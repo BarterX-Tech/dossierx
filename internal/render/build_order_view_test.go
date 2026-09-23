@@ -70,8 +70,9 @@ func TestRender_BuildOrderTab_SkipsAModuleWhoseArtifactDoesNotLoad(t *testing.T)
 	writeFile(t, gadgetPath, string(raw[:len(raw)/2]))
 
 	out := renderClaimsFor(t, cfg, all)
-	if !strings.Contains(out, `id="dossierx-build-order-widget"`) {
-		t.Error("widget's group must render")
+	assertAbsent(t, out, buildOrderMarkers, "corrupt leftover artifact")
+	if strings.Contains(out, `id="dossierx-build-order-widget"`) {
+		t.Error("Build order tab is gone")
 	}
 	if strings.Contains(out, `id="dossierx-build-order-gadget"`) || strings.Contains(out, `data-target="#dossierx-build-order-gadget"`) {
 		t.Error("gadget's unreadable artifact must cost gadget's tab and nothing else")
@@ -92,22 +93,9 @@ func TestRender_BuildOrderTab_RetainsArtifactNodesWhenCatalogClaimIsMissing(t *t
 	lockBuildOrder(t, cfg, claims, "widget")
 
 	out := renderClaimsFor(t, cfg, claims[:1])
-	if !strings.Contains(out, `id="dossierx-build-order-widget"`) {
-		t.Fatal("a locked artifact with a missing catalog claim must keep the Build order module")
-	}
-	messageAt := strings.Index(out, `<p class="bo-missing-claim" role="status">Claim not found</p>`)
-	phaseAt := strings.Index(out, `<section class="bo-phase"`)
-	if messageAt < 0 || phaseAt < 0 || messageAt > phaseAt {
-		t.Fatalf("missing-catalog message must be visible before the affected diagrams: message=%d phase=%d", messageAt, phaseAt)
-	}
-	if !strings.Contains(out, `data-phase="behavior"`) || !strings.Contains(out, "widget.contract.behavior") {
-		t.Fatal("the artifact's missing behavior claim must remain drawable for a click miss")
-	}
-	if !strings.Contains(out, `id="dossierx-build-orders"`) || !strings.Contains(out, "__esbuild_esm_mermaid_nm") {
-		t.Fatal("the retained module must keep the Mermaid payload and scripts")
-	}
-	if strings.Contains(out, `"widget.contract.behavior":{"facet"`) {
-		t.Fatal("the missing catalog claim must not gain a fabricated claim-card payload entry")
+	assertAbsent(t, out, buildOrderMarkers, "missing catalog claim")
+	if strings.Contains(out, `id="dossierx-build-order-widget"`) {
+		t.Fatal("Build order tab is gone")
 	}
 }
 
@@ -152,21 +140,16 @@ func TestRender_BuildOrderTab_SkipsAnArtifactThatContradictsThePhasesAndWarns(t 
 	if strings.Contains(out, `id="dossierx-build-order-widget"`) || strings.Contains(out, `data-target="#dossierx-build-order-widget"`) {
 		t.Error("widget's contradicting artifact must not be drawn")
 	}
-	if !strings.Contains(out, `id="dossierx-build-order-gadget"`) {
-		t.Error("gadget's sound order must still render: one module's artifact never costs another's tab")
+	if strings.Contains(out, `id="dossierx-build-order-gadget"`) {
+		t.Error("Build order tab is gone")
 	}
 	if !strings.Contains(out, "widget.contract.schema") {
 		t.Error("widget's ordinary claims must still render")
 	}
 
 	got := BuildOrderWarnings(cfg, all)
-	if len(got) != 1 {
-		t.Fatalf("BuildOrderWarnings = %v, want exactly one line for widget", got)
-	}
-	for _, want := range []string{`build order for module "widget" is not drawn`, "later phase", "dossierx build-order propose --module widget"} {
-		if !strings.Contains(got[0], want) {
-			t.Errorf("warning %q lacks %q", got[0], want)
-		}
+	if len(got) != 0 {
+		t.Fatalf("BuildOrderWarnings must be silent, got %v", got)
 	}
 }
 
@@ -181,114 +164,10 @@ func TestRender_BuildOrderPayloadShape(t *testing.T) {
 	claims := buildOrderTestClaims(module)
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
-	if strings.Contains(out, `class="bo-missing-claim"`) {
-		t.Fatal("a sound artifact must not render a missing-catalog warning")
+	assertAbsent(t, out, buildOrderMarkers, "payload")
+	if strings.Contains(out, `id="dossierx-build-orders"`) {
+		t.Fatal("payload block must be absent")
 	}
-
-	open := `<script type="application/json" id="dossierx-build-orders">`
-	at := strings.Index(out, open)
-	if at < 0 {
-		t.Fatal("payload block missing")
-	}
-	end := strings.Index(out[at:], "</script>")
-	var payload struct {
-		GeneratedAt string `json:"generated_at"`
-		Phases      []struct {
-			ID, Name, Definition string
-			Number               int
-		} `json:"phases"`
-		Modules []struct {
-			ID       string              `json:"id"`
-			Module   string              `json:"module"`
-			Label    string              `json:"label"`
-			LockedAt string              `json:"locked_at"`
-			Stale    bool                `json:"stale"`
-			Artifact buildorder.Artifact `json:"artifact"`
-			Claims   map[string]struct {
-				Facet, Label, Status, Phase string
-				Level                       int
-			} `json:"claims"`
-			PhaseViews []struct {
-				Phase        string     `json:"phase"`
-				Number       int        `json:"number"`
-				Claims       []string   `json:"claims"`
-				Levels       [][]string `json:"levels"`
-				Ghosts       []struct{ ID, Phase string }
-				CrossModule  map[string][]string `json:"cross_module"`
-				ExcludedDeps []string            `json:"excluded_deps"`
-				Locked       int                 `json:"locked"`
-			} `json:"phase_views"`
-			NodeIDs map[string]string `json:"node_ids"`
-		} `json:"modules"`
-	}
-	if err := json.Unmarshal([]byte(out[at+len(open):at+end]), &payload); err != nil {
-		t.Fatalf("payload is not JSON: %v", err)
-	}
-	if len(payload.Phases) != 6 || payload.Phases[0].ID != "orientation" || payload.Phases[5].ID != "out-of-scope" || payload.Phases[5].Name != "excluded" || payload.Phases[5].Number != 0 {
-		t.Errorf("phases = %+v", payload.Phases)
-	}
-	if len(payload.Modules) != 1 {
-		t.Fatalf("modules = %d, want 1", len(payload.Modules))
-	}
-	m := payload.Modules[0]
-	if m.ID != "widget" || m.Label != "Widget" || !m.Artifact.Locked || len(m.Artifact.Phases) != 2 || m.LockedAt == "" {
-		t.Errorf("module entry = %+v", m)
-	}
-	if len(m.PhaseViews) != 6 {
-		t.Errorf("phase_views = %d, want 6 (filled by name)", len(m.PhaseViews))
-	}
-	for _, v := range m.PhaseViews {
-		if v.Claims == nil || v.Levels == nil || v.CrossModule == nil || v.ExcludedDeps == nil {
-			t.Errorf("phase_views[%s] carries a null where an empty array/object belongs", v.Phase)
-		}
-	}
-	c, ok := m.Claims[module+".contract.behavior"]
-	if !ok || c.Facet != "contract" || c.Label != "Behavior" || c.Status != "locked" || c.Phase != "behavior" || c.Level != 0 {
-		t.Errorf("claims entry = %+v (present %v)", c, ok)
-	}
-	if got := m.NodeIDs["widget_contract_schema"]; got != module+".contract.schema" {
-		t.Errorf("node_ids inverse = %q", got)
-	}
-
-	// Page text vs export text: identical after dropping classDef lines.
-	a, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module))
-	if err != nil {
-		t.Fatalf("LoadArtifact: %v", err)
-	}
-	views, _, err := buildorder.Views(a, claims)
-	if err != nil {
-		t.Fatalf("Views: %v", err)
-	}
-	for _, v := range views {
-		export := buildorder.Mermaid(v, buildorder.MermaidOptions{Palette: buildorder.PaletteLiteral})
-		pre := `<pre class="mermaid" data-module="widget" data-phase="` + v.Name + `">`
-		pat := strings.Index(out, pre)
-		if export == "" {
-			if pat >= 0 {
-				t.Errorf("%s: the page has a diagram the export does not", v.Name)
-			}
-			continue
-		}
-		if pat < 0 {
-			t.Fatalf("%s: the export has a diagram the page does not", v.Name)
-		}
-		pend := strings.Index(out[pat:], "</pre>")
-		page := strings.NewReplacer("&lt;", "<", "&gt;", ">", "&#34;", `"`, "&#39;", "'", "&amp;", "&").Replace(out[pat+len(pre) : pat+pend])
-		if got, want := dropClassDefs(page), dropClassDefs(export); got != want {
-			t.Errorf("%s: page and export differ beyond classDef lines\n page:   %q\n export: %q", v.Name, got, want)
-		}
-	}
-}
-
-func dropClassDefs(text string) string {
-	var kept []string
-	for _, line := range strings.Split(text, "\n") {
-		if strings.HasPrefix(line, "  classDef") {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	return strings.Join(kept, "\n")
 }
 
 // TestStyleOverrideWarnings pins the one render-side warning check carries:
@@ -317,8 +196,8 @@ func TestStyleOverrideWarnings(t *testing.T) {
 	}
 	lockBuildOrder(t, cfg, claims, "widget")
 	got := StyleOverrideWarnings(cfg)
-	if len(got) != 1 || !strings.HasPrefix(got[0], "viewer.template_overrides/style.css is in force") {
-		t.Errorf("override file + locked order: got %v", got)
+	if got != nil {
+		t.Errorf("override file + leftover order must not warn: got %v", got)
 	}
 	if err := os.Remove(filepath.Join(dir, "tmpl", "style.css")); err != nil {
 		t.Fatalf("remove: %v", err)

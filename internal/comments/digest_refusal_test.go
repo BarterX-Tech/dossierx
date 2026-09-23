@@ -34,7 +34,7 @@ var realLeafCommands = map[string]bool{
 	"comment inbox": true, "comment list": true,
 	"comment add": true, "comment reply": true,
 
-	"build-order propose": true, "build-order status": true, "build-order lock": true,
+	"track list": true, "track show": true, "track status": true,
 
 	"serve": true, "skills export": true, "version": true,
 }

@@ -66,9 +66,7 @@ func TestGitignored_BareBuildPatternIsOneFindingPerPath(t *testing.T) {
 		"build/ledger/lock-store.json",
 		"build/ledger/comment-digest.json",
 		"build/ledger/flag-store.json",
-		"build/build-order/widget.json",
 		"build/code-links/widget.json",
-		"build/build-order/panel.json",
 		"build/code-links/panel.json",
 		"build/.gitignore",
 	}
@@ -78,9 +76,7 @@ func TestGitignored_BareBuildPatternIsOneFindingPerPath(t *testing.T) {
 		"build/ledger/lock-store.json":     {"so the lock ledger never reaches the repository", "check fails there with lock-ledger-absent", `so "!build/ledger/" alone does nothing`},
 		"build/ledger/comment-digest.json": {"so the comment digest never reaches the repository", "comment-digest-absent", `so "!build/ledger/" alone does nothing`},
 		"build/ledger/flag-store.json":     {"so the flag store never reaches the repository", "claim reaudit there finds no pending flag", `so "!build/ledger/" alone does nothing`},
-		"build/build-order/widget.json":    {`so module "widget"'s build order never reaches the repository`, `build-order-ledger-abandoned`, `module "widget"`, `so "!build/build-order/" alone does nothing`},
 		"build/code-links/widget.json":     {`so module "widget"'s code links never reaches the repository`, "prints no code-link status", `so "!build/code-links/" alone does nothing`},
-		"build/build-order/panel.json":     {`module "panel"`, `build-order-ledger-abandoned`},
 		"build/code-links/panel.json":      {`module "panel"`, "prints no code-link status"},
 		"build/.gitignore":                 {"so the build directory's own .gitignore never reaches the repository", "rewrites the file from the default", `so "!build/.gitignore" alone does nothing`},
 	}
@@ -137,7 +133,7 @@ func TestGitignored_ForceAddedLedgerIsAWarningAndItsSiblingsStayFindings(t *test
 	for _, f := range findings {
 		paths = append(paths, strings.SplitN(f.Message, " ", 2)[0])
 	}
-	for _, sibling := range []string{"build/ledger/flag-store.json", "build/ledger/comment-digest.json", "build/build-order/widget.json", "build/build-order/panel.json", "build/code-links/widget.json"} {
+	for _, sibling := range []string{"build/ledger/flag-store.json", "build/ledger/comment-digest.json", "build/code-links/widget.json"} {
 		if !containsStr(paths, sibling) {
 			t.Fatalf("a directory-level check goes green here; %s must still be a finding, got %v", sibling, paths)
 		}

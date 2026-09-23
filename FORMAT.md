@@ -1336,37 +1336,24 @@ There is **no** automatic adoption and **no** migration command. `dossierx
 migrate` was removed in v0.4.0 and survives only as a hidden stub whose whole job
 is to name this path. Nothing can attest to content no ledger ever recorded.
 
-A pre-ledger project that still holds a locked claim or a locked build order is
-refused by every approval-recording command — `claim lock`, `claim reaudit
---confirm`, `build-order lock` — with `error.code` `pre_ledger_unadopted`, and
-reported by `check` as `lock-ledger-pre-ledger`.
+A pre-ledger project that still holds a locked claim is refused by every
+approval-recording command — `claim lock`, `claim reaudit --confirm` — with
+`error.code` `pre_ledger_unadopted`, and reported by `check` as
+`lock-ledger-pre-ledger`. Leftover build-order files and their ledger rows do
+not count.
 
-The crossing is an ordered sequence of ordinary commands. The order is not
-cosmetic: `build-order propose` requires the module still **fully locked**, so
-unlocking a claim first strands the locked order with no way to release it. One
-decision belongs before the first command, per module: will you re-lock *every*
-claim in it at step 3? A build order exists only over a fully locked module, and
-step 1 releases the approved sequence — so a module you re-lock only partially
-finishes the crossing gate-green but without a locked build order, and its step 4
-waits until the day its last claim locks.
+The crossing is an ordered sequence of ordinary commands: unlock every locked
+claim, then re-lock only what you still stand behind. The first of those locks
+stamps the store onto the ledger.
 
 ```sh
-# 1. FIRST, for every module whose build order is locked:
-dossierx build-order propose --module <m>
-
-# 2. then every locked claim — unlock is gateless and always has been:
+# 1. every locked claim — unlock is gateless and always has been:
 dossierx claim unlock <id> --reason "..."
 
-# 3. then re-lock only what you still stand behind. The FIRST of these
+# 2. then re-lock only what you still stand behind. The FIRST of these
 #    crosses the store onto the ledger and records a real approval:
 dossierx claim lock <id> --dry-run
 dossierx claim lock <id> --reason "..." --proposal "<snapshot>"
-
-# 4. then the build orders again, for every module that is fully locked
-#    again. A module you re-locked only partially has nothing to propose
-#    yet — run this pair for it on the day its last claim locks:
-dossierx build-order propose --module <m>
-dossierx build-order lock --module <m> --reason "..."
 ```
 
 A pre-ledger project holding **nothing** locked crosses silently and correctly on

@@ -1169,12 +1169,6 @@ func registerSurfacePayloadType(name string, sample any) {
 // is red.
 func surfacePayloadTypes() map[string]any {
 	table := map[string]any{
-		"buildOrderLockData":      buildOrderLockData{},
-		"buildOrderPhaseData":     buildOrderPhaseData{},
-		"buildOrderProposeData":   buildOrderProposeData{},
-		"buildOrderShowData":      buildOrderShowData{},
-		"buildOrderShowPhaseData": buildOrderShowPhaseData{},
-		"buildOrderStatusData":    buildOrderStatusData{},
 		"checkData":               checkData{},
 		"codeLinksData":           codeLinksData{},
 		"moduleCodeLinksData":     moduleCodeLinksData{},

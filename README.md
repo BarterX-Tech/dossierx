@@ -61,13 +61,13 @@ Set up DossierX in this repository.
    add the CI workflow as well. If I say no, skip the hook and
    add the CI workflow alone, and tell me so. Either answer ends with the
    workflow installed; the hook is only fast local feedback on top of it.
-5. ONLY if `dossierx check` reports `lock-ledger-pre-ledger`, or a lock,
-   reaudit or build-order lock refuses with `pre_ledger_unadopted`: this
+5. ONLY if `dossierx check` reports `lock-ledger-pre-ledger`, or a lock
+   or reaudit refuses with `pre_ledger_unadopted`: this
    project locked claims before it had a lock ledger. There is NO migration
-   command. Crossing means re-proposing every locked build order, unlocking
-   every locked claim, then re-locking only what I still stand behind. Show
-   me the plan and WAIT for my yes before unlocking anything. On a project
-   you created at step 2 this never fires — say you skipped it.
+   command. Crossing means unlocking every locked claim, then re-locking
+   only what I still stand behind. Leftover build-order files are ignored.
+   Show me the plan and WAIT for my yes before unlocking anything. On a
+   project you created at step 2 this never fires — say you skipped it.
 6. Run `dossierx check --format text` and show me the output. Do not tell me
    it works; show me it exiting 0.
 7. Tell me to commit `build/ledger/lock-store.json` — and
@@ -118,7 +118,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Twenty-five leaf commands under eight nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty-one leaf commands under seven nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, bounded projections, code-link scan and the ledger gate
@@ -155,7 +155,7 @@ Upgrading from v0.2.x? Twelve commands were removed and four moved in v0.3.0, an
 
 Mutating commands take `--dry-run`, which reports what *would* change and writes nothing. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`).
 
-`--reason` is required on `claim lock`, `claim unlock`, `claim reaudit --confirm`, `claim flag`, and `build-order lock`. Under the two-role split the human never types these, so `--reason` is where their approving words enter the record.
+`--reason` is required on `claim lock`, `claim unlock`, `claim reaudit --confirm`, and `claim flag`. Under the two-role split the human never types these, so `--reason` is where their approving words enter the record.
 
 ### Exit codes
 
@@ -173,13 +173,13 @@ Claims are YAML in git, so nothing can *prevent* an edit. The goal is that no ou
 
 **DossierX detects; the forge enforces.** Keep that division in view for everything below. The ledger's job is to turn a silent edit into a **named, recoverable finding** — a stable rule string, the claim it is about, and the command that puts things back. What makes anyone *obey* that finding is branch protection with a required CI check, and that is exactly the point: the ledger is what makes a red check mean "`widget.contract.overview` changed without an approval, restore it from version control" instead of "something is off somewhere". A gate nobody can name the failure of is a gate people learn to re-run.
 
-Every legitimate approval — `claim lock`, a confirmed `claim reaudit`, `build-order lock` — writes a record into the **lock ledger**: the hash of exactly what was approved, when, by which account, and the human's own `--reason` words. Unlocking marks the record released rather than deleting it, so the evidence that a claim was ever locked survives. Comment history gets the same treatment in its own digest store, which is why `serve` never needs write access to the lock store.
+Every legitimate approval — `claim lock` and a confirmed `claim reaudit` — writes a record into the **lock ledger**: the hash of exactly what was approved, when, by which account, and the human's own `--reason` words. Unlocking marks the record released rather than deleting it, so the evidence that a claim was ever locked survives. Comment history gets the same treatment in its own digest store, which is why `serve` never needs write access to the lock store.
 
 Three files hold the review state, under the build directory (`build/ledger/`, beside `project.config.yaml`'s own `build/`; see [Where DossierX writes](#where-dossierx-writes)):
 
 | File | Holds |
 |---|---|
-| `build/ledger/lock-store.json` | the lock ledger — per locked claim and locked build order: `{hash, at, actor, reason}` |
+| `build/ledger/lock-store.json` | the lock ledger — per locked claim: `{hash, at, actor, reason}` (leftover `SubjectBuildOrder` rows are ignored) |
 | `build/ledger/comment-digest.json` | the review history's fingerprint |
 | `build/ledger/flag-store.json` | the pending `claim flag` triggers: each flagged claim's `{claim_says, now_does, reason, flagged_at}`, parked until a confirmed `claim reaudit` consumes it |
 
@@ -189,13 +189,13 @@ The flag store is not part of the gate — nothing compares it to anything — b
 
 That makes it the one store with **no integrity coverage in either direction**: deleting it, `.gitignore`-ing it, or emptying its map is silent — `check` still exits 0, and your recorded "the claim says X, the code does Y" is gone with nothing in the report to say so. It is a bounded hole (a flag is a request for review, not an approval, so erasing one cannot make a locked claim change or an unapproved claim read as approved) but it is a real one, and the mitigation is procedural until a rule covers it: commit the store with the claim it describes, and read an *empty* `reaudit` proposal on a `review_pending` claim as a missing flag entry rather than as "nothing to change". [FORMAT.md](FORMAT.md#the-project-root-stores-are-tracked-artifacts) states the same thing next to the findings that do exist.
 
-These are the exception, not the rule. `build/catalog/catalog.json`, `build/viewer/`, and optional `build/conformance/status.json` are *generated* — regenerated in full by every `dossierx check` (the conformance status only when a claim declares an embodiment) — and are safe to `.gitignore`. `build/build-order/<module>.json` starts out in that generated category and leaves it the moment you lock one: a **locked** build order is an approved artifact the gate compares against its record, so commit it like the stores above.
+These are the exception, not the rule. `build/catalog/catalog.json`, `build/viewer/`, and optional `build/conformance/status.json` are *generated* — regenerated in full by every `dossierx check` (the conformance status only when a claim declares an embodiment) — and are safe to `.gitignore`. Leftover `build/build-order/<module>.json` files are also generated leftovers: they are not a product surface and `check` does not audit them.
 
 The gate names each disagreement:
 
 | Finding | What it caught |
 |---|---|
-| `lock-ledger-pre-ledger` | project-scoped, and still the **one benign entry in this table**: this project's lock store predates the lock ledger, so nothing locked here has an approval record and there is nothing to judge against yet. Said once, with the crossing that clears it, rather than as one `lock-ledger-missing` per claim — whose recovery ("set it back to draft and re-lock") would be actively destructive advice here. **New in v0.4.0, and the part not to miss: it is CONDITIONAL** — silent unless the project actually holds a locked claim or a locked build order, because a pre-ledger project with nothing locked is correct state and crosses onto the ledger on its next lock, and a finding on correct state is how gates get switched off. Its write-path twin is `error.code: pre_ledger_unadopted`, which `claim lock`, `claim reaudit --confirm` and `build-order lock` refuse with in the same state. The recovery is [the crossing](#upgrading-a-pre-ledger-project), not a migration — v0.4.0 removed `dossierx migrate` entirely. Told apart from `lock-ledger-absent` by the store file itself, with no history needed: pre-ledger means the store is **there** and still on the pre-ledger schema, absent means the file is **gone** |
+| `lock-ledger-pre-ledger` | project-scoped, and still the **one benign entry in this table**: this project's lock store predates the lock ledger, so nothing locked here has an approval record and there is nothing to judge against yet. Said once, with the crossing that clears it, rather than as one `lock-ledger-missing` per claim — whose recovery ("set it back to draft and re-lock") would be actively destructive advice here. **New in v0.4.0, and the part not to miss: it is CONDITIONAL** — silent unless the project actually holds a locked claim (leftover locked build orders do not count), because a pre-ledger project with nothing locked is correct state and crosses onto the ledger on its next lock, and a finding on correct state is how gates get switched off. Its write-path twin is `error.code: pre_ledger_unadopted`, which `claim lock` and `claim reaudit --confirm` refuse with in the same state. The recovery is [the crossing](#upgrading-a-pre-ledger-project), not a migration — v0.4.0 removed `dossierx migrate` entirely. Told apart from `lock-ledger-absent` by the store file itself, with no history needed: pre-ledger means the store is **there** and still on the pre-ledger schema, absent means the file is **gone** |
 | `lock-ledger-missing` | a claim is `locked` with no approval record — e.g. `status: draft` flipped to `locked` by hand, walking past the lint, hub-gating and unresolved-comment gates |
 | `lock-ledger-deleted` | `lock-ledger-missing`'s sharper twin: a claim **this engine locked**, whose record is gone. Every other rule keys on a record *existing*, so deleting one took the claim out of the switch entirely — delete its `ledger` entry, flip `status: locked` back to `draft`, and it is an ordinary draft again, freely editable and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. `check --validate` reported `ok: true` with zero findings. The evidence the deletion does not reach sits one key away in the same file: `locked_at`, which every lock stamps and which nothing removes (`unlock` keeps the record and stamps `released_at`), plus the claim's dependency baselines under `hashes`. A record that is *absent* rather than *released* was deleted by hand. **`claim lock` refuses this state outright** (`integrity_failed`) — otherwise the last step of the bypass is the tool's own command: re-locking writes a fresh record over the rewritten content and the finding disappears for good |
 | `lock-ledger-downgraded` | the lock store **says it predates the ledger** while the project proves it does not — its own `version` field set back to `1` and the `ledger` key deleted, one edit inside the audited file. This used to be the highest-value edit in the design, because adoption ran automatically and a store that claimed to predate the ledger was re-adopted on sight: the claims *as they are now* became the approved baseline. Adoption no longer exists at all ([see the upgrade section](#upgrading-a-pre-ledger-project)), so the edit no longer buys approval — but a store lying about its own version is still a tampered store, and it is still reported. Restore it from version control; do **not** re-lock, and do **not** try to force the pre-ledger crossing by unlocking everything — both record the current bytes as the baseline, which is exactly what the downgrade was trying to achieve |
@@ -212,7 +212,7 @@ The gate names each disagreement:
 | `build-order-ledger-missing` | a build-order artifact says `locked: true` with no approval record behind it |
 | `build-order-ledger-orphan` | an approved build order with its own `locked` flag cleared to `false` while its ledger record still **stands**. The two rules above skip an unlocked artifact — correctly, since an unlocked one is a proposal nobody approved — so one boolean removed the file from every rule at once while the approved sequence stayed on disk for an agent to follow. Told apart from an honest re-propose by the *release*: `build-order propose` releases the record as it overwrites the artifact, so a standing record here means nothing released it — and a flag flip made together with a content edit is caught too |
 | `build-order-ledger-abandoned` | a locked build order's **artifact is gone** while its approval record still stands — the `build/build-order/<module>.json` was deleted, or the module was dropped from `modules:` so nothing audits it any more. The rules above all start from the file, so deleting it was quieter than editing it. Release the build order first, then remove it |
-| `store-gitignored` | a path the engine writes under `build/ledger`, `build/build-order` or `build/code-links` is **matched by `.gitignore` and not in the index** — the ordinary `build/` pattern a Gradle, CMake or Node template ships. The approval would never reach the repository: a collaborator or CI clones a project with no ledger, `check` fails there with `lock-ledger-absent`, and every flag vanishes on the next clone. Checked per FILE with `git check-ignore --no-index` (a directory check goes green the moment one file under it is force-added), one finding per path. A path that is ignored but already tracked is a `warnings[]` line, not a finding. The recovery is the replacement block under [Where DossierX writes](#where-dossierx-writes), or `build_dir` pointed at a directory the pattern does not match. `claim lock`, `claim flag`, `claim reaudit --confirm` and `build-order lock` refuse the same state with `error.code: store_gitignored` (`--dry-run` previews it as the `stores_are_tracked` precondition), and refuse too when the project is inside a git work tree and git cannot answer; `check`, `check --validate` and `check --staged` then report `data.gitignore_check` instead of a verdict and exit 0 |
+| `store-gitignored` | a path the engine writes under `build/ledger`, `build/build-order` or `build/code-links` is **matched by `.gitignore` and not in the index** — the ordinary `build/` pattern a Gradle, CMake or Node template ships. The approval would never reach the repository: a collaborator or CI clones a project with no ledger, `check` fails there with `lock-ledger-absent`, and every flag vanishes on the next clone. Checked per FILE with `git check-ignore --no-index` (a directory check goes green the moment one file under it is force-added), one finding per path. A path that is ignored but already tracked is a `warnings[]` line, not a finding. The recovery is the replacement block under [Where DossierX writes](#where-dossierx-writes), or `build_dir` pointed at a directory the pattern does not match. `claim lock`, `claim flag` and `claim reaudit --confirm` refuse the same state with `error.code: store_gitignored` (`--dry-run` previews it as the `stores_are_tracked` precondition), and refuse too when the project is inside a git work tree and git cannot answer; `check`, `check --validate` and `check --staged` then report `data.gitignore_check` instead of a verdict and exit 0 |
 | `build-order-unreadable` | a `build/build-order/<module>.json` that **is there and will not decode** — truncated or corrupted rather than deleted. It counted as neither present nor absent, so the rules above and the deletion sweep both skipped it and `check` exited 0 over a destroyed sequence. Restore the file from version control; do **not** re-propose, which would record the order the claims imply *now* as the approved one |
 
 ### Where DossierX writes
@@ -296,26 +296,17 @@ The ledger is not authentication. `actor` is provenance, not identity, and anyon
 
 **There is no migration command.** v0.4.0 removed `dossierx migrate --adopt` outright, and nothing is grandfathered by any run, in any mode. A project whose locks predate the lock ledger crosses onto it by emptying itself of everything that predates it.
 
-**The state.** A lock store written before the ledger existed — schema `version: 1`, no `ledger` key — fails `check` with the project-scoped `lock-ledger-pre-ledger` finding, and the three approval-recording commands (`claim lock`, `claim reaudit --confirm`, `build-order lock`) refuse with `error.code: pre_ledger_unadopted`. Both happen **only while the project still holds a locked claim or a locked build order.** Hold nothing locked and both are silent.
+**The state.** A lock store written before the ledger existed — schema `version: 1`, no `ledger` key — fails `check` with the project-scoped `lock-ledger-pre-ledger` finding, and the approval-recording commands (`claim lock`, `claim reaudit --confirm`) refuse with `error.code: pre_ledger_unadopted`. Both happen **only while the project still holds a locked claim.** Leftover build-order files and their ledger rows do not count. Hold nothing locked and both are silent.
 
-**The crossing.** The order is load-bearing, not cosmetic: `build-order propose` requires the module still fully locked, so re-proposing has to happen *before* any claim is unlocked — unlock first and propose then refuses, leaving the locked order with no way to be released. One decision belongs before the first command, per module: will you re-lock *every* claim in it at step 3? A build order exists only over a fully locked module, and step 1 releases the approved sequence — so a module you re-lock only partially finishes the crossing gate-green but without a locked build order, and its step 4 waits until the day its last claim locks.
+**The crossing.** Unlock every locked claim, then re-lock only what you still stand behind. The first of those locks stamps the store onto the ledger.
 
 ```sh
-# 1. FIRST, for every module whose build order is locked:
-dossierx build-order propose --module <m>
-
-# 2. then every locked claim — unlock is gateless and always has been:
+# 1. every locked claim — unlock is gateless and always has been:
 dossierx claim unlock <id> --reason "<your words>"
 
-# 3. then re-lock only what you still stand behind:
+# 2. then re-lock only what you still stand behind:
 dossierx claim lock <id> --dry-run
 dossierx claim lock <id> --reason "<your words>" --proposal "<snapshot>"
-
-# 4. then the build orders again, for every module that is fully locked
-#    again. A module you re-locked only partially has nothing to propose
-#    yet — run this pair for it on the day its last claim locks:
-dossierx build-order propose --module <m>
-dossierx build-order lock --module <m> --reason "<your words>"
 ```
 
 **The first `claim lock` in a project holding nothing locked is what crosses it.** That lock stamps the store onto the ledger schema and creates `build/ledger/comment-digest.json` in the same act — and it records a real approval, with your own words in `--reason`. That is the whole difference from the adoption path this replaces. Commit the rewritten `build/ledger/lock-store.json` and the new `build/ledger/comment-digest.json` together with the re-locks.

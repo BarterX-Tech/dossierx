@@ -226,23 +226,14 @@ func TestCLI_BuildOrderLockIsOnTheRecord(t *testing.T) {
 	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("build-order propose: %v", err)
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err == nil {
+		t.Fatal("retired build-order propose must fail")
 	}
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
-		t.Fatalf("build-order lock: %v", err)
+	if _, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]; ok {
+		t.Fatalf("retired build-order must not write a ledger record")
 	}
-
-	rec, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]
-	if !ok {
-		t.Fatalf("expected a ledger record for the locked build order")
-	}
-	if rec.Subject != lock.SubjectBuildOrder || rec.Reason != "order approved" || rec.Hash == "" {
-		t.Fatalf("unexpected build-order record: %+v", rec)
-	}
-	// And it must not be mistaken for a claim by the claim rules.
 	if findings := auditProject(t, cfgPath); len(findings) != 0 {
-		t.Fatalf("a build-order record must not disturb the claim rules, got %+v", findings)
+		t.Fatalf("a leftover-free lock must leave the gate clean, got %+v", findings)
 	}
 }
 

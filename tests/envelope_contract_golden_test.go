@@ -422,49 +422,6 @@ func envDangling(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
-// envRoleLocked is a locked claim carrying a build_role, which is what
-// build-order propose needs: the shared writeFixtureProject claim has none, and
-// proposing over it is refused with build_order_refused rather than producing an
-// order.
-func envRoleLocked(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	claimsDir := filepath.Join(dir, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims dir: %v", err)
-	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
-	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"build_role: schema\nbody: |\n  fixture claim carrying a build role.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
-	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
-		t.Fatalf("write claim: %v", err)
-	}
-	envMustRun(t, dir, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
-	return nil
-}
-
-// envProposedOrder is envRoleLocked with the build order proposed but not yet
-// locked.
-func envProposedOrder(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	envRoleLocked(t, dir)
-	envMustRun(t, dir, "build-order", "propose", "--module", "widget")
-	return nil
-}
-
-// envLockedOrder is envProposedOrder with the build order LOCKED, which is the
-// state "build-order show" exists to hand over: an approved implementation
-// sequence with a lock stamp and a ledger record behind it.
-func envLockedOrder(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	envProposedOrder(t, dir)
-	envMustRun(t, dir, "build-order", "lock", "--module", "widget", "--reason", "approved")
-	return nil
-}
-
 // envMustRun runs a setup command in the JSON format and fails the test if it
 // did not succeed. Setup failures must never present as a golden diff: a block
 // recording the envelope of a command whose PRECONDITION quietly stopped
@@ -542,18 +499,6 @@ func envelopeCases() []envelopeCase {
 		{"comment add / a new thread", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "agent", "--body", "a note"}},
 		{"comment add / an actor that is neither role", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "robot", "--body", "a note"}},
 		{"comment reply / on the agent's own thread", envAgentThread, []string{"comment", "reply", "widget.contract.overview", "{thread}", "--as", "agent", "--body", "checked, it holds"}},
-
-		{"build-order propose / one locked claim", envRoleLocked, []string{"build-order", "propose", "--module", "widget"}},
-		{"build-order status / nothing proposed yet", envLocked, []string{"build-order", "status", "--module", "widget"}},
-		{"build-order lock / a fresh proposal", envProposedOrder, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
-		{"build-order lock / nothing proposed yet", envLocked, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
-		// Both halves of "show", because the refusal is a DECISION rather than
-		// a fallout: "build-order status" answers the same unproposed module
-		// with ok:true, proposed:false at exit 0, and "show" answers it with
-		// not_proposed at exit 1. Pinning only the success block would leave
-		// the divergence resting on a comment in build_order_show.go.
-		{"build-order show / a locked order", envLockedOrder, []string{"build-order", "show", "--module", "widget"}},
-		{"build-order show / nothing proposed yet", envLocked, []string{"build-order", "show", "--module", "widget"}},
 
 		// The track leaves, against a project that has adopted the axis and one
 		// that has not. Both matter: the adopted project is where the lists have

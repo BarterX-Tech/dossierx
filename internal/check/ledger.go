@@ -400,81 +400,12 @@ func collectBuildOrderStates(cfg *config.Config, load func(module string) (*buil
 // human to re-propose and re-lock an order they never touched — was the same
 // false accusation the claim half used to make.
 func buildOrderGate(in ledgerInputs) []lock.Finding {
-	store := in.store
-	if store == nil {
-		return nil
-	}
-	preLedgerExempt := store.PreLedgerUnadopted(in.digests != nil && in.digests.FileExists())
-
-	var findings []lock.Finding
-	for _, o := range in.buildOrders {
-		// The corrupt artifact, reported before anything else about this module:
-		// like the unreadable lock store, it is a statement about the gate's own
-		// EVIDENCE, and it is the cause of every rule below saying nothing about
-		// this module. See RuleBuildOrderUnreadable.
-		if o.Unreadable {
-			findings = append(findings, lock.Finding{
-				Rule: RuleBuildOrderUnreadable,
-				Message: fmt.Sprintf(
-					"module %q's build-order artifact (%s) is there but could not be read: %v. No build-order rule can say anything about this module on this run — a corrupt artifact is not evidence that it was deleted, and it cannot be compared to the approval record either, so the approved implementation sequence is unaudited. Restore the file from version control; do NOT re-propose, which would record whatever the claims say now as the approved order.",
-					o.Module, o.Path, o.Err),
-			})
-			continue
-		}
-		if !o.Present {
-			continue
-		}
-		record, hasRecord := store.Record(lock.BuildOrderLedgerKey(o.Module))
-		standing := hasRecord && record.Subject == lock.SubjectBuildOrder && !record.Released()
-
-		// The unlocked artifact: audited by exactly one rule, and only in the
-		// one shape that cannot be an honest re-proposal. See
-		// RuleBuildOrderLedgerOrphan.
-		if !o.Locked {
-			if standing {
-				// Whether the phases were edited too changes only the wording.
-				// Both are the same finding: an artifact saying it needs nobody's
-				// approval, under a record saying somebody gave it.
-				what := "with its own \"locked\" flag set to false and nothing else changed"
-				if o.LockedHash != record.Hash {
-					what = "with its own \"locked\" flag set to false AND its content changed"
-				}
-				findings = append(findings, lock.Finding{
-					Rule: RuleBuildOrderLedgerOrphan,
-					Message: fmt.Sprintf(
-						"module %q's build order (%s) is the artifact approved on %s (%q) %s — its lock-ledger record still stands, unreleased. An unlocked artifact is audited by nothing (it is meant to be a fresh proposal nobody has approved yet), so clearing that one boolean takes an approved implementation sequence out of the gate while leaving it in place for an agent to follow. An honest re-proposal releases the record as it overwrites the artifact, so a standing record here means nothing released it. Restore the artifact from version control, or discard the approved order deliberately by re-proposing it (dossierx build-order propose --module %s) and locking the result.",
-						o.Module, o.Path, record.At, record.Reason, what, o.Module),
-				})
-			}
-			continue
-		}
-
-		if !hasRecord || record.Subject != lock.SubjectBuildOrder {
-			if preLedgerExempt {
-				// Locked before this project had a ledger to record it in. The
-				// pre-ledger exemption is project-scoped and covers this exactly
-				// as it covers a locked claim; the project-scoped
-				// lock-ledger-pre-ledger finding is what names the state, once.
-				continue
-			}
-			findings = append(findings, lock.Finding{
-				Rule: RuleBuildOrderLedgerMissing,
-				Message: fmt.Sprintf(
-					"module %q's build order (%s) is locked but has no lock-ledger record: its locked flag was set outside the approval path, or the record was removed. A locked build order is the implementation sequence an agent follows, so it sits in the same gate as a locked claim. Re-propose and lock it properly (dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"...\").",
-					o.Module, o.Path, o.Module, o.Module),
-			})
-			continue
-		}
-		if o.Hash != record.Hash {
-			findings = append(findings, lock.Finding{
-				Rule: RuleBuildOrderContentDrift,
-				Message: fmt.Sprintf(
-					"module %q's locked build order (%s) no longer matches what was approved on %s (%q). The artifact is generated, never hand-edited: revert the edit, or re-run dossierx build-order propose --module %s and lock the fresh order with the human's approval.",
-					o.Module, o.Path, record.At, record.Reason, o.Module),
-			})
-		}
-	}
-	return append(findings, abandonedBuildOrders(in.buildOrders, store)...)
+	// NIT-15: leftover artifacts and SubjectBuildOrder rows are not a gate.
+	// Rule name constants stay so FORMAT.md's table still names them; the
+	// function is kept as the documented no-op so a later caller cannot
+	// accidentally re-arm the old findings.
+	_ = in
+	return nil
 }
 
 // abandonedBuildOrders is the reverse sweep: the LEDGER's own build-order

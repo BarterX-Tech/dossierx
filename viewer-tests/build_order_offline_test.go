@@ -1,20 +1,7 @@
 package viewertests
 
-// A BUILD ORDER TAB OPENED AS A FILE ASKS THE NETWORK FOR NOTHING.
-//
-// The graph pane has this proof in graph_offline_test.go; the Build order tab
-// needs its own because it is the one part of the viewer that carries a
-// third-party renderer (the vendored mermaid build) whose first act on a page
-// is to draw. A renderer that fetched a font, a stylesheet or a telemetry
-// beacon would leave the static scan in tests/portability_test.go green (the
-// allowlist there is over string literals, not over what runs) and put a
-// request on the wire the moment a reader opened build/viewer/index.html.
-//
-// The shape is the graph test's: the request log is attached BEFORE the
-// navigation, the diagrams are waited for so "no request" is a statement
-// about a page that actually rendered, the vacuity guard requires at least
-// one request attributed to the document, and the served half proves the
-// listener sees requests when a page does make them.
+// A viewer opened as a file asks the network for nothing, including after
+// the Build order tab was removed.
 
 import (
 	"strings"
@@ -32,12 +19,12 @@ func TestBuildOrderViewerIssuesNoRequestOnAFileURL(t *testing.T) {
 		log := watchRequests(t, ctx)
 		pe := watchPageErrors(t, ctx)
 		runCDP(t, ctx, chromedp.Navigate(url))
-		pollTrue(t, ctx, `!!window.mermaid`)
+		pollTrue(t, ctx, `document.readyState === 'complete'`)
 		desktopViewport(t, ctx)
 		pollTrue(t, ctx, `document.readyState === 'complete' && !document.body.classList.contains('comments-live')`)
-		openBuildOrderTab(t, ctx)
-		runCDP(t, ctx, chromedp.Click(`.bo-modules .subtab[data-target="#dossierx-build-order-widget"]`, chromedp.ByQuery))
-		waitDiagrams(t, ctx, "widget", widgetSVGs)
+		if evalBool(t, ctx, `!!document.getElementById('dossierx-build-order')`) {
+			t.Fatal("the Build order tab must stay absent")
+		}
 		assertNoPageErrors(t, ctx, pe)
 
 		mine := log.fromDocument(url)
@@ -46,16 +33,13 @@ func TestBuildOrderViewerIssuesNoRequestOnAFileURL(t *testing.T) {
 				t.Fatalf("a file:// viewer issued an API request: %s (all from this document: %v)", u, mine)
 			}
 			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
-				t.Fatalf("a file:// viewer issued a network request while rendering its build order: %s", u)
+				t.Fatalf("a file:// viewer issued a network request: %s", u)
 			}
 		}
 		if len(mine) == 0 {
 			t.Fatalf("no request was attributed to %s — the listener never attached, or DocumentURL "+
 				"attribution changed; the silence asserted above would be vacuous. All requests seen: %v",
 				url, log.snapshot())
-		}
-		if n := evalInt(t, ctx, svgCountExpr("widget")); n != widgetSVGs {
-			t.Fatalf("widget rendered %d diagram(s), want %d; the silence above is not evidence of anything", n, widgetSVGs)
 		}
 	})
 

@@ -591,8 +591,8 @@ func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *test
 			missing++
 		}
 	}
-	if preLedger != 1 {
-		t.Fatalf("expected exactly one %s so check and the write path agree, got %d in %v", lock.RuleLockLedgerPreLedger, preLedger, got)
+	if preLedger != 0 {
+		t.Fatalf("a leftover locked build order is not a pre-ledger obligation, got %d in %v", preLedger, got)
 	}
 	if missing != 0 {
 		t.Fatalf("the pre-ledger exemption still covers the build order itself; got %d %s in %v", missing, check.RuleBuildOrderLedgerMissing, got)
@@ -612,7 +612,7 @@ func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
 	downgradeLockStore(t, cfg, true)
 
 	res := check.Status(claims, cfg)
-	for _, want := range []string{lock.RuleLockLedgerDowngraded, lock.RuleLockLedgerMissing, check.RuleBuildOrderLedgerMissing} {
+	for _, want := range []string{lock.RuleLockLedgerDowngraded, lock.RuleLockLedgerMissing} {
 		if !hasRule(res.LedgerFindings, want) {
 			t.Fatalf("expected %s, got %v", want, rulesOf(res.LedgerFindings))
 		}

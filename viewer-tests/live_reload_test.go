@@ -484,47 +484,13 @@ func TestReloadRerendersBuildOrderDiagrams(t *testing.T) {
 	ctx := serveAndOpenLive(t, p)
 	pe := watchPageErrors(t, ctx)
 	desktopViewport(t, ctx)
-	openBuildOrderTab(t, ctx)
-	waitDiagrams(t, ctx, "widget", widgetSVGs)
-	before := evalInt(t, ctx, svgCountExpr("widget"))
-
-	// An external edit lands a new draft claim in another module -> "changed"
-	// -> a fragment swap that replaces every rendered SVG with fresh source.
+	if evalBool(t, ctx, `!!document.getElementById('dossierx-build-order')`) {
+		t.Fatal("the Build order tab must stay absent")
+	}
 	p.writeClaim("single-extra.yaml", boClaim("single.contract.extra", "contract", "single", "orientation"))
 	pollTrue(t, ctx, `!!document.getElementById('single.contract.extra')`)
-	waitDiagrams(t, ctx, "widget", before)
-	if !evalBool(t, ctx, `!document.getElementById('dossierx-build-order').hidden`) {
-		t.Fatal("the Build order tab must stay the active section across a reload")
-	}
-	if n := evalInt(t, ctx, `document.querySelectorAll('#dossierx-build-order .bo-error').length`); n != 0 {
-		t.Fatalf(".bo-error count after the swap = %d", n)
-	}
-
-	// Freshness (1): lock a NEW claim into widget's artifact through the CLI
-	// against the served project. Adding a locked claim makes the locked
-	// order stale, which is what lets propose recompute it; the artifact is
-	// outside the claims tree so its write fires no "changed", and one more
-	// draft claim is the trigger for the swap that delivers the new payload.
-	p.writeClaim("widget-extra.yaml", boClaim("widget.contract.extra", "contract", "widget", "behavior", "widget.contract.behavior"))
-	pollTrue(t, ctx, `!!document.getElementById('widget.contract.extra')`)
-	p.run("claim", "lock", "widget.contract.extra", "--reason", "viewer-test fixture")
-	p.run("build-order", "propose", "--module", "widget")
-	p.run("build-order", "lock", "--module", "widget", "--reason", "viewer-test fixture")
-	p.writeClaim("single-extra2.yaml", boClaim("single.contract.extra2", "contract", "single", "orientation"))
-	pollTrue(t, ctx, `!!document.getElementById('single.contract.extra2')`)
-	waitDiagrams(t, ctx, "widget", widgetSVGs)
-	node := `#dossierx-build-order-widget .bo-phase[data-phase="behavior"] g.node[id*="widget_contract_extra"]`
-	pollTrue(t, ctx, `!!document.querySelector('`+node+`')`)
-	if evalBool(t, ctx, `document.querySelector('`+node+`').classList.contains('bo-missing')`) {
-		t.Fatal("the just-locked claim's node is marked missing: the click handler read a payload delivered once at load, not the swap's")
-	}
-	if !dispatchNodeClick(t, ctx, node) {
-		t.Fatal("the new node vanished")
-	}
-	pollTrue(t, ctx, `window.location.hash === '#widget.contract.extra'`)
-	pollTrue(t, ctx, `!document.getElementById('widget').hidden && document.getElementById('widget.contract.extra').getBoundingClientRect().height > 0`)
-	if evalBool(t, ctx, `!!document.querySelector('`+node+`') && document.querySelector('`+node+`').classList.contains('bo-missing')`) {
-		t.Fatal("a hit was marked as a miss")
+	if evalBool(t, ctx, `!!document.getElementById('dossierx-build-order')`) {
+		t.Fatal("a fragment swap must not revive the Build order tab")
 	}
 	assertNoPageErrors(t, ctx, pe)
 }
@@ -552,20 +518,13 @@ func TestReloadZeroToOneLockedOrderReloadsForTheRenderer(t *testing.T) {
 	}
 	runCDP(t, ctx, chromedp.Evaluate(`window.__boMarker = true;`, nil))
 
-	p.run("build-order", "propose", "--module", "widget")
-	p.run("build-order", "lock", "--module", "widget", "--reason", "viewer-test fixture")
-	// The artifact write fires no "changed"; a draft claim is the trigger.
 	p.writeClaim("single-extra.yaml", boClaim("single.contract.extra", "contract", "single", "orientation"))
-
-	// The reload: the marker is gone, the renderer is present, the section
-	// exists, and the SSE stream has reconnected on the fresh page.
-	pollTrueAcrossNavigation(t, ctx, `window.__boMarker === undefined && typeof window.mermaid !== 'undefined' && !!document.getElementById('dossierx-build-order')`)
-	pollTrueAcrossNavigation(t, ctx, `document.body.classList.contains('comments-sse-open')`)
-	desktopViewport(t, ctx)
-	openBuildOrderTab(t, ctx)
-	waitDiagrams(t, ctx, "widget", 2)
-	if n := evalInt(t, ctx, `document.querySelectorAll('#dossierx-build-order .bo-error').length`); n != 0 {
-		t.Fatalf(".bo-error count = %d", n)
+	pollTrue(t, ctx, `!!document.getElementById('single.contract.extra')`)
+	if !evalBool(t, ctx, `window.__boMarker === true`) {
+		t.Fatal("the marker is gone: adding a draft must not force a full reload for a retired tab")
+	}
+	if evalBool(t, ctx, `!!document.getElementById('dossierx-build-order')`) {
+		t.Fatal("a fragment swap must not create a Build order tab")
 	}
 }
 

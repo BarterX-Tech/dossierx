@@ -145,11 +145,11 @@ func TestBuildOrderTabDataWithBudget_CapsFragmentAndPayloadAccumulation(t *testi
 	t.Run("module fragment", func(t *testing.T) {
 		largeTemplate := template.Must(template.New("large").Parse(strings.Repeat("x", 2<<20)))
 		tab, payload, err := buildOrderTabDataWithBudget(cat, cfg, largeTemplate, generatedAt, &renderByteBudget{remaining: 1 << 20})
-		if !errors.Is(err, ErrIntermediateCapacityExceeded) {
-			t.Fatalf("buildOrderTabDataWithBudget error = %v, want intermediate capacity exceeded", err)
+		if err != nil {
+			t.Fatalf("empty tab must not consume the budget: %v", err)
 		}
 		if len(tab.Modules) != 0 || payload != "" {
-			t.Fatal("build-order fragment overflow returned partial tab data")
+			t.Fatal("retired build-order tab must be empty")
 		}
 	})
 
@@ -162,20 +162,12 @@ func TestBuildOrderTabDataWithBudget_CapsFragmentAndPayloadAccumulation(t *testi
 		if err != nil {
 			t.Fatalf("buildOrderTabData: %v", err)
 		}
-		retainedBytes := len(payload)
-		for _, module := range tab.Modules {
-			retainedBytes += len(module.HTML)
+		if len(tab.Modules) != 0 || payload != "" {
+			t.Fatal("retired build-order tab must be empty")
 		}
-		if retainedBytes < 2 {
-			t.Fatalf("unexpected retained build-order size %d", retainedBytes)
-		}
-
-		gotTab, gotPayload, err := buildOrderTabDataWithBudget(cat, cfg, loaded.buildOrder, generatedAt, &renderByteBudget{remaining: retainedBytes - 1})
-		if !errors.Is(err, ErrIntermediateCapacityExceeded) {
-			t.Fatalf("buildOrderTabDataWithBudget error = %v, want intermediate payload capacity exceeded", err)
-		}
-		if len(gotTab.Modules) != 0 || gotPayload != "" {
-			t.Fatal("build-order payload overflow returned partial tab data")
+		gotTab, gotPayload, err := buildOrderTabDataWithBudget(cat, cfg, loaded.buildOrder, generatedAt, &renderByteBudget{remaining: 1})
+		if err != nil || len(gotTab.Modules) != 0 || gotPayload != "" {
+			t.Fatalf("empty tab must stay empty, err=%v", err)
 		}
 	})
 }
