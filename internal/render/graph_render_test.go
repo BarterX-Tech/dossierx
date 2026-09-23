@@ -221,8 +221,6 @@ func TestEngineOwnedViewerAssetsHaveNoTrailingWhitespace(t *testing.T) {
 		"viewer/template/viewer-runtime.js",
 		"viewer/template/graph-core.js",
 		"viewer/template/graph-ui.js",
-		"viewer/template/build-order-ui.js",
-		"viewer/template/vendor/mermaid.min.js",
 	}
 	for _, path := range paths {
 		b, err := shellFS.ReadFile(path)
@@ -234,20 +232,6 @@ func TestEngineOwnedViewerAssetsHaveNoTrailingWhitespace(t *testing.T) {
 				t.Fatalf("engine asset %s has trailing whitespace at line %d", path, lineNo+1)
 			}
 		}
-	}
-
-	// The guarded Mermaid asset is injected as its exact engine-owned bytes,
-	// once, when a locked Build order is present.
-	cfg := buildOrderTestConfig(t, "widget")
-	claims := buildOrderTestClaims("widget")
-	lockBuildOrder(t, cfg, claims, "widget")
-	out := renderClaimsFor(t, cfg, claims)
-	mermaid, err := shellFS.ReadFile(mermaidTemplatePath)
-	if err != nil {
-		t.Fatalf("read embedded Mermaid: %v", err)
-	}
-	if got := strings.Count(out, string(mermaid)); got != 0 {
-		t.Fatalf("Build order is gone: Mermaid asset count = %d, want 0", got)
 	}
 }
 

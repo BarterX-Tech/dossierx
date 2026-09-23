@@ -184,15 +184,5 @@ func retiredTopLevelCmds() []*cobra.Command {
 		retiredCmd("migrate",
 			`migrate: removed in v0.4.0; there is no automatic adoption and no migration command — nothing can attest to content no ledger ever recorded`,
 			preLedgerCrossingHint),
-		// build-order is the noun v0.7.21 removed: module depends_on already
-		// orders work across modules, and the locked sequence's stale check
-		// forced re-approval after prose edits (#58). The stub answers the
-		// remembered group and every leaf (`propose --module`, `status`,
-		// `lock --reason`, `show --format mermaid`) so cobra never reports
-		// an unknown flag or unknown subcommand for a verb the last release
-		// still printed in --help.
-		retiredCmd("build-order",
-			`build-order: removed; a locked implementation sequence is not a product — module depends_on and claim rests_on already order the work, and there is no propose/status/lock/show and no stale check`,
-			`do not propose or lock a build order; implement from locked claims, module depends_on, and claim rests_on / build_role. leftover build/build-order artifacts and their ledger rows are ignored`),
 	}
 }

@@ -24,7 +24,7 @@ import (
 // the loop. Every other refusal in the CLI carries its payload in data; this was
 // the exception, and nothing about lock justified being one.
 func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
 	if err == nil || env.OK {
@@ -50,7 +50,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 	}
 	named := false
 	for _, f := range data.LintFindings {
-		if f.Lint == "build-role-required-for-locked" && f.ClaimID == "widget.contract.b" {
+		if f.Lint == "rest-on-locked" && f.ClaimID == "widget.contract.b" {
 			named = true
 		}
 		if f.Message == "" || f.Severity == "" {
@@ -77,7 +77,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 // duplicated prefix is worse than untidy — it is the sort of thing a consumer
 // writes a TrimPrefix against and then breaks on.
 func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
 	if err == nil {

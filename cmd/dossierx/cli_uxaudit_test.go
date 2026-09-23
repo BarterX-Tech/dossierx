@@ -123,8 +123,8 @@ func TestCLI_BuildOrderStatus_UnknownModuleRejected(t *testing.T) {
 	if err == nil {
 		t.Fatalf("build-order is retired and must fail")
 	}
-	if !strings.Contains(err.Error(), "removed") {
-		t.Fatalf("expected the retired-verb message, got: %v", err)
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("expected an unknown command, got: %v", err)
 	}
 }
 

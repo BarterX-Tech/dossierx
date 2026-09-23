@@ -228,7 +228,7 @@ func TestPolicyVerdictAdviceNeverTurnsRefusalsIntoReady(t *testing.T) {
 		verdict lock.CandidateVerdict
 		want    string
 	}{
-		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:build-role-required-for-locked"}, LintFindings: []lint.Finding{{LintName: "build-role-required-for-locked", ClaimID: "child", Message: "missing role"}}}, "build-role-required-for-locked"},
+		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:rest-on-locked"}, LintFindings: []lint.Finding{{LintName: "rest-on-locked", ClaimID: "child", Message: "unlocked dependency"}}}, "rest-on-locked"},
 		{"own roll-up", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:roll-up"}, LintFindings: []lint.Finding{{LintName: "roll-up", ClaimID: "child", Message: "draft sibling"}}}, "roll-up"},
 		{"open comments", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"unresolved_comments"}, OpenThreads: []string{"c-1"}}, "open comment thread"},
 		{"doctrine rests_on or mirror", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"doctrine_dependency_not_locked:doctrine:hub"}}, "dependency hub is doctrine"},

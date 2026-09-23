@@ -20,7 +20,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -443,8 +442,6 @@ func errorForCLI(err error) *cliout.Error {
 		code = cliout.CodeCommentDigestDrift
 	case errors.Is(err, loader.ErrClaimFileChanged):
 		code = cliout.CodeClaimFileChanged
-	case errors.Is(err, buildorder.ErrNotProposed):
-		code = cliout.CodeNotProposed
 	case errors.Is(err, implink.ErrNoArtifact):
 		code = cliout.CodeNoArtifact
 	case errors.Is(err, errWrongState):
@@ -538,7 +535,6 @@ var reasonInvocations = map[string]string{
 	"claim recover-approved-content": "dossierx claim recover-approved-content",
 	"claim unlock":                   "dossierx claim unlock <id>",
 	"claim reaudit":                  "dossierx claim reaudit <id> --confirm",
-	"build-order lock":               "dossierx build-order lock --module <module>",
 }
 
 func requireReason(verb, reason string) error {

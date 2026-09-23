@@ -213,32 +213,6 @@ const (
 	// rewrites body and nothing else, so accepting the flag would clear
 	// review_pending while leaving the actually-rendered content stale.
 	CodeStructuredLayout Code = "structured_layout"
-	// CodeNotProposed is a build-order operation on a module with no artifact
-	// proposed yet.
-	CodeNotProposed Code = "not_proposed"
-	// CodeBuildOrderStale is a locked build-order artifact whose claims have
-	// moved underneath it.
-	CodeBuildOrderStale Code = "build_order_stale"
-	// CodeBuildOrderRefused is buildorder's own refusal of a propose/lock (a
-	// module with unlocked claims, a missing build_role, a dependency cycle).
-	CodeBuildOrderRefused Code = "build_order_refused"
-	// CodeBuildOrderHandEdited is a build-order verb refusing an artifact that
-	// is not what the engine derives: "lock" refusing to freeze one that is not
-	// what a fresh propose computes — the phase sequence, a claim's placement,
-	// its File, or the excluded set was changed by hand — and "show" refusing
-	// one whose own stored entries cannot be laid out at all, which means a
-	// rests_on cycle inside bytes propose never writes.
-	//
-	// It is deliberately NOT CodeBuildOrderRefused. Every documented recovery for
-	// that code is a repair to the CLAIMS (lock the remaining ones, resolve a
-	// thread, set a missing build_role, break a rests_on cycle), and an agent
-	// that reads this refusal as one of those goes and inspects claims that are
-	// already correct, finds nothing to fix, and loops. Here the claims are fine
-	// and the ARTIFACT is wrong, so the recovery is the one move that discards
-	// it: re-run "build-order propose --module <m>" and lock what the engine
-	// derives. Splitting the code is what makes those two situations
-	// distinguishable without parsing the message.
-	CodeBuildOrderHandEdited Code = "build_order_hand_edited"
 	// CodeNoArtifact is an implementation-link operation on a module with no
 	// link artifact yet.
 	CodeNoArtifact Code = "no_artifact"

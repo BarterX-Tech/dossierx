@@ -9,22 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **Build order is gone.** `dossierx build-order propose|status|lock|show` is a
-  hidden retired stub (`usage`): a locked implementation sequence is not a
-  product once module `depends_on` exists, and the stale check forced re-lock
-  churn after prose edits (#58, NIT-15). There is no replacement sequencer.
-  Implement from locked claims, module `depends_on`, and claim `rests_on` /
-  `build_role`. Leftover `build/build-order/<module>.json` files and
-  `SubjectBuildOrder` ledger rows are ignored: `check` does not report stale,
-  does not emit `build-order-*` findings, does not hint to propose or lock, and
-  does not count leftover orders in the pre-ledger crossing. The viewer no
-  longer has a Build order tab. The consumer skill `dossierx-build-order` is
-  no longer embedded. `build_role` remains a claim field. Mirrors are
-  unchanged.
+- **Build order is gone.** The `dossierx build-order` noun and its
+  propose/status/lock/show leaves are deleted, not stubbed. A locked
+  implementation sequence is not a product once module `depends_on` exists
+  (NIT-15). There is no replacement sequencer. Implement from locked
+  claims, module `depends_on`, and claim `rests_on` / `build_role`.
+  Leftover artifact files and leftover ledger rows must not refuse `check`.
+  The viewer has no Build order tab and no Mermaid bundle. The consumer
+  skill `dossierx-build-order` is not embedded. `build_role` remains a
+  claim field. Mirrors are unchanged.
 
-| Retired | Replacement |
+| Removed | Replacement |
 |---|---|
-| `dossierx build-order` | removed; leftover artifacts are ignored. Implement from locked claims, module depends_on, and claim rests_on / build_role |
+| `dossierx build-order` | gone. Implement from locked claims, module depends_on, and claim rests_on / build_role |
 
 ## [0.7.20] - 2026-09-22
 

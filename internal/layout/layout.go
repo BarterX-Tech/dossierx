@@ -494,7 +494,7 @@ const RecommendedGitignore = `build/*
 // BuildGitignoreContent is what EnsureBuildGitignore writes into
 // <build_dir>/.gitignore: the historical generated kinds (catalog, viewer) and the
 // transient files (sentinels, temp and probe files) are ignored; the tracked
-// kinds under ledger/, build-order/ and code-links/ are not.
+// kinds under ledger/ and code-links/ are not.
 const BuildGitignoreContent = `# Written by dossierx check. Generated kinds are ignored; tracked kinds are not.
 catalog/
 viewer/
@@ -725,7 +725,7 @@ func storeGitignoredHarm(p IgnoredPath) string {
 // pattern was written). It is not the finding's harm — that ledger does reach
 // every collaborator — but nothing will stage the next NEW artifact.
 func IgnoredButTrackedWarning(p IgnoredPath) string {
-	return fmt.Sprintf("%s is in the repository but matched by .gitignore pattern %q (%s:%d): it was force-added, so nothing will stage the next NEW artifact under %s/ (a new module's %s/build-order/<m>.json, or a first flag store) and git add -A will never pick one up; replace the pattern with the block under store-gitignored, or set build_dir to a directory the pattern does not match",
+	return fmt.Sprintf("%s is in the repository but matched by .gitignore pattern %q (%s:%d): it was force-added, so nothing will stage the next NEW artifact under %s/ (a new module's %s/code-links/<m>.json, or a first flag store) and git add -A will never pick one up; replace the pattern with the block under store-gitignored, or set build_dir to a directory the pattern does not match",
 		p.Path, p.Pattern, p.Source, p.Line, p.BuildRel, p.BuildRel)
 }
 

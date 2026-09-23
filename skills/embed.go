@@ -44,8 +44,8 @@ const RouterName = "dossierx"
 // content and not about the exporter: the router first because it is loaded
 // always and first, then claims (the thing every other skill assumes), then the
 // human loop, then the two skills that only apply once claims are locked. A lexical
-// walk would open the guide on build-order — a skill for work
-// that has not started yet — and teach the reader to begin in the middle.
+// walk would open the guide in an order that is not the
+// reading order below, and teach the reader to begin in the middle.
 //
 // The exporter cross-checks this list against the embedded directories and fails
 // when they disagree, so a seventh bundle cannot be added without a decision

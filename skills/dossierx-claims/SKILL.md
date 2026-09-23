@@ -59,7 +59,7 @@ it out.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required
   before a claim can lock** once a module uses the feature. It classifies a claim for
   implementation reading (schema before behavior, and so on) and has nothing to do with `section`/`order`, which are the
-  human's reading order in the viewer. There is no locked build-order product.
+  human's reading order in the viewer.
 - Edges: `mirrors` (value equality; both sides must declare it), `rests_on` (semantic dependency;
   the target must exist), `governed_by: {type, reason}` —
   `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
@@ -163,8 +163,7 @@ it cites is locked. **Never treat a track as a gate.** It does not block anythin
 membership never gates `dossierx claim lock` — a claim locks on its own merits, and the way to
 change a locked claim's `tracks` is `unlock → fix → lock`, since `tracks` is signed by the ledger
 like every other field. "Is the feature done?" is `track status`. What to implement next is
-locked claims, module `depends_on`, and claim `rests_on` / `build_role` — there is no
-`dossierx build-order` command.
+locked claims, module `depends_on`, and claim `rests_on`.
 
 ## Finding the claim the human meant
 

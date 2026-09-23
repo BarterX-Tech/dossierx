@@ -29,7 +29,7 @@ import (
 // and the process exited 0. An agent that checked the status concluded its call
 // had succeeded and that the empty result was the answer.
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
-	for _, noun := range []string{"claim", "comment", "build-order", "track", "skills"} {
+	for _, noun := range []string{"claim", "comment", "track", "skills"} {
 		t.Run(noun, func(t *testing.T) {
 			env, _, err := execReviewedCLIJSON(t, noun)
 			if err == nil {
@@ -429,11 +429,6 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 		// flag parsing runs first — so without the stub, `--adopt` surfaces as
 		// `unknown flag` and the removal is never named at all.
 		{"migrate --adopt", []string{"migrate", "--adopt"}, "dossierx claim unlock", "removed in v0.4.0"},
-
-		{"build-order propose", []string{"build-order", "propose", "--module", "widget"}, "do not propose or lock a build order", "removed"},
-		{"build-order status", []string{"build-order", "status", "--module", "widget"}, "do not propose or lock a build order", "removed"},
-		{"build-order lock", []string{"build-order", "lock", "--module", "widget", "--reason", "keep"}, "do not propose or lock a build order", "removed"},
-		{"build-order show mermaid", []string{"build-order", "show", "--module", "widget", "--as-mermaid"}, "do not propose or lock a build order", "removed"},
 	}
 
 	for _, tc := range cases {

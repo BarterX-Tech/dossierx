@@ -19,48 +19,54 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// lockBuildOrder proposes and locks module's build order and records its
-// approval in the ledger, mirroring cmd/dossierx's own two steps (buildorder.Lock
-// then lock.RecordBuildOrderApproval over a sha256 of the artifact's JSON).
-func lockBuildOrder(t *testing.T, cfg *config.Config, claims []model.Claim, module string) *buildorder.Artifact {
+// writeLeftoverBuildOrder drops a leftover artifact and optional ledger row
+// so tests can prove they do not refuse check.
+func writeLeftoverBuildOrder(t *testing.T, cfg *config.Config, module string, record bool) []byte {
 	t.Helper()
-
-	path := buildorder.ArtifactPath(cfg, module)
-	proposed, err := buildorder.Propose(claims, cfg, module)
+	dir := filepath.Join(cfg.Dir(), config.DefaultBuildDir, config.BuildOrderDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir leftover dir: %v", err)
+	}
+	raw, err := json.Marshal(map[string]any{"module": module, "locked": true, "phases": []any{}})
 	if err != nil {
-		t.Fatalf("propose %s: %v", module, err)
+		t.Fatalf("marshal leftover: %v", err)
 	}
-	if err := buildorder.WriteArtifact(proposed, path); err != nil {
-		t.Fatalf("write artifact: %v", err)
+	path := filepath.Join(dir, module+".json")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write leftover: %v", err)
 	}
-	artifact, err := buildorder.Lock(path, claims, cfg)
-	if err != nil {
-		t.Fatalf("lock build order: %v", err)
+	if !record {
+		return raw
 	}
-
 	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)
 	}
-	raw, err := json.Marshal(artifact)
-	if err != nil {
-		t.Fatalf("marshal artifact: %v", err)
-	}
 	sum := sha256.Sum256(raw)
 	lock.RecordBuildOrderApproval(store, module, hex.EncodeToString(sum[:]),
-		lock.Approval{Actor: "fixture", Reason: "order approved"})
+		lock.Approval{Actor: "fixture", Reason: "leftover"})
 	if err := store.Save(); err != nil {
 		t.Fatalf("save store: %v", err)
 	}
-	return artifact
+	return raw
+}
+
+func leftoverPath(cfg *config.Config, module string) string {
+	return filepath.Join(cfg.Dir(), config.DefaultBuildDir, config.BuildOrderDirName, module+".json")
+}
+
+// lockBuildOrder writes a leftover artifact plus ledger row. Other leftover
+// tests still call this name; the product no longer has a lock verb.
+func lockBuildOrder(t *testing.T, cfg *config.Config, _ []model.Claim, module string) {
+	t.Helper()
+	writeLeftoverBuildOrder(t, cfg, module, true)
 }
 
 // orderedClaim is a locked claim carrying the build_role a build order needs.
@@ -80,7 +86,7 @@ func TestBuildOrderGate_HonestLockedOrderIsSilent(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
 	res := check.Status(claims, cfg)
 	if len(res.LedgerFindings) != 0 {
@@ -94,9 +100,9 @@ func TestBuildOrderGate_HandEditedArtifactIsContentDrift(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
-	path := buildorder.ArtifactPath(cfg, "widget")
+	path := leftoverPath(cfg, "widget")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)
@@ -128,7 +134,7 @@ func TestBuildOrderGate_DeletingTheRecordIsLedgerMissing(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
 	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
@@ -154,13 +160,7 @@ func TestBuildOrderGate_ProposedButUnlockedIsNotAudited(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	artifact, err := buildorder.Propose(claims, cfg, "widget")
-	if err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if err := buildorder.WriteArtifact(artifact, buildorder.ArtifactPath(cfg, "widget")); err != nil {
-		t.Fatalf("write artifact: %v", err)
-	}
+	writeLeftoverBuildOrder(t, cfg, "widget", false)
 
 	res := check.Status(claims, cfg)
 	if len(res.LedgerFindings) != 0 {
@@ -179,9 +179,9 @@ func TestBuildOrderGate_DeletingTheArtifactIsLedgerAbandoned(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
-	if err := os.Remove(buildorder.ArtifactPath(cfg, "widget")); err != nil {
+	if err := os.Remove(leftoverPath(cfg, "widget")); err != nil {
 		t.Fatalf("remove artifact: %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestBuildOrderGate_DroppingTheModuleFromConfigIsLedgerAbandoned(t *testing.
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
 	// The same project, re-read with a config that no longer declares the
 	// module. The artifact and the record are both still on disk.
@@ -226,7 +226,7 @@ func TestBuildOrderGate_ReleasedRecordIsNotAbandoned(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
 	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
@@ -239,7 +239,7 @@ func TestBuildOrderGate_ReleasedRecordIsNotAbandoned(t *testing.T) {
 	if err := store.Save(); err != nil {
 		t.Fatalf("save store: %v", err)
 	}
-	if err := os.Remove(buildorder.ArtifactPath(cfg, "widget")); err != nil {
+	if err := os.Remove(leftoverPath(cfg, "widget")); err != nil {
 		t.Fatalf("remove artifact: %v", err)
 	}
 
@@ -261,9 +261,9 @@ func TestBuildOrderGate_HandFlippedLockedFalseIsLedgerOrphan(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
-	path := buildorder.ArtifactPath(cfg, "widget")
+	path := leftoverPath(cfg, "widget")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)
@@ -304,15 +304,9 @@ func TestBuildOrderGate_ReProposedArtifactIsNotAbandoned(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
-	reproposed, err := buildorder.Propose(claims, cfg, "widget")
-	if err != nil {
-		t.Fatalf("re-propose: %v", err)
-	}
-	if err := buildorder.WriteArtifact(reproposed, buildorder.ArtifactPath(cfg, "widget")); err != nil {
-		t.Fatalf("write re-proposed artifact: %v", err)
-	}
+	writeLeftoverBuildOrder(t, cfg, "widget", false)
 	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
@@ -351,9 +345,9 @@ func TestBuildOrderGate_FlagFlipWithAContentEditIsLedgerOrphan(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
-	path := buildorder.ArtifactPath(cfg, "widget")
+	path := leftoverPath(cfg, "widget")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)
@@ -405,9 +399,9 @@ func TestBuildOrderGate_CorruptArtifactIsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
-	path := buildorder.ArtifactPath(cfg, "widget")
+	path := leftoverPath(cfg, "widget")
 	if err := os.WriteFile(path, []byte(`{ "module": "widget", "locked": tr`), 0o644); err != nil {
 		t.Fatalf("truncate artifact: %v", err)
 	}
@@ -438,7 +432,7 @@ func TestNextSteps_StaleLockedBuildOrderIsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
+	writeLeftoverBuildOrder(t, cfg, "widget", true)
 
 	res := check.Status(claims, cfg)
 	if len(res.BuildOrders) != 0 {
@@ -481,13 +475,7 @@ func TestNextSteps_UnlockedBuildOrderIsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
-	proposed, err := buildorder.Propose(claims, cfg, "widget")
-	if err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if err := buildorder.WriteArtifact(proposed, buildorder.ArtifactPath(cfg, "widget")); err != nil {
-		t.Fatalf("write artifact: %v", err)
-	}
+	writeLeftoverBuildOrder(t, cfg, "widget", false)
 
 	res := check.Status(claims, cfg)
 	if len(res.BuildOrders) != 0 {

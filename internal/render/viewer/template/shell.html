@@ -114,11 +114,7 @@
 <!-- The graph trigger deliberately does NOT carry class sec-tab: graph-ui.js
                owns it, while viewer-runtime.js owns reading-view selection. It
                remains inside #nav so live fragment swaps replace it safely. -->
-            <button id="dxgOpen" class="nav-utility" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>{{if .BuildOrders.Modules}}
-<!-- Build order is a reading-view selection, but Paper places it beside
-               Claims graph in the fixed utility footer rather than in a third
-               accordion group. The section/payload guards remain unchanged. -->
-            <button class="nav-utility sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-{{.BuildOrders.FirstModuleID}}"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-list-tree"/></svg><span>Build order</span></button>{{end}}
+            <button id="dxgOpen" class="nav-utility" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
           </div>
           <div class="theme-control desktop-theme-control" role="group" aria-label="Color theme">
           <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
@@ -127,7 +123,7 @@
         </div>
       </nav>
     </aside>
-    <main class="content-area">{{if .BuildOrders.Modules}}<script type="application/json" id="dossierx-build-orders">{{.BuildOrderPayload}}</script>{{end}}
+    <main class="content-area">
 {{if .ModuleGroups}}
 {{range .ModuleGroups}}
           <section class="module-section" id="{{.ID}}" hidden data-claim-count="{{.ClaimCount}}" data-locked-count="{{.LockedCount}}" data-facet-count="{{.FacetCount}}">
@@ -193,33 +189,7 @@
 {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
           </section>
         </section>
-{{end}}{{end}}{{if .BuildOrders.Modules}}
-<!-- The Build order section: a .module-section like every module and
-           track, so the show/hide, hash and fragment-swap machinery below
-           handles it with nothing new, holding one .claim-group per locked
-           module (build-order.html) so a "#dossierx-build-order-<module>" hash resolves
-           as a facet through facetToModule. Emitted LAST, after the tracks, so
-           moduleSections[0] stays the first module and a plain open or an
-           unresolvable hash still lands there, never on the diagrams. Inside
-           the SAME guard as the sidebar group, the payload block above and the
-           two script tags at the end of the body: a project with no locked
-           order carries none of it — and that guard is also what keeps the
-           one-time reload in applyFragment a one-time event.
-           The strip is .bo-modules, NOT .sub-nav: .sub-nav has never needed
-           horizontal overflow above 860px and has none, and a project's 25
-           locked modules would run off the desktop column unreachable. The
-           buttons keep .subtab so the delegated click handler below and
-           showModuleFacet's .on toggle drive them unchanged. -->
-      <section class="module-section build-order-section" id="dossierx-build-order" hidden>
-        <div class="bo-modules">
-{{- range .BuildOrders.Modules}}
-          <button class="subtab" data-target="#dossierx-build-order-{{.ID}}">{{.Label}}</button>
-{{- end}}
-        </div>
-{{- range .BuildOrders.Modules}}
-{{.HTML}}
-{{- end}}
-      </section>{{end}}
+{{end}}{{end}}
     </main>
 
 <!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own
@@ -446,12 +416,6 @@
        parse time and does nothing else until a reader opens the pane. -->
   <script>{{.SystemRecordJS}}</script>
   <script>{{.GraphCoreJS}}</script>
-  <script>{{.GraphUIJS}}</script>{{if or .BuildOrders.Modules .HasReadinessMaps}}
-<!-- The shared Mermaid renderer: the vendored build (~3.5 MB) and the
-       engine's lazy renderer glue are included only when a locked Build order
-       or a traceable readiness obstacle exists. Healthy projects with neither
-       retain the small viewer instead of carrying a dead renderer. -->
-  <script>{{.MermaidJS}}</script>
-  <script>{{.BuildOrderUIJS}}</script>{{end}}
+  <script>{{.GraphUIJS}}</script>
 </body>
 </html>

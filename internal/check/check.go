@@ -276,7 +276,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	gitignoreFindings, gitignoreWarnings, gitignoreReason, gitignoreErr := Gitignored(cfg)
 	res.GitignoreCheck = gitignoreReason
 	res.GitignoreWarnings = gitignoreWarnings
-	res.ViewerWarnings = render.StyleOverrideWarnings(cfg)
+	res.ViewerWarnings = nil
 	if gitignoreErr != nil {
 		// A read-only verdict: Run reports the non-verdict and carries on.
 		// The approval verbs, which write, refuse on the same error.
@@ -706,7 +706,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		res.GitignoreCheck = gitignoreReason
 		res.GitignoreWarnings = gitignoreWarnings
 	}
-	res.ViewerWarnings = render.StyleOverrideWarnings(cfg)
+	res.ViewerWarnings = nil
 
 	if len(res.LintErrors) > 0 {
 		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
