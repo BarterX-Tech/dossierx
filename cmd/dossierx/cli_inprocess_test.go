@@ -172,19 +172,6 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	// An orientation-note claim (via the reserved "overview" facet, which
-	// implies kind: orientation-note without saying so explicitly — see
-	// model.Claim.EffectiveKind) so the "check" assertion below can cover the
-	// orientation-notes non-blocking report line (computed in internal/check,
-	// formatted by formatCheckResult), not just "check: OK" itself.
-	overviewClaim := "id: widget.overview.router\n" +
-		"facet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
-		"body: |\n  fixture orientation-note claim for in-process CLI tests.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
-	if err := os.WriteFile(filepath.Join(root, "claims", "overview-router.yaml"), []byte(overviewClaim), 0o644); err != nil {
-		t.Fatalf("write overview claim: %v", err)
-	}
-
 	// --validate first, on a clean tree: it must report the lint verdict and
 	// leave the two artifacts ABSENT. The fixture claims carry no
 	// mirrors/rests_on edges, which trips the warning-severity "orphan" lint —
@@ -208,17 +195,13 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 		}
 	}
 
-	// Now the writing form: same lint verdict, plus both artifacts and the
-	// non-blocking orientation-notes report.
+	// Now the writing form: same lint verdict, plus both artifacts.
 	out, _, err = execCLI(t, "--config", cfgPath, "check")
 	if err != nil {
 		t.Fatalf("check: %v (out: %s)", err, out)
 	}
 	if !strings.Contains(out, "check: OK") {
 		t.Fatalf("expected check: OK, got: %s", out)
-	}
-	if !strings.Contains(out, `orientation notes: module "widget": 1 (1 in overview)`) {
-		t.Fatalf("expected orientation notes report line, got: %s", out)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "build", "catalog", "catalog.json")); statErr != nil {
 		t.Fatalf("expected build/catalog/catalog.json to exist after check: %v", statErr)

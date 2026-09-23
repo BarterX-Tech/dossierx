@@ -67,10 +67,8 @@ Never reordered, never interleaved:
 `out-of-scope` claims are never placed in the sequence, but are always still reported as
 `excluded` — never silently dropped from view.
 
-`build_role` and `kind` are different axes. `build_role` says *where in the build sequence* a claim
-sits; `kind: orientation-note` says *what the claim is* — reading guidance rather than a fact about
-the system. They are orthogonal, but an orientation-note claim is **not** invisible to Build Order
-and still needs a `build_role` (naturally `orientation`) before it can lock or be proposed.
+`build_role` says *where in the build sequence* a claim sits. It is independent of
+`kind`, which is only `fact` (or omitted).
 
 ## The completeness gate — why it refuses so much
 

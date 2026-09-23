@@ -99,7 +99,7 @@ func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
 // ---------------------------------------------------------------------
 
 // rollUpDeadlockFixture is the shape that had no legal move: one LOCKED banner
-// claim (an orientation note, the ordinary way a banner exists) and TWO draft
+// claim (a banner layout) and TWO draft
 // claims in the same module.
 //
 // With roll-up as a project-wide error this failed `check`, `check --validate`,
@@ -111,7 +111,7 @@ func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
 func rollUpDeadlockFixture(t *testing.T, bannerStatus string) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/banner.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\n" +
+		"claims/banner.yaml": "id: widget.contract.banner\nfacet: contract\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\n" +
 			"build_role: orientation\n" +
 			"body: |\n  read the contract claims below in order.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
@@ -172,7 +172,7 @@ func TestRollUpStillRefusesTheBannersOwnLock(t *testing.T) {
 	// would (correctly) refuse first, testing the wrong gate.
 	cfgPath := rollUpDeadlockFixture(t, "draft")
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.banner", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("a banner must not lock while its module holds a draft, got %+v", env)
 	}
@@ -202,7 +202,7 @@ func TestRollUpStillRefusesTheBannersOwnLock(t *testing.T) {
 func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 	cfgPath := rollUpDeadlockFixture(t, "draft")
 
-	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.overview.router")
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.banner")
 	detail := ""
 	for _, p := range dr.Preconditions {
 		if p.Name == "lint_clean" {
@@ -215,14 +215,14 @@ func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 	if !strings.Contains(detail, "roll-up") {
 		t.Fatalf("the lint_clean detail must name the rule, got %q", detail)
 	}
-	if !strings.Contains(detail, "widget.overview.router") {
+	if !strings.Contains(detail, "widget.contract.banner") {
 		t.Fatalf("the lint_clean detail must name the offending banner, got %q", detail)
 	}
 	if !strings.Contains(detail, "widget.contract.one") {
 		t.Fatalf("the lint_clean detail must name the blocking sibling, got %q", detail)
 	}
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.overview.router")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.banner")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}

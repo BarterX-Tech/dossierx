@@ -122,10 +122,7 @@ type Node struct {
 	// Status is model.Claim.Status: the closed enum "draft" | "locked".
 	Status string `json:"status"`
 
-	// Kind is model.Claim.EffectiveKind(), never the raw Kind field — the
-	// reserved overview facet implies orientation-note without the author
-	// repeating it, and a client re-deriving that rule would be a second
-	// place to keep it correct.
+	// Kind is model.Claim.EffectiveKind(), never the raw Kind field.
 	Kind string `json:"kind"`
 
 	// BuildRole is model.Claim.BuildRole. Empty is meaningful, not

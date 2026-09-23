@@ -43,16 +43,12 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims := []model.Claim{{
-		ID: "widget.overview.router", Facet: "overview", Module: "widget", Status: model.StatusDraft,
-		Layout: model.LayoutBanner, Kind: model.KindOrientationNote, Body: "orientation fixture",
-		Governed:   model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
-		Embodiment: &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: strings.Repeat("x", 1<<20)},
-	}}
+	heavy := strings.Repeat("x", 1<<20)
+	var claims []model.Claim
 	for _, facet := range facets {
 		claims = append(claims, model.Claim{
 			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "facet fixture", Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			Layout: model.LayoutCard, Body: heavy, Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -91,15 +87,12 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims := []model.Claim{{
-		ID: "widget.overview.router", Facet: "overview", Module: "widget", Status: model.StatusDraft,
-		Layout: model.LayoutBanner, Kind: model.KindOrientationNote, Body: strings.Repeat("x", 1<<20),
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
-	}}
+	heavy := strings.Repeat("x", 1<<20)
+	var claims []model.Claim
 	for _, facet := range facets {
 		claims = append(claims, model.Claim{
 			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "facet fixture", Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			Layout: model.LayoutCard, Body: heavy, Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
 		})
 	}
 	old := []byte("previous-complete-artifact")

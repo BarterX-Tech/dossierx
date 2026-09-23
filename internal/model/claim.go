@@ -119,16 +119,9 @@ func BuildRoleDefinition(r BuildRole) string {
 	return buildRoleDefinitions[r]
 }
 
-// Kind distinguishes a claim that states a fact about the system (the
-// default, and everything the engine has ever rendered until this field
-// existed) from one that is itself guidance about how to read the docs —
-// an "orientation note". This is a different axis from BuildRole: a
-// BuildRoleOrientation claim is still a *fact* the module rests on (e.g.
-// "why this module exists"), while a KindOrientationNote claim is a
-// pointer *at* other claims (e.g. "if you only call the public API, read
-// Contract, never Internals"). See internal/lint/orientation_note_shape.go and
-// internal/lint/orientation_note_order.go for the rules this field feeds,
-// and FORMAT.md for the full authoring contract.
+// Kind is the claim's kind field. The only legal value is KindFact
+// (also the default when the field is omitted). kind-shape refuses every
+// other string, including the retired orientation-note value.
 type Kind string
 
 const (
@@ -136,12 +129,6 @@ const (
 	// Claim.EffectiveKind — see that method): a claim stating a fact about
 	// the system.
 	KindFact Kind = "fact"
-
-	// KindOrientationNote marks a claim as agent/reviewer-facing reading
-	// guidance rather than a fact. Every claim under the reserved
-	// config.ReservedOverviewFacet facet is a KindOrientationNote whether
-	// or not this field is set explicitly — see EffectiveKind.
-	KindOrientationNote Kind = "orientation-note"
 )
 
 // GovernedType is the kind of doctrine governance backing a claim.
@@ -280,10 +267,8 @@ type Claim struct {
 	Layout Layout `yaml:"layout,omitempty"`
 
 	// Kind is optional; unset (or explicitly KindFact) means "an ordinary
-	// fact claim". See Kind's doc comment. Read via EffectiveKind, not this
-	// field directly, everywhere except lint's own explicit-value checks —
-	// EffectiveKind also accounts for the reserved overview facet implying
-	// orientation-note without the author having to repeat it.
+	// fact claim". Read via EffectiveKind, not this field directly,
+	// everywhere except lint's own explicit-value checks.
 	Kind Kind `yaml:"kind,omitempty"`
 
 	// BuildRole is optional (see BuildRole's doc comment for why, and for
@@ -418,25 +403,11 @@ type Claim struct {
 	SourcePath string `yaml:"-"`
 }
 
-// EffectiveKind returns c's real Kind, accounting for the reserved
-// "overview" facet (config.ReservedOverviewFacet) implicitly meaning
-// KindOrientationNote even when Kind itself is unset — see Kind's doc
-// comment. This package cannot import internal/config (config does not
-// depend on model, and importing it here would invert that), so the facet
-// name is duplicated as the unexported reservedOverviewFacet constant
-// immediately below, which internal/model/claim_test.go and
-// internal/config/config.go's own ReservedOverviewFacet constant both
-// pin equal via a same-package/cross-package equality test in Task 3.
+// EffectiveKind returns c's real Kind: unset maps to KindFact, otherwise
+// the authored value. kind-shape refuses every value other than fact.
 func (c Claim) EffectiveKind() Kind {
-	if c.Facet == reservedOverviewFacet {
-		return KindOrientationNote
-	}
 	if c.Kind == "" {
 		return KindFact
 	}
 	return c.Kind
 }
-
-// reservedOverviewFacet mirrors config.ReservedOverviewFacet — see
-// EffectiveKind's doc comment for why model can't import config directly.
-const reservedOverviewFacet = "overview"

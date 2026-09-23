@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- `kind: orientation-note` and the reserved `overview` facet. The only legal
+  `kind` is `fact` (or omit the field); `kind-shape` refuses every other
+  value. Listing `overview` in `facets[]` is a config error, leftover
+  `facet: overview` claims fail `id-shape` like any undeclared facet, and
+  the viewer no longer injects those claims onto every tab. `check` no
+  longer prints an orientation-notes summary. Module “why / start here”
+  belongs on ordinary declared-facet claims (and, once it exists, a
+  module `manifest.yaml` `summary` — NIT-7). `build_role: orientation` is
+  unchanged.
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed

@@ -8,9 +8,9 @@
      the chip below). The 💬 chip that reveals this panel is NOT hand-built here
      any more: since v0.4.1 it is components.CommentChipHTML, bound as the
      "commentChip" template func and emitted at the end of the shared footer.
-     It emits ZERO id= attributes: an
-     overview claim renders N times and only one copy may keep its root id
-     (render.stripOverviewIDs strips the rest), so claims and threads are keyed
+     It emits ZERO id= attributes: a
+     claim that the viewer renders more than once may keep its root id on
+     only one copy (render.stripDuplicateClaimIDs strips the rest), so claims and threads are keyed
      by data-claim-id / data-thread-id and the viewer JS fans state out with
      querySelectorAll, never getElementById. Comment bodies route through the
      shared "markdown" renderer — the same subset every body-shaped field uses —

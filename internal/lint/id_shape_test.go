@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -81,13 +82,16 @@ func TestIDShapeLint(t *testing.T) {
 	}
 }
 
-func TestIDShape_ReservedOverviewFacetAlwaysValid(t *testing.T) {
+func TestIDShape_OverviewFacetIsUndeclared(t *testing.T) {
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
 	claims := []model.Claim{
 		{ID: "widget.overview.router", Module: "widget", Facet: "overview"},
 	}
 	findings := IDShapeLint{}.Check(claims, cfg)
-	if len(findings) != 0 {
-		t.Fatalf("got findings %#v, want none — overview must be valid even though it's not in cfg.Facets", findings)
+	if len(findings) != 1 {
+		t.Fatalf("got %d findings, want 1 — overview is no longer a reserved facet: %#v", len(findings), findings)
+	}
+	if findings[0].LintName != "id-shape" || !strings.Contains(findings[0].Message, "overview") {
+		t.Fatalf("unexpected finding: %#v", findings[0])
 	}
 }

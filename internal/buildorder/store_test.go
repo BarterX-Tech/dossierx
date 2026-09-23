@@ -614,19 +614,14 @@ func TestLock_RefusesStaleArtifact(t *testing.T) {
 	}
 }
 
-// TestLifecycle_OrientationNoteClaim_ProposesAndLocks is the FIX-14
-// regression test (the code half of the SKILL correction): a
-// kind:orientation-note claim that carries a build_role DOES participate in
-// Build Order — Propose accepts it, places it in the orientation phase, and
-// Lock freezes it cleanly. The SKILL previously (falsely) claimed such claims
-// were invisible to Build Order and never carried a build_role.
-func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
+// TestLifecycle_OrientationRoleClaim_ProposesAndLocks: a
+// build_role:orientation fact claim participates in Build Order — Propose
+// accepts it, places it in the orientation phase, and Lock freezes it.
+func TestLifecycle_OrientationRoleClaim_ProposesAndLocks(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	orient := mc("widget.contract.readme", "widget", model.BuildRoleOrientation)
-	orient.Kind = model.KindOrientationNote
-	orient.Layout = model.LayoutBanner
 	claims := []model.Claim{
 		orient,
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -634,11 +629,11 @@ func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
 
 	a, err := Propose(claims, nil, "widget")
 	if err != nil {
-		t.Fatalf("Propose must accept a kind:orientation-note claim carrying build_role, got: %v", err)
+		t.Fatalf("Propose must accept a build_role:orientation claim, got: %v", err)
 	}
 	ids := idsOf(onlyPhase(a, model.BuildRoleOrientation))
 	if len(ids) != 1 || ids[0] != "widget.contract.readme" {
-		t.Fatalf("expected the orientation-note claim placed in the orientation phase, got %v", ids)
+		t.Fatalf("expected the orientation-role claim placed in the orientation phase, got %v", ids)
 	}
 	if err := WriteArtifact(a, path); err != nil {
 		t.Fatalf("WriteArtifact: %v", err)
@@ -646,10 +641,10 @@ func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
 	locked, err := Lock(path, claims, nil)
 	if err != nil {
-		t.Fatalf("Lock must accept an orientation-note claim carrying build_role, got: %v", err)
+		t.Fatalf("Lock must accept a build_role:orientation claim, got: %v", err)
 	}
 	if !locked.Locked {
-		t.Fatalf("expected locked=true after locking an orientation-note-bearing module")
+		t.Fatalf("expected locked=true after locking an orientation-role module")
 	}
 }
 

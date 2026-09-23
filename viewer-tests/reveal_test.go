@@ -333,7 +333,7 @@ func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 	after := readFooter(t, ctx, revealDeepID)
 	assertRevealed(t, before, after, revealDeepID, "after :target matched", targetRule)
 
-	// The rule must not fan out. render.stripOverviewIDs guarantees at most one
+	// The rule must not fan out. render.stripDuplicateClaimIDs guarantees at most one
 	// element can match :target, so the OTHER claim's footer — which has its own
 	// edges and would be just as revealable — must still be collapsed.
 	baseAfter := readFooter(t, ctx, revealBaseID)
@@ -530,7 +530,7 @@ func readFacetFooter(t *testing.T, ctx context.Context, claimID string) facetFoo
 // The decision it encodes is the SCOPE clause of the @media print block in
 // internal/render/viewer/template/style.css (decision Q4, v0.4.1): "only the
 // facet currently ON SCREEN prints", because un-hiding every facet for print is
-// a page-order / per-facet-heading / duplicated-overview design change larger
+// a page-order / per-facet-heading design change larger
 // than a patch release should make. A human ruled on that deliberately; nothing
 // exercised it, because every other fixture in this suite has one facet.
 //
@@ -627,7 +627,7 @@ func TestPrintCoversOnlyTheOnScreenFacet(t *testing.T) {
 		t.Errorf("%s: a collapsed footer in the INACTIVE facet must stay UNRENDERED under print, but it measured %.1fpx across %d client rect(s).\n"+
 			"  measured: %s\n"+
 			"  this is decision Q4's stated SCOPE: only the on-screen facet prints, because the other facet's ancestor section.claim-group carries `hidden` (display:none) and a disclosure rule cannot resurrect a subtree removed from the box tree.\n"+
-			"  if printing every facet is now WANTED, that is a real design change (page order, per-facet headings, duplicated overview copies) — make it, update the SCOPE clause in internal/render/viewer/template/style.css, and rewrite or delete this test. Do not work around it.",
+			"  if printing every facet is now WANTED, that is a real design change (page order, per-facet headings, duplicated copies) — make it, update the SCOPE clause in internal/render/viewer/template/style.css, and rewrite or delete this test. Do not work around it.",
 			inactiveDeepID, inactiveAfter.Height, inactiveAfter.ClientRects, inactiveAfter)
 	}
 }

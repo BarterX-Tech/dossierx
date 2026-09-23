@@ -20,15 +20,10 @@ import (
 // understands. LoadConfig refuses to run against any other value.
 const CurrentSchemaVersion = 1
 
-// ReservedOverviewFacet is the one facet name every module gets
-// automatically, without a project listing it in Facets: claims under
-// module.overview.* are module-level orientation notes (see
-// model.Claim.EffectiveKind), injected into every one of that module's
-// other facet tabs by internal/render rather than getting their own tab.
-// It deliberately does not need to appear in Facets — validate() below
-// never checks it, and internal/lint.IDShapeLint treats it as always
-// valid regardless of what a project declares.
-const ReservedOverviewFacet = "overview"
+// removedOverviewFacet is the retired reserved facet name. Listing it in
+// facets[] is refused; leftover claims with facet: overview fail id-shape
+// like any other undeclared facet.
+const removedOverviewFacet = "overview"
 
 // ErrNotFound is wrapped into LoadConfig's returned error whenever the
 // config file itself does not exist at the given path (as opposed to
@@ -393,6 +388,9 @@ func (c *Config) validate() error {
 	for i, f := range c.Facets {
 		if strings.TrimSpace(f) == "" {
 			return fmt.Errorf("facets[%d] is empty", i)
+		}
+		if f == removedOverviewFacet {
+			return fmt.Errorf("facets[%d] %q is not allowed: the reserved overview facet has been removed", i, f)
 		}
 	}
 

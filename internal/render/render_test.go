@@ -567,7 +567,7 @@ func TestNewGroup_SectionMetadataOrdersClaimsWithoutVisibleHeadings(t *testing.T
 		sectionedClaim("w.c", "widget", "contract", "Beta", 3),
 	}
 	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B", "w.c": "C"}
-	g := newGroup("widget", "contract", claims, rendered, nil)
+	g := newGroup("widget", "contract", claims, rendered)
 
 	want := []template.HTML{
 		"A", "B",
@@ -589,7 +589,7 @@ func TestNewGroup_NoSectionSetEmitsNoHeadings(t *testing.T) {
 		sectionedClaim("w.b", "widget", "contract", "", 2),
 	}
 	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B"}
-	g := newGroup("widget", "contract", claims, rendered, nil)
+	g := newGroup("widget", "contract", claims, rendered)
 
 	for _, h := range g.Claims {
 		if strings.Contains(string(h), "section-heading") {
@@ -608,7 +608,7 @@ func TestNewGroup_MixedSectionAndNoSectionClaimsStayInSemanticOrder(t *testing.T
 		sectionedClaim("w.c", "widget", "contract", "Alpha", 3),
 	}
 	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B", "w.c": "C"}
-	g := newGroup("widget", "contract", claims, rendered, nil)
+	g := newGroup("widget", "contract", claims, rendered)
 
 	want := []template.HTML{
 		"A", "B", "C",
@@ -969,10 +969,10 @@ func TestRender_OverrideDirMissingEntirelyErrors(t *testing.T) {
 	}
 }
 
-func TestBuildGroups_OverviewFacetInjectedIntoEveryFacetOfItsModule(t *testing.T) {
-	overview := groupedClaim("w.overview.router", "widget", "overview", model.StatusDraft)
+func TestBuildGroups_UndeclaredFacetIsUngroupedNotInjected(t *testing.T) {
+	leftover := groupedClaim("w.overview.router", "widget", "overview", model.StatusDraft)
 	claims := []model.Claim{
-		overview,
+		leftover,
 		groupedClaim("w.a", "widget", "contract", model.StatusDraft),
 		groupedClaim("w.b", "widget", "internals", model.StatusDraft),
 	}
@@ -982,60 +982,43 @@ func TestBuildGroups_OverviewFacetInjectedIntoEveryFacetOfItsModule(t *testing.T
 		t.Fatalf("catalog.Build: %v", err)
 	}
 	rendered := map[string]template.HTML{
-		"w.overview.router": "OVERVIEW",
+		"w.overview.router": "LEFTOVER",
 		"w.a":               "A",
 		"w.b":               "B",
 	}
 	groups := buildGroups(cat, cfg, rendered)
 
-	if len(groups) != 2 {
-		t.Fatalf("got %d groups, want 2 (overview must not become its own tab): %#v", len(groups), groups)
-	}
-	for _, g := range groups {
-		if len(g.Claims) == 0 || g.Claims[0] != template.HTML("OVERVIEW") {
-			t.Errorf("facet %q: Claims[0] = %v, want the overview claim rendered first", g.Facet, g.Claims)
-		}
-	}
-}
-
-func TestBuildGroups_OverviewFacetNeverBecomesItsOwnGroup(t *testing.T) {
-	claims := []model.Claim{
-		groupedClaim("w.overview.router", "widget", "overview", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}
-	cat, err := catalog.Build(claims, nil)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	groups := buildGroups(cat, cfg, map[string]template.HTML{"w.overview.router": "OVERVIEW"})
+	var leftoverCount int
 	for _, g := range groups {
 		if g.Facet == "overview" {
-			t.Fatalf("overview must never appear as its own group: %#v", groups)
+			t.Fatalf("overview must not become a reserved tab: %#v", groups)
 		}
+		for _, html := range g.Claims {
+			if html == template.HTML("LEFTOVER") {
+				leftoverCount++
+			}
+		}
+	}
+	if leftoverCount != 1 {
+		t.Fatalf("undeclared leftover claim copies = %d, want 1 (ungrouped, not injected): %#v", leftoverCount, groups)
 	}
 }
 
-// TestRender_OverviewCanonicalIDAppearsExactlyOnce covers DX-AUD-16: a
-// module's overview/orientation claim is injected into every facet group of
-// its module (so the note stays visible on every facet tab — desired), but
-// the canonical claim id must be stamped on exactly ONE copy so the rendered
-// document has no duplicate ids and a #<claim-id> deep-link is unambiguous.
-func TestRender_OverviewCanonicalIDAppearsExactlyOnce(t *testing.T) {
-	overview := model.Claim{
-		ID:     "widget.overview.router",
+func TestRender_ClaimBodyAppearsOncePerClaim(t *testing.T) {
+	note := model.Claim{
+		ID:     "widget.contract.router",
 		Module: "widget",
-		Facet:  "overview",
+		Facet:  "contract",
 		Status: model.StatusDraft,
 		Layout: model.LayoutCard,
-		Body:   "ORIENTATION-NOTE-BODY",
+		Body:   "CONTRACT-BODY",
 		Governed: model.Governed{
 			Type:   string(model.GovernedNone),
 			Reason: "test fixture",
 		},
 	}
 	claims := []model.Claim{
-		overview,
-		groupedClaim("widget.contract.a", "widget", "contract", model.StatusDraft),
+		note,
 		groupedClaim("widget.internals.b", "widget", "internals", model.StatusDraft),
 	}
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
@@ -1047,21 +1030,10 @@ func TestRender_OverviewCanonicalIDAppearsExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-
-	// Exactly one canonical id in the whole document (valid HTML, resolvable
-	// deep-link) even though the note renders on both facet tabs. The leading
-	// SPACE is load-bearing: it pins the real `id="…"` attribute and nothing
-	// else. Since v0.2.1 every non-banner claim carries a comment chip, so each
-	// id-less copy of this note also emits `data-claim-id="widget.overview.router"`
-	// — a bare substring count would score those as duplicate ids and fail on a
-	// document that is in fact perfectly well-formed. (It is also the exact form
-	// stripOverviewIDs removes, so the two stay in lockstep.)
-	if got := strings.Count(out, ` id="widget.overview.router"`); got != 1 {
-		t.Fatalf("overview canonical id appears %d times, want exactly 1:\n%s", got, out)
+	if got := strings.Count(out, ` id="widget.contract.router"`); got != 1 {
+		t.Fatalf("canonical id appears %d times, want 1:\n%s", got, out)
 	}
-	// The orientation note's visible body must still render once per facet
-	// (two facets => two copies): the duplicate copies are id-less, not gone.
-	if got := strings.Count(out, "ORIENTATION-NOTE-BODY"); got != 2 {
-		t.Fatalf("overview body appears %d times, want 2 (one per facet):\n%s", got, out)
+	if got := strings.Count(out, "CONTRACT-BODY"); got != 1 {
+		t.Fatalf("claim body appears %d times, want 1 (no facet-tab injection):\n%s", got, out)
 	}
 }

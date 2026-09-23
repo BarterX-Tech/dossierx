@@ -889,7 +889,7 @@ func newClaimListCmd() *cobra.Command {
 			// it is made against an empty set. The config declares facets: the
 			// same way it declares modules:, and "claim new" already refuses an
 			// undeclared facet with this exact shape (see parseClaimID).
-			if facet != "" && !containsStr(cfg.Facets, facet) && facet != config.ReservedOverviewFacet {
+			if facet != "" && !containsStr(cfg.Facets, facet) {
 				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
 					"claim list: unknown facet %q; this project declares: %s", facet, strings.Join(cfg.Facets, ", ")).
 					WithHint("run: dossierx claim list (unfiltered) to see what is there")
@@ -1216,7 +1216,7 @@ func parseClaimID(cfg *config.Config, id string) (module, facet, slug string, er
 		return "", "", "", cliout.Errorf(cliout.CodeUnknownModule,
 			"claim new: id module segment %q is not one of this project's modules: %s", module, strings.Join(cfg.Modules, ", "))
 	}
-	if !containsStr(cfg.Facets, facet) && facet != config.ReservedOverviewFacet {
+	if !containsStr(cfg.Facets, facet) {
 		return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
 			"claim new: id facet segment %q is not one of this project's facets: %s", facet, strings.Join(cfg.Facets, ", "))
 	}
@@ -1282,12 +1282,10 @@ func newClaimNewCmd() *cobra.Command {
 		Short: "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
 		Long: "Author a new draft claim at <claims_dir>/<id>.yaml.\n\n" +
 			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
-			"governed_by that satisfies the governed-required rule, and a layout chosen to\n" +
-			"suit the facet — card everywhere, except a claim in the reserved overview facet,\n" +
-			"which gets a banner because a card there fails orientation-note-shape. Passing\n" +
-			"--layout overrides that choice. Draft\n" +
-			"authoring is deliberately unfrictioned — no --reason, no confirmation — because\n" +
-			"drafts are the agent's workshop. The gate in this release is on LOCKED claims.",
+			"governed_by that satisfies the governed-required rule, and layout: card\n" +
+			"(or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
+			"no confirmation — because drafts are the agent's workshop. The gate in this\n" +
+			"release is on LOCKED claims.",
 		Args: cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			id := args[0]
@@ -1299,7 +1297,6 @@ func newClaimNewCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
-			layout = defaultLayoutForFacet(facet, layout, cmd.Flags().Changed("layout"))
 			path, err := claimNewPath(cfg, id, file)
 			if err != nil {
 				return cmdResult{}, err
@@ -1429,30 +1426,6 @@ func newClaimNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what creating this claim would do, and write nothing")
 	return cmd
-}
-
-// defaultLayoutForFacet resolves --layout's default against the facet the id
-// lands in.
-//
-// This command's help text promises "the claim it writes is shaped to pass the
-// lint suite immediately", and for the one reserved facet it did the opposite,
-// every single time. A claim under `overview` IS an orientation note — the facet
-// name is what makes it one (model.Claim.EffectiveKind) — and
-// orientation-note-shape requires every orientation note to render as layout:
-// banner. The flag's default is "card", so `claim new widget.overview.router`
-// wrote a file the very next lint call rejected, and the command's own
-// lint_error_count reported the failure it had just created.
-//
-// The fix is a default, not a refusal: an explicit --layout still wins, because
-// a caller who names a layout is making a choice and this command's job is to
-// carry it out (the lint suite is where a wrong choice gets answered, and it
-// will say so in the same call's lint_error_count). Only the UNSET case moves,
-// which is precisely the case where the command is the one picking.
-func defaultLayoutForFacet(facet, layout string, layoutWasSet bool) string {
-	if layoutWasSet || facet != config.ReservedOverviewFacet {
-		return layout
-	}
-	return string(model.LayoutBanner)
 }
 
 // fileExists is a plain "is something already there" probe. Any stat error

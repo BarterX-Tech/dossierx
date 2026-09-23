@@ -62,7 +62,7 @@ func (IDShapeLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 				Message:  "id module segment " + module + " is not in the project's configured modules",
 			})
 		}
-		if facets != nil && !facets[facet] && facet != config.ReservedOverviewFacet {
+		if facets != nil && !facets[facet] {
 			findings = append(findings, Finding{
 				LintName: "id-shape",
 				ClaimID:  c.ID,

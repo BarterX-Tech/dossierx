@@ -129,11 +129,11 @@ func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecove
 		facets[i] = facet
 		files[fmt.Sprintf("claims/f%03d.yaml", i)] = fmt.Sprintf("id: widget.%s.one\nfacet: %s\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\ngoverned_by:\n  type: none\n  reason: fixture\n", facet, facet)
 	}
-	overviewPath := "claims/overview.yaml"
-	overview := func(reason string) string {
-		return "id: widget.overview.capacity\nfacet: overview\nmodule: widget\nstatus: draft\nkind: orientation-note\nlayout: banner\nbody: overview fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
+	capacityPath := "claims/f000.yaml"
+	capacity := func(reason string) string {
+		return "id: widget.f000.one\nfacet: f000\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
 	}
-	files[overviewPath] = overview(strings.Repeat("x", 128<<10))
+	files[capacityPath] = capacity(strings.Repeat("x", 70<<20))
 	cfg := "schema_version: 1\nfacets: [" + strings.Join(facets, ", ") + "]\nmodules: [widget]\nclaims_dir: claims\n"
 	_, base, root := startServer(t, cfg, files)
 
@@ -153,7 +153,7 @@ func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecove
 		t.Fatalf("oversized viewer status=%d", resp.StatusCode)
 	}
 
-	if err := os.WriteFile(filepath.Join(root, overviewPath), []byte(overview("small")), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, capacityPath), []byte(capacity("small")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	resp, raw = do(t, http.MethodGet, base+"/api/status", "")

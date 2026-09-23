@@ -492,8 +492,7 @@ func TestBuild_LargeListDeterminism(t *testing.T) {
 func TestDocument_KindIsEffectiveKind(t *testing.T) {
 	claims := []model.Claim{
 		{ID: "w.contract.fact", Module: "w", Facet: "contract"},
-		{ID: "w.contract.note", Module: "w", Facet: "contract", Kind: model.KindOrientationNote, Layout: model.LayoutBanner},
-		{ID: "w.overview.router", Module: "w", Facet: "overview", Layout: model.LayoutBanner},
+		{ID: "w.contract.explicit", Module: "w", Facet: "contract", Kind: model.KindFact},
 	}
 	cat, err := Build(claims, nil)
 	if err != nil {
@@ -506,9 +505,8 @@ func TestDocument_KindIsEffectiveKind(t *testing.T) {
 		got[e.ID] = e.Kind
 	}
 	want := map[string]model.Kind{
-		"w.contract.fact":   model.KindFact,
-		"w.contract.note":   model.KindOrientationNote,
-		"w.overview.router": model.KindOrientationNote,
+		"w.contract.fact":     model.KindFact,
+		"w.contract.explicit": model.KindFact,
 	}
 	for id, k := range want {
 		if got[id] != k {

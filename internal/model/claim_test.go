@@ -257,9 +257,8 @@ func TestClaim_EffectiveKind(t *testing.T) {
 		want Kind
 	}{
 		{"default fact", Claim{Facet: "contract"}, KindFact},
-		{"explicit orientation-note", Claim{Facet: "contract", Kind: KindOrientationNote}, KindOrientationNote},
-		{"overview facet implies orientation-note", Claim{Facet: "overview"}, KindOrientationNote},
-		{"overview facet with explicit kind stays orientation-note", Claim{Facet: "overview", Kind: KindOrientationNote}, KindOrientationNote},
+		{"explicit fact", Claim{Facet: "contract", Kind: KindFact}, KindFact},
+		{"unknown authored kind is returned as-is (kind-shape refuses it)", Claim{Facet: "contract", Kind: Kind("orientation-note")}, Kind("orientation-note")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

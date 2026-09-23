@@ -2,5 +2,5 @@ schema_version: 1
 facets:
   - contract
 modules:
-  - orinordermod
+  - kindshapemod
 claims_dir: claims

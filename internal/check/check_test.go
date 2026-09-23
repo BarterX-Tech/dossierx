@@ -110,8 +110,8 @@ func severities(findings []lint.Finding) map[lint.Severity]int {
 // populates the reporting fields.
 func TestRun_SuccessWritesAndReports(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/overview.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
-			"body: |\n  orientation note.\n" +
+		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"body: |\n  start here.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 		"claims/one.yaml": draftClaim("widget.contract.one"),
 	})
@@ -159,10 +159,6 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 		t.Fatalf("render path %q not under cfg.Dir()", res.RenderPath)
 	}
 
-	// Orientation + next-steps reporting present.
-	if len(res.OrientationNotes) != 1 || res.OrientationNotes[0] != "orientation notes: module \"widget\": 1 (1 in overview)" {
-		t.Fatalf("unexpected orientation notes: %#v", res.OrientationNotes)
-	}
 	foundDraftHint := false
 	for _, h := range res.NextSteps {
 		if h == "2 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)" {

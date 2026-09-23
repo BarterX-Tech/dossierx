@@ -20,7 +20,7 @@
 // The fixtures span every output segment check can print: the lint block
 // (warnings and the error/fail-fast path), the catalog+render write lines,
 // the impl-links scan summary and per-module status line, "check: OK", the
-// orientation-notes / open-comments per-module summaries, and each next-steps
+// open-comments per-module summaries, and each next-steps
 // hint (draft, open-comment-thread, drift/flag reaudit including the
 // triggerless drift-then-revert catch-all, and the fully-locked build-order
 // prompt).
@@ -78,14 +78,13 @@ func assertCheckParity(t *testing.T, cfgPath, wantStdout, wantStderr string, wan
 
 const parityConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
 
-// A: draft claims plus an overview (orientation-note) claim — exercises the
-// lint-warning block, catalog/render writes, "check: OK", the orientation
-// summary line, and the "still draft -> claim lock" next step.
-func TestCheckParity_DraftAndOrientation(t *testing.T) {
+// A: two draft claims — exercises the lint-warning block, catalog/render
+// writes, "check: OK", and the "still draft -> claim lock" next step.
+func TestCheckParity_DraftClaims(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/overview.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
-			"body: |\n  fixture orientation-note claim.\n" +
+		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"body: |\n  fixture start-here claim.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 		"claims/c1.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  fixture claim one.\n" +
@@ -94,12 +93,11 @@ func TestCheckParity_DraftAndOrientation(t *testing.T) {
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] orphan: widget.contract.one: claim has no mirrors/rests_on edges in either direction\n" +
-		"[warning] orphan: widget.overview.router: claim has no mirrors/rests_on edges in either direction\n" +
+		"[warning] orphan: widget.contract.router: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 2 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (2 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +
 		"check: OK\n" +
-		"orientation notes: module \"widget\": 1 (1 in overview)\n" +
 		"next steps:\n" +
 		"  2 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)\n"
 	assertCheckParity(t, cfgPath, want, "", false)

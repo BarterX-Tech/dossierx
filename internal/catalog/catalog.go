@@ -163,9 +163,7 @@ type Entry struct {
 	Layout model.Layout `json:"layout"`
 
 	// Kind is c.EffectiveKind() — the resolved kind, not the raw
-	// (possibly-unset) model.Claim.Kind field — so a .catalog.json
-	// consumer never has to re-derive the "overview facet implies
-	// orientation-note" rule itself.
+	// (possibly-unset) model.Claim.Kind field.
 	Kind model.Kind `json:"kind"`
 
 	Edges Edges `json:"edges"`
@@ -195,7 +193,7 @@ type Entry struct {
 // track. Role is always written out explicitly — resolved through
 // model.TrackRef.EffectiveRole rather than copied raw — so a consumer never
 // has to know that an absent role means "cites", exactly as Entry.Kind
-// resolves the overview-facet rule rather than exporting the raw field.
+// exports EffectiveKind rather than the raw field.
 type TrackMembership struct {
 	ID   string          `json:"id"`
 	Role model.TrackRole `json:"role"`
