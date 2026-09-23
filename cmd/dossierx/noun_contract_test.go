@@ -451,6 +451,11 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 		// flag parsing runs first — so without the stub, `--adopt` surfaces as
 		// `unknown flag` and the removal is never named at all.
 		{"migrate --adopt", []string{"migrate", "--adopt"}, "dossierx claim unlock", "removed in v0.4.0"},
+
+		{"build-order propose", []string{"build-order", "propose", "--module", "widget"}, "do not propose or lock a build order", "removed"},
+		{"build-order status", []string{"build-order", "status", "--module", "widget"}, "do not propose or lock a build order", "removed"},
+		{"build-order lock", []string{"build-order", "lock", "--module", "widget", "--reason", "keep"}, "do not propose or lock a build order", "removed"},
+		{"build-order show mermaid", []string{"build-order", "show", "--module", "widget", "--format", "mermaid"}, "do not propose or lock a build order", "removed"},
 	}
 
 	for _, tc := range cases {

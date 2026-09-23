@@ -644,9 +644,7 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 		in.flags = flags
 	}
 
-	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {
-		return buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module))
-	})
+	in.buildOrders = nil
 
 	return in
 }
@@ -689,8 +687,12 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
-	findings = append(findings, preLedgerBuildOrdersOnly(claims, in)...)
-	return append(findings, buildOrderGate(in)...)
+	// Build-order artifacts and SubjectBuildOrder ledger rows are leftover
+	// from the removed product. They are not client obligations: do not
+	// refuse check for stale, drifted, missing, orphan, abandoned, or
+	// unreadable sequences, and do not treat a locked leftover order as
+	// the pre-ledger "still holds locked artifacts" half.
+	return findings
 }
 
 // preLedgerBuildOrdersOnly emits the HALF of RuleLockLedgerPreLedger that

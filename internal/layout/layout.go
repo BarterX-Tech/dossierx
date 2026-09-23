@@ -488,8 +488,6 @@ const RecommendedGitignore = `build/*
 !build/.gitignore
 !build/ledger
 !build/ledger/*
-!build/build-order
-!build/build-order/*
 !build/code-links
 !build/code-links/*`
 

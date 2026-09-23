@@ -372,11 +372,6 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 		"comment add":   true,
 		"comment reply": true,
 
-		"build-order propose": true,
-		"build-order status":  true,
-		"build-order lock":    true,
-		"build-order show":    true,
-
 		"track list":   true,
 		"track show":   true,
 		"track status": true,
@@ -429,8 +424,8 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 25 {
-		t.Errorf("the surface is 25 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 21 {
+		t.Errorf("the surface is 21 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 

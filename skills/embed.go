@@ -1,6 +1,6 @@
 // Package skills embeds the DossierX agent skill files — SKILL.md bundles
 // teaching an agent what DossierX is, how to author/review claims, how to
-// derive a Build Order, how to ground code in claims, and how to run the
+// ground code in claims, and how to run the
 // review-comment loop with a human — so they can be extracted into any
 // consuming project via "dossierx skills export", without requiring this
 // repository checked out alongside the installed binary.
@@ -29,7 +29,7 @@ import "embed"
 // AGENTS.md section, which has a much smaller budget than a loaded-on-demand
 // skill file.
 //
-//go:embed dossierx dossierx-claims dossierx-build-order dossierx-code-links dossierx-comments
+//go:embed dossierx dossierx-claims dossierx-code-links dossierx-comments
 var FS embed.FS
 
 // RouterName is the directory name of the router skill — the one form that is
@@ -54,6 +54,5 @@ var Order = []string{
 	RouterName,
 	"dossierx-claims",
 	"dossierx-comments",
-	"dossierx-build-order",
 	"dossierx-code-links",
 }

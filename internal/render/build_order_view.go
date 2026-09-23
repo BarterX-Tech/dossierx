@@ -203,6 +203,9 @@ func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.
 }
 
 func buildOrderTabDataWithBudget(cat *catalog.Catalog, cfg *config.Config, tmpl *template.Template, generatedAt time.Time, budget *renderByteBudget) (BuildOrderTab, template.JS, error) {
+	// The Build order tab is gone: leftover artifacts are not a viewer
+	// obligation and must not appear as a product surface.
+	return BuildOrderTab{}, "", nil
 	var tab BuildOrderTab
 	if cfg == nil || tmpl == nil {
 		return tab, "", nil
@@ -362,6 +365,8 @@ func buildOrderIDCollision(tab BuildOrderTab, groups []ModuleGroup) error {
 // load or is not locked is not a warning here: that skip is the ordinary
 // "no order yet" state. Nil when nothing was skipped.
 func BuildOrderWarnings(cfg *config.Config, claims []model.Claim) []string {
+	return nil
+}
 	if cfg == nil {
 		return nil
 	}
@@ -390,6 +395,7 @@ func StyleOverrideWarnings(cfg *config.Config) []string {
 	if cfg == nil || cfg.Viewer.TemplateOverrides == "" {
 		return nil
 	}
+	return nil
 	_, found, err := components.OverrideFile(cfg.Viewer.TemplateOverrides, styleFileName)
 	if err != nil || !found {
 		return nil

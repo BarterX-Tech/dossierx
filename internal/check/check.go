@@ -48,7 +48,6 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -261,24 +260,8 @@ type BuildOrderReport struct {
 // module whose artifact cannot be read is omitted too — the ledger gate reports
 // that as build-order-unreadable, and a report that guessed at its contents
 // would be worse than one that says nothing.
-func buildOrderReports(cfg *config.Config, claims []model.Claim) []BuildOrderReport {
-	if cfg == nil {
-		return nil
-	}
-	var out []BuildOrderReport
-	for _, module := range cfg.Modules {
-		a, err := buildorder.Status(buildorder.ArtifactPath(cfg, module), claims, cfg)
-		if err != nil || a == nil {
-			continue
-		}
-		out = append(out, BuildOrderReport{
-			Module:   module,
-			Locked:   a.Locked,
-			Stale:    a.Stale,
-			StaleIDs: a.StaleIDs,
-		})
-	}
-	return out
+func buildOrderReports(_ *config.Config, _ []model.Claim) []BuildOrderReport {
+	return nil
 }
 
 // Run executes the check pipeline against claims (already loaded and
@@ -304,7 +287,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	gitignoreFindings, gitignoreWarnings, gitignoreReason, gitignoreErr := Gitignored(cfg)
 	res.GitignoreCheck = gitignoreReason
 	res.GitignoreWarnings = gitignoreWarnings
-	res.ViewerWarnings = append(render.StyleOverrideWarnings(cfg), render.BuildOrderWarnings(cfg, claims)...)
+	res.ViewerWarnings = render.StyleOverrideWarnings(cfg)
 	if gitignoreErr != nil {
 		// A read-only verdict: Run reports the non-verdict and carries on.
 		// The approval verbs, which write, refuse on the same error.
@@ -597,11 +580,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	res.OK = true
 	res.OrientationNotes = orientationNotes(cfg, claims)
 	res.OpenComments = openCommentCounts(claims)
-	res.BuildOrders = buildOrderReports(cfg, claims)
+	res.BuildOrders = nil
 	stdout, stderr, implinkHints := implinkStatus(cfg, claims)
 	res.ImplinkStatusStdout = stdout
 	res.ImplinkStatusStderr = stderr
-	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints, nil)
 	return res, nil
 }
 
@@ -734,7 +717,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		res.GitignoreCheck = gitignoreReason
 		res.GitignoreWarnings = gitignoreWarnings
 	}
-	res.ViewerWarnings = append(render.StyleOverrideWarnings(cfg), render.BuildOrderWarnings(cfg, claims)...)
+	res.ViewerWarnings = render.StyleOverrideWarnings(cfg)
 
 	if len(res.LintErrors) > 0 {
 		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
@@ -810,12 +793,12 @@ func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	// serve strip: buildorder.Status is a read (it never writes the artifact
 	// back), so it belongs on the non-writing path exactly as implink.Status
 	// does.
-	res.BuildOrders = buildOrderReports(cfg, claims)
+	res.BuildOrders = nil
 	// The impl-link hints come from the READ-ONLY implink.Status (drift/unlinked),
 	// the same source Run's nextSteps uses — NOT implink.Scan, which is the
 	// mutating reconcile and stays out of the memory-only status path.
 	_, _, implinkHints := implinkStatus(cfg, claims)
-	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints, nil)
 	// The same coverage the gate reads, but with Scanned and Gated both
 	// false: this path reconciles no tag and refuses nothing, and the
 	// envelope must say so rather than let a read-only green pass for a
@@ -1101,7 +1084,7 @@ func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Con
 	return errs
 }
 
-func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, buildOrders []BuildOrderReport) []string {
+func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, _ []BuildOrderReport) []string {
 	var hints []string
 
 	// Best-effort: a load error just degrades the drift/flag partition to "none"
@@ -1128,15 +1111,9 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 	// holding nothing locked crosses silently and correctly on its next lock, so a
 	// hint firing there would tell a human to fix a state this same run reports as
 	// clean.
-	lockedBuildOrders := 0
-	for _, b := range buildOrders {
-		if b.Locked {
-			lockedBuildOrders++
-		}
-	}
 	if store != nil && store.PreLedgerUnadopted(digestStorePresent(cfg)) &&
-		countLockedClaims(claims)+lockedBuildOrders > 0 {
-		hints = append(hints, "this project's locks predate the lock ledger -> re-propose any locked build order FIRST, then unlock every locked claim, then re-lock only what you still stand behind; the FIRST lock in a project holding nothing crosses the store onto the ledger schema — unlocking alone does not. There is no automatic adoption and no migration command")
+		countLockedClaims(claims) > 0 {
+		hints = append(hints, "this project's locks predate the lock ledger -> unlock every locked claim, then re-lock only what you still stand behind; the FIRST lock in a project holding nothing crosses the store onto the ledger schema — unlocking alone does not. There is no automatic adoption and no migration command")
 	}
 
 	var draftIDs []string
@@ -1235,67 +1212,6 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending with no active trigger -> dossierx claim reaudit <id> (e.g. %s)", len(reauditTriggerless), reauditTriggerless[0]))
 	}
 	hints = append(hints, implinkHints...)
-
-	// The build-order hints. There used to be exactly one — "fully locked, no
-	// artifact yet" — reached through a branch that tested only for
-	// ErrNotProposed and discarded every other answer, so the two states a
-	// project actually spends time in were both silent:
-	//
-	//   - a LOCKED order that has gone STALE. That is the ordinary outcome of the
-	//     fully sanctioned lifecycle (unlock a covered claim, edit it, re-lock),
-	//     and it means the approved implementation sequence no longer matches the
-	//     claims. `build-order status` reported stale:true while `check`,
-	//     `check --staged` and therefore the hook and CI said ok:true and named
-	//     only the dependent claim's review_pending. The skill tells an agent to
-	//     act "whenever a locked build order reports stale"; the loop command
-	//     never reported it.
-	//   - an artifact that exists and is UNLOCKED — an abandoned propose->lock
-	//     flow, silent forever, with next_steps null.
-	//
-	// The states come from buildOrders (recomputed live, never from the
-	// artifact's persisted "stale" field), so the hint and Result.BuildOrders can
-	// never disagree.
-	reported := make(map[string]bool, len(buildOrders))
-	for _, bo := range buildOrders {
-		reported[bo.Module] = true
-		switch {
-		case bo.Locked && bo.Stale:
-			hints = append(hints, fmt.Sprintf(
-				"module %q's locked build order is stale (%d claim(s) changed: %s) -> dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"…\"",
-				bo.Module, len(bo.StaleIDs), strings.Join(bo.StaleIDs, ", "), bo.Module, bo.Module))
-		case !bo.Locked:
-			hints = append(hints, fmt.Sprintf(
-				"module %q has a proposed build order that was never locked -> dossierx build-order lock --module %s --reason \"…\"",
-				bo.Module, bo.Module))
-		}
-	}
-
-	byModule := make(map[string][]model.Claim, len(cfg.Modules))
-	for _, c := range claims {
-		byModule[c.Module] = append(byModule[c.Module], c)
-	}
-	for _, module := range cfg.Modules {
-		mClaims := byModule[module]
-		if len(mClaims) == 0 || reported[module] {
-			continue
-		}
-		fullyLocked := true
-		for _, c := range mClaims {
-			// Same predicate as the buildorder Propose gate: an open comment
-			// thread makes a module not build-ready even if every claim is
-			// locked, so it must not be reported "fully locked, propose now".
-			if c.Status != model.StatusLocked || c.ReviewPending || c.HasOpenThreads() {
-				fullyLocked = false
-				break
-			}
-		}
-		if !fullyLocked {
-			continue
-		}
-		if _, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module)); errors.Is(err, buildorder.ErrNotProposed) {
-			hints = append(hints, fmt.Sprintf("module %q is fully locked with no build order yet -> dossierx build-order propose --module %s", module, module))
-		}
-	}
 	return hints
 }
 

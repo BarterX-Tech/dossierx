@@ -176,8 +176,7 @@ reviewable diff.
 ## How an open thread gates the lifecycle
 
 - **Lock gate.** A claim cannot be locked while it carries an open thread — `dossierx claim lock`
-  refuses with `unresolved_comments` and names the blocking thread ids. `dossierx build-order
-  propose` enforces the same gate across a whole module.
+  refuses with `unresolved_comments` and names the blocking thread ids.
 - **Third `review_pending` trigger.** Adding a thread to an already-locked claim sets
   `review_pending`. It clears when the last open thread is resolved — but only if no *other*
   trigger (dependency drift, a flag) still stands.

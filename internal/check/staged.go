@@ -157,7 +157,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
@@ -846,13 +845,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	// not being committed, and — the direction that matters — would pass a
 	// commit that stages a tampered artifact while the worktree copy still
 	// matches its record.
-	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {
-		path, err := materializeIndexFile(g, dir, cfg.BuildOrderPath(module))
-		if err != nil {
-			return nil, err
-		}
-		return buildorder.LoadArtifact(path)
-	})
+	in.buildOrders = nil
 
 	return in, nil
 }

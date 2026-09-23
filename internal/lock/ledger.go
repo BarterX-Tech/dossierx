@@ -672,20 +672,12 @@ func ReleaseBuildOrderApproval(store *Store, module string, ap Approval) bool {
 // is the same words everywhere so the write path, the audit gate and the CLI
 // hint cannot send a reader three different ways.
 //
-// The ORDER is not cosmetic. "build-order propose" requires the module still
-// FULLY LOCKED, so re-proposing has to happen BEFORE any claim is unlocked; the
-// other order deadlocks — unlock a claim first and propose then refuses, leaving
-// the locked order with no way to be released.
 const preLedgerCrossingSteps = `Cross onto the ledger by emptying the project of everything that predates it, in this order:
-  1. dossierx build-order propose --module <m>
-     for every module whose build order is locked. Do this FIRST: propose requires the module still fully locked, so unlocking a claim first leaves the order stuck.
-  2. dossierx claim unlock <id> --reason "..."
+  1. dossierx claim unlock <id> --reason "..."
      for every locked claim. Unlock is gateless and always has been.
-  3. dossierx claim lock <id> --reason "..."
+  2. dossierx claim lock <id> --reason "..."
      re-lock only what you still stand behind. The FIRST of these crosses the store onto the ledger and records a real approval — locking is what says a human approved these exact bytes.
-  4. dossierx build-order propose --module <m>
-     dossierx build-order lock --module <m> --reason "..."
-     for every module that is fully locked again. A build order exists only over a fully locked module, so a module you re-locked only partially has nothing to propose yet — run this pair for it on the day its last claim locks.`
+     Leftover build-order artifacts and their ledger rows are ignored and are not part of this crossing.`
 
 // preLedgerRefusal composes the refusal ErrPreLedgerUnadopted carries, naming
 // how much of the project still predates the ledger so a reader can see which

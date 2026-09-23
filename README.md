@@ -129,7 +129,6 @@ check                    lint, bounded projections, code-link scan and the ledge
 
 claim        show · list · new · lock · unlock · flag · reaudit · link · migrate-lock-policy
 comment      inbox · list · add · reply
-build-order  propose · status · lock · show
 track        list · show · status
 
 serve                    the human's viewer + comment API
@@ -137,9 +136,9 @@ skills export [dir]      write the embedded agent skills into a project
 version                  version, commit, build date (also --version)
 ```
 
-`track` and `build-order` answer different questions: a track is a user feature assembled across modules, and `track status` reports whether every claim it owns or cites is locked, gating nothing; a build order is one module's implementation sequence once its claims are locked, approved by `build-order lock`.
+`track` answers whether a user feature assembled across modules is finished (`track status`); it gates nothing. What to implement next is locked claims, module `depends_on`, and claim `rests_on` / `build_role`. There is no build-order command.
 
-Every subcommand takes the global `--config` (a path to `project.config.yaml`; when omitted, DossierX searches upward from the current directory the way `git` finds `.git`) and `--format json|text` — `build-order show` is the one leaf that also accepts `--format mermaid`, rendering the module's stored build order (proposed or locked) as one flowchart per phase for pasting into a PR.
+Every subcommand takes the global `--config` (a path to `project.config.yaml`; when omitted, DossierX searches upward from the current directory the way `git` finds `.git`) and `--format json|text`.
 
 Upgrading from v0.2.x? Twelve commands were removed and four moved in v0.3.0, and v0.4.0 removed `migrate` outright — a project whose lock store predates the ledger now crosses onto it by holding nothing locked; see [Upgrading a pre-ledger project](#upgrading-a-pre-ledger-project) below and [the CHANGELOG's full migration table](CHANGELOG.md).
 
