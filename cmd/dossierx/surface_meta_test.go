@@ -215,7 +215,7 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 
 	want := map[string]int{
 		"nouns":      8,
-		"commands":   25,
+		"commands":   24,
 		"lint_rules": 38,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
