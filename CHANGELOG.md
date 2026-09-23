@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer embedded. `build_role` remains a claim field. Mirrors are
   unchanged.
 
+| Retired | Replacement |
+|---|---|
+| `dossierx build-order` | removed; leftover artifacts are ignored. Implement from locked claims, module depends_on, and claim rests_on / build_role |
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed

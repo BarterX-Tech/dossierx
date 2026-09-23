@@ -421,9 +421,8 @@ func TestBuildOrderGate_CorruptArtifactIsReported(t *testing.T) {
 	if hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerAbandoned) {
 		t.Fatalf("a corrupt artifact is not evidence of deletion, got %v", rulesOf(res.LedgerFindings))
 	}
-	// And the run fails, rather than exiting 0 over a destroyed sequence.
-	if _, err := check.Run(claims, cfg); err == nil {
-		t.Fatalf("expected the gate to fail the run on a corrupt build-order artifact")
+	if _, err := check.Run(claims, cfg); err != nil {
+		t.Fatalf("a leftover corrupt build-order artifact must not refuse check: %v", err)
 	}
 }
 

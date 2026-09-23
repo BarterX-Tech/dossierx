@@ -167,7 +167,7 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
 | "are we done?" | run | what it is |
 |---|---|---|
 | a user feature, across modules | `dossierx track status <id>` | read-only: COMPLETE when every claim it owns or cites is locked. It gates nothing and orders nothing. |
-| what to implement next | locked claims, module `depends_on`, and claim `rests_on` / `build_role` | there is no build-order command and no stale sequence to re-lock |
+| what to implement next | locked claims, module depends_on, and claim rests_on / build_role | there is no build-order command and no stale sequence to re-lock |
 
 ## `mixed-cycle` — what v0.5.0 changed under you
 
@@ -237,7 +237,7 @@ locked claim still resolves to its record. A move that **strands** them fails as
 | cite the evidence behind a claim (`sources`, `[n]` markers), put a claim on a feature track, or read `dossierx track list/show/status` | `dossierx-claims` |
 | tag finished code with `dossierx-claim:` or `dossierx-step:`, or report that shipped code no longer matches a locked claim | `dossierx-code-links` |
 | read `dossierx comment inbox`, reply to a review thread, or decide comment vs. `claim flag` | `dossierx-comments` |
-| implement code from locked claims | `dossierx-claims` — follow module `depends_on` and claim `rests_on` / `build_role`; there is no build-order skill |
+| implement code from locked claims | `dossierx-claims` — follow module depends_on and claim rests_on / build_role; there is no build-order skill |
 
 Load one, not all four.
 
@@ -289,4 +289,4 @@ confirmed `claim reaudit` clears the human's flag having changed nothing — sil
 |---|---|
 | `lint`, `catalog`, `render` → `dossierx check` · `deps`, `implink status` → `dossierx claim show <id>` · `stale`, `coverage` → `dossierx claim list --review-pending` / `--migrated` · `implink set` → `dossierx claim link` · bare `lock`/`unlock`/`flag`/`reaudit` → `dossierx claim lock` / `unlock` / `flag` / `reaudit` · `comment resolve|reopen|edit|delete` → viewer only, the human does these | |
 | `migrate --adopt` | legacy ledger adoption has no `dossierx migrate`; use `dossierx claim migrate-lock-policy --reason "…"` for explicit policy-v1 adoption. For an unadopted project, unlock every locked claim (`dossierx claim unlock <id> --reason "…"`), then preview and write each lock with its matching token — `dossierx claim lock <id> --dry-run`, then `dossierx claim lock <id> --reason "…" --proposal "<snapshot>"` — so the first lock in a project with nothing locked crosses the store onto the ledger |
-| `build-order propose\|status\|lock\|show` | removed; leftover artifacts are ignored. Implement from locked claims, module `depends_on`, and claim `rests_on` / `build_role` |
+| `build-order propose\|status\|lock\|show` | removed; leftover artifacts are ignored. Implement from locked claims, module depends_on, and claim rests_on / build_role |

@@ -11,7 +11,7 @@ import (
 
 func TestMermaidParsesEveryExportedFlowchart(t *testing.T) {
 	p := newBuildOrderProject(t)
-	out, err := exec.Command(p.bin, "--config", p.config, "build-order", "show", "--module", "widget", "--format", "mermaid").CombinedOutput()
+	out, err := exec.Command(p.bin, "--config", p.config, "build-order", "show", "--module", "widget", "--as-mermaid").CombinedOutput()
 	if err == nil {
 		t.Fatalf("retired build-order show must fail, got:\n%s", out)
 	}

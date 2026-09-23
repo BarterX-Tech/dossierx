@@ -1,45 +1,6 @@
 {
   "commands": [
     {
-      "path": "build-order lock",
-      "short": "Lock --module's proposed build-order artifact, freezing the derived sequence",
-      "flags": [
-        "--config",
-        "--dry-run",
-        "--format",
-        "--module",
-        "--reason"
-      ]
-    },
-    {
-      "path": "build-order propose",
-      "short": "Propose (and write) a build-order artifact for --module (refused unless every claim in it is locked)",
-      "flags": [
-        "--config",
-        "--dry-run",
-        "--format",
-        "--module"
-      ]
-    },
-    {
-      "path": "build-order show",
-      "short": "Print --module's build order: the machine envelope, a phase table, or one mermaid flowchart per phase",
-      "flags": [
-        "--config",
-        "--format",
-        "--module"
-      ]
-    },
-    {
-      "path": "build-order status",
-      "short": "Show --module's build-order artifact state: proposed/locked/stale and coverage",
-      "flags": [
-        "--config",
-        "--format",
-        "--module"
-      ]
-    },
-    {
       "path": "check",
       "short": "Run lint, catalog, render and the lock-ledger gate in one shot, stopping at first failure; --validate for a read-only run, --staged to judge the git index",
       "flags": [
@@ -264,6 +225,7 @@
     "--version"
   ],
   "retired": [
+    "build-order",
     "catalog",
     "comment delete",
     "comment edit",
@@ -379,7 +341,6 @@
     "dossierx",
     "dossierx-claims",
     "dossierx-comments",
-    "dossierx-build-order",
     "dossierx-code-links"
   ],
   "http_routes": [
@@ -531,15 +492,15 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
+  "render_fingerprint": "sha256:712c1cb7c0ddf93c7dedaae1ebf737ccf450ea8c9617e86efec37a4b2044857c",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:8a4d290c74ad162ae729dbcaf1aa3cf6f3228fc5234a3e08e4d45472f0bdd65c",
+    "cmd/dossierx": "sha256:55ac40bdc2094578b563ce3ec3ac14734ca0c6059dc6eb07c734ba96c8468976",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/buildorder": "sha256:9d535232f6d1c05de536df4592b7f5f7451e804e2da035e495c461e40d9dbefe",
     "internal/catalog": "sha256:358d9aa06b14b14f5a9b52686cc328e005be4596e0fa89770ac32530f4629d31",
-    "internal/check": "sha256:bba5501642f44bd52ab9b22d63157787346ab35e3f54fd1e17d33e7c8f8bed2f",
+    "internal/check": "sha256:14c9e2aa71ce611ace75df0b3e28bbc709aaf6c661f341160b8a9c54c84e1db7",
     "internal/cliout": "sha256:9c578cd84239c34947443e1e84df064b7099b16c21e3e450b476c9223f894c66",
     "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
     "internal/config": "sha256:3b6ed912d2fe5b4cd622e0d49af32c3705a5960cb907f06ddc13d1842a6a810c",
@@ -548,22 +509,22 @@
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
     "internal/graph": "sha256:39c61c63e8099f25dfdb53217036a8aca7987edf49c5d7372594efb901353f63",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
-    "internal/layout": "sha256:22b57470d1c8381dfee41e360c123d1633ae1c923bf8ec1f736fe9a00b6caeb3",
+    "internal/layout": "sha256:66f08489f11aefcb9e048ae700105e54234fdb472bc8008bc2aba0578c92c0ce",
     "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
-    "internal/lock": "sha256:d6e659bfd81c3996d503d4bd74012bc7f5a337f23412c0f35aefc5ad9eef6f36",
+    "internal/lock": "sha256:1ddf143e3e00641305bfab692281a44de422cb51fb69b0c31c7f123d00f54df1",
     "internal/model": "sha256:604cd3dfa6de63d2bd483425d859508e1c95b3fa77a475dfbb65b3c9ac2f2bfe",
     "internal/readiness": "sha256:705cd7a1c00c60e1ffec82a557cd13389ce49ac4b76f9ff4a3927559e353b033",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:d28a6f3c444e00df2b334a09c48aada948a9dbc93249815a14d0ad7084c70950",
+    "internal/render": "sha256:6d6396a15d993cfe81e7ecc6d8e2b549ea05b7e43620dec9515a8289568c7d60",
     "internal/render/components": "sha256:9c263a323a8fdd66f5d5b3e9b52468bd229da8b1b480bcb6f9febb8e20a08a74",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:1bcd6aebec312325f2e0103e57e85c2039f4ffbf673fa78d6031bcf94ee1089a"
+    "skills": "sha256:6994832fc5b071b569b44318fda80e569a5f22bf3fcf47518c5b469a1286ba8a"
   },
   "envelope": {
     "keys": [
@@ -639,54 +600,6 @@
         "lint_findings",
         "offenders",
         "requested_ids"
-      ],
-      "buildOrderLockData": [
-        "locked_at",
-        "module",
-        "path",
-        "reason"
-      ],
-      "buildOrderPhaseData": [
-        "claims",
-        "phase"
-      ],
-      "buildOrderProposeData": [
-        "excluded",
-        "locked",
-        "module",
-        "path",
-        "phases"
-      ],
-      "buildOrderShowData": [
-        "locked",
-        "locked_at",
-        "module",
-        "path",
-        "phases",
-        "stale"
-      ],
-      "buildOrderShowPhaseData": [
-        "claims",
-        "cross_module",
-        "definition",
-        "excluded_deps",
-        "ghosts",
-        "levels",
-        "locked",
-        "mermaid",
-        "number",
-        "phase"
-      ],
-      "buildOrderStatusData": [
-        "covered_claims",
-        "excluded_count",
-        "locked",
-        "locked_at",
-        "module",
-        "proposed",
-        "stale",
-        "stale_ids",
-        "total_claims"
       ],
       "checkData": [
         "catalog_count",
@@ -984,10 +897,10 @@
     }
   ],
   "counts": {
-    "commands": 25,
+    "commands": 21,
     "error_codes": 52,
     "http_routes": 14,
     "lint_rules": 38,
-    "nouns": 8
+    "nouns": 7
   }
 }

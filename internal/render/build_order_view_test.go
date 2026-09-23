@@ -1,7 +1,6 @@
 package render
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"

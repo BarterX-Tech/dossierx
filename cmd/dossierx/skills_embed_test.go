@@ -65,8 +65,8 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 
 	// Five bundles, their lock file, plus the generic guide, which is always
 	// written — with no project root to put it in, it lands beside the bundles.
-	if !strings.Contains(stdout, "wrote 7 file(s)") {
-		t.Fatalf("expected stdout to report 7 file(s) written, got:\n%s", stdout)
+	if !strings.Contains(stdout, "wrote 6 file(s)") {
+		t.Fatalf("expected stdout to report 6 file(s) written, got:\n%s", stdout)
 	}
 	if _, statErr := os.Stat(filepath.Join(targetDir, skillsLockFile)); statErr != nil {
 		t.Fatalf("the lock file must be written beside the bundles: %v", statErr)
@@ -146,7 +146,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The eight nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The seven nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -289,7 +289,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The eight nouns, twenty-five leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The seven nouns, twenty-one leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}
@@ -772,7 +772,7 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if checkErr == nil {
 		t.Fatalf("text-mode --check must also refuse")
 	}
-	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 5 file(s) differ"} {
+	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 4 file(s) differ"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in text output, got:\n%s", want, out)
 		}

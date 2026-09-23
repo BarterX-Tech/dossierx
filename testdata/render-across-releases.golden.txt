@@ -40,7 +40,16 @@ baseline   v0.7.19 (4cc1273d730f5c408c75c17886607ddaedc51299)
 compared   153 rendered artifacts present at both revisions
 added      0
 removed    0
-silent     0 rendered differently from byte-identical inputs
+silent     1 rendered differently from byte-identical inputs
 explained  0 rendered differently after their own inputs changed
 
-no rendered artifact has moved since the baseline.
+SILENT RENDER CHANGES
+---------------------
+
+testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
+    size            27403 lines / 4877586 bytes -> 23421 lines / 1279984 bytes
+    more than 3000 lines differ, so these two are not variants of one
+    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
+    artifact IS reported, with its sizes, and it still rendered differently. Read it
+    against the baseline directly:
+        git diff v0.7.19 -- testdata/fixture-theme-flat/build/viewer/index.html
