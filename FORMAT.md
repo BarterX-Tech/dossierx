@@ -71,7 +71,6 @@ embodiment:                    # optional project-neutral implementation expecta
       expectation:
         shape: scalar
         value: "3"
-mirrors: [ id, ... ]           # optional
 rests_on: [ id, ... ]          # optional
 governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
   type: none | doctrine_id
@@ -549,7 +548,7 @@ what is not":
   and reported as `lock-content-drift`. This is the thing the field exists for:
   approving a claim now approves the evidence behind it too.
 - `sources` is **not** part of the dependency-drift `ContentHash`, the baseline a
-  dependent records for the claims it `rests_on`, `mirrors` or is `governed_by`.
+  dependent records for the claims it `rests_on` or is `governed_by`.
   Adding or correcting a citation does not change what a claim *promises*, so it
   must not flip every dependent to `review_pending`. Provenance is not contract.
 - The field is `omitempty`: a claim carrying no sources serializes and hashes
@@ -588,7 +587,7 @@ criteria are statements that belong to no single module, and without an owning
 track they have nowhere in the corpus to live. With one, they are an ordinary
 claim: linted, reviewable, and lockable like any other.
 
-**Track membership is not an edge.** `rests_on`, `mirrors` and `governed_by` are
+**Track membership is not an edge.** `rests_on` and `governed_by` are
 semantic dependencies, which is why each carries a cycle lint — a loop in them is
 a set of claims that can only be reviewed together, and drift has no order to
 propagate in. A track is a *set*, and a set has no direction to run in a circle.
@@ -752,7 +751,7 @@ schema field instead of a path convention.
   has any error-level finding, if doctrine hub-gating blocks it, or if the claim
   still carries an unresolved comment thread); also carries an engine-managed
   `review_pending` bool. `review_pending` is `true` while ANY of three
-  independent triggers stands: a dependency's content — a `mirrors` or
+  independent triggers stands: a dependency's content — a
   `rests_on` target, or a claim-valued `governed_by` — has drifted since the
   claim was last locked or reaudited; a `dossierx claim flag` has recorded a
   spec mismatch; or the claim carries an unresolved (`status: open`) comment
@@ -772,12 +771,9 @@ schema field instead of a path convention.
 
 ## Edge types
 
-A claim may reference other claims by `id` via three distinct kinds of
+A claim may reference other claims by `id` via two distinct kinds of
 edge, each with a different meaning:
 
-- **`mirrors`** — a deterministic equality edge. The target claims'
-  comparable content must match this claim's exactly; if they diverge,
-  that is a lint failure (`mirror-mismatch`), not merely staleness.
 - **`rests_on`** — a semantic-consequence edge. This claim depends on the
   target claim remaining true, but is not required to be textually
   identical to it. When a `rests_on` target's content changes underneath a
@@ -787,22 +783,26 @@ edge, each with a different meaning:
   claim's authority, or explicitly declares `type: none` with a required
   `reason` when no such doctrine claim exists. Note that `governed_by` is
   **not** itself a gated edge: when the project config sets
-  `doctrine_facet`, hub-gating refuses to lock a claim whose **`mirrors`
-  or `rests_on`** names an unlocked claim in that facet — those two lists
-  are the whole of what it walks. A doctrine claim named *only* by
-  `governed_by` is not gated, so to have hub-gating cover it, name it as a
-  `rests_on` dependency as well. If `doctrine_facet` is unset, hub-gating
-  does not run at all. A claim-valued `governed_by` **is** a
-  semantic-consequence edge on the same terms as `rests_on`: when the named
-  governor's content changes underneath a locked claim, the locked claim is
-  flagged `review_pending` rather than invalidated outright. Only a
-  claim-valued `governed_by.type` participates — `type: none` names no claim,
-  so there is nothing for it to drift against. `governed_by` is **also**
-  checked for the authority chain terminating — see `governed-cycle` below.
-  The drift edge is new in v0.4.0 and is not backfilled: a claim locked before
-  the upgrade carries no governance baseline until its next `claim lock` or
-  confirmed `claim reaudit`, so the first governor edit after upgrading does
-  not flag it.
+  `doctrine_facet`, hub-gating refuses to lock a claim whose **`rests_on`**
+  names an unlocked claim in that facet — that list is the whole of what
+  it walks. A doctrine claim named *only* by `governed_by` is not gated,
+  so to have hub-gating cover it, name it as a `rests_on` dependency as
+  well. If `doctrine_facet` is unset, hub-gating does not run at all. A
+  claim-valued `governed_by` **is** a semantic-consequence edge on the
+  same terms as `rests_on`: when the named governor's content changes
+  underneath a locked claim, the locked claim is flagged `review_pending`
+  rather than invalidated outright. Only a claim-valued `governed_by.type`
+  participates — `type: none` names no claim, so there is nothing for it
+  to drift against. `governed_by` is **also** checked for the authority
+  chain terminating — see `governed-cycle` below. The drift edge is new
+  in v0.4.0 and is not backfilled: a claim locked before the upgrade
+  carries no governance baseline until its next `claim lock` or confirmed
+  `claim reaudit`, so the first governor edit after upgrading does not
+  flag it.
+
+There is no `mirrors` edge. The YAML key still decodes so existing lock
+signatures stay byte-identical, but a non-empty list is a lint error
+(`mirrors-retired`). Delete the key; the engine does not walk it.
 
 ### Graph invariants
 
@@ -818,18 +818,12 @@ see. These are enforced by the lint suite, so a violation blocks
    that flips dependents to `review_pending` has no order to run in. Every
    claim in the loop is reported by the `cycle` lint, with the cycle path in
    the message.
-2. **`mirrors` must be a reciprocal 2-cycle.** Equality is symmetric, so if
-   `A` mirrors `B` then `B` must mirror `A` back (`mirror-reciprocal`), the
-   target must exist (`mirror-unanchored`), and the two claims' comparable
-   content — `layout`, `body`, `rows`, `steps` — must actually match
-   (`mirror-mismatch`). A one-directional `mirrors` edge is not a weaker
-   equality claim; it is an unfinished one.
-3. **`governed_by` must terminate.** Following `governed_by` from any claim
+2. **`governed_by` must terminate.** Following `governed_by` from any claim
    has to reach `type: none` (with its required `reason`) in finitely many
    steps — that sentinel is the only grounded end state. A cycle in this
    graph means a set of claims whose authority rests only on each other,
    which is to say on nothing, and is reported by the `governed-cycle` lint.
-4. **The UNION of `rests_on` and `governed_by` must be acyclic** — new in
+3. **The UNION of `rests_on` and `governed_by` must be acyclic** — new in
    v0.5.0, and that release's one BREAKING change to what a claim corpus may
    look like. `mixed-cycle` walks both edge kinds as one graph, carrying the
    edge kind on every hop, and reports a cycle whose hops include at least one
@@ -842,8 +836,7 @@ see. These are enforced by the lint suite, so a violation blocks
    exits 1 after it, with no edit on the author's side, no content-hash move and
    nothing in the lock store to explain it. The recovery is to break the loop —
    the finding names every claim on it — and re-run `check`; where those claims
-   are locked that is unlock, edit, lock, like any other correction. `mirrors`
-   is not part of the union graph and never trips this rule.
+   are locked that is unlock, edit, lock, like any other correction.
 
 `tracks` is not a fourth edge kind and appears in none of these graphs. It is a
 membership set, not a dependency: no claim's truth rests on another claim's track
@@ -852,11 +845,11 @@ for a cycle walk to find. Two claims in the same track constrain each other in
 exactly one way — `track-multi-owner`, at most one owner apiece — which is a
 per-track count, not a walk. See "`tracks` and the second ownership axis" above.
 
-Across all four, a claim may never name **its own id** in any edge
+Across all three, a claim may never name **its own id** in any edge
 (`self-edge`). A self-edge is trivially satisfied by every content rule —
-a claim always equals itself, always mirrors itself back, and always
-resolves — so it asserts nothing while looking like a well-formed edge. An
-edge is a statement about a *different* claim.
+a claim always equals itself and always resolves — so it asserts nothing
+while looking like a well-formed edge. An edge is a statement about a
+*different* claim.
 
 ## Integrity invariants
 

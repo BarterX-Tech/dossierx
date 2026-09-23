@@ -369,23 +369,23 @@ func TestLockLifecycle_ReviewPendingFilterIsEmptyWhenNothingIsLocked(t *testing.
 // ---------------------------------------------------------------------
 // Rows 10 & 11: doctrine hub-gating, configured vs. not configured.
 //
-// These use a mirrors[] edge (not rests_on) between hub and child so the
-// unrelated "rest-on-locked" lint can never independently block the lock
-// attempt, isolating hub-gating as the only thing under test.
+// These use a rests_on edge from child to hub. rest-on-locked does not fire
+// while the child is still draft, so hub-gating is the only lock refusal
+// under test when doctrine_facet is set.
 // ---------------------------------------------------------------------
 
-func llWriteMirrorPair(t *testing.T, root, hubID, hubFacet, childID string) (hubPath, childPath string) {
+func llWriteHubChildPair(t *testing.T, root, hubID, hubFacet, childID string) (hubPath, childPath string) {
 	t.Helper()
-	body := "identical shared content for a reciprocal mirrors pair."
-	hubPath = llWriteClaim(t, root, llClaimSpec{id: hubID, facet: hubFacet, module: "widget", status: "draft", body: body, mirrors: []string{childID}})
-	childPath = llWriteClaim(t, root, llClaimSpec{id: childID, facet: "contract", module: "widget", status: "draft", body: body, mirrors: []string{hubID}})
+	body := "child rests on the hub so hub-gating walks this edge."
+	hubPath = llWriteClaim(t, root, llClaimSpec{id: hubID, facet: hubFacet, module: "widget", status: "draft", body: body})
+	childPath = llWriteClaim(t, root, llClaimSpec{id: childID, facet: "contract", module: "widget", status: "draft", body: body, restsOn: []string{hubID}})
 	return hubPath, childPath
 }
 
 func TestLockLifecycle_HubGatingBlocksWhenConfigured(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := llWriteConfig(t, root, []string{"contract", "doctrine"}, []string{"widget"}, "doctrine")
-	hubPath, childPath := llWriteMirrorPair(t, root, "widget.doctrine.hub", "doctrine", "widget.contract.child")
+	hubPath, childPath := llWriteHubChildPair(t, root, "widget.doctrine.hub", "doctrine", "widget.contract.child")
 
 	// Hub not yet locked: locking child must be refused by hub-gating.
 	_, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
@@ -417,7 +417,7 @@ func TestLockLifecycle_HubGatingBlocksWhenConfigured(t *testing.T) {
 func TestLockLifecycle_HubGatingSkippedWhenNotConfigured(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"}, "") // no doctrine_facet
-	hubPath, childPath := llWriteMirrorPair(t, root, "widget.internals.hub", "internals", "widget.contract.child")
+	hubPath, childPath := llWriteHubChildPair(t, root, "widget.internals.hub", "internals", "widget.contract.child")
 
 	// Hub-gating is not configured at all: locking child must succeed even
 	// though "hub" (not even in a doctrine-designated facet) is still

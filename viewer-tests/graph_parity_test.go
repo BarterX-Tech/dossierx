@@ -148,7 +148,7 @@ func TestGraphIsolatedMatchesOrphanLintUnscoped(t *testing.T) {
 	// these are pure functions over the payload the document carries.
 	isolated := evalStrings(t, ctx, `(function () {
 		var p = JSON.parse(document.getElementById('dossierx-graph').textContent);
-		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, { enabledTypes: ['rests_on', 'mirrors'] });
+		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, { enabledTypes: ['rests_on'] });
 		var out = [];
 		for (var i = 0; i < gaps.facts.length; i++) {
 			if (gaps.facts[i].rule === 'isolated') { out = out.concat(gaps.facts[i].node_ids); }

@@ -544,7 +544,7 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 	for _, depID := range lock.BaselineDependencyIDs(c) {
 		dep, exists := byID[depID]
 		if !exists {
-			// A missing governed_by or mirrors input is still reported by the
+			// A missing governed_by input is still reported by the
 			// relevant integrity/lint gate; it is deliberately not turned into
 			// an approval prerequisite here. rests_on is the required chain.
 			if contains(c.RestsOn, depID) {
@@ -556,8 +556,8 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 			continue
 		}
 		if !contains(c.RestsOn, depID) {
-			// mirrors and governed_by are comparable drift inputs, but neither
-			// edge creates an approval prerequisite.
+			// governed_by is a comparable drift input, but it does not
+			// create an approval prerequisite.
 			if stored, known := baseline(store, c.ID, depID); known && stored != lock.ContentHash(dep) {
 				out.causes = append(out.causes, Cause{
 					Kind: CauseDirectDependencyChange, SourceKind: CauseDirectDependencyChange,

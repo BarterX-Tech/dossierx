@@ -164,7 +164,7 @@ func TestPickChangedDependencyPrefersStaleHash(t *testing.T) {
 
 func TestPickChangedDependencyFallsBackToFirstDep(t *testing.T) {
 	dep := model.Claim{ID: "m.contract.dep"}
-	claim := model.Claim{ID: "m.contract.main", Mirrors: []string{"m.contract.dep"}}
+	claim := model.Claim{ID: "m.contract.main", RestsOn: []string{"m.contract.dep"}}
 	claims := []model.Claim{claim, dep}
 
 	store := &lock.Store{Hashes: map[string]map[string]string{}}

@@ -124,7 +124,7 @@ func TestEnvelope_ClaimShowAnswersEverythingDepsAndImplinkStatusDid(t *testing.T
 	if len(data.Edges.DependedOnBy) != 1 || data.Edges.DependedOnBy[0] != "widget.contract.timeout-budget" {
 		t.Fatalf("expected the incoming rests_on edge, got %+v", data.Edges)
 	}
-	if len(data.Edges.RestsOn) != 0 || len(data.Edges.Mirrors) != 0 {
+	if len(data.Edges.RestsOn) != 0 {
 		t.Fatalf("this claim has no outgoing edges, got %+v", data.Edges)
 	}
 	if data.Edges.GovernedBy != "none" || data.Edges.GovernedReason == "" {

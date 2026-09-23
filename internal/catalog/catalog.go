@@ -147,7 +147,6 @@ type GovernedEdge struct {
 
 // Edges is the serialized edge graph for one claim entry.
 type Edges struct {
-	Mirrors    []string      `json:"mirrors,omitempty"`
 	RestsOn    []string      `json:"rests_on,omitempty"`
 	GovernedBy *GovernedEdge `json:"governed_by,omitempty"`
 }
@@ -219,9 +218,6 @@ func entryFor(c model.Claim) Entry {
 		Kind:   c.EffectiveKind(),
 	}
 
-	if len(c.Mirrors) > 0 {
-		e.Edges.Mirrors = append([]string(nil), c.Mirrors...)
-	}
 	if len(c.RestsOn) > 0 {
 		e.Edges.RestsOn = append([]string(nil), c.RestsOn...)
 	}
@@ -368,7 +364,6 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 			add(claim.Governed.Type)
 			add(claim.Governed.Reason)
 		}
-		addStrings(claim.Mirrors)
 		addStrings(claim.RestsOn)
 		for _, track := range claim.Tracks {
 			b.add(trackStructureBytes)
@@ -513,10 +508,6 @@ func catalogProjectionUpperBound(cat *Catalog, limit uint64) catalogBudget {
 		b.add(2048)
 		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind()), claim.Governed.Type, claim.Governed.Reason} {
 			b.addString(value)
-		}
-		for _, value := range claim.Mirrors {
-			b.addString(value)
-			b.add(64)
 		}
 		for _, value := range claim.RestsOn {
 			b.addString(value)

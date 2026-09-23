@@ -1141,7 +1141,7 @@ func TestTheUnrecordedDigestLockGateIsSilentWhereEvidenceIsHonestlyAbsent(t *tes
 // ---------------------------------------------------------------------
 
 // TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy pins the whole of
-// what the baseline set is: mirrors, rests_on, and a governed_by.type that
+// what the baseline set is: rests_on, and a governed_by.type that
 // names a claim — with "none" and the empty string excluded by the same guard
 // internal/lint/dangling.go uses, and repeats collapsed deterministically.
 func TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy(t *testing.T) {
@@ -1166,12 +1166,12 @@ func TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy(t *testing.T) {
 			want:  []string{},
 		},
 		{
-			name: "all three edge types, in order",
+			name: "both remaining edge types, in order",
 			claim: model.Claim{
-				ID: "child", Mirrors: []string{"m"}, RestsOn: []string{"r"},
+				ID: "child", RestsOn: []string{"r"},
 				Governed: model.Governed{Type: "widget.doctrine.hub"},
 			},
-			want: []string{"m", "r", "widget.doctrine.hub"},
+			want: []string{"r", "widget.doctrine.hub"},
 		},
 		{
 			// The reason dedupeStable is required rather than incidental: a

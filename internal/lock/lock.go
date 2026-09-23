@@ -1346,14 +1346,13 @@ func ClearReviewPending(claim model.Claim, claims []model.Claim, store *Store) m
 }
 
 func dependencyIDs(c model.Claim) []string {
-	ids := make([]string, 0, len(c.Mirrors)+len(c.RestsOn))
-	ids = append(ids, c.Mirrors...)
+	ids := make([]string, 0, len(c.RestsOn))
 	ids = append(ids, c.RestsOn...)
 	return ids
 }
 
 // BaselineDependencyIDs is the dependency set whose CONTENT a locked claim is
-// baselined against: mirrors, rests_on, and a claim-valued governed_by.type.
+// baselined against: rests_on and a claim-valued governed_by.type.
 //
 // It is deliberately NOT dependencyIDs. dependencyIDs is what hub gating walks
 // (checkHubGating), and hub gating is a lock REFUSAL: widening it would make an
@@ -1367,8 +1366,7 @@ func dependencyIDs(c model.Claim) []string {
 // Exported because internal/comments and cmd/dossierx used to keep hand-copied
 // duplicates of this list; they call this now, so the three cannot diverge.
 func BaselineDependencyIDs(c model.Claim) []string {
-	ids := make([]string, 0, len(c.Mirrors)+len(c.RestsOn)+1)
-	ids = append(ids, c.Mirrors...)
+	ids := make([]string, 0, len(c.RestsOn)+1)
 	ids = append(ids, c.RestsOn...)
 	if t := strings.TrimSpace(c.Governed.Type); t != "" && t != string(model.GovernedNone) {
 		ids = append(ids, t)

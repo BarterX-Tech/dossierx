@@ -43,8 +43,8 @@ Cover own thread, own flag, direct dependency drift, approval-integrity failure,
 unapproved dependency, missing dependency, retired dependency, unreadable
 dependency, unknown historical baseline, cycles, and legacy/v1 stores. Include
 multiple independent causes at one claim and independent baselines to one target.
-Governance/mirror drift must still propagate as specified without accidentally
-becoming required approval edges. Define an inherited witness as a required-edge
+Governance drift must still propagate as specified without accidentally
+becoming a required approval edge. Define an inherited witness as a required-edge
 route to its owner plus any documented terminal drift edge; not every diagnostic
 hop is necessarily `rests_on`.
 

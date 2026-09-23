@@ -220,8 +220,8 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		// The exported constants are a stated API: the pane, the CSS ramp and
 		// this suite all key off them, so they are pinned rather than assumed.
 		{name: "EDGE_TYPES", expr: "window.dossierxGraphCore.EDGE_TYPES",
-			want: []any{"rests_on", "mirrors", "governed_by"}},
-		{name: "DIRECTED_EDGE_TYPES excludes mirrors", expr: "window.dossierxGraphCore.DIRECTED_EDGE_TYPES",
+			want: []any{"rests_on", "governed_by"}},
+		{name: "DIRECTED_EDGE_TYPES", expr: "window.dossierxGraphCore.DIRECTED_EDGE_TYPES",
 			want: []any{"rests_on", "governed_by"}},
 		{name: "GHOST_PREFIX", expr: "window.dossierxGraphCore.GHOST_PREFIX", want: "ghost:"},
 		{name: "FACET_SLOT_COUNT", expr: "window.dossierxGraphCore.FACET_SLOT_COUNT", want: 20},

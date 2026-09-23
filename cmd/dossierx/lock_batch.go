@@ -311,7 +311,7 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 		// checkHubGating is unexported and this package already keeps its own
 		// copy in step for that reason.
 		if cfg != nil && cfg.HubGatingEnabled() {
-			deps := append(append([]string(nil), claim.Mirrors...), claim.RestsOn...)
+			deps := append([]string(nil), claim.RestsOn...)
 			var depBlock string
 			for _, dep := range deps {
 				depClaim, ok := loader.FindByID(claims, dep)

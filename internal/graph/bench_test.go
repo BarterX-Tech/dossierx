@@ -32,7 +32,7 @@ func syntheticCorpus(n int) []model.Claim {
 			claims[i].RestsOn = []string{claims[i-1].ID, claims[i-3].ID}
 		}
 		if i%5 == 0 && i+1 < n {
-			claims[i].Mirrors = []string{claims[i+1].ID}
+			claims[i].RestsOn = append(claims[i].RestsOn, claims[i+1].ID)
 		}
 		if i%7 == 0 && n > 5 {
 			claims[i].Governed = model.Governed{Type: claims[i%5].ID}

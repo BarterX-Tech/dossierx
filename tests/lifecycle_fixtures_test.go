@@ -2,7 +2,7 @@
 // end via the built CLI binary:
 //
 //  1. doctrine-gate: a doctrine_facet hub claim left in draft blocks
-//     locking a dependent that mirrors it, via testdata/fixture-coverage/
+//     locking a dependent that rests_on it, via testdata/fixture-coverage/
 //     lifecycle/doctrine-gate.
 //  2. undeclared-facet: a claim whose facet isn't in config.facets fails
 //     lint, via testdata/fixture-coverage/lifecycle/undeclared-facet.
@@ -98,7 +98,7 @@ func TestLifecycle_DoctrineGateFixture(t *testing.T) {
 	childPath := filepath.Join(root, "claims", "child.yaml")
 	hubPath := filepath.Join(root, "claims", "hub.yaml")
 
-	// Hub still draft: locking the child (which mirrors the hub) must be
+	// Hub still draft: locking the child (which rests_on the hub) must be
 	// refused by hub-gating, mentioning the doctrine facet.
 	_, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture")
 	if code == 0 {

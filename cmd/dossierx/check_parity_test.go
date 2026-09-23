@@ -93,8 +93,8 @@ func TestCheckParity_DraftAndOrientation(t *testing.T) {
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	want := "[warning] orphan: widget.contract.one: claim has no mirrors/rests_on edges in either direction\n" +
-		"[warning] orphan: widget.overview.router: claim has no mirrors/rests_on edges in either direction\n" +
+	want := "[warning] orphan: widget.contract.one: claim has no rests_on edges in either direction\n" +
+		"[warning] orphan: widget.overview.router: claim has no rests_on edges in either direction\n" +
 		"lint: 2 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (2 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +
@@ -120,7 +120,7 @@ func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] comments-unresolved: widget.contract.locked: 1 unresolved comment thread(s)\n" +
-		"[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
+		"[warning] orphan: widget.contract.locked: claim has no rests_on edges in either direction\n" +
 		"lint: 2 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +
@@ -166,7 +166,7 @@ func TestCheckParity_FullyLocked(t *testing.T) {
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	want := "[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
+	want := "[warning] orphan: widget.contract.locked: claim has no rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +
@@ -189,7 +189,7 @@ func TestCheckParity_ImplinkScanAndStatus(t *testing.T) {
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	want := "[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
+	want := "[warning] orphan: widget.contract.locked: claim has no rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +
@@ -213,7 +213,7 @@ func TestCheckParity_RawHTMLFailsAtLint(t *testing.T) {
 			"body: |\n  a claim.\nraw_html: \"<b>hi</b>\"\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	wantStdout := "[warning] orphan: widget.contract.mock: claim has no mirrors/rests_on edges in either direction\n" +
+	wantStdout := "[warning] orphan: widget.contract.mock: claim has no rests_on edges in either direction\n" +
 		"[error] raw-html-scope: widget.contract.mock: module \"widget\" is not in the project's mockup_modules allowlist and may not author layout: mockup / raw_html claims\n" +
 		"[error] raw-html-scope: widget.contract.mock: raw_html is set but raw_html_reviewed is not true; a human must review this markup and set raw_html_reviewed: true before this claim can lock\n" +
 		"lint: 3 finding(s), 2 error(s)\n"
@@ -238,7 +238,7 @@ func TestCheckParity_ScanErrorFailsAtScan(t *testing.T) {
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	wantStdout := "[warning] orphan: widget.contract.draft: claim has no mirrors/rests_on edges in either direction\n" +
+	wantStdout := "[warning] orphan: widget.contract.draft: claim has no rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
 		"render: wrote " + viewer + "\n"
@@ -264,7 +264,7 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 	}
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	want := "[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
+	want := "[warning] orphan: widget.contract.locked: claim has no rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +

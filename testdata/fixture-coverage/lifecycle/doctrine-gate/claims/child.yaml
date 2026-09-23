@@ -4,8 +4,8 @@ module: dgatemod
 status: draft
 layout: card
 body: |
-  identical shared content for a reciprocal mirrors pair.
-mirrors:
+  Child rests on the doctrine hub so hub-gating walks this edge.
+rests_on:
   - dgatemod.doctrine.hub
 governed_by:
   type: none

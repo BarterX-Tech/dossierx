@@ -65,7 +65,6 @@ func TestPendingTriggers_GovernorEditIsDrift(t *testing.T) {
 // verdict. It is asserted over every edge type at once.
 func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
-	mirrored := model.Claim{ID: "widget.contract.mirrored", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "mirrored"}
 	rested := model.Claim{ID: "widget.contract.rested", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "rested"}
 
 	cases := []struct {
@@ -79,20 +78,15 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 			edit:  func(claims []model.Claim) { claims[0].Body = "doctrine v2" },
 		},
 		{
-			name:  "mirrors",
-			child: model.Claim{ID: "c2", Facet: "contract", Module: "widget", Status: model.StatusLocked, Mirrors: []string{mirrored.ID}},
-			edit:  func(claims []model.Claim) { claims[1].Body = "mirrored v2" },
-		},
-		{
 			name:  "rests_on",
 			child: model.Claim{ID: "c3", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{rested.ID}},
-			edit:  func(claims []model.Claim) { claims[2].Body = "rested v2" },
+			edit:  func(claims []model.Claim) { claims[1].Body = "rested v2" },
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			claims := []model.Claim{hub, mirrored, rested, tc.child}
+			claims := []model.Claim{hub, rested, tc.child}
 			store, err := lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
 			if err != nil {
 				t.Fatalf("lock.LoadStore: %v", err)

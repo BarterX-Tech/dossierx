@@ -1,9 +1,9 @@
 // Lint body-edge-hint scans a claim's prose (Body with any fenced code
 // blocks stripped out — code-orphan owns those) for mentions of another
 // real claim's id that isn't declared through any of this claim's actual
-// edges (mirrors, rests_on, or governed_by). Prose that says "see
+// edges (rests_on or governed_by). Prose that says "see
 // widget.contract.overview" but never lists widget.contract.overview under
-// mirrors/rests_on/governed_by is a strong hint the edge was meant to be
+// rests_on/governed_by is a strong hint the edge was meant to be
 // declared and was simply forgotten. This is a WARNING, not an error: the
 // prose reference might be deliberately loose (a passing mention, not a
 // dependency), so it's a nudge for a human to check, not a hard failure.
@@ -35,10 +35,7 @@ func (bodyEdgeHintLint) Check(claims []model.Claim, cfg *config.Config) []Findin
 			continue
 		}
 
-		declared := make(map[string]bool, len(c.Mirrors)+len(c.RestsOn)+1)
-		for _, id := range c.Mirrors {
-			declared[id] = true
-		}
+		declared := make(map[string]bool, len(c.RestsOn)+1)
 		for _, id := range c.RestsOn {
 			declared[id] = true
 		}
@@ -56,7 +53,7 @@ func (bodyEdgeHintLint) Check(claims []model.Claim, cfg *config.Config) []Findin
 			findings = append(findings, Finding{
 				LintName: "body-edge-hint",
 				ClaimID:  c.ID,
-				Message:  fmt.Sprintf("body mentions claim %q but does not declare it as a mirrors/rests_on/governed_by edge", tok),
+				Message:  fmt.Sprintf("body mentions claim %q but does not declare it as a rests_on/governed_by edge", tok),
 				Severity: SeverityWarning,
 			})
 		}

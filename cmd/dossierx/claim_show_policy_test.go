@@ -125,17 +125,11 @@ func TestClaimShowCorruptStoreCannotClaimReadinessAndWritesNothing(t *testing.T)
 
 func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 	const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - doctrine\nmodules:\n  - widget\nclaims_dir: claims\ndoctrine_facet: doctrine\n"
-	claimYAML := func(id, facet, status string, rests, mirrors []string) string {
+	claimYAML := func(id, facet, status string, rests []string) string {
 		body := "id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: " + status + "\nlayout: card\nbuild_role: behavior\nbody: |\n  fixture claim.\n"
 		if len(rests) > 0 {
 			body += "rests_on:\n"
 			for _, dep := range rests {
-				body += "  - " + dep + "\n"
-			}
-		}
-		if len(mirrors) > 0 {
-			body += "mirrors:\n"
-			for _, dep := range mirrors {
 				body += "  - " + dep + "\n"
 			}
 		}
@@ -149,31 +143,27 @@ func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 		admissible  bool
 	}{
 		{"doctrine rests_on", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.doctrine.hub"}, nil),
-			"claims/hub.yaml":   claimYAML("widget.doctrine.hub", "doctrine", "draft", nil, nil),
-		}, "doctrine_dependency_not_locked", "dependency widget.doctrine.hub is doctrine", false},
-		{"doctrine mirror", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", nil, []string{"widget.doctrine.hub"}),
-			"claims/hub.yaml":   claimYAML("widget.doctrine.hub", "doctrine", "draft", nil, nil),
+			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.doctrine.hub"}),
+			"claims/hub.yaml":   claimYAML("widget.doctrine.hub", "doctrine", "draft", nil),
 		}, "doctrine_dependency_not_locked", "dependency widget.doctrine.hub is doctrine", false},
 		{"missing dependency", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.gone"}, nil),
+			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.gone"}),
 		}, "missing_dependency", "missing_dependency", false},
 		{"retired dependency", map[string]string{
-			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}, nil),
-			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "retired", nil, nil),
+			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}),
+			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "retired", nil),
 		}, "retired_dependency", "retired_dependency", false},
 		{"unreadable dependency", map[string]string{
-			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}, nil),
-			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "migration-unknown", nil, nil),
+			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}),
+			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "migration-unknown", nil),
 		}, "unreadable_dependency", "unreadable_dependency", false},
 		{"cycle", map[string]string{
-			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}, nil),
-			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "draft", []string{"widget.contract.child"}, nil),
+			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}),
+			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "draft", []string{"widget.contract.child"}),
 		}, "dependency_cycle", "dependency_cycle", false},
 		{"unrelated lint scoped out", map[string]string{
-			"claims/child.yaml":     claimYAML("widget.contract.child", "contract", "draft", nil, nil),
-			"claims/unrelated.yaml": claimYAML("widget.unknown.unrelated", "unknown", "draft", nil, nil),
+			"claims/child.yaml":     claimYAML("widget.contract.child", "contract", "draft", nil),
+			"claims/unrelated.yaml": claimYAML("widget.unknown.unrelated", "unknown", "draft", nil),
 		}, "", "ready for local approval", true},
 	}
 	for _, tc := range cases {

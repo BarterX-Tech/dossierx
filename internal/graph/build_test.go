@@ -207,16 +207,14 @@ func TestBuildEdges(t *testing.T) {
 		return model.Claim{ID: id, Module: "widget", Facet: "contract", Status: model.StatusDraft}
 	}
 
-	t.Run("all three types, in the declared direction", func(t *testing.T) {
+	t.Run("both remaining types, in the declared direction", func(t *testing.T) {
 		a, b, d := base("widget.contract.a"), base("widget.contract.b"), base("widget.contract.d")
 		a.RestsOn = []string{"widget.contract.b"}
-		a.Mirrors = []string{"widget.contract.d"}
 		a.Governed = model.Governed{Type: "widget.contract.d"}
 		p := buildFrom(t, cfg, a, b, d)
 
 		want := []Edge{
 			{From: "widget.contract.a", To: "widget.contract.d", Type: EdgeGovernedBy},
-			{From: "widget.contract.a", To: "widget.contract.d", Type: EdgeMirrors},
 			{From: "widget.contract.a", To: "widget.contract.b", Type: EdgeRestsOn},
 		}
 		if !reflect.DeepEqual(p.Edges, want) {
@@ -246,26 +244,23 @@ func TestBuildEdges(t *testing.T) {
 	t.Run("unknown targets are dropped and counted, of every type", func(t *testing.T) {
 		a := base("widget.contract.a")
 		a.RestsOn = []string{"widget.contract.ghost"}
-		a.Mirrors = []string{"widget.contract.phantom"}
 		a.Governed = model.Governed{Type: "widget.contract.spectre"}
 		p := buildFrom(t, cfg, a)
 		if len(p.Edges) != 0 {
 			t.Errorf("edges = %#v, want none", p.Edges)
 		}
-		if p.Dropped.UnresolvedEdges != 3 {
-			t.Errorf("dropped.unresolved_edges = %d, want 3", p.Dropped.UnresolvedEdges)
+		if p.Dropped.UnresolvedEdges != 2 {
+			t.Errorf("dropped.unresolved_edges = %d, want 2", p.Dropped.UnresolvedEdges)
 		}
 	})
 
 	t.Run("edges are sorted by (from, type, to)", func(t *testing.T) {
 		a, b, c := base("widget.contract.a"), base("widget.contract.b"), base("widget.contract.c")
 		a.RestsOn = []string{"widget.contract.c", "widget.contract.b"}
-		a.Mirrors = []string{"widget.contract.c"}
 		b.RestsOn = []string{"widget.contract.a"}
 		p := buildFrom(t, cfg, b, a, c)
 
 		want := []Edge{
-			{From: "widget.contract.a", To: "widget.contract.c", Type: EdgeMirrors},
 			{From: "widget.contract.a", To: "widget.contract.b", Type: EdgeRestsOn},
 			{From: "widget.contract.a", To: "widget.contract.c", Type: EdgeRestsOn},
 			{From: "widget.contract.b", To: "widget.contract.a", Type: EdgeRestsOn},
@@ -295,18 +290,17 @@ func TestBuildDegrees(t *testing.T) {
 		return model.Claim{ID: id, Module: "m", Facet: "f", Status: model.StatusDraft}
 	}
 
-	// hub is rested on by two claims, mirrors one, and is governed by one —
-	// so every one of the three edge types contributes to its degrees.
+	// hub is rested on by two claims and is governed by one —
+	// so both remaining edge types contribute to its degrees.
 	hub, a, b, doc := base("m.f.hub"), base("m.f.a"), base("m.f.b"), base("m.f.doc")
 	a.RestsOn = []string{"m.f.hub"}
 	b.RestsOn = []string{"m.f.hub"}
-	hub.Mirrors = []string{"m.f.a"}
 	hub.Governed = model.Governed{Type: "m.f.doc"}
 	p := buildFrom(t, cfg, hub, a, b, doc)
 
 	want := map[string][2]int{ // id -> {in, out}
-		"m.f.hub": {2, 2},
-		"m.f.a":   {1, 1},
+		"m.f.hub": {2, 1},
+		"m.f.a":   {0, 1},
 		"m.f.b":   {0, 1},
 		"m.f.doc": {1, 0},
 	}
@@ -392,7 +386,7 @@ func TestBuildDeterministic(t *testing.T) {
 			claims[i].RestsOn = []string{claims[i-1].ID, claims[i-3].ID}
 		}
 		if i%5 == 0 && i+1 < len(claims) {
-			claims[i].Mirrors = []string{claims[i+1].ID}
+			claims[i].RestsOn = append(claims[i].RestsOn, claims[i+1].ID)
 		}
 		if i%7 == 0 {
 			claims[i].Governed = model.Governed{Type: claims[0].ID}

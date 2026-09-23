@@ -281,7 +281,7 @@ func TestCLI_ClaimShowReportsBothEdgeDirections(t *testing.T) {
 	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "governed_by") {
 		t.Fatalf("expected claim show to describe the claim, got: %s", out)
 	}
-	if !strings.Contains(out, "incoming mirrors") || !strings.Contains(out, "incoming rests_on") {
+	if !strings.Contains(out, "incoming rests_on") {
 		t.Fatalf("expected claim show to report incoming edges, got: %s", out)
 	}
 	// The two things "deps" never said, and the reason claim show replaced it.

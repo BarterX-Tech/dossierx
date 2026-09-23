@@ -102,9 +102,6 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 		for _, target := range c.RestsOn {
 			p.appendEdge(known, c.ID, target, EdgeRestsOn)
 		}
-		for _, target := range c.Mirrors {
-			p.appendEdge(known, c.ID, target, EdgeMirrors)
-		}
 		// The same guard internal/lint/dangling.go uses: "none" and the
 		// empty type are both "deliberately not governed", not an edge.
 		if t := c.Governed.Type; t != "" && t != "none" {

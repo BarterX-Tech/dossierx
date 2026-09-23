@@ -332,7 +332,13 @@ type Claim struct {
 	// them in order.
 	Steps []string `yaml:"steps,omitempty"`
 
-	// Edges.
+	// Edges. rests_on is the required dependency chain; governed_by is
+	// authority (and a drift input when claim-valued).
+	//
+	// Mirrors is retired (NIT-17). The field stays on the struct so
+	// KnownFields still names the key and LockedClaimHash stays byte-identical
+	// for claims that never declared it. The engine does not walk it. A
+	// non-empty list is an error (`mirrors-retired`).
 	Mirrors  []string `yaml:"mirrors,omitempty"`
 	RestsOn  []string `yaml:"rests_on,omitempty"`
 	Governed Governed `yaml:"governed_by"`

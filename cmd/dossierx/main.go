@@ -2176,7 +2176,7 @@ func evaluateLockGates(claim model.Claim, claims []model.Claim, cfg *config.Conf
 		g.LintFindings = append(g.LintFindings, f)
 	}
 	if cfg != nil && cfg.HubGatingEnabled() {
-		deps := append(append([]string(nil), claim.Mirrors...), claim.RestsOn...)
+		deps := append([]string(nil), claim.RestsOn...)
 		for _, dep := range deps {
 			depClaim, ok := loader.FindByID(claims, dep)
 			if !ok {

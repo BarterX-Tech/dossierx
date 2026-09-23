@@ -598,3 +598,28 @@ governed_by:
 		t.Fatalf("expected the error to name the unknown field 'bodyy', got: %v", err)
 	}
 }
+
+// TestLoadClaims_RetiredMirrorsField_StillParses: leftover mirrors: must
+// still decode so LockedClaimHash of a claim that never declared it stays
+// byte-identical. The refusal is the mirrors-retired lint, not a parse error.
+func TestLoadClaims_RetiredMirrorsField_StillParses(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.yaml", `id: widget.contract.a
+facet: contract
+module: widget
+status: draft
+body: claim a
+mirrors:
+  - widget.contract.b
+governed_by:
+  type: none
+  reason: fixture
+`)
+	got, err := LoadClaims(dir)
+	if err != nil {
+		t.Fatalf("leftover mirrors: must still parse: %v", err)
+	}
+	if len(got) != 1 || len(got[0].Mirrors) != 1 || got[0].Mirrors[0] != "widget.contract.b" {
+		t.Fatalf("parsed claim = %#v", got)
+	}
+}

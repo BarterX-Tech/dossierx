@@ -17,7 +17,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 25 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads, and its top-level **Build order** tab (a module strip inside it, not a per-module sub-tab) |
+| Surface | the CLI — all 25 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads, and its top-level **Build order** tab (a module strip inside it, not a per-module sub-tab) |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
@@ -178,7 +178,7 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
 **A corpus that passed `dossierx check` before v0.5.0 can exit 1 after it with no edit on your
 side.** `mixed-cycle` (ERROR) reports a loop alternating the two edge kinds — "A `rests_on` B, B
 `governed_by` A". `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so
-that shape presented no back edge to either and passed the whole registry. `mirrors` never trips it.
+that shape presented no back edge to either and passed the whole registry.
 
 You meet it as `lint_failed` carrying `mixed-cycle`, one finding per claim on the loop. Three things
 make it unlike any other finding:

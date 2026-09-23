@@ -21,10 +21,9 @@ func TestSelfEdgeLint(t *testing.T) {
 				{
 					ID:       "widget.contract.overview",
 					RestsOn:  []string{"widget.contract.doctrine"},
-					Mirrors:  []string{"widget.internals.overview"},
 					Governed: model.Governed{Type: "widget.contract.doctrine"},
 				},
-				{ID: "widget.internals.overview", Mirrors: []string{"widget.contract.overview"}},
+				{ID: "widget.internals.overview", RestsOn: []string{"widget.contract.overview"}},
 			},
 			wantFindings: 0,
 		},
@@ -37,18 +36,7 @@ func TestSelfEdgeLint(t *testing.T) {
 			wantContains: "rests_on names this claim's own id",
 		},
 		{
-			// The case the whole rule exists for: mirror-reciprocal and
-			// mirror-mismatch are both trivially satisfied by a self-mirror,
-			// so nothing reported this before.
-			name: "failing: mirrors names its own id",
-			claims: []model.Claim{
-				{ID: "widget.contract.self", Mirrors: []string{"widget.contract.self"}},
-			},
-			wantFindings: 1,
-			wantContains: "mirrors names this claim's own id",
-		},
-		{
-			// Likewise: governed_by: self resolves, so dangling and
+			// governed_by: self resolves, so dangling and
 			// validated-on-missing both pass it.
 			name: "failing: governed_by names its own id",
 			claims: []model.Claim{
@@ -58,16 +46,15 @@ func TestSelfEdgeLint(t *testing.T) {
 			wantContains: "governed_by names this claim's own id",
 		},
 		{
-			name: "failing: all three edge kinds self-reference at once",
+			name: "failing: both edge kinds self-reference at once",
 			claims: []model.Claim{
 				{
 					ID:       "widget.contract.self",
 					RestsOn:  []string{"widget.contract.self"},
-					Mirrors:  []string{"widget.contract.self"},
 					Governed: model.Governed{Type: "widget.contract.self"},
 				},
 			},
-			wantFindings: 3,
+			wantFindings: 2,
 		},
 		{
 			// One finding per edge kind, not per occurrence.

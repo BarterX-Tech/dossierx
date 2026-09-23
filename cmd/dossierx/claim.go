@@ -99,33 +99,29 @@ func claimTitle(id string) string {
 }
 
 // incomingEdges returns the ids of every OTHER claim that points at id through
-// mirrors and through rests_on, each sorted.
+// rests_on, sorted.
 //
-// internal/render has a rests_on-only reverse index (buildDependedByLookup)
+// internal/render has a rests_on reverse index (buildDependedByLookup)
 // built for the viewer's "depended on by" footer. It is deliberately not reused
-// here: it is unexported, in a package whose job is HTML, and covers only one of
-// the two edge kinds "claim show" has to report. A linear scan over the claim
-// set — the same scan the retired "deps" verb did — is cheaper than the coupling.
-func incomingEdges(claims []model.Claim, id string) (mirroredBy, dependedOnBy []string) {
+// here: it is unexported, in a package whose job is HTML. A linear scan over
+// the claim set — the same scan the retired "deps" verb did — is cheaper than
+// the coupling.
+func incomingEdges(claims []model.Claim, id string) (dependedOnBy []string) {
 	for _, c := range claims {
 		if c.ID == id {
 			continue
-		}
-		if containsStr(c.Mirrors, id) {
-			mirroredBy = append(mirroredBy, c.ID)
 		}
 		if containsStr(c.RestsOn, id) {
 			dependedOnBy = append(dependedOnBy, c.ID)
 		}
 	}
-	sort.Strings(mirroredBy)
 	sort.Strings(dependedOnBy)
-	return mirroredBy, dependedOnBy
+	return dependedOnBy
 }
 
 // emptyIfNil coerces a nil string slice to an empty one so every list in a
 // payload encodes as "[]" rather than "null" — a consumer must be able to range
-// over edges.mirrors without first testing it for null.
+// over edges.rests_on without first testing it for null.
 func emptyIfNil(ss []string) []string {
 	if ss == nil {
 		return []string{}
@@ -264,11 +260,9 @@ func claimTrackViews(refs []model.TrackRef) []claimTrackView {
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
 type claimEdgesData struct {
-	Mirrors        []string `json:"mirrors"`
 	RestsOn        []string `json:"rests_on"`
 	GovernedBy     string   `json:"governed_by"`
 	GovernedReason string   `json:"governed_reason,omitempty"`
-	MirroredBy     []string `json:"mirrored_by"`
 	DependedOnBy   []string `json:"depended_on_by"`
 }
 
@@ -621,7 +615,7 @@ func newClaimShowCmd() *cobra.Command {
 			assessments := readiness.Compute(claims, store, flagStore)
 			assessment := assessments[id]
 
-			mirroredBy, dependedOnBy := incomingEdges(claims, id)
+			dependedOnBy := incomingEdges(claims, id)
 			links := linkViewsFor(cfg, claim)
 			trigger := claimReviewTrigger(claim, claims, store, flagStore)
 
@@ -662,11 +656,9 @@ func newClaimShowCmd() *cobra.Command {
 				Trigger:       trigger,
 				Readiness:     assessment,
 				Edges: claimEdgesData{
-					Mirrors:        emptyIfNil(claim.Mirrors),
 					RestsOn:        emptyIfNil(claim.RestsOn),
 					GovernedBy:     claim.Governed.Type,
 					GovernedReason: claim.Governed.Reason,
-					MirroredBy:     emptyIfNil(mirroredBy),
 					DependedOnBy:   emptyIfNil(dependedOnBy),
 				},
 				ImplementedIn: links,
@@ -713,7 +705,6 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 	if d.Ledger != nil && d.Ledger.Recorded && !d.Ledger.Released && !d.Ledger.ContentMatches {
 		fmt.Fprintln(out, "  lock ledger:        CONTENT DOES NOT MATCH THE APPROVAL ON RECORD (see dossierx check --validate)")
 	}
-	fmt.Fprintf(out, "  outgoing mirrors:   %v\n", d.Edges.Mirrors)
 	fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
 	if d.Edges.GovernedBy != "" {
 		fmt.Fprintf(out, "  governed_by:        %s", d.Edges.GovernedBy)
@@ -724,7 +715,6 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 	} else {
 		fmt.Fprintln(out, "  governed_by:        (unset)")
 	}
-	fmt.Fprintf(out, "  incoming mirrors:   %v\n", d.Edges.MirroredBy)
 	fmt.Fprintf(out, "  incoming rests_on:  %v\n", d.Edges.DependedOnBy)
 	if len(d.ImplementedIn) == 0 {
 		fmt.Fprintln(out, "  implemented in:     (nothing linked)")
@@ -1274,7 +1264,7 @@ func claimNewPath(cfg *config.Config, id, override string) (string, error) {
 
 func newClaimNewCmd() *cobra.Command {
 	var body, layout, section, buildRole, governedBy, governedReason, file string
-	var restsOn, mirrors []string
+	var restsOn []string
 	var dryRun bool
 
 	cmd := &cobra.Command{
@@ -1379,7 +1369,6 @@ func newClaimNewCmd() *cobra.Command {
 				Body:       normalizeClaimBody(body),
 				Section:    section,
 				BuildRole:  model.BuildRole(buildRole),
-				Mirrors:    mirrors,
 				RestsOn:    restsOn,
 				Governed:   model.Governed{Type: governedBy, Reason: governedReason},
 				SourcePath: path,
@@ -1424,7 +1413,6 @@ func newClaimNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&buildRole, "build-role", "", "optional build phase: orientation, schema, behavior, api, verification, out-of-scope (required only once the claim locks)")
 	cmd.Flags().StringVar(&governedBy, "governed-by", string(model.GovernedNone), "the doctrine claim id backing this claim, or \"none\"")
 	cmd.Flags().StringVar(&governedReason, "governed-reason", "", "why this claim is deliberately ungoverned (required when --governed-by is \"none\")")
-	cmd.Flags().StringSliceVar(&mirrors, "mirrors", nil, "claim ids this claim mirrors")
 	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on")
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what creating this claim would do, and write nothing")

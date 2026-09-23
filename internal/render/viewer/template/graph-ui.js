@@ -110,15 +110,12 @@
   // overridable from it — a threshold a reader cannot see and cannot cross is
   // a threshold nobody can report as wrong.
   var AUTO_COLLAPSE_ABOVE = 300;
-  // 13 §4.2 / §6 — the board's own vocabulary for the three relation chips
-  // and the legend's edge rows: "Depends on", "Says the same thing",
-  // "Governed by". Re-pinned from this file's original "Rests On" /
-  // "Mirrors" / "Governed By" — display text only; data-dxg-type keeps the
-  // engine's own rests_on / mirrors / governed_by everywhere a test or a
-  // deep link keys off it.
+  // 13 §4.2 / §6 — the board's own vocabulary for the relation chips
+  // and the legend's edge rows: "Depends on", "Governed by". Display
+  // text only; data-dxg-type keeps the engine's own rests_on /
+  // governed_by everywhere a test or a deep link keys off it.
   var RELATIONSHIP_LABELS = {
     rests_on: 'Depends on',
-    mirrors: 'Says the same thing',
     governed_by: 'Governed by',
   };
 
@@ -131,9 +128,8 @@
   var LEGEND_EDGE_LABELS = {
     governed_by: 'governed by',
     rests_on: 'depends on',
-    mirrors: 'says the same thing',
   };
-  var LEGEND_EDGE_ORDER = ['governed_by', 'rests_on', 'mirrors'];
+  var LEGEND_EDGE_ORDER = ['governed_by', 'rests_on'];
 
   // ---- Labels ------------------------------------------------------------
   //
@@ -924,26 +920,15 @@
   // carry project data into the document.
   //
   // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
-  // The strip used to name governed_by alone, which left rests_on and mirrors
-  // as two lines a reader had to tell apart by an arrowhead — and an
-  // arrowhead is precisely the part of an edge that disappears under the node
-  // it points at. So mirrors is now DASHED on the canvas as well as
-  // headless, and each sample here draws exactly what the canvas draws:
+  // Each sample here draws exactly what the canvas draws:
   //
   //   rests_on     solid, one chevron
-  //   mirrors      dashed, no chevron — reciprocal by design, so a head on
-  //                either end would be a direction it does not have
   //   governed_by  the reserved hue, curved, two chevrons
   var EDGE_SAMPLES = {
     rests_on:
       '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
       '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
       '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-      '</svg>',
-    mirrors:
-      '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
-      '<path d="M1 6 L31 6" fill="none" stroke="currentColor" stroke-width="1.6" ' +
-      'stroke-dasharray="5 3"/>' +
       '</svg>',
     governed_by:
       '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
@@ -1181,7 +1166,7 @@
   function appendEdgeRows(list) {
     var c = core();
     var known = {};
-    var engineTypes = c ? c.EDGE_TYPES : ['rests_on', 'mirrors', 'governed_by'];
+    var engineTypes = c ? c.EDGE_TYPES : ['rests_on', 'governed_by'];
     for (var k = 0; k < engineTypes.length; k++) {
       known[str(engineTypes[k])] = true;
     }
@@ -2919,12 +2904,7 @@
       if (curved) {
         ctx.lineWidth += 0.6;
       }
-      // MIRRORS IS DASHED, and that is the fix for two lines that used to be
-      // tellable apart only by an arrowhead — the part of an edge most often
-      // hidden under the node it points at. mirrors is reciprocal by design
-      // and so carries no head at all; a dash says "no direction here" at a
-      // glance and at any zoom, without pretending the relation has one.
-      ctx.setLineDash(edge.type === 'mirrors' ? [5, 3] : []);
+      ctx.setLineDash([]);
 
       var target = scene.byId[edge.to];
       var stop = target ? radiusOf(target) + 2 : 4;
@@ -2940,17 +2920,13 @@
       }
       ctx.stroke();
 
-      // Arrowheads. mirrors gets none: it is reciprocal by design, and a head
-      // on both ends of a symmetric relation is noise. RETRY fix list item
-      // 19 / 13 §4.4: a dependency edge is a plain 1.4px line on the
-      // canvas — no chevron — the same way the spec's own edge table
-      // carries no arrowhead column for either edge kind. The head lives in
-      // the legend's "depends on" mark alone. Governance keeps its double
-      // chevron: it is what makes a governance arc readable as directed at
-      // a glance among hundreds of undirected-looking dependency lines, and
-      // the spec (13 §4.4, node A7D-0) already draws it on every board this
-      // lane verifies; a broader removal was raised as a dispute rather
-      // than made unilaterally here.
+      // Arrowheads. RETRY fix list item 19 / 13 §4.4: a dependency edge is
+      // a plain 1.4px line on the canvas — no chevron — the same way the
+      // spec's own edge table carries no arrowhead column for rests_on.
+      // The head lives in the legend's "depends on" mark alone. Governance
+      // keeps its double chevron: it is what makes a governance arc
+      // readable as directed at a glance among hundreds of
+      // undirected-looking dependency lines.
       var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
       if (edge.type === 'governed_by') {
         chevron(ctx, end.x, end.y, angle, 6.5);
@@ -4134,9 +4110,7 @@
   // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
   // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
   // dropped; it leaves the rail and becomes its own edge group, where it
-  // always belonged"), then SAYS THE SAME THING only while `mirrors` is
-  // toggled on — "so that group is absent", exactly what the canvas does
-  // with the same toggle.
+  // always belonged").
   function buildNeighborhood(id, claim) {
     var wrap = h('div', 'dxg-neighborhood');
     wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
@@ -4152,8 +4126,7 @@
     var plan = [
       ['governed_by', 'out', 'GOVERNED BY'],
       ['rests_on', 'out', 'DEPENDS ON'],
-      ['rests_on', 'in', 'DEPENDED ON BY'],
-      ['mirrors', 'both', 'SAYS THE SAME THING']
+      ['rests_on', 'in', 'DEPENDED ON BY']
     ];
     var any = false;
     for (var i = 0; i < plan.length; i++) {

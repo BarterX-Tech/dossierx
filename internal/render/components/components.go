@@ -513,12 +513,6 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// then it stays here, exactly where a reader could already find it, so
 	// nothing regresses to invisible.
 	var extra strings.Builder
-	if len(c.Mirrors) > 0 {
-		links += len(c.Mirrors)
-		extra.WriteString(`<li class="claim-mirrors claim-relationship-extra">mirrors:`)
-		writeIDListItems(&extra, c.Module, c.Facet, c.Mirrors, targetStatuses)
-		extra.WriteString(`</li>`)
-	}
 	if c.MigratedFrom != "" {
 		links++
 		extra.WriteString(`<li class="claim-migrated claim-relationship-extra">migrated_from: `)
@@ -1047,22 +1041,6 @@ func cell(v any) template.HTML {
 		return ""
 	}
 	return markdown.RenderInline(fmt.Sprint(v))
-}
-
-// writeIDListItems renders ids as a nested <ul> of one <li> per id, each
-// holding a writeClaimRef anchor, used for every edges-footer field that
-// lists other claim ids (mirrors, rests_on, depended-by) so each id gets its
-// own bulleted line rather than a run-on comma list. fromModule/fromFacet are
-// the RENDERING claim's own module and facet — the context writeClaimRef
-// elides each target's redundant prefix against.
-func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []string, targetStatuses map[string]TargetStatus) {
-	b.WriteString(`<ul class="claim-edge-id-list">`)
-	for _, id := range ids {
-		b.WriteString(`<li>`)
-		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses, true)
-		b.WriteString(`</li>`)
-	}
-	b.WriteString(`</ul>`)
 }
 
 // ---------------------------------------------------------------------

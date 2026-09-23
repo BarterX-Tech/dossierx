@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- The `mirrors` edge is gone. `claim new --mirrors` is gone; `claim show`
+  no longer reports `mirrors`/`mirrored_by`; catalog, graph payload, and
+  the viewer no longer draw a “says the same thing” relation (graph
+  `EDGE_TYPES` is now `rests_on` and `governed_by` only). The
+  `mirror-mismatch`, `mirror-reciprocal`, and `mirror-unanchored` lints
+  are gone. A leftover non-empty `mirrors:` list is `mirrors-retired`
+  (error). Hub-gating and dependency drift walk `rests_on` and a
+  claim-valued `governed_by` only. (NIT-17)
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed

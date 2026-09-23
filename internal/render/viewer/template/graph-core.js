@@ -31,7 +31,7 @@
   // suite off these names.
   //
   // Constants (all frozen, all JSON-able):
-  //   EDGE_TYPES           ["rests_on", "mirrors", "governed_by"]
+  //   EDGE_TYPES           ["rests_on", "governed_by"]
   //   DIRECTED_EDGE_TYPES  ["rests_on", "governed_by"] — the SCC edge set
   //   GHOST_PREFIX         "ghost:" — id prefix of an out-of-scope endpoint
   //   FACET_SLOT_COUNT     20 — the categorical palette's slot count
@@ -87,11 +87,12 @@
 
   // EDGE_TYPES is the closed set of relations model.Claim declares. It is the
   // canonical ordering used by encodeState and by every by-type sort.
-  var EDGE_TYPES = Object.freeze(['rests_on', 'mirrors', 'governed_by']);
+  var EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
-  // DIRECTED_EDGE_TYPES is the subset scc() walks. `mirrors` is excluded
-  // because it is reciprocal by design — a mirrored pair is not a dependency
-  // loop, and counting it as one would ring every mirrored claim red.
+  // DIRECTED_EDGE_TYPES is the subset scc() walks. Today that is every
+  // remaining edge kind; the name is kept because gapRules and the pane
+  // still distinguish "types that participate in cycles" from display-only
+  // filters if a later kind is added.
   var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
   // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope

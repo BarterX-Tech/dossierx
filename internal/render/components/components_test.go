@@ -370,15 +370,14 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 		wantChip   string
 	}{
 		{
-			name: "governed_mirrors_restson_dependedby_no_files",
+			name: "governed_restson_dependedby_no_files",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
 				Governed: model.Governed{Type: "doctrine.hub.retries"},
-				Mirrors:  []string{"widget.contract.a"},
 				RestsOn:  []string{"widget.contract.b", "widget.contract.c"},
 			},
 			dependedBy: []string{"widget.internals.d", "widget.internals.e"},
-			wantChip:   "6 relationships",
+			wantChip:   "5 relationships",
 		},
 		{
 			// Linked files no longer add to the relationships count at all —
@@ -839,8 +838,7 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		Facet:         "contract",
 		Module:        "widget",
 		Governed:      model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
-		Mirrors:       []string{"widget.contract.a", "widget.contract.b"},
-		RestsOn:       []string{"widget.contract.c"},
+		RestsOn:       []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
 		MigratedFrom:  "docs/tabs/widget.html",
 		Status:        model.StatusLocked,
 		ReviewPending: true,
@@ -852,10 +850,9 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`claim-mirrors`,
+		`claim-rests-on`,
 		`href="#widget.contract.a"`,
 		`href="#widget.contract.b"`,
-		`claim-rests-on`,
 		`href="#widget.contract.c"`,
 		`migrated_from: docs/tabs/widget.html`,
 		`claim-review-pending`,
@@ -863,12 +860,6 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("edgesHTML missing %q, got: %s", want, got)
 		}
-	}
-	// Two mirror ids each get their own bulleted <li>. Both targets share this
-	// claim's module AND facet, so they are the bare-label tier: no prefix at
-	// all, since "widget.contract." is the tab the reader is already on.
-	if !strings.Contains(got, `<li><a class="claim-ref" href="#widget.contract.a" data-claim-id="widget.contract.a" title="widget.contract.a"><span class="claim-ref-label">A</span></a></li><li><a class="claim-ref" href="#widget.contract.b" data-claim-id="widget.contract.b" title="widget.contract.b"><span class="claim-ref-label">B</span></a></li>`) {
-		t.Fatalf("expected multiple ids in an edge list rendered as separate <li> bullets, got: %s", got)
 	}
 	if strings.Contains(got, "claim-ref-prefix") {
 		t.Errorf("a same-module, same-facet target must carry no prefix at all, got: %s", got)
@@ -1325,35 +1316,34 @@ func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	}
 }
 
-// TestEdgesHTML_ElisionTiers_ExtrasStillElide is the RETRY addition proving
-// the elision tiers TestEdgesHTML_ElisionTiers used to pin for RestsOn still
-// exist, just relocated to writeIDListItems' callers (mirrors), which have
-// no meta column of their own and so keep writeClaimRef's original,
-// context-relative claim-ref-prefix behaviour unchanged.
-func TestEdgesHTML_ElisionTiers_ExtrasStillElide(t *testing.T) {
+// TestEdgesHTML_RestsOnUsesMetaColumn not prefix elision: rests_on rows
+// carry module/facet in claim-relationship-meta, not claim-ref-prefix.
+func TestEdgesHTML_RestsOnUsesMetaColumn(t *testing.T) {
 	c := model.Claim{
 		ID:     "widget.contract.self",
 		Module: "widget",
 		Facet:  "contract",
-		Mirrors: []string{
-			"widget.contract.retry-policy",  // same module + facet -> bare
-			"widget.internals.retry-buffer", // same module, other facet
-			"ledger.contract.spend-cap",     // other module entirely
+		RestsOn: []string{
+			"widget.contract.retry-policy",
+			"widget.internals.retry-buffer",
+			"ledger.contract.spend-cap",
 		},
 	}
 	got := string(edgesHTML(c))
 
 	for _, want := range []string{
 		`title="widget.contract.retry-policy"><span class="claim-ref-label">Retry Policy</span>`,
-		`title="widget.internals.retry-buffer"><span class="claim-ref-prefix">Internals › </span><span class="claim-ref-label">Retry Buffer</span>`,
-		`title="ledger.contract.spend-cap"><span class="claim-ref-prefix">Ledger · Contract › </span><span class="claim-ref-label">Spend Cap</span>`,
+		`title="widget.internals.retry-buffer"><span class="claim-ref-label">Retry Buffer</span>`,
+		`title="ledger.contract.spend-cap"><span class="claim-ref-label">Spend Cap</span>`,
+		`Widget · Internals`,
+		`Ledger · Contract`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %q in the edges footer, got: %s", want, got)
 		}
 	}
-	if n := strings.Count(got, "claim-ref-prefix"); n != 2 {
-		t.Errorf("expected 2 prefix spans (the two cross-boundary targets), got %d in: %s", n, got)
+	if strings.Contains(got, "claim-ref-prefix") {
+		t.Errorf("rests_on rows must not use claim-ref-prefix, got: %s", got)
 	}
 }
 

@@ -2,5 +2,5 @@ schema_version: 1
 facets:
   - contract
 modules:
-  - mirunmod
+  - leftover
 claims_dir: claims
