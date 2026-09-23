@@ -9,12 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- `dossierx claim migrate-lock-policy` is no longer an everyday leaf. Agents
-  treated a one-shot policy adoption as a normal recovery. The binary keeps a
-  hidden retired stub that refuses the remembered invocation. Existing lock
-  stores stay on their recorded policy; a new project still starts on lock
-  policy v1. Policy evaluation, approvals, and baselines are unchanged. The
-  surface is now twenty-four leaves under eight nouns.
+- The lock-policy adoption CLI leaf is deleted. Existing lock stores stay on
+  their recorded policy; a new project still starts on lock policy v1. Policy
+  evaluation, approvals, and baselines are unchanged. The surface is now
+  twenty-four leaves under eight nouns.
 
 ## [0.7.20] - 2026-09-22
 

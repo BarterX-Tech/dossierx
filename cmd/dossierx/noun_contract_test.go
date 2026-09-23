@@ -451,11 +451,6 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 		// flag parsing runs first — so without the stub, `--adopt` surfaces as
 		// `unknown flag` and the removal is never named at all.
 		{"migrate --adopt", []string{"migrate", "--adopt"}, "dossierx claim unlock", "removed in v0.4.0"},
-
-		// The policy-adoption leaf was a live command, not a top-level memory.
-		// Agents treated it as a normal recovery; the stub names the removal
-		// even when the remembered flags are present.
-		{"claim migrate-lock-policy --reason", []string{"claim", "migrate-lock-policy", "--reason", "adopt"}, "recorded policy", "removed"},
 	}
 
 	for _, tc := range cases {
@@ -544,5 +539,24 @@ func TestRetiredVerbsAreNotSurface(t *testing.T) {
 		if retired(cmd) && !cmd.Hidden {
 			t.Fatalf("a removal stub must be hidden: %q", cmd.Name())
 		}
+	}
+}
+
+// TestDeletedLockPolicyLeafIsUnknownSubcommand pins the kill: the leaf is gone,
+// so the claim group's existing unknown-subcommand path answers it. There is
+// no retired stub and no replacement command.
+func TestDeletedLockPolicyLeafIsUnknownSubcommand(t *testing.T) {
+	env, _, err := execReviewedCLIJSON(t, "claim", "migrate-lock-policy")
+	if err == nil || env.OK {
+		t.Fatalf("a deleted leaf must fail, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
+		t.Fatalf("expected usage, got %+v", env.Error)
+	}
+	if !strings.Contains(env.Error.Message, "unknown subcommand") {
+		t.Fatalf("expected the claim group's unknown-subcommand path, got %+v", env.Error)
+	}
+	if strings.Contains(env.Error.Hint, "migrate-lock-policy") {
+		t.Fatalf("the recovery must not name the deleted leaf: %+v", env.Error)
 	}
 }

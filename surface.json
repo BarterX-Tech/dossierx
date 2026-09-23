@@ -255,7 +255,6 @@
   ],
   "retired": [
     "catalog",
-    "claim migrate-lock-policy",
     "comment delete",
     "comment edit",
     "comment reopen",
@@ -524,7 +523,7 @@
   ],
   "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:936a958bdcdc277a0685365638d0bd2df3e9732b314908f31a99f2552a8f91eb",
+    "cmd/dossierx": "sha256:1418d95e74a5da6ae4fcef5f2c0d19e2622ca860e8245dd7a155ee8780d12608",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -542,7 +541,7 @@
     "internal/layout": "sha256:22b57470d1c8381dfee41e360c123d1633ae1c923bf8ec1f736fe9a00b6caeb3",
     "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
-    "internal/lock": "sha256:d6e659bfd81c3996d503d4bd74012bc7f5a337f23412c0f35aefc5ad9eef6f36",
+    "internal/lock": "sha256:b4706e06aa46cd8ce8db30e16e9d70f73bf3f3f6878fc22a93a370e3331a8f9b",
     "internal/model": "sha256:604cd3dfa6de63d2bd483425d859508e1c95b3fa77a475dfbb65b3c9ac2f2bfe",
     "internal/readiness": "sha256:705cd7a1c00c60e1ffec82a557cd13389ce49ac4b76f9ff4a3927559e353b033",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
@@ -554,7 +553,7 @@
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:769db1900a8cf016edf103a45d559c6712cef6be7751e407769cfde1ff9513ef"
+    "skills": "sha256:7e88435f9a135a923a8cc4e21d740bb28efe3fe5a58f5008e399c280fea53681"
   },
   "envelope": {
     "keys": [

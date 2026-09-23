@@ -213,9 +213,6 @@ var clogRetirementsInProseOnly = map[string]string{
 		"explains why there is no replacement command rather than naming one — the one " +
 		"retirement in the set whose answer is not a substitution and does not fit a " +
 		"Retired/Replacement row.",
-	"claim migrate-lock-policy": "the Unreleased entry retires the policy-adoption leaf " +
-		"without a substitute command: existing stores stay on their recorded policy and " +
-		"a new project starts on v1. That does not fit a Retired/Replacement row.",
 }
 
 func TestTheChangelogAccountsForEveryRetiredCommand(t *testing.T) {

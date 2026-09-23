@@ -332,10 +332,10 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // artifact nor the ledger. Same argument as track and theme: a way to look, and
 // no new way to change what the project treats as approved.
 //
-// THE SIXTH MOVE IS `claim migrate-lock-policy`. It was a narrow adoption
-// leaf that moved a store onto policy v1 without creating an approval. Agents
-// treated it as an everyday recovery. It is now a hidden retired stub; existing
-// stores stay on their recorded policy and a new project starts on v1.
+// THE SIXTH MOVE WAS a lock-policy adoption leaf. Agents treated it as an
+// everyday recovery, so it was deleted. Existing stores stay on their
+// recorded policy and a new project starts on v1. There is no replacement
+// command and no retired stub.
 //
 // THE SEVENTH MOVE IS `claim recover-approved-content`, and it is a
 // one-time migration surface that creates no approval. Approvals recorded

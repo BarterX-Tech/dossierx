@@ -64,7 +64,6 @@ func newClaimCmd() *cobra.Command {
 		newReauditCmd(),
 		newClaimLinkCmd(),
 	)
-	cmd.AddCommand(retiredClaimVerbs()...)
 	return commandGroup(cmd)
 }
 

@@ -480,18 +480,6 @@ func (s *Store) LocalApprovalEnabled() bool {
 	return s != nil && s.PolicyVersion >= PolicyLocalApprovalV1
 }
 
-// AdoptLocalApproval records the v1 policy transition without changing any
-// approval record, dependency baseline, pending flag, or claim file.
-func (s *Store) AdoptLocalApproval(reason string) {
-	if s == nil {
-		return
-	}
-	s.PolicyVersion = PolicyLocalApprovalV1
-	s.Version = storeSchemaVersion
-	s.PolicyMigratedAt = nowFunc().UTC().Format(time.RFC3339Nano)
-	s.PolicyMigrationReason = reason
-}
-
 // MigrateLegacyStore re-arms per-dependent hash baselines for a store that
 // predates them, so an existing project's already-locked claims regain
 // dependency-drift detection immediately on upgrade — with no manual re-lock
