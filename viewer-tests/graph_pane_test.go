@@ -365,8 +365,8 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 	if n := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).nodes.length`); n != 3 {
 		t.Fatalf("payload nodes = %d, want 3 (one per claim file)", n)
 	}
-	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 1 {
-		t.Fatalf("payload schema = %d, want 1", v)
+	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 2 {
+		t.Fatalf("payload schema = %d, want 2", v)
 	}
 
 	openGraphPane(t, ctx)
@@ -551,11 +551,11 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
 	}
 
-	// The overlay select carries all six overlays plus none, including
-	// governance — the channel that answers "what does this doctrine reach?"
+	// The overlay select carries all five overlays plus none (governance
+	// left with the governed_by edge, NIT-29).
 	overlays := evalStrings(t, ctx, `Array.from(document.querySelectorAll('#dxgOverlay option'))
 		.map(function (o) { return o.value; })`)
-	wantOverlays := []string{"none", "isolated", "cycles", "governance", "review", "comments", "status"}
+	wantOverlays := []string{"none", "isolated", "cycles", "review", "comments", "status"}
 	if fmt.Sprint(overlays) != fmt.Sprint(wantOverlays) {
 		t.Fatalf("overlay options = %v, want %v", overlays, wantOverlays)
 	}
@@ -821,15 +821,15 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 
 	// Now paste a full deep link: a reading-view target AND a graph state.
 	// Both halves must apply.
-	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=rg&lb=1&ex=&se=';`)
-	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'governance'`)
+	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=review&ty=r&lb=1&ex=&se=';`)
+	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'review'`)
 	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
 		t.Fatalf("granularity from the pasted hash = %q, want module", got)
 	}
 	// The reading view rewrote the hash for its own target and preserved the
 	// graph half byte for byte.
-	if got := evalString(t, ctx, `window.location.hash`); !strings.Contains(got, "!g=") || !strings.Contains(got, "ov=governance") {
+	if got := evalString(t, ctx, `window.location.hash`); !strings.Contains(got, "!g=") || !strings.Contains(got, "ov=review") {
 		t.Fatalf("hash after the deep link = %q, want the graph segment preserved", got)
 	}
 }
