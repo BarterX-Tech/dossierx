@@ -17,7 +17,7 @@ import (
 )
 
 func lockedClaim(id string, rests ...string) model.Claim {
-	return model.Claim{ID: id, Facet: "contract", Module: "fixture", Status: model.StatusLocked, Body: id + " body", RestsOn: rests}
+	return model.Claim{ID: id, Facet: "contract", Module: "fixture", Status: model.StatusLocked, Body: id + " body", RestsOn: model.RestsOnIDs(rests...)}
 }
 
 func standingStore(claims ...model.Claim) *lock.Store {
@@ -234,21 +234,23 @@ func TestComputeIntegrityDriftPropagatesAndStaleBitCannotMakeReady(t *testing.T)
 	}
 }
 
-func TestComputeMissingRetiredCycleAndLegacyHistory(t *testing.T) {
+func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
 	missing := lockedClaim("fixture.contract.missing-user", "fixture.contract.does-not-exist")
 	retiredDep := lockedClaim("fixture.contract.retired")
 	retiredDep.Status = model.Status("retired")
 	retired := lockedClaim("fixture.contract.retired-user", retiredDep.ID)
 	cycleA := lockedClaim("fixture.contract.cycle-a", "fixture.contract.cycle-b")
 	cycleB := lockedClaim("fixture.contract.cycle-b", cycleA.ID)
+	governor := model.Claim{ID: "fixture.contract.rule", Facet: "contract", Module: "fixture", Status: model.StatusDraft, Body: "a draft rule"}
+	governed := lockedClaim("fixture.contract.governed", governor.ID)
 	legacyA := lockedClaim("fixture.contract.legacy-a")
 	legacyB := lockedClaim("fixture.contract.legacy-b", legacyA.ID)
 
-	s := standingStore(missing, retired, cycleA, cycleB, legacyA, legacyB)
+	s := standingStore(missing, retired, cycleA, cycleB, governed, legacyA, legacyB)
 	// An old policy store keeps the approval record but has no attributable
 	// dependency baseline. Readiness must remain explicitly unknown.
 	s.PolicyVersion = lock.PolicyLegacy
-	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, legacyA, legacyB}
+	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, governor, governed, legacyA, legacyB}
 	got := Compute(claims, s, nil)
 	if !hasCondition(got[missing.ID], ConditionMissingDependency, missing.ID, "fixture.contract.does-not-exist") {
 		t.Fatalf("missing required dependency must be visible: %+v", got[missing.ID].DependencyConditions)
@@ -261,6 +263,9 @@ func TestComputeMissingRetiredCycleAndLegacyHistory(t *testing.T) {
 	}
 	if !hasCondition(got[cycleB.ID], ConditionDependencyCycle, cycleB.ID, cycleA.ID, cycleB.ID) {
 		t.Fatalf("reverse cycle assessment must also terminate and report its path: %+v", got[cycleB.ID].DependencyConditions)
+	}
+	if got[governed.ID].DependencyReady || !hasCondition(got[governed.ID], ConditionDependencyUnapproved, governed.ID, governor.ID) {
+		t.Fatalf("a draft rests_on target must be a visible unapproved-dependency condition: %+v", got[governed.ID])
 	}
 	if got[legacyB.ID].DependencyReady || !hasCondition(got[legacyB.ID], ConditionUnknownHistoricalBaseline, legacyB.ID, legacyA.ID) {
 		t.Fatalf("legacy missing baseline must remain unknown: %+v", got[legacyB.ID])
@@ -382,7 +387,7 @@ func TestComputeMultipleRoutesToOneSourceSingleDerivedRecord(t *testing.T) {
 
 	// Remove edge x -> n1 by updating x.RestsOn to only [n2, n3]
 	x2 := x
-	x2.RestsOn = []string{n2.ID, n3.ID}
+	x2.RestsOn = model.RestsOnIDs(n2.ID, n3.ID)
 	claims2 := []model.Claim{x2, n1, n2, n3, z}
 	s2 := standingStore(x2, n1, n2, n3)
 	recordBaseline(s2, n2.ID, z)
@@ -446,7 +451,7 @@ func TestComputeMultiNodeCycleAndSelfCycleValidClosedWitnesses(t *testing.T) {
 	// Cycles must not hide independent obstacles!
 	unapprovedD := model.Claim{ID: "fixture.cycle.3.d", Status: model.StatusDraft, Body: "draft D"}
 	cCWithD := cC
-	cCWithD.RestsOn = []string{cA.ID, unapprovedD.ID}
+	cCWithD.RestsOn = model.RestsOnIDs(cA.ID, unapprovedD.ID)
 	sOutgoing := standingStore(cA, cB, cCWithD)
 	gotOutgoing := Compute([]model.Claim{cA, cB, cCWithD, unapprovedD}, sOutgoing, nil)
 
@@ -538,7 +543,7 @@ func TestComputeLayeredDenseDAGScaleBounds(t *testing.T) {
 				Module:  "dense",
 				Status:  model.StatusDraft,
 				Body:    fmt.Sprintf("Dense claim layer %d node %d", l, w),
-				RestsOn: nextLayerIDs,
+				RestsOn: model.RestsOnIDs(nextLayerIDs...),
 			}
 			allClaims = append(allClaims, claim)
 			if l == 0 {
@@ -735,8 +740,11 @@ func TestIndependentDifferentialDAG(t *testing.T) {
 			}
 			for j := i + 1; j < 6; j++ {
 				if rng.Intn(2) == 0 {
-					c.RestsOn = append(c.RestsOn, fmt.Sprintf("n%d", j))
+					c.RestsOn.IDs = append(c.RestsOn.IDs, fmt.Sprintf("n%d", j))
 				}
+			}
+			if rng.Intn(4) == 0 {
+				c.RestsOn.IDs = append(c.RestsOn.IDs, "n5")
 			}
 			claims = append(claims, c)
 		}
@@ -823,7 +831,7 @@ func testIndependentCycleOracle(t *testing.T, lifecycle bool) {
 			claims[i] = lockedClaim(fmt.Sprintf("n%d", i))
 			for j := 0; j < n; j++ {
 				if rng.Intn(4) == 0 {
-					claims[i].RestsOn = append(claims[i].RestsOn, fmt.Sprintf("n%d", j))
+					claims[i].RestsOn.AppendIDs(fmt.Sprintf("n%d", j))
 					reach[i][j] = true
 				}
 			}
@@ -870,8 +878,11 @@ func testIndependentCycleOracle(t *testing.T, lifecycle bool) {
 		}
 		permuted := append([]model.Claim(nil), claims...)
 		for i := range permuted {
-			permuted[i].RestsOn = append([]string(nil), permuted[i].RestsOn...)
-			slices.Reverse(permuted[i].RestsOn)
+			ids := append([]string(nil), permuted[i].RestsOn.IDs...)
+			slices.Reverse(ids)
+			if !permuted[i].RestsOn.None {
+				permuted[i].RestsOn = model.RestsOnIDs(ids...)
+			}
 		}
 		slices.Reverse(permuted)
 		if !reflect.DeepEqual(got, Compute(permuted, standingStore(permuted...), nil)) {
@@ -891,7 +902,7 @@ func testIndependentCycleOracle(t *testing.T, lifecycle bool) {
 						return
 					}
 					seen[id] = true
-					for _, dep := range byID[id].RestsOn {
+					for _, dep := range byID[id].RestsOn.IDs {
 						if !consumable(byID[dep]) {
 							wantInvalid[dep] = true
 						} else {
@@ -917,7 +928,7 @@ func testIndependentCycleOracle(t *testing.T, lifecycle bool) {
 			best := map[string]Path{}
 			var walk func(Path)
 			walk = func(p Path) {
-				for _, next := range byID[p[len(p)-1]].RestsOn {
+				for _, next := range byID[p[len(p)-1]].RestsOn.IDs {
 					if !consumable(byID[next]) {
 						continue
 					}
@@ -1109,10 +1120,10 @@ func TestAuditShortestDAGWitnesses400(t *testing.T) {
 			c := model.Claim{ID: fmt.Sprintf("n%d", i), Status: model.StatusDraft, Body: "draft"}
 			for j := i + 1; j < 9; j++ {
 				if rng.Intn(3) == 0 {
-					c.RestsOn = append(c.RestsOn, fmt.Sprintf("n%d", j))
+					c.RestsOn.IDs = append(c.RestsOn.IDs, fmt.Sprintf("n%d", j))
 				}
 			}
-			rng.Shuffle(len(c.RestsOn), func(a, b int) { c.RestsOn[a], c.RestsOn[b] = c.RestsOn[b], c.RestsOn[a] })
+			rng.Shuffle(len(c.RestsOn.IDs), func(a, b int) { c.RestsOn.IDs[a], c.RestsOn.IDs[b] = c.RestsOn.IDs[b], c.RestsOn.IDs[a] })
 			claims = append(claims, c)
 			byID[c.ID] = c
 		}
@@ -1121,7 +1132,7 @@ func TestAuditShortestDAGWitnesses400(t *testing.T) {
 			expected := map[string]Path{}
 			var walk func(Path)
 			walk = func(p Path) {
-				for _, d := range byID[p[len(p)-1]].RestsOn {
+				for _, d := range byID[p[len(p)-1]].RestsOn.IDs {
 					q := append(append(Path(nil), p...), d)
 					old := expected[d]
 					if old == nil || len(q) < len(old) || (len(q) == len(old) && auditLex(q, old)) {
@@ -1143,8 +1154,8 @@ func TestAuditShortestDAGWitnesses400(t *testing.T) {
 		}
 		rng.Shuffle(len(claims), func(a, b int) { claims[a], claims[b] = claims[b], claims[a] })
 		for i := range claims {
-			rng.Shuffle(len(claims[i].RestsOn), func(a, b int) {
-				claims[i].RestsOn[a], claims[i].RestsOn[b] = claims[i].RestsOn[b], claims[i].RestsOn[a]
+			rng.Shuffle(len(claims[i].RestsOn.IDs), func(a, b int) {
+				claims[i].RestsOn.IDs[a], claims[i].RestsOn.IDs[b] = claims[i].RestsOn.IDs[b], claims[i].RestsOn.IDs[a]
 			})
 		}
 		if !reflect.DeepEqual(got, Compute(claims, nil, nil)) {

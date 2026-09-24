@@ -214,7 +214,7 @@ func TestCatalogProjectionUpperBoundCoversEscapedIndentedOutput(t *testing.T) {
 		Facet:   "contract",
 		Status:  model.StatusDraft,
 		Layout:  model.LayoutCard,
-		RestsOn: []string{"widget.contract.\x00quoted\"", "widget.contract.<rest>"},
+		RestsOn: model.RestsNone("<&>\\\"\n"),
 	}
 	cat, err := Build([]model.Claim{claim}, nil)
 	if err != nil {
@@ -305,11 +305,12 @@ func TestBuild_NilCatalogDocumentAndWrite(t *testing.T) {
 func TestDocument_EdgeSerialization(t *testing.T) {
 	claims := []model.Claim{
 		{
-			ID:     "widget.contract.overview",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusLocked,
-			Layout: model.LayoutCard,
+			ID:      "widget.contract.overview",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusLocked,
+			Layout:  model.LayoutCard,
+			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 		{
 			ID:     "widget.internals.fields",
@@ -319,7 +320,7 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 			Rows: []model.Row{
 				{"field": "id", "type": "string"},
 			},
-			RestsOn: []string{"widget.contract.overview", "widget.internals.other"},
+			RestsOn: model.RestsOnIDs("widget.contract.overview", "widget.contract.sibling"),
 		},
 	}
 
@@ -352,7 +353,10 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 		t.Errorf("overview layout = %q, want card", overview.Layout)
 	}
 	if overview.Edges.RestsOn != nil {
-		t.Errorf("overview should have no rests_on edges, got %#v", overview.Edges)
+		t.Errorf("overview should have no rests_on target list, got %#v", overview.Edges)
+	}
+	if !overview.Edges.RestsOnNone || overview.Edges.RestsOnReason != "fixture claim, not backed by any real doctrine" {
+		t.Errorf("overview rests_on none = %#v, want none with reason", overview.Edges)
 	}
 
 	fields, ok := byID["widget.internals.fields"]
@@ -364,6 +368,9 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	}
 	if len(fields.Edges.RestsOn) != 2 {
 		t.Errorf("fields rests_on = %v, want 2 entries", fields.Edges.RestsOn)
+	}
+	if fields.Edges.RestsOnNone {
+		t.Errorf("fields should not be rests_on none, got %#v", fields.Edges)
 	}
 
 	// Entries must be sorted by id regardless of input order.
@@ -416,9 +423,9 @@ func TestBuild_LargeListDeterminism(t *testing.T) {
 				Module: module,
 				Status: model.StatusDraft,
 				Body:   "filler",
-				RestsOn: []string{
+				RestsOn: model.RestsOnIDs(
 					fmt.Sprintf("%s.%s.slug-%04d", module, facet, (i+1)%n),
-				},
+				),
 			})
 		}
 		return claims

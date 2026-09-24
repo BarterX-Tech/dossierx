@@ -50,6 +50,11 @@ const (
 	// gets, resolved against the config file's own directory.
 	DefaultBuildDir = "build"
 
+	// DefaultConstitution is the project-root roof file beside project.config.yaml.
+	DefaultConstitution = "constitution.yaml"
+	// DefaultProjectClaimsDir is the store for scope: project claims.
+	DefaultProjectClaimsDir = "project-claims"
+
 	// BuildOrderDirName and CodeLinksDirName are the per-module artifact
 	// subdirectories; CatalogDirName, ConformanceDirName and ViewerDirName
 	// hold regenerated outputs.

@@ -13,7 +13,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// realLeafCommands is the CLI surface, as a set: seven nouns, nineteen
+// realLeafCommands is the CLI surface, as a set: nine nouns, twenty-three
 // leaves, and nothing else. It is duplicated here rather than imported because
 // internal/comments must not depend on cmd/dossierx — the engine is the thing
 // the CLI wraps, not the other way round — and because the point of the test
@@ -21,7 +21,7 @@ import (
 // without any compiler catching it.
 //
 // The authority for this list is `dossierx --help` plus each noun's own help,
-// and it is restated in skills/dossierx/SKILL.md's "seven nouns, nineteen
+// and it is restated in skills/dossierx/SKILL.md's "nine nouns, twenty-three
 // leaves" block. If a release adds or removes a verb, this set and that block
 // move together.
 var realLeafCommands = map[string]bool{
@@ -30,9 +30,13 @@ var realLeafCommands = map[string]bool{
 	"claim show": true, "claim list": true, "claim new": true,
 	"claim lock": true, "claim unlock": true, "claim flag": true,
 	"claim reaudit": true, "claim link": true,
+	"claim recover-approved-content": true,
 
 	"comment inbox": true, "comment list": true,
 	"comment add": true, "comment reply": true,
+
+	"constitution show": true, "constitution lock": true,
+	"manifest show": true,
 
 	"track list": true, "track show": true, "track status": true,
 

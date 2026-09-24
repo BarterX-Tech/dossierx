@@ -244,8 +244,11 @@ func (r Row) MarshalYAML() (interface{}, error) {
 // tags below are the authoritative field names for claim files on disk.
 type Claim struct {
 	ID     string `yaml:"id"`
-	Facet  string `yaml:"facet"`
+	Facet  string `yaml:"facet,omitempty"`
 	Module string `yaml:"module,omitempty"`
+	// Scope is "project" for project-claims store nodes (id project.<slug>).
+	// Module claims omit it. Facet and Module are forbidden on project claims.
+	Scope  string `yaml:"scope,omitempty"`
 	Status Status `yaml:"status"`
 	Layout Layout `yaml:"layout,omitempty"`
 
@@ -302,14 +305,16 @@ type Claim struct {
 
 	// Edges. rests_on is the one claim-to-claim edge: the required
 	// dependency chain, and the drift baseline a locked claim is checked
-	// against. The retired governed_by edge (NIT-29) has no field and no
-	// shadow key: a claim file that still carries it fails strict decode.
+	// against. It is a list of claim ids, or the stated absence
+	// {none: true, reason} (NIT-24). The retired governed_by edge (NIT-29)
+	// has no field and no shadow key: a claim file that still carries it
+	// fails strict decode.
 	//
 	// Mirrors is not an edge. The field exists only so KnownFields still
 	// names the historical YAML key and LockedClaimHash / ContentHash stay
 	// byte-identical. Nothing walks it.
 	Mirrors []string `yaml:"mirrors,omitempty"`
-	RestsOn []string `yaml:"rests_on,omitempty"`
+	RestsOn RestsOn  `yaml:"rests_on,omitempty"`
 
 	// Sources is the evidence this claim rests on, cited from Body by "[n]"
 	// markers matching each entry's Ref. See model.Source for the whole
@@ -397,4 +402,9 @@ func (c Claim) EffectiveKind() Kind {
 		return KindFact
 	}
 	return c.Kind
+}
+
+// IsProjectClaim reports a project-claims store node.
+func (c Claim) IsProjectClaim() bool {
+	return c.Scope == ScopeProject || IsProjectClaimID(c.ID)
 }

@@ -31,7 +31,7 @@ func TestRunAll_NormalizesEmptySeverityToError(t *testing.T) {
 			Status:  model.StatusDraft,
 			Layout:  model.LayoutCard,
 			Body:    "x",
-			RestsOn: []string{"widget.contract.ghost"},
+			RestsOn: model.RestsOnIDs("widget.contract.ghost"),
 		},
 		// id-shape: an uppercase slug violates the id grammar —
 		// historically left Severity empty.

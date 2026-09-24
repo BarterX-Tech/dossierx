@@ -21,7 +21,7 @@ func TestAdversarialInvalidBoundaryCycles(t *testing.T) {
 				c := lockedClaim("c", "b")
 				b.Status = status
 				if self {
-					b.RestsOn = []string{"b"}
+					b.RestsOn = model.RestsOnIDs("b")
 				}
 				claims := []model.Claim{x, b, c}
 				s := standingStore(claims...)
@@ -54,7 +54,7 @@ func TestAdversarialInvalidBridgeDoesNotMergeCycles(t *testing.T) {
 	s := standingStore(claims...)
 	for _, c := range claims {
 		for _, d := range claims {
-			for _, id := range c.RestsOn {
+			for _, id := range c.RestsOn.IDs {
 				if id == d.ID {
 					recordBaseline(s, c.ID, d)
 				}
@@ -116,7 +116,7 @@ func TestInvalidRootRemainsABlockingPrerequisite(t *testing.T) {
 				a := lockedClaim("a", "root")
 				want := Path{"root", "root"}
 				if !self {
-					root.RestsOn = []string{"a"}
+					root.RestsOn = model.RestsOnIDs("a")
 					want = Path{"root", "a", "root"}
 				}
 				claims := []model.Claim{root, a}

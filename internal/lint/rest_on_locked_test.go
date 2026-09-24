@@ -16,7 +16,7 @@ func TestRestOnLockedLint(t *testing.T) {
 			name: "passing: locked claim only rests_on other locked claims",
 			claims: []model.Claim{
 				{ID: "widget.contract.overview", Status: model.StatusLocked},
-				{ID: "widget.internals.fields", Status: model.StatusLocked, RestsOn: []string{"widget.contract.overview"}},
+				{ID: "widget.internals.fields", Status: model.StatusLocked, RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantFindings: 0,
 		},
@@ -24,7 +24,7 @@ func TestRestOnLockedLint(t *testing.T) {
 			name: "passing: draft claim may rest on a draft claim",
 			claims: []model.Claim{
 				{ID: "widget.contract.overview", Status: model.StatusDraft},
-				{ID: "widget.internals.fields", Status: model.StatusDraft, RestsOn: []string{"widget.contract.overview"}},
+				{ID: "widget.internals.fields", Status: model.StatusDraft, RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantFindings: 0,
 		},
@@ -32,7 +32,7 @@ func TestRestOnLockedLint(t *testing.T) {
 			name: "failing: locked claim rests_on a draft claim",
 			claims: []model.Claim{
 				{ID: "widget.contract.overview", Status: model.StatusDraft},
-				{ID: "widget.internals.fields", Status: model.StatusLocked, RestsOn: []string{"widget.contract.overview"}},
+				{ID: "widget.internals.fields", Status: model.StatusLocked, RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantFindings: 1,
 		},

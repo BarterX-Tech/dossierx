@@ -41,7 +41,7 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 	}
 	out := map[string][]string{}
 	for _, c := range cat.Claims {
-		for _, dep := range c.RestsOn {
+		for _, dep := range c.RestsOn.IDs {
 			out[dep] = append(out[dep], c.ID)
 		}
 	}

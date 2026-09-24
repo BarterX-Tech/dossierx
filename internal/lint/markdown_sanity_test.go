@@ -325,12 +325,13 @@ func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
 	}
 	claims := []model.Claim{
 		{
-			ID:     "widget.contract.anchor",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusDraft,
-			Layout: model.LayoutCard,
-			Body:   "An anchor claim with nothing wrong with it.",
+			ID:      "widget.contract.anchor",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusDraft,
+			Layout:  model.LayoutCard,
+			Body:    "An anchor claim with nothing wrong with it.",
+			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 		{
 			ID:     "widget.contract.crafty",
@@ -342,7 +343,7 @@ func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
 				"a ` that never closes, an *opener with no partner, and a line\n" +
 				"that ends in a break marker with nothing to break to\\\n\n" +
 				"- a\n - b\n",
-			RestsOn: []string{"widget.contract.anchor"},
+			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 	}
 

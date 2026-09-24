@@ -31,7 +31,7 @@ func (RestOnLockedLint) Check(claims []model.Claim, cfg *config.Config) []Findin
 		if c.Status != model.StatusLocked {
 			continue
 		}
-		for _, target := range c.RestsOn {
+		for _, target := range c.RestsOn.IDs {
 			dep, ok := byID[target]
 			if !ok {
 				continue // dangling lint's concern

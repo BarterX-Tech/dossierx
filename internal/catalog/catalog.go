@@ -141,7 +141,9 @@ func inferLayout(c model.Claim) model.Layout {
 
 // Edges is the serialized edge graph for one claim entry.
 type Edges struct {
-	RestsOn []string `json:"rests_on,omitempty"`
+	RestsOn       []string `json:"rests_on,omitempty"`
+	RestsOnNone   bool     `json:"rests_on_none,omitempty"`
+	RestsOnReason string   `json:"rests_on_reason,omitempty"`
 }
 
 // Entry is the .catalog.json projection of a single claim: id/facet/module/
@@ -209,9 +211,14 @@ func entryFor(c model.Claim) Entry {
 		Kind:   c.EffectiveKind(),
 	}
 
-	if len(c.RestsOn) > 0 {
-		e.Edges.RestsOn = append([]string(nil), c.RestsOn...)
+	if c.RestsOn.None {
+		e.Edges.RestsOnNone = true
+		e.Edges.RestsOnReason = c.RestsOn.Reason
 	}
+	if ids := c.RestsOn.IDs; len(ids) > 0 {
+		e.Edges.RestsOn = append([]string(nil), ids...)
+	}
+
 	for _, t := range c.Tracks {
 		e.Tracks = append(e.Tracks, TrackMembership{ID: t.ID, Role: t.EffectiveRole()})
 	}
@@ -344,7 +351,8 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind())} {
 			add(value)
 		}
-		addStrings(claim.RestsOn)
+		add(claim.RestsOn.Reason)
+		addStrings(claim.RestsOn.IDs)
 		for _, track := range claim.Tracks {
 			b.add(trackStructureBytes)
 			add(track.ID)
@@ -486,10 +494,10 @@ func catalogProjectionUpperBound(cat *Catalog, limit uint64) catalogBudget {
 	}
 	for _, claim := range cat.Claims {
 		b.add(2048)
-		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind())} {
+		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind()), claim.RestsOn.Reason} {
 			b.addString(value)
 		}
-		for _, value := range claim.RestsOn {
+		for _, value := range claim.RestsOn.IDs {
 			b.addString(value)
 			b.add(64)
 		}

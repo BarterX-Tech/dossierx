@@ -1,5 +1,6 @@
-// Package lint defines the Lint interface every one of the 29 lints
+// Package lint defines the Lint interface every one of the 31 lints
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, self-edge,
+// rests-on-required, rests-on-target,
 // rows-shape,
 // supersede, raw-html-scope, roll-up, body-edge-hint,
 // code-orphan, orphan, layout-shape-mismatch, kind-shape, status-shape,

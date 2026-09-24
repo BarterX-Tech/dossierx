@@ -465,14 +465,26 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	links := 0
 
 	// The R09.4 direction blocks, built independently of the "extra" facts
-	// below so their fixed order — DEPENDS ON, DEPENDED ON BY — never depends
+	// below so their fixed order — RESTS ON, DEPENDED ON BY — never depends
 	// on which edge kinds a given claim happens to carry. GOVERNED BY was the
-	// first of the three until the edge retired (NIT-29).
-	var dependsOnBody strings.Builder
-	if len(c.RestsOn) > 0 {
-		links += len(c.RestsOn)
-		for _, id := range c.RestsOn {
-			writeRelationshipRow(&dependsOnBody, "claim-rests-on", id, c.Module, c.Facet, targetStatuses)
+	// first of the three until the edge retired (NIT-29); DEPENDS ON became
+	// RESTS ON when the stated-absence form joined it (NIT-24).
+	var restsOnBody strings.Builder
+	restsOnHas := false
+	if c.RestsOn.None {
+		restsOnHas = true
+		restsOnBody.WriteString(`<li class="claim-rests-on rests-on-none claim-relationship-none">none`)
+		if c.RestsOn.Reason != "" {
+			restsOnBody.WriteString(`<span class="claim-rests-on-reason"> — `)
+			restsOnBody.WriteString(string(markdown.RenderInline(c.RestsOn.Reason)))
+			restsOnBody.WriteString(`</span>`)
+		}
+		restsOnBody.WriteString(`</li>`)
+	} else if len(c.RestsOn.IDs) > 0 {
+		restsOnHas = true
+		links += len(c.RestsOn.IDs)
+		for _, id := range c.RestsOn.IDs {
+			writeRelationshipRow(&restsOnBody, "claim-rests-on", id, c.Module, c.Facet, targetStatuses)
 		}
 	}
 
@@ -605,7 +617,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// <details> elements themselves, which still exist, still share
 	// `name="claim-footer-<id>"`, and still carry the real `open` attribute
 	// exactly as before.
-	if links == 0 && extra.Len() == 0 {
+	if links == 0 && !restsOnHas && extra.Len() == 0 {
 		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--relationships claim-footer-chip--empty"><span class="claim-footer-chip-label">No relationships</span></span>`)
 	} else {
 		b.WriteString(`<details class="claim-links" name="`)
@@ -622,9 +634,10 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		b.WriteString(`</span></div>`)
 
 		// The direction count (2nd param) is 05 §4.10's optional mono count,
-		// shown for DEPENDS ON / DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1",
-		// "DEPENDED ON BY · 1"); a negative count omits the element.
-		writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
+		// shown for RESTS ON / DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1",
+		// "DEPENDED ON BY · 1"; the label is RESTS ON since NIT-24); a negative
+		// count omits the element.
+		writeRelationshipDirection(&b, "down", "RESTS ON", len(c.RestsOn.IDs), restsOnBody.String(), restsOnHas)
 		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
 
 		if extra.Len() > 0 {

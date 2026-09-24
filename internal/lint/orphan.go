@@ -22,14 +22,14 @@ func (orphanLint) Name() string { return "orphan" }
 func (orphanLint) Check(claims []model.Claim, _ *config.Config) []Finding {
 	hasIncoming := make(map[string]bool, len(claims))
 	for _, c := range claims {
-		for _, dep := range c.RestsOn {
+		for _, dep := range c.RestsOn.IDs {
 			hasIncoming[dep] = true
 		}
 	}
 
 	var findings []Finding
 	for _, c := range claims {
-		hasOutgoing := len(c.RestsOn) > 0
+		hasOutgoing := len(c.RestsOn.IDs) > 0
 		if hasOutgoing || hasIncoming[c.ID] {
 			continue
 		}

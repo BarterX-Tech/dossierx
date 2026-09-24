@@ -33,6 +33,9 @@ facet: contract
 module: widget
 status: draft
 body: claim a
+rests_on:
+  none: true
+  reason: fixture
 `
 
 const lockedAYAML = `id: widget.contract.a
@@ -41,6 +44,9 @@ module: widget
 status: locked
 build_role: schema
 body: claim a
+rests_on:
+  none: true
+  reason: fixture
 `
 
 const lockedARestsOnBYAML = `id: widget.contract.a
@@ -58,6 +64,9 @@ facet: contract
 module: widget
 status: draft
 body: claim b
+rests_on:
+  none: true
+  reason: fixture
 `
 
 const bannerYAML = `id: widget.contract.a
@@ -66,6 +75,9 @@ module: widget
 status: draft
 layout: banner
 body: a banner
+rests_on:
+  none: true
+  reason: fixture
 `
 
 // project is a test harness: a temp project dir (config + claims) plus the two
@@ -671,6 +683,9 @@ comments:
     created: 2026-07-24T10:12:00Z
     body: existing thread
     edited: false
+rests_on:
+  none: true
+  reason: fixture
 `
 
 const claimWithReplyIDYAML = `id: widget.contract.a
@@ -691,6 +706,9 @@ comments:
         created: 2026-07-24T10:40:00Z
         body: existing reply
         edited: false
+rests_on:
+  none: true
+  reason: fixture
 `
 
 const claimWithIDLessCommentsYAML = `id: widget.contract.a
@@ -709,6 +727,9 @@ comments:
         created: 2026-07-24T10:40:00Z
         body: legacy id-less reply
         edited: false
+rests_on:
+  none: true
+  reason: fixture
 `
 
 func stubRand(t *testing.T, hexes ...string) {

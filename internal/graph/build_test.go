@@ -204,9 +204,9 @@ func TestBuildEdges(t *testing.T) {
 		return model.Claim{ID: id, Module: "widget", Facet: "contract", Status: model.StatusDraft}
 	}
 
-	t.Run("rests_on, in the declared direction", func(t *testing.T) {
+	t.Run("rests_on in the declared direction", func(t *testing.T) {
 		a, b := base("widget.contract.a"), base("widget.contract.b")
-		a.RestsOn = []string{"widget.contract.b"}
+		a.RestsOn = model.RestsOnIDs("widget.contract.b")
 		p := buildFrom(t, cfg, a, b)
 
 		want := []Edge{
@@ -220,8 +220,9 @@ func TestBuildEdges(t *testing.T) {
 		}
 	})
 
-	t.Run("an edgeless claim produces no edge and no drop", func(t *testing.T) {
+	t.Run("rests_on none produces no edge", func(t *testing.T) {
 		a := base("widget.contract.a")
+		a.RestsOn = model.RestsNone("not backed by another claim")
 		p := buildFrom(t, cfg, a)
 		if len(p.Edges) != 0 {
 			t.Errorf("edges = %#v, want none", p.Edges)
@@ -233,20 +234,20 @@ func TestBuildEdges(t *testing.T) {
 
 	t.Run("unknown targets are dropped and counted", func(t *testing.T) {
 		a := base("widget.contract.a")
-		a.RestsOn = []string{"widget.contract.ghost", "widget.contract.spectre"}
+		a.RestsOn = model.RestsOnIDs("widget.contract.ghost")
 		p := buildFrom(t, cfg, a)
 		if len(p.Edges) != 0 {
 			t.Errorf("edges = %#v, want none", p.Edges)
 		}
-		if p.Dropped.UnresolvedEdges != 2 {
-			t.Errorf("dropped.unresolved_edges = %d, want 2", p.Dropped.UnresolvedEdges)
+		if p.Dropped.UnresolvedEdges != 1 {
+			t.Errorf("dropped.unresolved_edges = %d, want 1", p.Dropped.UnresolvedEdges)
 		}
 	})
 
 	t.Run("edges are sorted by (from, type, to)", func(t *testing.T) {
 		a, b, c := base("widget.contract.a"), base("widget.contract.b"), base("widget.contract.c")
-		a.RestsOn = []string{"widget.contract.c", "widget.contract.b"}
-		b.RestsOn = []string{"widget.contract.a"}
+		a.RestsOn = model.RestsOnIDs("widget.contract.c", "widget.contract.b")
+		b.RestsOn = model.RestsOnIDs("widget.contract.a")
 		p := buildFrom(t, cfg, b, a, c)
 
 		want := []Edge{
@@ -264,7 +265,7 @@ func TestBuildEdges(t *testing.T) {
 	// to fire at all.
 	t.Run("a self-edge survives to the payload", func(t *testing.T) {
 		a := base("widget.contract.a")
-		a.RestsOn = []string{"widget.contract.a"}
+		a.RestsOn = model.RestsOnIDs("widget.contract.a")
 		p := buildFrom(t, cfg, a)
 		want := []Edge{{From: "widget.contract.a", To: "widget.contract.a", Type: EdgeRestsOn}}
 		if !reflect.DeepEqual(p.Edges, want) {
@@ -279,19 +280,16 @@ func TestBuildDegrees(t *testing.T) {
 		return model.Claim{ID: id, Module: "m", Facet: "f", Status: model.StatusDraft}
 	}
 
-	// hub is rested on by two claims and itself rests on one, so both
-	// directions contribute to its degrees.
-	hub, a, b, doc := base("m.f.hub"), base("m.f.a"), base("m.f.b"), base("m.f.doc")
-	a.RestsOn = []string{"m.f.hub"}
-	b.RestsOn = []string{"m.f.hub"}
-	hub.RestsOn = []string{"m.f.doc"}
-	p := buildFrom(t, cfg, hub, a, b, doc)
+	// hub is rested on by two claims.
+	hub, a, b := base("m.f.hub"), base("m.f.a"), base("m.f.b")
+	a.RestsOn = model.RestsOnIDs("m.f.hub")
+	b.RestsOn = model.RestsOnIDs("m.f.hub")
+	p := buildFrom(t, cfg, hub, a, b)
 
 	want := map[string][2]int{ // id -> {in, out}
-		"m.f.hub": {2, 1},
+		"m.f.hub": {2, 0},
 		"m.f.a":   {0, 1},
 		"m.f.b":   {0, 1},
-		"m.f.doc": {1, 0},
 	}
 	for id, wd := range want {
 		n := nodeByID(t, p, id)
@@ -302,7 +300,7 @@ func TestBuildDegrees(t *testing.T) {
 
 	t.Run("a dropped edge is not counted in either degree", func(t *testing.T) {
 		c := base("m.f.c")
-		c.RestsOn = []string{"m.f.nowhere"}
+		c.RestsOn = model.RestsOnIDs("m.f.nowhere")
 		p := buildFrom(t, cfg, c)
 		n := nodeByID(t, p, "m.f.c")
 		if n.OutDegree != 0 || n.InDegree != 0 {
@@ -372,13 +370,10 @@ func TestBuildDeterministic(t *testing.T) {
 	// Wire a dense-enough edge set that ordering has something to get wrong.
 	for i := range claims {
 		if i >= 3 {
-			claims[i].RestsOn = []string{claims[i-1].ID, claims[i-3].ID}
+			claims[i].RestsOn = model.RestsOnIDs(claims[i-1].ID, claims[i-3].ID)
 		}
 		if i%5 == 0 && i+1 < len(claims) {
-			claims[i].RestsOn = append(claims[i].RestsOn, claims[i+1].ID)
-		}
-		if i%7 == 0 && i != 0 {
-			claims[i].RestsOn = append(claims[i].RestsOn, claims[0].ID)
+			claims[i].RestsOn.AppendIDs(claims[i+1].ID)
 		}
 		byID[claims[i].ID] = claims[i]
 	}
@@ -495,11 +490,10 @@ func TestBuildNilSafe(t *testing.T) {
 		// never lints, so Build has to survive it rather than assume it away.
 		p := buildFrom(t, nil,
 			model.Claim{ID: "", Module: "m", Facet: "f"},
-			model.Claim{ID: "", Module: "m", Facet: "f", RestsOn: []string{""}},
-			model.Claim{ID: "m.f.real", Module: "m", Facet: "f", RestsOn: []string{""}},
+			model.Claim{ID: "m.f.real", Module: "m", Facet: "f", RestsOn: model.RestsOnIDs("")},
 		)
-		if len(p.Nodes) != 3 {
-			t.Errorf("node count = %d, want 3 (an empty id is still a claim)", len(p.Nodes))
+		if len(p.Nodes) != 2 {
+			t.Errorf("node count = %d, want 2 (an empty id is still a claim; empty rests_on is not a ghost)", len(p.Nodes))
 		}
 		if _, err := Encode(p); err != nil {
 			t.Fatalf("Encode: %v", err)

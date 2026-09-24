@@ -44,7 +44,7 @@ func (SelfEdgeLint) Check(claims []model.Claim, _ *config.Config) []Finding {
 		// names the claim's own id twice is still one thing to delete, and
 		// duplicate entries within a single list are not this rule's
 		// subject.
-		if contains(c.RestsOn, c.ID) {
+		if contains(c.RestsOn.IDs, c.ID) {
 			findings = append(findings, Finding{
 				LintName: "self-edge",
 				ClaimID:  c.ID,

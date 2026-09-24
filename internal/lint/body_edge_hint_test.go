@@ -20,7 +20,7 @@ func TestBodyEdgeHint(t *testing.T) {
 				{
 					ID:      "widget.internals.fields",
 					Body:    "Builds on widget.contract.overview for the base shape.",
-					RestsOn: []string{"widget.contract.overview"},
+					RestsOn: model.RestsOnIDs("widget.contract.overview"),
 				},
 				{ID: "widget.contract.overview"},
 			},

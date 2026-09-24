@@ -36,14 +36,11 @@ claims_dir: claims
 	if cfg.ClaimsDir != want {
 		t.Errorf("ClaimsDir = %q, want %q", cfg.ClaimsDir, want)
 	}
-	if cfg.HubGatingEnabled() {
-		t.Errorf("HubGatingEnabled = true, want false (doctrine_facet unset)")
+	if !strings.HasSuffix(cfg.Constitution, DefaultConstitution) {
+		t.Errorf("Constitution = %q, want default %q", cfg.Constitution, DefaultConstitution)
 	}
-	// doctrine_facet must stay exactly "" — never defaulted to a guess
-	// (e.g. the first facet, or a facet named "doctrine" if one happens
-	// to exist).
-	if cfg.DoctrineFacet != "" {
-		t.Errorf("DoctrineFacet = %q, want \"\" (must not be defaulted when omitted)", cfg.DoctrineFacet)
+	if !strings.HasSuffix(cfg.ProjectClaimsDir, DefaultProjectClaimsDir) {
+		t.Errorf("ProjectClaimsDir = %q, want default %q", cfg.ProjectClaimsDir, DefaultProjectClaimsDir)
 	}
 }
 
@@ -201,7 +198,7 @@ totally_unknown_field: true
 	}
 }
 
-func TestLoadConfig_DoctrineFacetNotInFacets(t *testing.T) {
+func TestLoadConfig_UnknownDoctrineFacetFieldRefused(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
@@ -212,28 +209,10 @@ doctrine_facet: doctrine
 `)
 	_, err := LoadConfig(p)
 	if err == nil {
-		t.Fatal("expected error for doctrine_facet not present in facets, got nil")
+		t.Fatal("expected error for retired doctrine_facet field, got nil")
 	}
-	if !strings.Contains(err.Error(), "doctrine") {
-		t.Errorf("expected error to name the unknown doctrine_facet value %q, got: %v", "doctrine", err)
-	}
-}
-
-func TestLoadConfig_DoctrineFacetValid(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract, doctrine]
-modules: [ledger]
-claims_dir: claims
-doctrine_facet: doctrine
-`)
-	cfg, err := LoadConfig(p)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if !cfg.HubGatingEnabled() {
-		t.Errorf("HubGatingEnabled = false, want true")
+	if !strings.Contains(err.Error(), "doctrine_facet") {
+		t.Errorf("expected error to name doctrine_facet, got: %v", err)
 	}
 }
 

@@ -87,6 +87,7 @@ func TestSaveClaimCreatesShapeDependentEmbodimentValues(t *testing.T) {
 	claim := model.Claim{
 		ID: "widget.contract.state", Facet: "contract", Module: "widget", Status: model.StatusDraft,
 		Layout: model.LayoutCard, Body: "State vocabulary.", SourcePath: path,
+		RestsOn: model.RestsNone("fixture"),
 		Embodiment: &model.Embodiment{Mode: model.EmbodimentModeCompare, Checks: []model.EmbodimentCheck{
 			{ID: "set", Adapter: "adapter/v1", Target: "set", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{"blocked", "ready"}}},
 			{ID: "scalar", Adapter: "adapter/v1", Target: "scalar", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeScalar, Value: "07"}},
@@ -109,7 +110,7 @@ func TestSaveClaimCreatesShapeDependentEmbodimentValues(t *testing.T) {
 
 func writeClaim(t *testing.T, dir, embodiment string) {
 	t.Helper()
-	body := "id: widget.contract.state\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: State vocabulary.\nembodiment:\n  " + strings.ReplaceAll(embodiment, "\n", "\n  ") + "\n"
+	body := "id: widget.contract.state\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: State vocabulary.\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  " + strings.ReplaceAll(embodiment, "\n", "\n  ") + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "claim.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

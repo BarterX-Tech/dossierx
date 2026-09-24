@@ -65,11 +65,12 @@ func FuzzCommentBodyRoundTrip(f *testing.F) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "a.yaml")
 		original := model.Claim{
-			ID:     "widget.contract.a",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusDraft,
-			Body:   "base claim body",
+			ID:      "widget.contract.a",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusDraft,
+			Body:    "base claim body",
+			RestsOn: model.RestsNone("fixture"),
 			Comments: []model.Comment{{
 				ID:      "c-000001",
 				Status:  model.CommentStatusOpen,

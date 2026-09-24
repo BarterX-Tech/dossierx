@@ -15,7 +15,7 @@ func TestOrphan(t *testing.T) {
 		{
 			name: "passing: outgoing edge",
 			claims: []model.Claim{
-				{ID: "widget.internals.fields", RestsOn: []string{"widget.contract.overview"}},
+				{ID: "widget.internals.fields", RestsOn: model.RestsOnIDs("widget.contract.overview")},
 				{ID: "widget.contract.overview"},
 			},
 			wantIDs: nil,
@@ -24,14 +24,14 @@ func TestOrphan(t *testing.T) {
 			name: "passing: incoming edge only",
 			claims: []model.Claim{
 				{ID: "widget.contract.overview"},
-				{ID: "widget.internals.fields", RestsOn: []string{"widget.contract.overview"}},
+				{ID: "widget.internals.fields", RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantIDs: nil,
 		},
 		{
 			name: "failing: fully isolated claim",
 			claims: []model.Claim{
-				{ID: "widget.contract.overview", RestsOn: []string{"widget.internals.fields"}},
+				{ID: "widget.contract.overview", RestsOn: model.RestsOnIDs("widget.internals.fields")},
 				{ID: "widget.internals.fields"},
 				{ID: "widget.internals.lonely"},
 			},
