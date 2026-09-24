@@ -57,8 +57,8 @@ it out.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required
-  before a claim can lock** once a module uses the feature. It orders implementation (see
-  **[`dossierx-build-order`](../dossierx-build-order/SKILL.md)**) and has nothing to do with `section`/`order`, which are the
+  before a claim can lock** once a module uses the feature. It classifies a claim for
+  implementation reading (schema before behavior, and so on) and has nothing to do with `section`/`order`, which are the
   human's reading order in the viewer.
 - Edges: `mirrors` (value equality; both sides must declare it), `rests_on` (semantic dependency;
   the target must exist), `governed_by: {type, reason}` —
@@ -162,9 +162,8 @@ status <id>` REPORTS whether it is finished: COMPLETE when every claim the track
 it cites is locked. **Never treat a track as a gate.** It does not block anything, and track
 membership never gates `dossierx claim lock` — a claim locks on its own merits, and the way to
 change a locked claim's `tracks` is `unlock → fix → lock`, since `tracks` is signed by the ledger
-like every other field. A track is not a build order either: "is the feature done?" is `track
-status`; "what do I build next in this module?" is `dossierx build-order status --module <m>`, a
-different question with its own human approval (see **[`dossierx-build-order`](../dossierx-build-order/SKILL.md)**).
+like every other field. "Is the feature done?" is `track status`. What to implement next is
+locked claims, module `depends_on`, and claim `rests_on`.
 
 ## Finding the claim the human meant
 

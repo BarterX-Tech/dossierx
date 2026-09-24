@@ -116,22 +116,15 @@ func TestCLI_VersionFlag(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestCLI_BuildOrderStatus_UnknownModuleRejected(t *testing.T) {
-	root := t.TempDir()
-	cfgPath := boWriteConfig(t, root, "widget")
-
+	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  leftover.\ngoverned_by:\n  type: none\n  reason: fixture\n",
+	})
 	_, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "nope")
 	if err == nil {
-		t.Fatalf("expected build-order status to reject an unknown module")
+		t.Fatalf("build-order is retired and must fail")
 	}
-	if !strings.Contains(err.Error(), "unknown module") {
-		t.Fatalf("expected an unknown-module error, got: %v", err)
-	}
-
-	// A known module with no artifact yet must still report normally.
-	if out, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "widget"); err != nil {
-		t.Fatalf("known-but-unproposed module should not error: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "not proposed yet") {
-		t.Fatalf("expected a not-proposed-yet report for a known module, got: %s", out)
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("expected an unknown command, got: %v", err)
 	}
 }
 

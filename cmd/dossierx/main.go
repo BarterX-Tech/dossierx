@@ -126,11 +126,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
+				WithHint("run one of: dossierx <check, claim, comment, serve, skills, track, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
+			WithHint("run one of: dossierx <check, claim, comment, serve, skills, track, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -168,12 +168,11 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-six leaves, and not one more.
+	// The whole surface: seven nouns, twenty-one leaves, and not one more.
 	//
 	//	check                                                            1
-	//	claim   show list new lock unlock flag reaudit link migrate-lock-policy 9
+	//	claim   show list new lock unlock flag reaudit link migrate-lock-policy recover-approved-content 10
 	//	comment inbox list add reply                                      4
-	//	build-order propose status lock show                              4
 	//	track   list show status                                          3
 	//	serve · skills export · version                                   3
 	//
@@ -187,14 +186,17 @@ func newRootCmd() *cobra.Command {
 	// TestSurfaceIsTwentyFourLeavesUnderEightNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
-	// "track" is the eighth noun, and it was the first addition since v0.3.0
-	// built the seven. It earns its place by answering a question none of the
-	// other seven can be asked: every one of them is organized on the MODULE
-	// axis, which says who guarantees a claim, and no arrangement of them says
-	// what a user gets or whether that thing is finished. Its three leaves are
-	// all READ-ONLY by design — see track.go's package comment for why a track
-	// must never gate a lock — so the eighth noun adds a way to look at the
-	// corpus and no new way to change it.
+	// "track" is the seventh noun. It earns its place by answering a question
+	// none of the other six can be asked: every one of them is organized on the
+	// MODULE axis, which says who guarantees a claim, and no arrangement of
+	// them says what a user gets or whether that thing is finished. Its three
+	// leaves are all READ-ONLY by design — see track.go's package comment for
+	// why a track must never gate a lock — so the noun adds a way to look at
+	// the corpus and no new way to change it.
+	//
+	// "build-order" was a noun through v0.7.20 and is a hidden retired stub
+	// as of this release. A locked implementation sequence is not a product
+	// once module depends_on exists; leftover artifacts are ignored.
 	//
 	// The migration verb was the twentieth leaf, added by v0.3.0 and REMOVED by
 	// v0.4.0. It was the one door into ledger adoption, and v0.4.0 removes
@@ -205,7 +207,6 @@ func newRootCmd() *cobra.Command {
 		newCheckCmd(),
 		newClaimCmd(),
 		newCommentCmd(),
-		newBuildOrderCmd(),
 		newTrackCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
@@ -674,7 +675,7 @@ func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (
 // stub's own hint (see retired.go). One string rather than three restatements is
 // what keeps the binary and the skill from drifting into disagreeing about where
 // a caller should go next.
-const preLedgerCrossingHint = `re-propose any locked build order (dossierx build-order propose --module <m>), unlock every locked claim (dossierx claim unlock <id> --reason "..."), then lock only what you still stand behind — the first lock in a project with nothing locked crosses the store onto the ledger`
+const preLedgerCrossingHint = `unlock every locked claim (dossierx claim unlock <id> --reason "..."), then lock only what you still stand behind — the first lock in a project with nothing locked crosses the store onto the ledger`
 
 // crossPreLedger is the write-path half of the pre-ledger gate, shared by the
 // three commands that record an approval: claim lock, claim reaudit --confirm,
@@ -696,7 +697,7 @@ const preLedgerCrossingHint = `re-propose any locked build order (dossierx build
 // verb is the command path, so the message reads as that command's own refusal
 // rather than as a stray internal error.
 func crossPreLedger(cfg *config.Config, store *lock.Store, claims []model.Claim, verb string) error {
-	err := lock.CrossPreLedger(store, claims, lockedBuildOrders(cfg, claims))
+	err := lock.CrossPreLedger(store, claims, 0)
 	switch {
 	case err == nil:
 		return nil
@@ -733,7 +734,7 @@ func preLedgerPrecondition(dr *cliout.DryRun, cfg *config.Config, claims []model
 		return
 	}
 	blocked := store.PreLedgerUnadopted(digestStorePresent(cfg)) &&
-		countLockedClaims(claims)+lockedBuildOrders(cfg, claims) > 0
+		countLockedClaims(claims) > 0
 	dr.Require("pre_ledger", !blocked, boolDetail(!blocked,
 		"this project's lock store is on the ledger schema, or holds nothing that predates it, so an approval can be recorded",
 		"this project's lock store predates the lock ledger and it still holds locked artifacts, so an approval cannot be recorded here: "+preLedgerCrossingHint))

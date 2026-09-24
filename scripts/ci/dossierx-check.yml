@@ -145,24 +145,15 @@
 # existing approval records, baselines, receipts, and pending review state. So if
 # you are upgrading a project that
 # locked claims before v0.3.0, this job will fail until you do this ONCE,
-# locally, at a keyboard, IN THIS ORDER. Decide per module, before the first
-# command, whether you will re-lock every claim in it: a build order exists
-# only over a fully locked module, and the first command releases the approved
-# sequence — so a module you re-lock only partially finishes the crossing
-# gate-green but without a locked build order, and its propose + lock pair
-# waits until the day its last claim locks.
+# locally, at a keyboard, IN THIS ORDER. Leftover build-order files are
+# ignored and are not part of the crossing.
 #
-#   dossierx build-order propose --module <m>    # every LOCKED build order, re-proposed
 #   dossierx claim unlock <id> --reason "..."    # every locked claim
 #   dossierx claim lock   <id> --dry-run          # review the exact draft first
 #   dossierx claim lock   <id> --reason "..." --proposal "<snapshot>"    # re-lock only what you still stand
 #                                                # behind; the first lock in a project
 #                                                # holding nothing locked is what
 #                                                # crosses the store onto the ledger
-#   dossierx build-order propose --module <m>    # then, for every module that is
-#   dossierx build-order lock --module <m> --reason "..."
-#                                                # fully locked again: re-derive
-#                                                # the sequence and re-approve it
 #
 # then COMMIT the build/ledger/lock-store.json and build/ledger/comment-digest.json it
 # writes. Until that commit lands, every run here checks out the old-format store

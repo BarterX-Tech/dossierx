@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Build order is gone.** The `dossierx build-order` noun and its
+  propose/status/lock/show leaves are deleted, not stubbed. A locked
+  implementation sequence is not a product once module `depends_on` exists
+  (NIT-15). There is no replacement sequencer. Implement from locked
+  claims, module `depends_on`, and claim `rests_on` / `build_role`.
+  Leftover artifact files and leftover ledger rows must not refuse `check`.
+  The viewer has no Build order tab and no Mermaid bundle. The consumer
+  skill `dossierx-build-order` is not embedded. `build_role` remains a
+  claim field. Mirrors are unchanged.
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed

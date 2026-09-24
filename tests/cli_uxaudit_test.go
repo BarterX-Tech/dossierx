@@ -67,32 +67,18 @@ func TestStatusUnknownModuleExitsNonZero(t *testing.T) {
 	root := t.TempDir()
 	writeFixtureProject(t, root, "widget")
 
-	cases := [][]string{
-		{"build-order", "status", "--module", "nope"},
-		{"claim", "list", "--module", "nope"},
+	_, stderr, code := run(t, root, "claim", "list", "--module", "nope")
+	if code == 0 {
+		t.Fatalf("expected a non-zero exit for claim list with an unknown module, got 0 (stderr: %s)", stderr)
 	}
-	for _, args := range cases {
-		_, stderr, code := run(t, root, args...)
-		if code == 0 {
-			t.Fatalf("expected a non-zero exit for %v with an unknown module, got 0 (stderr: %s)", args, stderr)
-		}
-		if !strings.Contains(stderr, "unknown module") {
-			t.Fatalf("expected an unknown-module error for %v, got stderr: %s", args, stderr)
-		}
+	if !strings.Contains(stderr, "unknown module") {
+		t.Fatalf("expected an unknown-module error, got stderr: %s", stderr)
 	}
 }
 
 func TestStatusKnownButUnusedModuleExitsZero(t *testing.T) {
 	root := t.TempDir()
 	writeFixtureProject(t, root, "widget")
-
-	out, stderr, code := run(t, root, "build-order", "status", "--module", "widget")
-	if code != 0 {
-		t.Fatalf("expected exit 0 for a known-but-unproposed module, got %d (stderr: %s)", code, stderr)
-	}
-	if !strings.Contains(out, "not proposed yet") {
-		t.Fatalf("expected 'not proposed yet' for a known module, got: %s", out)
-	}
 
 	out2, stderr2, code2 := run(t, root, "claim", "list", "--module", "widget")
 	if code2 != 0 {

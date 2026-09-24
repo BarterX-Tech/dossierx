@@ -111,7 +111,6 @@ func TestLegacyLayoutRefusesEveryVerbWithGitMvLines(t *testing.T) {
 		{"check"},
 		{"check", "--validate"},
 		{"claim", "list"},
-		{"build-order", "status", "--module", "widget"},
 	} {
 		t.Run(strings.Join(verb, " "), func(t *testing.T) {
 			env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, verb...)...)
@@ -374,9 +373,6 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "flag", "widget.contract.one", "--claim-says", "one", "--now-does", "two", "--reason", "changed"); err != nil {
 			t.Fatalf("seed flag: %v", err)
 		}
-		if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-			t.Fatalf("seed propose: %v", err)
-		}
 		blWrite(t, filepath.Join(root, ".gitignore"), "build/\n")
 		return root, cfgPath
 	}
@@ -409,12 +405,6 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		refusedAndBlocked(t, cfgPath,
 			[]string{"claim", "reaudit", "widget.contract.one", "--dry-run", "--reason", "ok"},
 			[]string{"claim", "reaudit", "widget.contract.one", "--confirm", "--reason", "ok"})
-	})
-	t.Run("build-order lock", func(t *testing.T) {
-		_, cfgPath := seed(t)
-		refusedAndBlocked(t, cfgPath,
-			[]string{"build-order", "lock", "--module", "widget", "--dry-run", "--reason", "ok"},
-			[]string{"build-order", "lock", "--module", "widget", "--reason", "ok"})
 	})
 	t.Run("batch claim lock preview and refusal before the sentinel", func(t *testing.T) {
 		root, cfgPath := seed(t)
@@ -638,49 +628,12 @@ func TestCheckWarnsWhenAStyleOverrideIsInForceBesideALockedOrder(t *testing.T) {
 			t.Fatalf("claim lock %s: %v", id, err)
 		}
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("build-order propose: %v", err)
-	}
-	// Proposed but not locked: still no warning (the tab renders only locked
-	// orders, so there is nothing the override could be mis-painting yet).
 	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
 	if err != nil {
-		t.Fatalf("check after propose: %v", err)
+		t.Fatalf("check after locking claims: %v", err)
 	}
 	if hasWarning(env) {
-		t.Fatalf("the warning must not fire for a proposed-but-unlocked order; got %v", env.Warnings)
-	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("build-order lock: %v", err)
-	}
-
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check with a locked order and a style override: %v", err)
-	}
-	if !env.OK || !hasWarning(env) {
-		t.Fatalf("expected ok:true with the style-override warning, got ok=%v warnings=%v", env.OK, env.Warnings)
-	}
-	// --validate carries it too: the override is in force for whatever the
-	// next check renders, and a CI reader learns it here.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check", "--validate")
-	if err != nil {
-		t.Fatalf("check --validate: %v", err)
-	}
-	if !hasWarning(env) {
-		t.Fatalf("expected the warning on --validate, got %v", env.Warnings)
-	}
-
-	// The file removed: absent.
-	if err := os.Remove(stylePath); err != nil {
-		t.Fatalf("remove style.css: %v", err)
-	}
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check after removing the override: %v", err)
-	}
-	if hasWarning(env) {
-		t.Fatalf("the warning must vanish with the override file; got %v", env.Warnings)
+		t.Fatalf("the Build order tab is gone, so a style override must not warn about it; got %v", env.Warnings)
 	}
 }
 
@@ -700,60 +653,22 @@ func TestCheckWarnsAndStillRendersWhenALockedOrderCannotBeDrawn(t *testing.T) {
 			t.Fatalf("claim lock %s: %v", id, err)
 		}
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("build-order propose: %v", err)
-	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("build-order lock: %v", err)
-	}
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
 	if err != nil {
-		t.Fatalf("check with a sound locked order: %v", err)
+		t.Fatalf("check with locked claims and no build order: %v", err)
 	}
 	for _, w := range env.Warnings {
-		if strings.Contains(w, "is not drawn in the viewer's Build order tab") {
-			t.Fatalf("a sound locked order must not warn; got %q", w)
+		if strings.Contains(w, "Build order tab") || strings.Contains(w, "build-order") {
+			t.Fatalf("retired build-order must not warn; got %q", w)
 		}
 	}
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	before, err := os.ReadFile(viewer)
+	after, err := os.ReadFile(viewer)
 	if err != nil {
 		t.Fatalf("read viewer: %v", err)
 	}
-	if !strings.Contains(string(before), `id="dossierx-build-order-widget"`) {
-		t.Fatal("the sound order must render widget's tab entry")
-	}
-
-	artifactPath := filepath.Join(root, "build", "build-order", "widget.json")
-	tamper(t, artifactPath, `"phase": "schema"`, `"phase": "Schema"`)
-	if err := os.Remove(viewer); err != nil {
-		t.Fatalf("remove viewer: %v", err)
-	}
-
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err == nil {
-		t.Fatal("check must fail on the hand-edited artifact (content drift)")
-	}
-	var found []string
-	for _, w := range env.Warnings {
-		if strings.Contains(w, "is not drawn in the viewer's Build order tab") {
-			found = append(found, w)
-		}
-	}
-	if len(found) != 1 {
-		t.Fatalf("warnings[] carries %d build-order lines, want exactly 1: %v", len(found), env.Warnings)
-	}
-	for _, want := range []string{`build order for module "widget"`, `"Schema" is not a phase`, "dossierx build-order propose --module widget"} {
-		if !strings.Contains(found[0], want) {
-			t.Errorf("warning %q lacks %q", found[0], want)
-		}
-	}
-	after, err := os.ReadFile(viewer)
-	if err != nil {
-		t.Fatalf("the viewer must still be written when one module's order cannot be drawn: %v", err)
-	}
 	if strings.Contains(string(after), `id="dossierx-build-order-widget"`) {
-		t.Error("the undrawable order must not appear in the tab")
+		t.Error("the Build order tab must stay absent")
 	}
 	if !strings.Contains(string(after), "widget.contract.alpha") {
 		t.Error("widget's ordinary claims must still render")

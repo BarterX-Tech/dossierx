@@ -90,8 +90,6 @@ governed_by:
 `)
 	p.run("claim", "lock", "widget.contract.orientation", "--reason", "viewer-test fixture")
 	p.run("claim", "lock", "widget.internals.detail", "--reason", "viewer-test fixture")
-	p.run("build-order", "propose", "--module", "widget")
-	p.run("build-order", "lock", "--module", "widget", "--reason", "viewer-test fixture")
 	return p
 }
 
@@ -268,7 +266,7 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('navSearch')`)
-	requireAll(t, ctx, "mobile drawer must keep collapsed Tracks and both 40px utility actions above its fixed footer theme control", `
+	requireAll(t, ctx, "mobile drawer must keep collapsed Tracks and the graph utility above its fixed footer theme control", `
 		var footer = document.querySelector('.sidebar-footer');
 		var utilities = footer && footer.querySelector('.nav-utilities');
 		var tracks = document.querySelectorAll('.system-nav-group')[1];
@@ -279,9 +277,9 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		{"the sidebar footer exists", `footer`},
 		{"the footer does not shrink", `getComputedStyle(footer).flexShrink === '0'`},
 		{"the utilities row exists", `utilities`},
-		{"the utilities row has two actions", `utilities.children.length === 2`},
+		{"the utilities row has one action", `utilities.children.length === 1`},
 		{"the first action is #dxgOpen", `utilities.children[0].id === 'dxgOpen'`},
-		{"the second action targets the build order", `utilities.children[1].dataset.target === '#dossierx-build-order'`},
+		{"no build-order utility remains", `!document.querySelector('[data-target="#dossierx-build-order"]')`},
 		{"the first action is 40px tall", `getComputedStyle(utilities.children[0]).height === '40px'`},
 		{"a Tracks group exists", `tracks`},
 		{"the Tracks group is collapsed", `!tracks.open`},
@@ -397,15 +395,15 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 		var choices = footer && footer.querySelectorAll('.theme-control [data-theme-choice]');
 		var groups = scroll && scroll.querySelectorAll('.system-nav-group');
 		return scroll && footer && getComputedStyle(footer).flexShrink === '0' &&
-		  utilities && utilities.children.length === 2 && utilities.children[0].id === 'dxgOpen' &&
-		  utilities.children[1].dataset.target === '#dossierx-build-order' &&
+		  utilities && utilities.children.length === 1 && utilities.children[0].id === 'dxgOpen' &&
+		  !document.querySelector('[data-target="#dossierx-build-order"]') &&
 		  getComputedStyle(utilities.children[0]).height === '30px' &&
 		  groups && groups.length === 2 && groups[0].open && !groups[1].open &&
 		  !scroll.querySelector('[data-dxg-open]') && !scroll.querySelector('[data-target="#dossierx-build-order"]') &&
 		  choices && choices.length === 2 && choices[0].dataset.themeChoice === 'light' && choices[1].dataset.themeChoice === 'dark' &&
 		  !footer.querySelector('[data-theme-choice="system"]');
 	})()`) {
-		t.Fatal("desktop navigation must match Paper's collapsed Tracks, fixed two-action footer, and Light/Dark-only control")
+		t.Fatal("desktop navigation must match Paper's collapsed Tracks, graph-only footer, and Light/Dark-only control")
 	}
 	runCDP(t, ctx, chromedp.Click(`.theme-control [data-theme-choice="dark"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, `(function(){
@@ -424,12 +422,9 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 		t.Fatal("dark all-locked metric must use the Paper confirmation green independent of the project accent")
 	}
 
-	// Module and Build order remain ordinary keyboard-reachable reading-view
-	// selections even though Build order moved out of the accordion stack.
+	// Modules remain ordinary keyboard-reachable reading-view selections.
 	runCDP(t, ctx, chromedp.SendKeys(`.system-nav-group .sec-tab[data-target="#gadget"]`, "\n", chromedp.ByQuery))
 	pollTrue(t, ctx, `!document.getElementById('gadget').hidden && document.querySelector('.sec-tab[data-target="#gadget"]').classList.contains('on')`)
-	runCDP(t, ctx, chromedp.SendKeys(`.sidebar-footer .sec-tab[data-target="#dossierx-build-order"]`, "\n", chromedp.ByQuery))
-	pollTrue(t, ctx, `!document.getElementById('dossierx-build-order').hidden && document.querySelector('.sidebar-footer .sec-tab[data-target="#dossierx-build-order"]').classList.contains('on')`)
 
 	// Claims graph is a button, not a reading tab. Enter opens it, focus moves
 	// into the pane, and Escape returns to the exact footer trigger.

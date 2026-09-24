@@ -467,78 +467,6 @@ comment reply / on the agent's own thread
                   reply_id:string
                   thread_id:string
 
-build-order propose / one locked claim
-    argv          build-order propose --module widget
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order propose
-    data          excluded:[]
-                  locked:bool
-                  module:string
-                  path:string
-                  phases:[{claims:[string],phase:string}]
-
-build-order status / nothing proposed yet
-    argv          build-order status --module widget
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order status
-    data          covered_claims:number
-                  excluded_count:number
-                  locked:bool
-                  module:string
-                  proposed:bool
-                  stale:bool
-                  stale_ids:[]
-                  total_claims:number
-
-build-order lock / a fresh proposal
-    argv          build-order lock --module widget --reason approved
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order lock
-    data          locked_at:string
-                  module:string
-                  path:string
-                  reason:string
-
-build-order lock / nothing proposed yet
-    argv          build-order lock --module widget --reason approved
-    exit          1
-    ok            false
-    envelope      command error ok
-    command       build-order lock
-    error         code:string
-                  message:string
-    error.code    not_proposed
-
-build-order show / a locked order
-    argv          build-order show --module widget
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order show
-    data          locked:bool
-                  locked_at:string
-                  module:string
-                  path:string
-                  phases:[{claims:[],cross_module:{},definition:string,excluded_deps:[],ghosts:[],levels:[],locked:number,mermaid:string,number:number,phase:string}|{claims:[string],cross_module:{},definition:string,excluded_deps:[],ghosts:[],levels:[[string]],locked:number,mermaid:string,number:number,phase:string}]
-                  stale:bool
-
-build-order show / nothing proposed yet
-    argv          build-order show --module widget
-    exit          1
-    ok            false
-    envelope      command error ok
-    command       build-order show
-    error         code:string
-                  hint:string
-                  message:string
-    error.code    not_proposed
-
 track list / two declared tracks
     argv          track list
     exit          0
@@ -679,7 +607,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 52)
+    pinned by an invocation above (13 of 48)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -688,20 +616,16 @@ ERROR-CODE COVERAGE
         invalid_config            exit 1
         lint_failed               exit 1
         not_locked                exit 2
-        not_proposed              exit 1
         not_review_pending        exit 2
         unknown_track             exit 1
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (38)
+    reachable only from states no fixture here builds (35)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
         bad_request
         banner_claim
-        build_order_hand_edited
-        build_order_refused
-        build_order_stale
         claim_file_changed
         claim_not_serializable
         comment_digest_drift

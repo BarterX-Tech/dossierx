@@ -24,9 +24,9 @@ import (
 // the loop. Every other refusal in the CLI carries its payload in data; this was
 // the exception, and nothing about lock justified being one.
 func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("fixture precondition: this lock must be refused, got %+v", env)
 	}
@@ -39,7 +39,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 
 	var data lockRefusedData
 	envData(t, env, &data)
-	if data.ClaimID != "widget.contract.b" {
+	if data.ClaimID != "widget.overview.router" {
 		t.Fatalf("the refusal payload must name the claim, got %+v", data)
 	}
 	if data.Gate != string(cliout.CodeLintFailed) {
@@ -50,7 +50,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 	}
 	named := false
 	for _, f := range data.LintFindings {
-		if f.Lint == "build-role-required-for-locked" && f.ClaimID == "widget.contract.b" {
+		if f.Lint == "roll-up" && f.ClaimID == "widget.overview.router" {
 			named = true
 		}
 		if f.Message == "" || f.Severity == "" {
@@ -77,9 +77,9 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 // duplicated prefix is worse than untidy — it is the sort of thing a consumer
 // writes a TrimPrefix against and then breaks on.
 func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
 	if err == nil {
 		t.Fatalf("fixture precondition: this lock must be refused")
 	}

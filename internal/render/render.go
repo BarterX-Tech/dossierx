@@ -42,7 +42,7 @@ import (
 // exactly the same mistake — a client file deleted, renamed or never
 // written — into a silently empty pane.
 //
-//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/build-order.html viewer/template/build-order-ui.js viewer/template/vendor/mermaid.min.js viewer/template/fonts/inter-latin-wght.woff2 viewer/template/fonts/source-serif-4-latin-opsz-wght.woff2 viewer/template/fonts/ibm-plex-mono-latin-400.woff2 viewer/template/fonts/ibm-plex-mono-latin-500.woff2 viewer/template/fonts/ibm-plex-mono-latin-600.woff2
+//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/fonts/inter-latin-wght.woff2 viewer/template/fonts/source-serif-4-latin-opsz-wght.woff2 viewer/template/fonts/ibm-plex-mono-latin-400.woff2 viewer/template/fonts/ibm-plex-mono-latin-500.woff2 viewer/template/fonts/ibm-plex-mono-latin-600.woff2
 var shellFS embed.FS
 
 // shellFileName and styleFileName are the override-lookup names for the
@@ -65,19 +65,6 @@ const (
 	graphCSSFileName      = "graph.css"
 	systemRecordFileName  = "system-record.js"
 	viewerRuntimeFileName = "viewer-runtime.js"
-
-	// buildOrderFileName is the Build order tab's per-module partial. It is
-	// parsed from the embedded FS ONLY — it is not an override point (see
-	// loadTemplates' refusal of a legacy build_order.html override), so it
-	// lives beside the shell rather than under components/.
-	buildOrderFileName = "build-order.html"
-	// buildOrderUIFileName and mermaidFileName are the tab's two client
-	// files: the engine's own renderer glue and the vendored mermaid build
-	// (third_party/mermaid/ records its version, licence and hash). Both are
-	// injected as template.JS and only into a viewer with at least one
-	// locked build order — see shell.html's guard.
-	buildOrderUIFileName = "build-order-ui.js"
-	mermaidFileName      = "vendor/mermaid.min.js"
 )
 
 // shellTemplatePath and styleTemplatePath are the embedded paths backing
@@ -92,9 +79,6 @@ const (
 	graphCSSTemplatePath      = "viewer/template/" + graphCSSFileName
 	systemRecordTemplatePath  = "viewer/template/" + systemRecordFileName
 	viewerRuntimeTemplatePath = "viewer/template/" + viewerRuntimeFileName
-	buildOrderTemplatePath    = "viewer/template/" + buildOrderFileName
-	buildOrderUITemplatePath  = "viewer/template/" + buildOrderUIFileName
-	mermaidTemplatePath       = "viewer/template/" + mermaidFileName
 )
 
 // generatedHeader returns the comment prepended to every rendered document
@@ -185,38 +169,6 @@ type shellData struct {
 	// only for viewers with structured conformance. It intentionally is not
 	// part of ViewerRuntimeJS so no-feature viewer bytes remain unchanged.
 	ConformanceStatusGuardJS template.JS
-
-	// BuildOrders is the Build order tab: one entry per module with a LOCKED
-	// build-order artifact, in module order (see build_order_view.go). Its
-	// Modules slice is nil for a project with no locked order, and shell.html
-	// guards every byte of the tab — the sidebar group, the section, the
-	// payload block and the two script tags — on that, so such a project
-	// renders not one byte of it and never carries the vendored renderer.
-	BuildOrders BuildOrderTab
-	// HasReadinessMaps used to extend the Mermaid asset guard so a project
-	// with at least one traceable dependency condition or review cause paid
-	// the vendored renderer's ~3.5 MB cost. docs/design/screens/
-	// 06-claim-blocked-across-four-modules.md's R09.9 ("no inline dependency
-	// map") retired the inline claim-readiness trace this field guarded —
-	// viewer-runtime.js's renderClaimReadiness now renders a two-slug
-	// dependency path with no Mermaid source at all, so this is always
-	// false. The field stays (permanently false, never removed) because
-	// shell.html's `{{if or .BuildOrders.Modules .HasReadinessMaps}}` guard
-	// (shell.html:339, not L5-owned) still reads it by name; Build order's
-	// own diagrams are the only remaining reason that guard ever passes.
-	HasReadinessMaps bool
-	// BuildOrderPayload is the tab's JSON payload (buildOrderPayloadJSON),
-	// injected into <script type="application/json" id="dossierx-build-orders">
-	// under the same escaping contract as GraphPayload: encoding/json's
-	// default HTML escaping is the whole guard, applied before these bytes
-	// exist. It sits INSIDE <main class="content-area"> so a serve fragment
-	// swap re-delivers it beside the diagrams it describes.
-	BuildOrderPayload template.JS
-	// MermaidJS is the vendored mermaid build and BuildOrderUIJS the engine's
-	// shared lazy renderer glue, both engine-owned bytes off the embedded FS.
-	// shell.html injects them for a locked Build order or readiness map.
-	MermaidJS      template.JS
-	BuildOrderUIJS template.JS
 
 	// ModuleGroups is cat.Claims folded into the two-level Module -> []Facet
 	// shape fix 5 describes (one sidebar entry per module, a nested
@@ -465,8 +417,6 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
 		generatedAt:              generatedAt,
-		mermaidJS:                tmpl.mermaidJS,
-		buildOrderUIJS:           tmpl.buildOrderUI,
 	}
 
 	var data any
@@ -478,7 +428,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 			// This guard applies only to lazily requested, corpus-sized values.
 			memoryBudget = &renderByteBudget{remaining: maxBoundedRenderIntermediateBytes, exceeded: ErrIntermediateCapacityExceeded}
 		}
-		data = newLazyShellData(inputs, tmpl.partials, tmpl.buildOrder, memoryBudget)
+		data = newLazyShellData(inputs, tmpl.partials, memoryBudget)
 	} else {
 		var outputBudget *renderByteBudget
 		if maxBytes > 0 {
@@ -486,7 +436,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 			// against the output budget is therefore exact lower-bound containment.
 			outputBudget = &renderByteBudget{remaining: maxBytes - len(header), exceeded: conformance.ErrCapacityExceeded}
 		}
-		eager, err := buildEagerShellData(inputs, tmpl.partials, tmpl.buildOrder, outputBudget)
+		eager, err := buildEagerShellData(inputs, tmpl.partials, outputBudget)
 		if err != nil {
 			if errors.Is(err, conformance.ErrCapacityExceeded) {
 				return "", viewerCapacityError(maxBytes)
@@ -600,17 +550,6 @@ type loadedTemplates struct {
 	// has a fixed, audited projection contract; a project shell may reference
 	// any subset and must pay only for fields its executed branches request.
 	shellOverridden bool
-	// buildOrder is the Build order tab's per-module partial
-	// (viewer/template/build-order.html), parsed off the embedded FS with NO
-	// override branch — see loadTemplates for the refusal a legacy
-	// build_order.html override meets. Whether it is ever executed depends on
-	// buildOrderTabData finding a module with a locked artifact.
-	buildOrder *template.Template
-	// mermaidJS and buildOrderUI are the tab's two client files, raw bytes
-	// like the graph files above and typed template.JS at the shellData
-	// boundary.
-	mermaidJS    []byte
-	buildOrderUI []byte
 
 	// graphCore, graphUI and graphCSS are the claims-graph client files,
 	// always the embedded engine copies. Unlike css and shell above they have
@@ -633,21 +572,6 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	partials, err := components.Load(overrideDir)
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load component templates: %w", err)
-	}
-
-	// build_order.html was an override point until the Build order tab
-	// replaced the list it rendered; its data shape is gone with the list. A
-	// project still carrying one is TOLD, by name, rather than handed a
-	// template executed against a shape it was never written for — or,
-	// worse, silently ignored.
-	if _, found, err := components.OverrideFile(overrideDir, legacyBuildOrderOverrideName); err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: load %s override: %w", legacyBuildOrderOverrideName, err)
-	} else if found {
-		return loadedTemplates{}, fmt.Errorf("render: viewer.template_overrides contains %s, which is no longer an override point — the Build order tab is not overridable; delete the file", legacyBuildOrderOverrideName)
-	}
-	buildOrderTmpl, err := template.ParseFS(shellFS, buildOrderTemplatePath)
-	if err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: parse %s: %w", buildOrderFileName, err)
 	}
 
 	css, cssOverridden, err := components.OverrideFile(overrideDir, styleFileName)
@@ -707,28 +631,17 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", viewerRuntimeFileName, err)
 	}
-	mermaidJS, err := shellFS.ReadFile(mermaidTemplatePath)
-	if err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", mermaidFileName, err)
-	}
-	buildOrderUI, err := shellFS.ReadFile(buildOrderUITemplatePath)
-	if err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", buildOrderUIFileName, err)
-	}
 
 	return loadedTemplates{
 		partials:        partials,
 		css:             css,
 		shell:           shell,
 		shellOverridden: shellOverridden,
-		buildOrder:      buildOrderTmpl,
 		graphCore:       graphCore,
 		graphUI:         graphUI,
 		graphCSS:        graphCSS,
 		systemRecord:    systemRecord,
 		viewerRuntime:   viewerRuntime,
-		mermaidJS:       mermaidJS,
-		buildOrderUI:    buildOrderUI,
 	}, nil
 }
 
@@ -829,13 +742,6 @@ type shellInputs struct {
 
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
-
-	// buildOrders and buildOrderPayload are buildOrderTabData's two outputs
-	// for cat; mermaidJS and buildOrderUIJS the tab's two client files.
-	buildOrders       BuildOrderTab
-	buildOrderPayload template.JS
-	mermaidJS         []byte
-	buildOrderUIJS    []byte
 }
 
 // buildShellStaticData assembles the shellData passed to shell.Execute: cfg's
@@ -843,21 +749,12 @@ type shellInputs struct {
 // when cfg is nil or leaves a field blank) and the module/facet groups
 // computed from in.cat via buildGroups/buildModuleGroups, combined with the
 // css/renderedByID inputs loadTemplates and renderClaimsWithBudget already produced.
-// The Build order tab's data arrives already computed (buildOrderTabData,
-// which does the artifact reads) and is copied through.
 //
 // The four graph fields are typed on the way OUT, not on the way in: see
 // shellData.GraphCSS and the block of comments there for why plain strings
 // at those injection sites fail silently.
 func buildShellStaticData(in shellInputs) shellData {
 	cfg := in.cfg
-	// hasReadinessMaps is permanently false: 06 §R09.9 retired the inline
-	// claim-readiness dependency trace this used to gate (see the
-	// HasReadinessMaps field doc comment above). Left as a named constant,
-	// not deleted, so the one call site that still asks for it — the return
-	// below, matching shellData.HasReadinessMaps's own field comment — has
-	// something to name.
-	const hasReadinessMaps = false
 
 	title := "dossierx viewer"
 	eyebrow := ""
@@ -886,13 +783,6 @@ func buildShellStaticData(in shellInputs) shellData {
 		ConformanceStatusGuardJS: template.JS(in.conformanceStatusGuardJS),
 		ModuleGroups:             nil,
 		SoftMount:                claimCount >= softMountClaimThreshold,
-		// The Build order tab. Typed template.JS on the way out like the
-		// graph fields, for the same silent-failure reason.
-		BuildOrders:       in.buildOrders,
-		HasReadinessMaps:  hasReadinessMaps,
-		BuildOrderPayload: in.buildOrderPayload,
-		MermaidJS:         template.JS(in.mermaidJS),
-		BuildOrderUIJS:    template.JS(in.buildOrderUIJS),
 		// Built from the SAME renderedByID the module groups read, so a claim
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.

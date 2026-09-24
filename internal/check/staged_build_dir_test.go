@@ -134,23 +134,20 @@ func TestStaged_BuildOrderUnderBuildDirIsJudgedByBothModes(t *testing.T) {
 		tamperArtifact(t, cfg, "widget")
 		git(t, cfg.Dir(), "add", "-A")
 		want := validateRules(t, cfg)
-		if !hasName(want, check.RuleBuildOrderContentDrift) {
-			t.Fatalf("control precondition: --validate must refuse the tamper as %s, got %v", check.RuleBuildOrderContentDrift, want)
+		if hasName(want, "build-order-content-drift") {
+			t.Fatalf("leftover build-order files must not refuse --validate, got %v", want)
 		}
 		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped {
-			t.Fatalf("--staged took the escape hatch on a tree --validate refuses with %v", want)
-		}
-		if strings.Join(got, ",") != strings.Join(want, ",") {
-			t.Fatalf("the two modes disagree:\n--staged:   %v\n--validate: %v", got, want)
+		if skipped || hasName(got, "build-order-content-drift") {
+			t.Fatalf("--staged must ignore leftover build-order tamper: skipped=%v rules=%v", skipped, got)
 		}
 	})
 
 	t.Run("worktree-only tamper", func(t *testing.T) {
 		cfg := committedBuildOrderFixture(t, baseConfig, files, "widget")
 		tamperArtifact(t, cfg, "widget")
-		if !hasName(validateRules(t, cfg), check.RuleBuildOrderContentDrift) {
-			t.Fatalf("the worktree gate must refuse a hand-edited artifact under build/build-order/")
+		if hasName(validateRules(t, cfg), "build-order-content-drift") {
+			t.Fatalf("the worktree gate must ignore leftover build-order artifacts")
 		}
 		got, skipped := stagedRulesOrSkipped(t, cfg)
 		if skipped || len(got) != 0 {
@@ -189,8 +186,8 @@ func TestStaged_ModuleNamedLockStoreSurvivesMaterialisation(t *testing.T) {
 		tamperArtifact(t, cfg, "lock-store")
 		git(t, cfg.Dir(), "add", "-A")
 		want := validateRules(t, cfg)
-		if !hasName(want, check.RuleBuildOrderContentDrift) {
-			t.Fatalf("control precondition: --validate must refuse as %s, got %v", check.RuleBuildOrderContentDrift, want)
+		if hasName(want, "build-order-content-drift") {
+			t.Fatalf("leftover build-order files must not refuse --validate, got %v", want)
 		}
 		got, skipped := stagedRulesOrSkipped(t, cfg)
 		if skipped || strings.Join(got, ",") != strings.Join(want, ",") {

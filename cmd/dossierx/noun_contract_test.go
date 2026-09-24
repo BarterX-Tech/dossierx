@@ -17,7 +17,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -30,7 +29,7 @@ import (
 // and the process exited 0. An agent that checked the status concluded its call
 // had succeeded and that the empty result was the answer.
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
-	for _, noun := range []string{"claim", "comment", "build-order", "track", "skills"} {
+	for _, noun := range []string{"claim", "comment", "track", "skills"} {
 		t.Run(noun, func(t *testing.T) {
 			env, _, err := execReviewedCLIJSON(t, noun)
 			if err == nil {
@@ -272,15 +271,11 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 // project, which is a gate firing on correct state.
 func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("lock: %v", err)
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeUsage {
+		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
 	}
 
-	// The gate's own verdict, through the public seam: silence means the two
-	// signatures agreed on a freshly locked, untouched artifact.
 	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -291,7 +286,7 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 	}
 	for _, f := range check.Status(claims, cfg).LedgerFindings {
 		if strings.HasPrefix(f.Rule, "build-order-") {
-			t.Fatalf("the writer's signature and the gate's disagree on an untouched artifact: %s: %s", f.Rule, f.Message)
+			t.Fatalf("leftover build-order artifacts must not refuse: %s: %s", f.Rule, f.Message)
 		}
 	}
 }
@@ -321,13 +316,6 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	root := filepath.Dir(cfgPath)
 	const id = "widget.contract.a"
 
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("lock: %v", err)
-	}
-
 	// Rewind to what a pre-ledger build would have left behind: an existing
 	// store file, at the old schema version, with no ledger at all, and no
 	// comment digest store beside it. The shared helper is what knows the full
@@ -336,31 +324,23 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	storeFile := filepath.Join(root, "build", "ledger", "lock-store.json")
 	rewindStoreToPreLedger(t, storeFile)
 
-	// 1. The refusal, on both write paths, and that it IS the refusal.
+	// 1. The refusal, and that it IS the refusal. Retired build-order is usage,
+	// not a second pre-ledger emitter.
 	lockEnv, _, lockErr := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
 	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
 		t.Fatalf("claim lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
 	}
 	boEnv, _, boErr := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
-	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodePreLedgerUnadopted {
-		t.Fatalf("build-order lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, boEnv.Error)
+	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodeUsage {
+		t.Fatalf("retired build-order lock must be usage, got %+v", boEnv.Error)
 	}
 
 	// 2. The recovery, in the order the refusal text gives.
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("re-propose (FIRST: propose needs the module still fully locked): %v", err)
-	}
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "crossing onto the ledger"); err != nil {
 		t.Fatalf("unlock is gateless and always has been: %v", err)
 	}
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved after the crossing"); err != nil {
 		t.Fatalf("the crossing lock: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("re-propose after the crossing: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "re-approved after the crossing"); err != nil {
-		t.Fatalf("build-order lock after the crossing: %v", err)
 	}
 
 	// 3. The assertions.
@@ -371,14 +351,12 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	if !strings.Contains(string(after), `"version": 3`) {
 		t.Fatalf("the crossing must stamp the ledger schema:\n%s", after)
 	}
-	for _, key := range []string{id, lock.BuildOrderLedgerKey("widget")} {
-		rec, ok := readLedger(t, storeFile)[key]
-		if !ok {
-			t.Fatalf("expected a record for %q:\n%s", key, after)
-		}
-		if rec.Grandfathered {
-			t.Fatalf("%q must hold a real APPROVAL, never a grandfathered adoption: %+v", key, rec)
-		}
+	rec, ok := readLedger(t, storeFile)[id]
+	if !ok {
+		t.Fatalf("expected a record for %q:\n%s", id, after)
+	}
+	if rec.Grandfathered {
+		t.Fatalf("%q must hold a real APPROVAL, never a grandfathered adoption: %+v", id, rec)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "build", "ledger", "comment-digest.json")); statErr != nil {
 		t.Fatalf("the crossing must create the comment digest store in the same act: %v", statErr)

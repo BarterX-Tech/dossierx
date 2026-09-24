@@ -99,7 +99,7 @@ const (
 func newSkillsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skills",
-		Short: "Install the embedded DossierX agent skills (dossierx router, claims, comments, build-order, code-links) in whatever form this repo's harness reads",
+		Short: "Install the embedded DossierX agent skills (dossierx router, claims, comments, code-links) in whatever form this repo's harness reads",
 	}
 	cmd.AddCommand(newSkillsExportCmd())
 	return commandGroup(cmd)

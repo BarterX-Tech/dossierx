@@ -797,15 +797,16 @@ func envelopeOf(t *testing.T, args ...string) (cliout.Envelope, error) {
 // because the lock gate lints the about-to-be-locked form. Every claim-status
 // lint has this shape — rest-on-locked and roll-up too — which is why "go run
 // check --validate to see the finding" was never an answer.
-func buildRoleAdoptedFixture(t *testing.T) string {
+func restOnUnlockedFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"build_role: schema\n" +
-			"body: |\n  a locked claim that carries a build role.\n" +
+		"claims/banner.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
+			"build_role: orientation\n" +
+			"body: |\n  read the contract claims below in order.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
-		"claims/b.yaml": "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a draft claim with no build role.\n" +
+		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"build_role: schema\n" +
+			"body: |\n  the first draft claim.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
 }
@@ -820,16 +821,16 @@ func buildRoleAdoptedFixture(t *testing.T) string {
 // lock succeed. That is an unbreakable loop, and the findings were computed and
 // discarded one line above the refusal.
 func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
 	// The premise, stated as an assertion: the read-only pass sees nothing.
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
 		t.Fatalf("fixture precondition: check --validate must be clean, got %v", err)
 	}
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
 	if err == nil || env.OK {
-		t.Fatalf("locking a claim with no build_role in an adopted module must be refused, got %+v", env)
+		t.Fatalf("locking a banner while a sibling is draft must be refused, got %+v", env)
 	}
 	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
 		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
@@ -848,7 +849,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 		if !ok {
 			t.Fatalf("a lint finding must be an object: %#v", raw)
 		}
-		if f["lint"] == "build-role-required-for-locked" && f["claim_id"] == "widget.contract.b" {
+		if f["lint"] == "roll-up" && f["claim_id"] == "widget.overview.router" {
 			named = true
 		}
 		// The same snake_case shape check publishes as data.lint_findings, so an
@@ -865,7 +866,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 
 	// And the command claim show points at answers the same question. A
 	// next_action naming a command that reports nothing is worse than none.
-	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.b")
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.overview.router")
 	lintDetail := ""
 	for _, p := range dr.Preconditions {
 		if p.Name == "lint_clean" {
@@ -875,16 +876,15 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 			lintDetail = p.Detail
 		}
 	}
-	if !strings.Contains(lintDetail, "build-role-required-for-locked") {
+	if !strings.Contains(lintDetail, "roll-up") {
 		t.Fatalf("the dry run's lint_clean detail must name the rule, got %q", lintDetail)
 	}
 
-	// Adding the field makes the identical command succeed — which is what makes
-	// the missing rule name the ONLY thing that was ever in the way.
-	claimFile := filepath.Join(filepath.Dir(cfgPath), "claims", "b.yaml")
-	tamper(t, claimFile, "status: draft\n", "status: draft\nbuild_role: behavior\n")
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go"); err != nil {
-		t.Fatalf("with build_role set, the identical lock must succeed: %v", err)
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go"); err != nil {
+		t.Fatalf("locking the sibling first: %v", err)
+	}
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go"); err != nil {
+		t.Fatalf("with the sibling locked, the banner lock must succeed: %v", err)
 	}
 }
 
@@ -894,9 +894,9 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 // reports ok:true with zero findings. The agent is told a finding blocks its
 // lock and sent to a command that reports none.
 func TestClaimShowPointsAtACommandThatNamesTheBlockingLint(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.b")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.overview.router")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
@@ -917,11 +917,11 @@ func TestClaimShowPointsAtACommandThatNamesTheBlockingLint(t *testing.T) {
 	if strings.Contains(action, "check --validate") {
 		t.Fatalf("check --validate reports zero of these findings; sending the agent there is the loop: %q", action)
 	}
-	if !strings.Contains(action, "dossierx claim lock widget.contract.b --dry-run") {
+	if !strings.Contains(action, "dossierx claim lock widget.overview.router --dry-run") {
 		t.Fatalf("the next_action must name a command that can answer it: %q", action)
 	}
 	// The rule is named here too, so the cheapest read already carries it.
-	if !strings.Contains(action, "build-role-required-for-locked") {
+	if !strings.Contains(action, "roll-up") {
 		t.Fatalf("the next_action must name the rule: %q", action)
 	}
 }

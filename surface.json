@@ -1,45 +1,6 @@
 {
   "commands": [
     {
-      "path": "build-order lock",
-      "short": "Lock --module's proposed build-order artifact, freezing the derived sequence",
-      "flags": [
-        "--config",
-        "--dry-run",
-        "--format",
-        "--module",
-        "--reason"
-      ]
-    },
-    {
-      "path": "build-order propose",
-      "short": "Propose (and write) a build-order artifact for --module (refused unless every claim in it is locked)",
-      "flags": [
-        "--config",
-        "--dry-run",
-        "--format",
-        "--module"
-      ]
-    },
-    {
-      "path": "build-order show",
-      "short": "Print --module's build order: the machine envelope, a phase table, or one mermaid flowchart per phase",
-      "flags": [
-        "--config",
-        "--format",
-        "--module"
-      ]
-    },
-    {
-      "path": "build-order status",
-      "short": "Show --module's build-order artifact state: proposed/locked/stale and coverage",
-      "flags": [
-        "--config",
-        "--format",
-        "--module"
-      ]
-    },
-    {
       "path": "check",
       "short": "Run lint, catalog, render and the lock-ledger gate in one shot, stopping at first failure; --validate for a read-only run, --staged to judge the git index",
       "flags": [
@@ -285,7 +246,6 @@
     "ambiguous",
     "asset-scope",
     "body-edge-hint",
-    "build-role-required-for-locked",
     "code-orphan",
     "comments-unresolved",
     "cycle",
@@ -325,9 +285,6 @@
     "already_locked",
     "bad_request",
     "banner_claim",
-    "build_order_hand_edited",
-    "build_order_refused",
-    "build_order_stale",
     "claim_file_changed",
     "claim_not_found",
     "claim_not_serializable",
@@ -350,7 +307,6 @@
     "missing_flag",
     "no_artifact",
     "not_locked",
-    "not_proposed",
     "not_review_pending",
     "pre_ledger_unadopted",
     "read_only",
@@ -379,7 +335,6 @@
     "dossierx",
     "dossierx-claims",
     "dossierx-comments",
-    "dossierx-build-order",
     "dossierx-code-links"
   ],
   "http_routes": [
@@ -531,16 +486,15 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:44dc6af5a048f59778d65de6b398ed31029aa0778c8c54de0538d85bc5a6cde4",
+  "render_fingerprint": "sha256:3938ee8926f415cdaea922de68bb6041b5d3a38a217a7a2765b87ca15838d092",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:8a4d290c74ad162ae729dbcaf1aa3cf6f3228fc5234a3e08e4d45472f0bdd65c",
+    "cmd/dossierx": "sha256:6b04d23bbf3efe470bc097921bc2f98ff77a6680c99f1c53d8de2480d90257ac",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/buildorder": "sha256:9d535232f6d1c05de536df4592b7f5f7451e804e2da035e495c461e40d9dbefe",
     "internal/catalog": "sha256:358d9aa06b14b14f5a9b52686cc328e005be4596e0fa89770ac32530f4629d31",
-    "internal/check": "sha256:bba5501642f44bd52ab9b22d63157787346ab35e3f54fd1e17d33e7c8f8bed2f",
-    "internal/cliout": "sha256:9c578cd84239c34947443e1e84df064b7099b16c21e3e450b476c9223f894c66",
+    "internal/check": "sha256:66f54d7cc320e28b1f35f75f1731d660565657ddd924a6026bec7bcec36a43d6",
+    "internal/cliout": "sha256:5e7003ed5d09de7bf32a3ad9ceffd6b0ae0273c124ee57047702a765d07deb9c",
     "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
     "internal/config": "sha256:3b6ed912d2fe5b4cd622e0d49af32c3705a5960cb907f06ddc13d1842a6a810c",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
@@ -548,22 +502,22 @@
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
     "internal/graph": "sha256:39c61c63e8099f25dfdb53217036a8aca7987edf49c5d7372594efb901353f63",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
-    "internal/layout": "sha256:22b57470d1c8381dfee41e360c123d1633ae1c923bf8ec1f736fe9a00b6caeb3",
-    "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
+    "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
+    "internal/lint": "sha256:725fc4604b48205055bbf5b763353b5c70fcc5dfe9a476d83f7ffddee183e76c",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
-    "internal/lock": "sha256:d6e659bfd81c3996d503d4bd74012bc7f5a337f23412c0f35aefc5ad9eef6f36",
+    "internal/lock": "sha256:f3f3669e994210cd73aee056c6318b45b38549984c9274c848b1e831aaf6950e",
     "internal/model": "sha256:604cd3dfa6de63d2bd483425d859508e1c95b3fa77a475dfbb65b3c9ac2f2bfe",
     "internal/readiness": "sha256:705cd7a1c00c60e1ffec82a557cd13389ce49ac4b76f9ff4a3927559e353b033",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:d28a6f3c444e00df2b334a09c48aada948a9dbc93249815a14d0ad7084c70950",
+    "internal/render": "sha256:fb74bc826813525556d4cfaee01339f5984a3582d3fe18366ff8ce854196d67f",
     "internal/render/components": "sha256:9c263a323a8fdd66f5d5b3e9b52468bd229da8b1b480bcb6f9febb8e20a08a74",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:1bcd6aebec312325f2e0103e57e85c2039f4ffbf673fa78d6031bcf94ee1089a"
+    "skills": "sha256:be82027f8c3abe7b4325c24c044b14170ae4a240055e5da016fb152fd38379e7"
   },
   "envelope": {
     "keys": [
@@ -578,9 +532,6 @@
       "already_locked": 1,
       "bad_request": 1,
       "banner_claim": 1,
-      "build_order_hand_edited": 1,
-      "build_order_refused": 1,
-      "build_order_stale": 1,
       "claim_file_changed": 1,
       "claim_not_found": 2,
       "claim_not_serializable": 1,
@@ -603,7 +554,6 @@
       "missing_flag": 1,
       "no_artifact": 1,
       "not_locked": 2,
-      "not_proposed": 1,
       "not_review_pending": 2,
       "pre_ledger_unadopted": 1,
       "read_only": 1,
@@ -639,54 +589,6 @@
         "lint_findings",
         "offenders",
         "requested_ids"
-      ],
-      "buildOrderLockData": [
-        "locked_at",
-        "module",
-        "path",
-        "reason"
-      ],
-      "buildOrderPhaseData": [
-        "claims",
-        "phase"
-      ],
-      "buildOrderProposeData": [
-        "excluded",
-        "locked",
-        "module",
-        "path",
-        "phases"
-      ],
-      "buildOrderShowData": [
-        "locked",
-        "locked_at",
-        "module",
-        "path",
-        "phases",
-        "stale"
-      ],
-      "buildOrderShowPhaseData": [
-        "claims",
-        "cross_module",
-        "definition",
-        "excluded_deps",
-        "ghosts",
-        "levels",
-        "locked",
-        "mermaid",
-        "number",
-        "phase"
-      ],
-      "buildOrderStatusData": [
-        "covered_claims",
-        "excluded_count",
-        "locked",
-        "locked_at",
-        "module",
-        "proposed",
-        "stale",
-        "stale_ids",
-        "total_claims"
       ],
       "checkData": [
         "catalog_count",
@@ -984,10 +886,10 @@
     }
   ],
   "counts": {
-    "commands": 25,
-    "error_codes": 52,
+    "commands": 21,
+    "error_codes": 48,
     "http_routes": 14,
-    "lint_rules": 38,
-    "nouns": 8
+    "lint_rules": 37,
+    "nouns": 7
   }
 }

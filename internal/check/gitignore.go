@@ -53,7 +53,6 @@ func gitignoreTargets(cfg *config.Config) []gitignoreTarget {
 	}
 	for _, m := range cfg.Modules {
 		targets = append(targets,
-			gitignoreTarget{cfg.BuildOrderPath(m), fmt.Sprintf("module %q's build order", m), layout.KindBuildOrder, m},
 			gitignoreTarget{cfg.CodeLinksPath(m), fmt.Sprintf("module %q's code links", m), layout.KindCodeLinks, m},
 		)
 	}

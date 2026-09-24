@@ -31,10 +31,6 @@ modules:
 claims_dir: claims
 `
 
-// gammaSVGs is the number of non-empty phases in gamma's order: schema (1
-// claim) and behavior (1).
-const gammaSVGs = 2
-
 // newCollidingProject writes the build-order module (one draft orientation
 // claim, never ordered) and gamma (two locked claims across two phases),
 // and locks gamma's order through the CLI when lockGamma is set.
@@ -48,8 +44,6 @@ func newCollidingProject(t *testing.T, lockGamma bool) *project {
 		for _, id := range []string{"gamma.contract.schema", "gamma.contract.behavior"} {
 			p.run("claim", "lock", id, "--reason", "viewer-test fixture")
 		}
-		p.run("build-order", "propose", "--module", "gamma")
-		p.run("build-order", "lock", "--module", "gamma", "--reason", "viewer-test fixture")
 	}
 	return p
 }
@@ -63,28 +57,15 @@ func TestBuildOrderTabSurvivesAModuleNamedBuildOrder(t *testing.T) {
 	ctx, pe, _ := staticBuildOrderTab(t, p)
 	desktopViewport(t, ctx)
 
-	// Exactly one element per id: the module's own, and the tab's own.
 	if n := evalInt(t, ctx, `document.querySelectorAll('#build-order').length`); n != 1 {
 		t.Fatalf("elements with id=build-order: %d, want exactly 1 (the module's section)", n)
 	}
-	if n := evalInt(t, ctx, `document.querySelectorAll('#dossierx-build-order').length`); n != 1 {
-		t.Fatalf("elements with id=dossierx-build-order: %d, want exactly 1 (the tab's section)", n)
+	if n := evalInt(t, ctx, `document.querySelectorAll('#dossierx-build-order').length`); n != 0 {
+		t.Fatalf("the retired Build order tab leaked back: %d #dossierx-build-order nodes", n)
 	}
 
-	// The sidebar's Build order entry shows the diagrams, and ONLY them.
-	openBuildOrderTab(t, ctx)
-	waitDiagrams(t, ctx, "gamma", gammaSVGs)
-	if got := evalString(t, ctx, visibleSectionsExpr); got != "dossierx-build-order|module-section build-order-section" {
-		t.Fatalf("visible sections after clicking Build order = %q, want the tab's section alone", got)
-	}
-	if evalBool(t, ctx, `!document.getElementById('build-order').hidden`) {
-		t.Fatal("the build-order MODULE's section is visible under the Build order tab")
-	}
-
-	// The module's own sidebar entry still shows the module's cards, and
-	// hides the tab.
 	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#build-order"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, `!document.getElementById('build-order').hidden && document.getElementById('dossierx-build-order').hidden`)
+	pollTrue(t, ctx, `!document.getElementById('build-order').hidden`)
 	if got := evalString(t, ctx, visibleSectionsExpr); got != "build-order|module-section" {
 		t.Fatalf("visible sections after clicking the build-order module = %q, want the module's section alone", got)
 	}
@@ -100,41 +81,26 @@ func TestBuildOrderTabSurvivesAModuleNamedBuildOrder(t *testing.T) {
 // after it, and with an order the diagrams come back rendered.
 func TestReloadSwapsInPlaceWithAModuleNamedBuildOrder(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		lockGamma   bool
-		wantSection bool
+		name      string
+		lockGamma bool
 	}{
-		{"locked order", true, true},
-		{"no order", false, false},
+		{"locked order", true},
+		{"no order", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newCollidingProject(t, tc.lockGamma)
 			ctx := serveAndOpenLive(t, p)
 			pe := watchPageErrors(t, ctx)
 			desktopViewport(t, ctx)
-			if got := evalBool(t, ctx, `!!document.querySelector('.build-order-section')`); got != tc.wantSection {
-				t.Fatalf(".build-order-section present = %v, want %v", got, tc.wantSection)
-			}
-			if tc.lockGamma {
-				openBuildOrderTab(t, ctx)
-				waitDiagrams(t, ctx, "gamma", gammaSVGs)
+			if evalBool(t, ctx, `!!document.querySelector('.build-order-section')`) {
+				t.Fatal(".build-order-section must stay absent")
 			}
 			runCDP(t, ctx, chromedp.Evaluate(`window.__boMarker = true;`, nil))
 
-			// An external edit in the build-order module -> "changed" -> a swap.
 			p.writeClaim("bo-extra.yaml", boClaim("build-order.contract.extra", "contract", "build-order", "orientation"))
 			pollTrue(t, ctx, `!!document.getElementById('build-order.contract.extra')`)
 			if !evalBool(t, ctx, `window.__boMarker === true`) {
 				t.Fatal("the marker is gone: the swap became a full page reload")
-			}
-			if tc.lockGamma {
-				waitDiagrams(t, ctx, "gamma", gammaSVGs)
-				if !evalBool(t, ctx, `!document.getElementById('dossierx-build-order').hidden && document.getElementById('build-order').hidden`) {
-					t.Fatalf("after the swap the visible sections are %q, want the tab alone", evalString(t, ctx, visibleSectionsExpr))
-				}
-				if n := evalInt(t, ctx, `document.querySelectorAll('#dossierx-build-order .bo-error').length`); n != 0 {
-					t.Fatalf(".bo-error count after the swap = %d", n)
-				}
 			}
 			assertNoPageErrors(t, ctx, pe)
 		})

@@ -3836,23 +3836,6 @@
         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
         oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
-        // The Build order tab's renderer (the vendored mermaid build and
-        // build-order-ui.js) sits OUTSIDE .content-area and is only emitted
-        // for a project with a locked order, so a fragment swap cannot deliver
-        // it: a project that locks its FIRST build order while this page is
-        // open receives a .build-order-section with no renderer. One full
-        // reload, once, on that zero-to-one transition; every later swap has
-        // the renderer and takes the observer path. It is a one-time event
-        // only because the section is inside the same guard as the scripts.
-        // The test is the section's CLASS, which no module section carries,
-        // never its id: a module's section id is slugify(module), and a
-        // module named "build-order" once matched a getElementById here on
-        // every swap, turning each one into a full reload.
-        if (document.querySelector('.build-order-section') && typeof window.mermaid === 'undefined') {
-          window.location.reload();
-          return;
-        }
-
         // ---- re-point every lookup map at the fresh DOM ----
         initViewer();
 

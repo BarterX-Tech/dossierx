@@ -3,6 +3,7 @@ package check_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
@@ -349,14 +350,10 @@ func TestRun_FullyLockedBuildOrderHint(t *testing.T) {
 	if len(res.OpenComments) != 0 {
 		t.Fatalf("expected no open comments, got %#v", res.OpenComments)
 	}
-	foundBuildOrderHint := false
 	for _, h := range res.NextSteps {
-		if h == "module \"widget\" is fully locked with no build order yet -> dossierx build-order propose --module widget" {
-			foundBuildOrderHint = true
+		if strings.Contains(h, "build-order") {
+			t.Fatalf("fully locked modules must not require a build order, got %#v", res.NextSteps)
 		}
-	}
-	if !foundBuildOrderHint {
-		t.Fatalf("expected the build-order next-step, got %#v", res.NextSteps)
 	}
 }
 
