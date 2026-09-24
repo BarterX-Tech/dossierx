@@ -353,7 +353,7 @@ func (s *Server) buildAssetIndex(fp map[string]fileStamp) (*assetIndex, bool) {
 	}
 	idx.root = root
 
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		return nil, false
 	}

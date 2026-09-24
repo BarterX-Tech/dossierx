@@ -147,6 +147,7 @@ var lockedClaimHashOmitWhenEmpty = map[string]bool{
 	"embodiment": true,
 	"sources":    true,
 	"tracks":     true,
+	"scope":      true,
 }
 
 // LockedClaimHash returns a deterministic hash over every persisted field of c
@@ -298,6 +299,21 @@ func hashValue(h io.Writer, v reflect.Value) {
 		fmt.Fprint(h, "}")
 
 	case reflect.Struct:
+		// rests_on became a struct (NIT-24) so it could carry the stated
+		// absence {none, reason} beside the id list. The LIST form is encoded
+		// exactly as the []string it used to be, so a claim that names targets
+		// hashes to the bytes its ledger record already holds; only the new
+		// NONE form — which no existing record can contain — gets a new
+		// encoding. Domain-separated by the "none:" prefix so a claim resting
+		// on nothing can never collide with one resting on an id.
+		if r, ok := v.Interface().(model.RestsOn); ok {
+			if r.None {
+				fmt.Fprintf(h, "none:s%d:%s", len(r.Reason), r.Reason)
+				return
+			}
+			hashValue(h, reflect.ValueOf(r.IDs))
+			return
+		}
 		fmt.Fprint(h, "{")
 		hashStructFields(h, v, nil, nil)
 		fmt.Fprint(h, "}")

@@ -161,7 +161,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 				verdict.LintFindings = append(verdict.LintFindings, finding)
 			}
 		}
-		for _, depID := range claim.RestsOn {
+		for _, depID := range claim.RestsOn.IDs {
 			dep, ok := byID[depID]
 			if !ok {
 				verdict.LocalAdmissible = false
@@ -188,11 +188,6 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 			default:
 				verdict.LocalAdmissible = false
 				verdict.Refusals = append(verdict.Refusals, "unreadable_dependency:"+depID)
-				continue
-			}
-			if cfg != nil && cfg.HubGatingEnabled() && dep.Facet == cfg.DoctrineFacet && !candidateLocked(depID, candidate) {
-				verdict.LocalAdmissible = false
-				verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+cfg.DoctrineFacet+":"+depID)
 				continue
 			}
 			if store == nil || !store.LocalApprovalEnabled() {
@@ -261,7 +256,7 @@ func restCycleFrom(root, next string, claims map[string]model.Claim) bool {
 		if !ok {
 			return false
 		}
-		for _, dep := range claim.RestsOn {
+		for _, dep := range claim.RestsOn.IDs {
 			if visit(dep) {
 				return true
 			}

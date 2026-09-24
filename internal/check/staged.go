@@ -159,6 +159,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/gitrepo"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
@@ -833,6 +834,17 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	} else {
 		in.flags = flags
 	}
+
+	// The roof, from the index like everything else here: a constitution
+	// edited in the working tree but not staged is not what the commit
+	// carries, and one staged but not yet on disk is. The verdict keeps the
+	// worktree path so a finding names a file a human can open.
+	constitutionPath, err := materializeIndexFile(g, dir, cfg.ConstitutionPath())
+	if err != nil {
+		return ledgerInputs{}, err
+	}
+	in.constitution = constitution.EvaluateAt(constitutionPath, constitutionRecord(in.store))
+	in.constitution.Path = cfg.ConstitutionPath()
 
 	return in, nil
 }

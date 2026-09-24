@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -161,6 +162,15 @@ type Store struct {
 	// It is `omitempty` so a project with nothing locked keeps a store file
 	// shaped exactly as the pre-ledger one.
 	Ledger map[string]LedgerRecord `json:"ledger,omitempty"`
+
+	// Constitution is the roof's lock record (NIT-6): the content hash
+	// `constitution lock` approved, the human's reason and the time. It is
+	// what check and every claim-lock path compare the file against
+	// (constitution.Evaluate); nil means the constitution was never locked.
+	// It is a sibling of Ledger rather than a record inside it because the
+	// constitution is not a claim: none of the ledger's per-claim rules
+	// (orphan, abandoned, released) mean anything for it.
+	Constitution *constitution.LockRecord `json:"constitution,omitempty"`
 
 	path string
 
@@ -352,7 +362,7 @@ func DecodeStore(raw []byte) (*Store, error) {
 	}
 	for key := range probe {
 		switch key {
-		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger":
+		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger", "constitution":
 		default:
 			return nil, fmt.Errorf("lock: decode store: unknown key %q", key)
 		}
@@ -395,6 +405,10 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 		Receipts              json.RawMessage   `json:"receipts"`
 		LockedAt              map[string]string `json:"locked_at"`
 		Ledger                json.RawMessage   `json:"ledger"`
+		// Constitution is the roof's record (NIT-6). It is read at every
+		// schema version: the record is a sibling of the ledger, not part of
+		// it, so a pre-ledger store that carries one still knows its roof.
+		Constitution *constitution.LockRecord `json:"constitution"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
@@ -402,6 +416,7 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 	if onDisk.LockedAt != nil {
 		s.LockedAt = onDisk.LockedAt
 	}
+	s.Constitution = onDisk.Constitution
 	if len(onDisk.Ledger) > 0 {
 		s.ledgerKeyOnDisk = true
 		var ledger map[string]LedgerRecord
@@ -815,7 +830,15 @@ func ContentHash(c model.Claim) string {
 	for _, m := range c.Mirrors {
 		fmt.Fprintf(legacy, "mirrors=%s\n", m)
 	}
-	for _, r := range c.RestsOn {
+	if c.RestsOn.None {
+		fmt.Fprintf(legacy, "rests_on=none/%s\n", c.RestsOn.Reason)
+	}
+	// RESTS ON NONE (NIT-24) writes one line of its own; a target list writes
+	// the per-id lines it always did, so no existing baseline moves.
+	if c.RestsOn.None {
+		fmt.Fprintf(legacy, "rests_on=none/%s\n", c.RestsOn.Reason)
+	}
+	for _, r := range c.RestsOn.IDs {
 		fmt.Fprintf(legacy, "rests_on=%s\n", r)
 	}
 	// The retired governed_by edge used to write a "governed=" line here.
@@ -1206,11 +1229,7 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 		return claim, fmt.Errorf("lock: refused, %d error-level lint finding(s) outstanding", errCount)
 	}
 
-	if err := checkHubGating(claim, claims, cfg); err != nil {
-		return claim, err
-	}
-
-	// Third refusal path (after the lint gate and hub gating): a claim cannot
+	// Third refusal path (after the lint gate): a claim cannot
 	// lock while it carries an unresolved comment thread. THIS is the lock
 	// gate; the comments-unresolved lint is only a non-blocking warning (a
 	// project-wide error-lint would freeze all locking and take render/check
@@ -1336,27 +1355,40 @@ func ClearReviewPending(claim model.Claim, claims []model.Claim, store *Store) m
 	return claim
 }
 
+// LockConstitution records the roof's approval on the store (NIT-6): the
+// file's content hash, the human's reason and the time. It writes nothing —
+// the caller flips the file's status line and saves both, under the store
+// sentinel, exactly as a claim lock does. Re-recording is legal and is the
+// whole point of the edited-after-lock state: a file whose hash moved is
+// re-locked by a fresh record, never by editing the old one.
+func LockConstitution(store *Store, f *constitution.File, reason string, now time.Time) constitution.LockRecord {
+	rec := constitution.LockRecord{
+		Hash:     constitution.Hash(f),
+		Reason:   reason,
+		LockedAt: now.UTC().Format(time.RFC3339Nano),
+	}
+	store.Constitution = &rec
+	return rec
+}
+
 func dependencyIDs(c model.Claim) []string {
-	ids := make([]string, 0, len(c.RestsOn))
-	ids = append(ids, c.RestsOn...)
-	return ids
+	return append([]string(nil), c.RestsOn.IDs...)
 }
 
 // BaselineDependencyIDs is the dependency set whose CONTENT a locked claim is
 // baselined against: its rests_on targets, each recorded once.
 //
-// It is kept distinct from dependencyIDs (what hub gating walks) even though
-// both read rests_on today. dependencyIDs feeds a lock REFUSAL; this feeds a
-// drift baseline. The retired governed_by edge was the one input that sat in
-// this set and not the other (NIT-29); keeping the seam means a later drift-
-// only edge kind is added here, not to the gate.
+// It is kept distinct from dependencyIDs even though both read rests_on today.
+// dependencyIDs feeds a lock REFUSAL; this feeds a drift baseline. The retired
+// governed_by edge was the one input that sat in this set and not the other
+// (NIT-29); keeping the seam means a later drift-only edge kind is added here,
+// not to the gate. RESTS ON NONE contributes nothing: a stated absence is not
+// an edge and has no content to baseline (NIT-24).
 //
 // Exported because internal/comments and cmd/dossierx used to keep hand-copied
 // duplicates of this list; they call this now, so the three cannot diverge.
 func BaselineDependencyIDs(c model.Claim) []string {
-	ids := make([]string, 0, len(c.RestsOn))
-	ids = append(ids, c.RestsOn...)
-	return dedupeStable(ids)
+	return dedupeStable(c.RestsOn.IDs)
 }
 
 // dedupeStable drops repeated ids while preserving first-seen order. It is
@@ -1402,26 +1434,4 @@ func findByID(claims []model.Claim, id string) (model.Claim, bool) {
 		}
 	}
 	return model.Claim{}, false
-}
-
-// checkHubGating implements: if doctrine_facet is configured, a claim
-// naming that facet as a dependency cannot be locked until the hub
-// (doctrine) claim itself is locked. If doctrine_facet is unset this
-// check is skipped entirely, not run as a vacuous pass.
-func checkHubGating(claim model.Claim, claims []model.Claim, cfg *config.Config) error {
-	if cfg == nil || !cfg.HubGatingEnabled() {
-		return nil
-	}
-	// dependencyIDs, NOT BaselineDependencyIDs: this is a refusal, and the
-	// baseline set is the drift set, not the gating one.
-	for _, dep := range dependencyIDs(claim) {
-		depClaim, ok := findByID(claims, dep)
-		if !ok {
-			continue
-		}
-		if depClaim.Facet == cfg.DoctrineFacet && depClaim.Status != model.StatusLocked {
-			return fmt.Errorf("lock: refused, dependency %q is in doctrine facet %q and is not yet locked", dep, cfg.DoctrineFacet)
-		}
-	}
-	return nil
 }

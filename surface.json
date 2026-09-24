@@ -73,6 +73,7 @@
         "--format",
         "--layout",
         "--rests-on",
+        "--rests-on-none-reason",
         "--section"
       ]
     },
@@ -152,6 +153,24 @@
         "--body",
         "--config",
         "--dry-run",
+        "--format"
+      ]
+    },
+    {
+      "path": "constitution lock",
+      "short": "Lock the constitution: record its content hash and the human's --reason in the lock store",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
+      "path": "constitution show",
+      "short": "Print the constitution's full text, its digest and its lock state",
+      "flags": [
+        "--config",
         "--format"
       ]
     },
@@ -244,6 +263,8 @@
     "orphan",
     "raw-html-scope",
     "rest-on-locked",
+    "rests-on-required",
+    "rests-on-target",
     "roll-up",
     "rows-shape",
     "self-edge",
@@ -261,6 +282,8 @@
     "track-unowned"
   ],
   "error_codes": [
+    "CONSTITUTION_NOT_LOCKED",
+    "CONSTITUTION_OVER_CAP",
     "already_locked",
     "bad_request",
     "banner_claim",
@@ -272,7 +295,6 @@
     "config_not_found",
     "conformance_capacity_exceeded",
     "conformance_failed",
-    "dependency_not_locked",
     "empty_body",
     "git_unavailable",
     "implink_refused",
@@ -465,38 +487,40 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:e1439e66aa8c49055160ffea166ea0466f5a2ceee6e30128faae3d3cd2fb9d41",
+  "render_fingerprint": "sha256:b29a3d13a463daee57f9dddf300a01390896cd3e8ae71fb1775265a9da402814",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:f7a0d0644002df2735fc29291c5430c24e36fc4a411c2ebb78784cfe65e964a9",
+    "cmd/dossierx": "sha256:6b859869536fd6d08bbe2d5cc684aeba18c2b967d349832a499af4d0fb4fcb46",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/catalog": "sha256:a52583d600339b3001dd557c4f3d4cec6f36bc94608682f4cb32e78c9417fd4f",
-    "internal/check": "sha256:51ff1a5c75d7195229494fcf080458f9e2c6efded279ba7461bb9245c9fbf785",
-    "internal/cliout": "sha256:5e7003ed5d09de7bf32a3ad9ceffd6b0ae0273c124ee57047702a765d07deb9c",
-    "internal/comments": "sha256:e70d8353976c147f87a6248c5d4cdf407f9e38d060e600991a2621947a887278",
-    "internal/config": "sha256:d9233e4ad8765d687fdbcbe440b5e301d12c8da35f0b7d433982a9665efca193",
+    "internal/catalog": "sha256:377c9fe198f52d3680a163239a3db46392eb4f7c4ba3fe701fd96273f9829093",
+    "internal/check": "sha256:95e22356986b7a86c1f656043957da15995415be8d47f529c99feca6ff0f2ebd",
+    "internal/cliout": "sha256:bbd11a5f3a2b24aee4d557280f470f971f2124402dbabb5d1a8cac678bce1bfe",
+    "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
+    "internal/config": "sha256:a15827d131e944f626a8a539da72b5b66d5c2fdc08a53208ed6652cd51da6a5a",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
+    "internal/constitution": "sha256:d40d8ae4bb547e32a9c04fbae73cd887f290bab08e669f1355fbe196af8ccc31",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
-    "internal/graph": "sha256:13ed66aa9ccd5a035b3b6d865eab5cb4280dd5de42bd69dae70baa9d92c86320",
+    "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:d14977581148f9ceba9a4c58ec5aff43d56e302f2800352c812f159e5aa4ae42",
-    "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
-    "internal/lock": "sha256:b4d7b8906a10adff8ead6c00a227c5184474c285d61c3d20c2b1dcac983c2bff",
-    "internal/model": "sha256:b42d8aaec9529e28c36eee7a389e6c98565e8b3f0ba5b0a042f946e50ff63303",
-    "internal/readiness": "sha256:8cc946fb2bd2d27a632668e12a161f8789ff376b958ff921ed8c334803b48ada",
+    "internal/lint": "sha256:c4350530e1907839833a59ff3c81bafe366822e35bd8a1e91f5c461445c7a624",
+    "internal/loader": "sha256:3f016bec4118c24d48427e7ed085288b5df5ae8f4040dafabcfda907becda39a",
+    "internal/lock": "sha256:e192569b38c5968faa5e8b9079e815e62569bd0de679424a5e62bb7db8861fa4",
+    "internal/model": "sha256:0fd89e250d483bda6ef3d3b642627b29d8b1fe281370d2b888664379c1bf588c",
+    "internal/projectclaims": "sha256:95004afec9f9248fb6adfc32c911713555204b6bf530e4259993e5b3169924f5",
+    "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
     "internal/reaudit": "sha256:cfa9ca71f387eac1ec8ce841cf80a59d2acd14f20a001820987d7cde7ccf5852",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:0f2da95b74f981881c1f39f57904d53587ba1e8fabee122e3fa9cefc9b1366f8",
-    "internal/render/components": "sha256:0ed231a36040e00c3ce3a3fde92eaf717f6368bd12eec8cdef8add5ee7503af9",
+    "internal/render": "sha256:9b23f9f62702b543f4f5c8fe8351a9c44f1ba7a8c00423fcc446d56f825d1944",
+    "internal/render/components": "sha256:e4170bcb14adef2b15d4d19a8995850800013e21ef9a30a577e8171afb91b11e",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
+    "internal/serve": "sha256:0ad4bd18550a8d50d5a55b39293549398a62c78379c20b97b9c4969305ea6867",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:04ae742739a21a4319fd0b33ba5d71246bb35f00698e2c1aed5ddd9b032351e2"
+    "skills": "sha256:882f46d9f03cfc7f20c547cbdc60a30955682fad2ae3a6e0fb1b72e638205ac5"
   },
   "envelope": {
     "keys": [
@@ -508,6 +532,8 @@
       "warnings"
     ],
     "exit_codes": {
+      "CONSTITUTION_NOT_LOCKED": 1,
+      "CONSTITUTION_OVER_CAP": 1,
       "already_locked": 1,
       "bad_request": 1,
       "banner_claim": 1,
@@ -519,7 +545,6 @@
       "config_not_found": 2,
       "conformance_capacity_exceeded": 1,
       "conformance_failed": 1,
-      "dependency_not_locked": 1,
       "empty_body": 1,
       "git_unavailable": 1,
       "implink_refused": 1,
@@ -600,7 +625,9 @@
       ],
       "claimEdgesData": [
         "depended_on_by",
-        "rests_on"
+        "rests_on",
+        "rests_on_none",
+        "rests_on_reason"
       ],
       "claimLinkData": [
         "claim_id",
@@ -686,6 +713,22 @@
         "claim_id",
         "reply_id",
         "thread_id"
+      ],
+      "constitutionLockData": [
+        "comment_digests_adopted",
+        "digest",
+        "path",
+        "record",
+        "relocked"
+      ],
+      "constitutionShowData": [
+        "digest",
+        "lock",
+        "path",
+        "present",
+        "sections",
+        "status",
+        "text"
       ],
       "flagData": [
         "claim_id",
@@ -854,10 +897,10 @@
     }
   ],
   "counts": {
-    "commands": 20,
-    "error_codes": 48,
+    "commands": 22,
+    "error_codes": 49,
     "http_routes": 14,
-    "lint_rules": 29,
-    "nouns": 7
+    "lint_rules": 31,
+    "nouns": 8
   }
 }
