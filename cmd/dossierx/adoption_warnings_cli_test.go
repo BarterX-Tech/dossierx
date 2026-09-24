@@ -52,7 +52,7 @@ func adoptableCommentFixture(t *testing.T) string {
 		"claims/locked.yaml": "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  a locked claim, present so the project is ledger- and digest-covered.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"" +
 			"comments:\n" +
 			"  - id: c-11aa22\n    status: resolved\n    author: human\n" +
 			"    created: \"2026-07-26T09:00:00Z\"\n    body: looks right.\n    edited: false\n" +
@@ -65,7 +65,7 @@ func adoptableCommentFixture(t *testing.T) string {
 	// would already have an entry and there would be nothing left to adopt.
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a draft claim the comment digest store has never seen.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"" +
 		"rests_on:\n  - widget.contract.main\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "a.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write the late claim: %v", err)
@@ -172,7 +172,7 @@ func TestFirstCheckOfANewProjectDoesNotWarnAboutAdoption(t *testing.T) {
 	}
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a brand new claim that already carries a thread.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"" +
 		"comments:\n" +
 		"  - id: c-8136dd\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: is this true?\n    edited: false\n"

@@ -31,8 +31,8 @@
   // suite off these names.
   //
   // Constants (all frozen, all JSON-able):
-  //   EDGE_TYPES           ["rests_on", "governed_by"]
-  //   DIRECTED_EDGE_TYPES  ["rests_on", "governed_by"] — the SCC edge set
+  //   EDGE_TYPES           ["rests_on"]
+  //   DIRECTED_EDGE_TYPES  ["rests_on"] — the SCC edge set
   //   GHOST_PREFIX         "ghost:" — id prefix of an out-of-scope endpoint
   //   FACET_SLOT_COUNT     20 — the categorical palette's slot count
   //   FACT_RULE_IDS        the eight fact rule ids, in emission order
@@ -81,19 +81,19 @@
   // The array form exists so a one-liner harness can call scc() without
   // building objects. An edge with no type is treated as a DIRECTED edge of
   // unnamed type: it participates in scc(), and it is excluded from the
-  // by-type filters (governed_by in particular) that name a type explicitly.
+  // by-type filters that name a type explicitly.
   //
   // Returned edges are always the object form.
 
   // EDGE_TYPES is the closed set of relations model.Claim declares. It is the
   // canonical ordering used by encodeState and by every by-type sort.
-  var EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
+  var EDGE_TYPES = Object.freeze(['rests_on']);
 
   // DIRECTED_EDGE_TYPES is the subset scc() walks. Today that is every
   // remaining edge kind; the name is kept because gapRules and the pane
   // still distinguish "types that participate in cycles" from display-only
   // filters if a later kind is added.
-  var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
+  var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on']);
 
   // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
   // representative. aggregateEdges() emits "ghost:<claim id>" for it rather
@@ -658,7 +658,7 @@
   // ------------------------------------------------------------------
 
   // isDirectedType reports whether an edge type participates in cycle
-  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
+  // detection. The remaining edge type does (`rests_on`).
   // An untyped edge ("") is treated as directed, which is what makes
   // the [from, to] pair form usable in a one-liner harness.
   function isDirectedType(type) {
@@ -818,7 +818,7 @@
   }
 
   // selfEdges returns the ids in nodeIds that are their own target under ANY
-  // edge type — rests_on or governed_by, plus any retired kind still present
+  // edge type — rests_on, plus any retired kind still present
   // in a payload. It is reported separately
   // from scc() and never merged into the cycle list, because the engine
   // already has a dedicated error-severity `self-edge` lint distinct from
@@ -1480,9 +1480,10 @@
 
   // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
   // entry in the URL. The mapping is positional against EDGE_TYPES, so the
-  // two cannot drift. Letter identity is stable across the retired `mirrors`
-  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
-  var TYPE_LETTERS = 'rg';
+  // two cannot drift. Letter identity is stable across retired kinds:
+  // r = rests_on. An old hash carrying `g` or `m` is ignored, the same way
+  // the retired `mirrors` letter already was.
+  var TYPE_LETTERS = 'r';
 
   // defaultState returns a fresh state object — everything on, nothing
   // filtered, nothing selected. Fresh rather than shared: a caller that

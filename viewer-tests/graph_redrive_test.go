@@ -61,11 +61,12 @@ import (
 // =====================================================================
 
 // deepLinkHash is a full shared link: a reading-view target, then the graph
-// segment. Every graph field in it differs from defaultState() —
+// segment. Every graph field in it differs from defaultState() except the
+// remaining edge type, which is rests_on and therefore already the default —
 // granularity claims -> module, overlay none -> governance, labels on -> off,
-// both remaining edge types -> one, nothing selected -> a node, facet scope all ->
-// contract — so "the pane restored this state" cannot be satisfied by a pane
-// that simply opened on its defaults.
+// nothing selected -> a node, facet scope all -> contract — so "the pane
+// restored this state" cannot be satisfied by a pane that simply opened on
+// its defaults.
 //
 // The MODULE axis is the one field deliberately left at its default, because
 // the selection assertion below counts the nodes the canvas drew and wants
@@ -146,7 +147,6 @@ func TestGraphDeepLinkOnLoadOpensAndRestoresThePane(t *testing.T) {
 		{"overlay", `document.getElementById('dxgOverlay').value`, "governance"},
 		{"labels toggle", `document.querySelector('[data-dxg-labels]').getAttribute('aria-pressed')`, "false"},
 		{"rests_on toggle", `document.querySelector('[data-dxg-type="rests_on"]').getAttribute('aria-pressed')`, "true"},
-		{"governed_by toggle", `document.querySelector('[data-dxg-type="governed_by"]').getAttribute('aria-pressed')`, "false"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

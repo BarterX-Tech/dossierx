@@ -192,7 +192,7 @@ func LockedClaimHash(c model.Claim) string {
 // skipped here.
 //
 // exclude and omitWhenEmpty apply only at this level; nested structs
-// (model.Governed, model.Source, model.TrackRef) are called with both nil and
+// (model.Source, model.TrackRef) are called with both nil and
 // hash all of their own fields, since both maps name top-level claim fields.
 func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[string]bool) {
 	t := v.Type()

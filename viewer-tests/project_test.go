@@ -94,18 +94,13 @@ modules:
 claims_dir: claims
 `
 
-// draftClaimYAML is a single lockable draft claim with a governed_by: none
-// escape hatch (so it needs no doctrine claim to be lint-clean).
+// draftClaimYAML is a single lockable draft claim.
 const draftClaimYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
 body: |
-  a claim under review.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  a claim under review.`
 
 const testClaimID = "widget.contract.overview"
 

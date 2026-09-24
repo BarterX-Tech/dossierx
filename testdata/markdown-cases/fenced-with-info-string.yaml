@@ -12,6 +12,3 @@ body: |
     - a
     - b
   ```
-governed_by:
-  type: none
-  reason: markdown renderer test fixture

@@ -11,8 +11,8 @@ import (
 // two stores. It is the single authority the comment ops, reaudit, and the
 // check/serve reconciler all consult so the three triggers can never diverge.
 //
-//   - drift: a dependency (lock.BaselineDependencyIDs — c.RestsOn ∪
-//     a claim-valued c.Governed.Type) whose recorded per-dependent baseline no
+//   - drift: a dependency (lock.BaselineDependencyIDs — c.RestsOn)
+//     whose recorded per-dependent baseline no
 //     longer matches its current content hash. This is computed EXACTLY like
 //     lock.DetectStale — via ls.Baseline(c.ID, dep) compared to
 //     lock.ContentHash(depClaim) — and deliberately NOT via ls.Hashes[dep],

@@ -45,7 +45,7 @@ func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
 		claim := "id: " + id + "\n" +
 			"facet: contract\nmodule: concmod\nstatus: draft\nlayout: card\n" +
 			"body: |\n  concurrently-locked claim number " + strconv.Itoa(i) + ".\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+			""
 		if err := os.WriteFile(filepath.Join(claimsDir, "c"+strconv.Itoa(i)+".yaml"), []byte(claim), 0o644); err != nil {
 			t.Fatalf("write claim %s: %v", id, err)
 		}
@@ -136,7 +136,7 @@ func TestVeryLongClaimIDHandledEndToEnd(t *testing.T) {
 	claim := "id: " + id + "\n" +
 		"facet: contract\nmodule: longidmod\nstatus: draft\nlayout: card\n" +
 		"body: |\n  claim with a very long id.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(filepath.Join(claimsDir, "long.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

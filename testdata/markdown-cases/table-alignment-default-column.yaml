@@ -7,6 +7,3 @@ body: |
   | L | C | R | D |
   | :-- | :-: | --: | --- |
   | 1 | 2 | 3 | 4 |
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - alignment - a column with no colon carries no class at all

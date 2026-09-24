@@ -291,11 +291,7 @@ sources:
     title: Short
     url: https://example.test/short
     accessed_on: 2026-01-02
-    supports: "One line."
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+    supports: "One line."`)
 	return p
 }
 

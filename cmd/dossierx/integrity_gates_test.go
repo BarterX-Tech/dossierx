@@ -153,7 +153,7 @@ func TestBuildOrderProposeRefusesToDiscardALockedOrder(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -169,7 +169,7 @@ func TestBuildOrderProposeStillRecomputesAStaleOrder(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -454,7 +454,7 @@ func TestClaimShowNeverSuggestsFlaggingAStructuredLayout(t *testing.T) {
 	claim := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: table\n" +
 		"body: |\n  a table claim.\n" +
 		"rows:\n  - name: alpha\n    value: one\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -561,7 +561,7 @@ func restsOnPairProject(t *testing.T, root string) (cfgPath, alphaPath, betaPath
 	if err := os.WriteFile(alphaPath, []byte("id: widget.contract.alpha\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
 		"build_role: schema\n"+
 		"body: |\n  the alpha body.\n"+
-		"governed_by:\n  type: none\n  reason: fixture\n"), 0o644); err != nil {
+		""), 0o644); err != nil {
 		t.Fatalf("write alpha: %v", err)
 	}
 	betaPath = filepath.Join(claimsDir, "beta.yaml")
@@ -569,7 +569,7 @@ func restsOnPairProject(t *testing.T, root string) (cfgPath, alphaPath, betaPath
 		"build_role: behavior\n"+
 		"rests_on:\n  - widget.contract.alpha\n"+
 		"body: |\n  the beta body.\n"+
-		"governed_by:\n  type: none\n  reason: fixture\n"), 0o644); err != nil {
+		""), 0o644); err != nil {
 		t.Fatalf("write beta: %v", err)
 	}
 	return cfgPath, alphaPath, betaPath
@@ -678,7 +678,7 @@ func TestBuildOrderLockHandEditReportsItsOwnCode(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -755,7 +755,7 @@ func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -771,7 +771,7 @@ func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *te
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -787,7 +787,7 @@ func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -803,7 +803,7 @@ func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -819,7 +819,7 @@ func TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {

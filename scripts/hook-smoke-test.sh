@@ -190,8 +190,7 @@ YAML
 		git config user.name "hook smoke test"
 		git config commit.gpgsign false
 		"$BIN" claim new "$CLAIM_ID" \
-			--body "the widget answers within 200ms." \
-			--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+			--body "the widget answers within 200ms." \ \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
 		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -216,8 +215,7 @@ YAML
 	(
 		cd "$repo/$sub"
 		"$BIN" claim new "$CLAIM_ID" \
-			--body "the widget answers within 200ms." \
-			--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+			--body "the widget answers within 200ms." \ \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
 		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -673,8 +671,7 @@ YAML
 (
 	cd "$SPLIT/docs"
 	"$BIN" claim new "$CLAIM_ID" \
-		--body "the widget answers within 200ms." \
-		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+		--body "the widget answers within 200ms." \ \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
 	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -801,8 +798,7 @@ YAML
 	git config user.name "hook smoke test"
 	git config commit.gpgsign false
 	"$BIN" claim new "$CLAIM_ID" \
-		--body "the widget answers within 200ms." \
-		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+		--body "the widget answers within 200ms." \ \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
 	reviewed_lock "$CLAIM_ID" "approved for the smoke test"

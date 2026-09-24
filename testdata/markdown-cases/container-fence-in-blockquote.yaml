@@ -10,6 +10,3 @@ body: |
   > code block
   > inside blockquote
   > ```
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - tests fence inside blockquote (currently escapes prefixes)

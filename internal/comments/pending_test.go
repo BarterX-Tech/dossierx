@@ -21,15 +21,14 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// governedPair returns a locked doctrine hub and a locked claim governed by it
-// through governed_by.type ONLY — no rests_on naming the hub — plus
+// restsOnPair returns a locked hub and a locked claim that rests_on it, plus
 // a store already baselined at the hub's current content.
-func governedPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
+func restsOnPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 	t.Helper()
 	hub = model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
 	child = model.Claim{
 		ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked,
-		Body: "child", Governed: model.Governed{Type: hub.ID},
+		Body: "child", RestsOn: []string{"widget.doctrine.hub"},
 	}
 	var err error
 	store, err = lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
@@ -41,7 +40,7 @@ func governedPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 }
 
 func TestPendingTriggers_GovernorEditIsDrift(t *testing.T) {
-	hub, child, store := governedPair(t)
+	hub, child, store := restsOnPair(t)
 
 	// Baselined and unchanged: no trigger at all.
 	if drift, flag, open := PendingTriggers(child, []model.Claim{hub, child}, store, nil); drift || flag || open != 0 {
@@ -52,7 +51,7 @@ func TestPendingTriggers_GovernorEditIsDrift(t *testing.T) {
 	hub.Body = "doctrine v2"
 	drift, _, _ := PendingTriggers(child, []model.Claim{hub, child}, store, nil)
 	if !drift {
-		t.Fatalf("editing the governing claim must report drift=true — this is the trigger lock.DetectStale acted on when it wrote review_pending")
+		t.Fatalf("editing the rests_on target must report drift=true — this is the trigger lock.DetectStale acted on when it wrote review_pending")
 	}
 	if !Recompute(child, []model.Claim{hub, child}, store, nil) {
 		t.Fatalf("Recompute must agree with PendingTriggers; a comment op that disagrees erases the drift silently")
@@ -72,11 +71,6 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 		child model.Claim
 		edit  func(claims []model.Claim)
 	}{
-		{
-			name:  "governed_by",
-			child: model.Claim{ID: "c1", Facet: "contract", Module: "widget", Status: model.StatusLocked, Governed: model.Governed{Type: hub.ID}},
-			edit:  func(claims []model.Claim) { claims[0].Body = "doctrine v2" },
-		},
 		{
 			name:  "rests_on",
 			child: model.Claim{ID: "c3", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{rested.ID}},
@@ -111,12 +105,12 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 	}
 }
 
-// TestPendingTriggers_GovernedByNoneIsNotADependency: "none" is the sentinel for
-// "deliberately ungoverned". It names no claim, so it can never drift.
-func TestPendingTriggers_GovernedByNoneIsNotADependency(t *testing.T) {
+// TestPendingTriggers_NoRestsOnCreatesNoBaseline: a claim with no rests_on
+// names no dependency, so it can never drift.
+func TestPendingTriggers_NoRestsOnCreatesNoBaseline(t *testing.T) {
 	claim := model.Claim{
-		ID: "widget.contract.ungoverned", Facet: "contract", Module: "widget", Status: model.StatusLocked,
-		Body: "ungoverned", Governed: model.Governed{Type: "none", Reason: "deliberately ungoverned"},
+		ID: "widget.contract.independent", Facet: "contract", Module: "widget", Status: model.StatusLocked,
+		Body: "ungoverned",
 	}
 	store, err := lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
 	if err != nil {
@@ -125,9 +119,9 @@ func TestPendingTriggers_GovernedByNoneIsNotADependency(t *testing.T) {
 	lock.RefreshBaseline(claim, []model.Claim{claim}, store)
 
 	if _, known := store.Baseline(claim.ID, "none"); known {
-		t.Fatalf("governed_by.type: none must create no baseline; store has %v", store.Hashes)
+		t.Fatalf("a claim with no rests_on must create no baseline; store has %v", store.Hashes)
 	}
 	if drift, _, _ := PendingTriggers(claim, []model.Claim{claim}, store, nil); drift {
-		t.Fatalf("governed_by.type: none must never report drift")
+		t.Fatalf("a claim with no rests_on must never report drift")
 	}
 }

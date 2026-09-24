@@ -144,11 +144,7 @@ facet: contract
 module: %[1]s
 status: draft
 body: |
-  a claim under review.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-%[2]s
+  a claim under review.%[2]s
 `
 
 // A navigation group is both an automatic orientation aid and a reader-owned

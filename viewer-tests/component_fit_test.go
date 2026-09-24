@@ -26,11 +26,7 @@ facet: %s
 module: widget
 status: draft
 body: |
-  soft-mount lock-metric fixture %d.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`, id, facet, i))
+  soft-mount lock-metric fixture %d.`, id, facet, i))
 	}
 	return p
 }
@@ -62,32 +58,20 @@ tracks:
   - id: review
     role: owns
 body: |
-  the widget orientation claim.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  the widget orientation claim.`)
 	p.writeClaim("widget-internals.yaml", `id: widget.internals.detail
 facet: internals
 module: widget
 status: draft
 build_role: verification
 body: |
-  the widget implementation detail.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  the widget implementation detail.`)
 	p.writeClaim("gadget-contract.yaml", `id: gadget.contract.orientation
 facet: contract
 module: gadget
 status: draft
 body: |
-  the gadget orientation claim.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  the gadget orientation claim.`)
 	p.run("claim", "lock", "widget.contract.orientation", "--reason", "viewer-test fixture")
 	p.run("claim", "lock", "widget.internals.detail", "--reason", "viewer-test fixture")
 	return p
@@ -464,11 +448,7 @@ module: widget
 status: draft
 emphasis: true
 body: |
-  An approved claim can be important without being a warning.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  An approved claim can be important without being a warning.`)
 	p.run("claim", "lock", "widget.contract.locked", "--reason", "viewer test lock")
 	p.writeClaim("warning.yaml", `id: widget.contract.warning
 facet: contract
@@ -476,11 +456,7 @@ module: widget
 status: draft
 layout: banner
 body: |
-  This is an explicit warning callout.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  This is an explicit warning callout.`)
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()))
 	pollTrue(t, ctx, `!!document.getElementById('widget.contract.locked')`)

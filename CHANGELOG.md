@@ -33,12 +33,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged.
 - The `mirrors` edge is gone. `claim new --mirrors` is gone; `claim show`
   no longer reports `mirrors`/`mirrored_by`; catalog, graph payload, and
-  the viewer no longer draw that relation (`EDGE_TYPES` is `rests_on` and
-  `governed_by` only). The `mirror-mismatch`, `mirror-reciprocal`, and
+  the viewer no longer draw that relation (`EDGE_TYPES` is `rests_on`
+  only). The `mirror-mismatch`, `mirror-reciprocal`, and
   `mirror-unanchored` lints are gone. Hub-gating and dependency drift
-  walk `rests_on` and a claim-valued `governed_by` only. The YAML key
-  remains on the claim struct so existing lock hashes stay
-  byte-identical; the engine does not walk it. (NIT-17)
+  walk `rests_on` only. The YAML key remains on the claim struct so
+  existing lock hashes stay byte-identical; the engine does not walk it.
+  (NIT-17)
+- The `governed_by` field is gone. There is no `Governed` struct, no
+  `claim new --governed-by` / `--governed-reason`, no `claim show`
+  governed fields, no catalog or graph `governed_by` edge, and no viewer
+  GOVERNED BY row or graph toggle. The `governed-cycle`,
+  `governed-required`, `mixed-cycle`, and `validated-on-missing` lints
+  are gone. Drift baselines walk `rests_on` only. Strict decode refuses
+  a leftover `governed_by` key. No alias and no migrate CLI. ContentHash
+  and LockedClaimHash both drop the field, so every locked claim hash
+  moves on upgrade. Hub-gating still walks `rests_on` (NIT-23). (NIT-29)
 
 ### Fixed
 

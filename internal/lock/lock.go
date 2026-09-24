@@ -43,7 +43,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -819,7 +818,6 @@ func ContentHash(c model.Claim) string {
 	for _, r := range c.RestsOn {
 		fmt.Fprintf(legacy, "rests_on=%s\n", r)
 	}
-	fmt.Fprintf(legacy, "governed=%s/%s\n", c.Governed.Type, c.Governed.Reason)
 
 	// raw_html is in the allowlist, but ONLY WHEN NON-EMPTY. The conditional
 	// is the whole point of this stanza and must not be "simplified" into an
@@ -1340,30 +1338,18 @@ func dependencyIDs(c model.Claim) []string {
 }
 
 // BaselineDependencyIDs is the dependency set whose CONTENT a locked claim is
-// baselined against: rests_on and a claim-valued governed_by.type.
-//
-// It is deliberately NOT dependencyIDs. dependencyIDs is what hub gating walks
-// (checkHubGating), and hub gating is a lock REFUSAL: widening it would make an
-// unlocked doctrine-facet claim named only by governed_by block a lock, which
-// internal/lint/governed_cycle.go and FORMAT.md both document as deliberately
-// absent. Governance drift flags for review; it does not gate.
-//
-// The guard on Governed.Type is `t != "" && t != "none"` — the same shape
-// internal/lint/dangling.go uses for the same field; keep the two consistent.
+// baselined against: rests_on only. governed_by is gone (NIT-29). Hub-gating
+// still walks dependencyIDs — the same rests_on list — and NIT-23 owns that
+// walk.
 //
 // Exported because internal/comments and cmd/dossierx used to keep hand-copied
 // duplicates of this list; they call this now, so the three cannot diverge.
 func BaselineDependencyIDs(c model.Claim) []string {
-	ids := make([]string, 0, len(c.RestsOn)+1)
-	ids = append(ids, c.RestsOn...)
-	if t := strings.TrimSpace(c.Governed.Type); t != "" && t != string(model.GovernedNone) {
-		ids = append(ids, t)
-	}
-	return dedupeStable(ids)
+	return dedupeStable(dependencyIDs(c))
 }
 
 // dedupeStable drops repeated ids while preserving first-seen order. It is
-// required, not incidental: a claim may both rests_on X and be governed_by X,
+// required, not incidental: a claim may list the same rests_on target twice,
 // and a store that recorded X twice (or in a map-iteration order) would make
 // the baseline table depend on which edge was walked first.
 func dedupeStable(ids []string) []string {
@@ -1415,7 +1401,8 @@ func checkHubGating(claim model.Claim, claims []model.Claim, cfg *config.Config)
 	if cfg == nil || !cfg.HubGatingEnabled() {
 		return nil
 	}
-	// dependencyIDs, NOT BaselineDependencyIDs: this is a refusal, and governed_by is a drift edge, not a gating one.
+	// dependencyIDs, NOT BaselineDependencyIDs: this is a refusal. Hub-gating
+	// walks rests_on (plus leftover mirrors); NIT-23 owns that walk.
 	for _, dep := range dependencyIDs(claim) {
 		depClaim, ok := findByID(claims, dep)
 		if !ok {

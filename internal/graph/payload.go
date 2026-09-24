@@ -69,16 +69,13 @@ import (
 // understand rather than silently mis-rendering one.
 const SchemaVersion = 1
 
-// Edge type values. These are the wire strings, matching the claim
-// edge kinds model.Claim declares (RestsOn, Governed). They are
-// constants rather than literals because graph-core.js keys its edge-type
-// toggles off them and viewer-tests asserts on them, so they are contract.
+// Edge type values. These are the wire strings, matching the remaining
+// claim edge kind model.Claim declares (RestsOn). They are constants
+// rather than literals because graph-core.js keys its edge-type toggles
+// off them and viewer-tests asserts on them, so they are contract.
 const (
 	// EdgeRestsOn is one entry of model.Claim.RestsOn.
 	EdgeRestsOn = "rests_on"
-	// EdgeGovernedBy is a claim's single governed_by edge, emitted only
-	// when the type names a real doctrine claim (see Build).
-	EdgeGovernedBy = "governed_by"
 )
 
 // Node is one claim, projected down to the facts the pane draws with.
@@ -219,7 +216,7 @@ type NodeTrack struct {
 type Edge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
-	// Type is one of EdgeRestsOn, EdgeGovernedBy.
+	// Type is EdgeRestsOn.
 	Type string `json:"type"`
 }
 

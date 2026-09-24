@@ -14,7 +14,7 @@ What the engine actually enforces, each with the code it fails on:
 
 | Mechanism | What it does | Refusal |
 |---|---|---|
-| Atomic YAML claims | one reviewable fact per file, with typed edges (`rests_on`, `governed_by`) the engine walks and lints | `lint_failed` |
+| Atomic YAML claims | one reviewable fact per file, with typed `rests_on` edges the engine walks and lints | `lint_failed` |
 | The lock ledger | every approval records a hash of exactly what was approved, when, by whom, and the human's own words; a locked claim edited by hand, a deleted record, a status flipped in either direction is a named finding that fails `check`, and `claim lock` refuses rather than re-sign it | `integrity_failed` |
 | Human Resolve | a claim cannot lock while it carries an open thread; the agent replies, only the human resolves, and `--reason` carries the human's words into the record | `unresolved_comments` |
 | Code links, machine-judged | `check` scans source for `dossierx-claim:` and `dossierx-step:` tags; with `source_dirs` set, a locked code-producing claim with no link fails, and a stepped claim must be tagged on every step | `unlinked_claims` |
@@ -324,9 +324,6 @@ body: |
   A widget is the smallest unit this project documents [1].
 rests_on:
   - widget.internals.storage     # this claim is true only while that one is
-governed_by:
-  type: none
-  reason: no doctrine facet configured yet
 sources:                         # optional: the evidence, cited from body as [n]
   - ref: 1
     kind: external               # external | internal
@@ -338,7 +335,7 @@ tracks:                          # optional: cross-cutting membership
     role: cites                  # owns | cites
 ```
 
-Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`), and a `governed_by` block naming what backs its truth (a doctrine claim, or `none` with a reason). Claims name other claims they `rests_on` — and a claim-valued `governed_by.type` is the same kind of edge for drift purposes — forming a graph the engine walks and validates. The full schema is in [FORMAT.md](FORMAT.md).
+Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`, and a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`). Claims name other claims they `rests_on`, forming a graph the engine walks and validates. The full schema is in [FORMAT.md](FORMAT.md).
 
 **Sources and tracks** are the two optional axes, both added in v0.6.0 and both no-ops for a project that does not use them. `sources` carries a claim's evidence *inside* the claim — cited from the body with `[n]` markers, anchored by an access date when the source is a page that can change under you and by a content hash when it is a file the engine can read, and signed by the lock ledger so a citation cannot be rewritten after approval. `tracks` is a second ownership axis: `module` answers "who guarantees this?", and a track answers "what does the user get, and is it finished?" — a feature assembled from claims across many modules, with `dossierx track status <id>` reporting whether every claim it owns and cites is locked.
 
@@ -346,7 +343,7 @@ Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`
 
 **Proof or stop.** Only admitted evidence counts: a `dossierx check` that exited 0, a lint or ledger finding, a conformance result, the code-link coverage report in `data.code_links`, a human's Resolve click, or a human's own words in `--reason`. An agent's statement in chat that "the code matches the claim" or "it is synced" is not a certificate and closes no loop — it is the thing this tool exists to replace. When the evidence is missing, the agent stops and says what is missing rather than filling the gap with an opinion. A model drafts claims, tags and code; it is never the judge.
 
-**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on` or is `governed_by` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `governed_by` joined the drift set in v0.4.0 as a **drift** edge only: a claim-valued governor whose content changes flags its dependants `review_pending`, but hub gating still walks `rests_on` alone, so an unlocked governor named only by `governed_by` still never refuses a lock. There is no backfill — a claim locked before v0.4.0 carries no governance baseline until its next `claim lock` or confirmed `claim reaudit`, so the first governor edit after upgrading does not flag it. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
+**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. Hub gating walks `rests_on` alone. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
 
 **Local approval and dependency readiness.** A new project uses lock policy v1. An existing project stays on its recorded policy; loading a newer binary does not reinterpret old approvals, refresh baselines, or clear review causes. Under v1, `claim lock` evaluates one requested set whether it contains one claim or many. `--dry-run` returns every member's local verdict, dependency conditions and a request-bound `snapshot`; the matching `--proposal` is mandatory on the write, and an omitted, invalid, stale, or wrong-set token refuses before approval storage changes. A locally approved claim may depend on a readable draft, but it reports `dependency_unapproved` and is not dependency-ready. A missing, retired, unreadable, cyclic, or doctrine-gated required dependency refuses approval before any claim or approval storage changes. Local approval, dependency readiness and integrated evidence are different statements. The lock store retains the reviewed dependency content and comparable hash for each new local approval; a hash detects a difference and never proves semantic compatibility.
 

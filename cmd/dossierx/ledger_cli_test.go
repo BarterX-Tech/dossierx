@@ -29,7 +29,7 @@ func ledgerProject(t *testing.T) (cfgPath, claimPath, storeFile string) {
 	claimPath = filepath.Join(claimsDir, "main.yaml")
 	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +
 		"body: |\n  the approved body.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestCLI_LockUnlockRelockKeepsTheLedgerHonest(t *testing.T) {
 	// Edit while draft — entirely allowed — then re-lock: a NEW approval.
 	edited := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +
 		"body: |\n  the corrected body.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(edited), 0o644); err != nil {
 		t.Fatalf("edit claim: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestCLI_HandEditingALockedClaimIsCaught(t *testing.T) {
 
 	tampered := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nbuild_role: schema\n" +
 		"body: |\n  a body nobody approved.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(tampered), 0o644); err != nil {
 		t.Fatalf("tamper: %v", err)
 	}

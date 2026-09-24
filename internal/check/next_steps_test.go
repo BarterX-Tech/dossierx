@@ -23,7 +23,7 @@ import (
 func draftWithOpenThread(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"" +
 		"comments:\n" +
 		"  - id: c-aaa111\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: does this still hold?\n    edited: false\n"
@@ -74,12 +74,11 @@ func TestNextSteps_DraftExampleSkipsAnUnlockedDoctrineDependency(t *testing.T) {
 	cfg, claims := project(t, doctrineConfig, map[string]string{
 		"claims/hub.yaml": "id: widget.doctrine.hub\nfacet: doctrine\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  the doctrine hub, still draft.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 		// Sorts first, and rests on the still-draft hub, so hub gating refuses it.
 		"claims/blocked.yaml": "id: widget.contract.blocked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  rests on a draft doctrine claim.\n" +
-			"rests_on:\n  - widget.doctrine.hub\n" +
-			"governed_by:\n  type: widget.doctrine.hub\n  reason: governed by the hub\n",
+			"rests_on:\n  - widget.doctrine.hub\n",
 	})
 	if !cfg.HubGatingEnabled() {
 		t.Fatalf("fixture precondition: hub gating must be on")
@@ -156,7 +155,7 @@ func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 		"claims/a.yaml": "id: widget.contract.aaa\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  rests on a still-draft sibling.\n" +
 			"rests_on:\n  - widget.contract.zzz\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 		"claims/z.yaml": draftClaim("widget.contract.zzz"),
 	})
 
@@ -177,7 +176,7 @@ func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 func lockedWithOpenThread(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"" +
 		"comments:\n" +
 		"  - id: c-406a9f\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: I am not sure about this.\n    edited: false\n"

@@ -59,11 +59,7 @@ rows:
     c: "2"
     d: "2"
     e: "2"
-    f: "2"
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+    f: "2"`
 
 // tableNarrowClaim is the control: two columns of ordinary prose-length values.
 // The 5rem cell floor must leave it fitting inside the card.
@@ -76,11 +72,7 @@ rows:
   - name: alpha
     note: a short ordinary value
   - name: beta
-    note: another ordinary value
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+    note: another ordinary value`
 
 // bodyMDTableClaim is an ordinary card claim whose BODY holds a GFM pipe table.
 // It renders as .md-table, not as a claim table, and it is the fixture that
@@ -98,11 +90,7 @@ body: |
 
   | col | value |
   | --- | --- |
-  | one | ` + wideIdent + ` |
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  | one | ` + wideIdent + ` |`
 
 // tableFixtureTab writes the three fixture claims into a throwaway project,
 // renders the static viewer, and opens it in a tab emulating the given

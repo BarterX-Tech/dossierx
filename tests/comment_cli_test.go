@@ -78,7 +78,7 @@ func writeBannerClaim(t *testing.T, root, id, module string) string {
 	body := "id: " + id + "\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: banner\n" +
 		"body: |\n  Section divider.\n" +
-		"governed_by:\n  type: none\n  reason: fixture banner claim\n"
+		""
 	path := filepath.Join(root, "claims", lastSegment(id)+".yaml")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write banner claim: %v", err)
@@ -648,7 +648,7 @@ func writePoisonStoredBodyClaim(t *testing.T, root, id, module string) string {
 	body := "id: " + id + "\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
 		"body: \"\\tstored prose yaml cannot round-trip\\nsecond line\"\n" +
-		"governed_by:\n  type: none\n  reason: fixture poison claim\n" +
+		"" +
 		"comments:\n" +
 		"  - id: c-poison1\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: open thread on a poison claim\n    edited: false\n" +
 		"  - id: c-poison2\n    status: resolved\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: resolved thread on a poison claim\n    edited: false\n    resolved_by: human\n    resolved_at: \"2026-07-24T11:00:00Z\"\n"

@@ -26,7 +26,7 @@ import (
 func commentedLockedClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"" +
 		"comments:\n" +
 		"  - id: c-8136dd\n    status: resolved\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: I do not agree with this yet.\n    edited: false\n" +
@@ -142,7 +142,7 @@ func TestCommentDigest_RenamingACoveredClaimIsAbandoned(t *testing.T) {
 	path := filepath.Join(cfg.ClaimsDir, "thread.yaml")
 	renamed := "id: widget.internals.gamma\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(path, []byte(renamed), 0o644); err != nil {
 		t.Fatalf("rewrite claim: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestCommentDigest_SweepCoversAClaimAuthoredAfterTheFirstLock(t *testing.T) 
 	// A second claim, authored later, never through the comment engine.
 	second := "id: widget.contract.second\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  authored after the project's first lock.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(filepath.Join(cfg.ClaimsDir, "second.yaml"), []byte(second), 0o644); err != nil {
 		t.Fatalf("write second claim: %v", err)
 	}

@@ -34,7 +34,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	claim := "id: emptyrowsmod.internals.empty-table\n" +
 		"facet: internals\nmodule: emptyrowsmod\nstatus: draft\nlayout: table\n" +
 		"rows: []\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(filepath.Join(claimsDir, "empty-table.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -162,7 +162,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 		"body: A console mockup.\n" +
 		"raw_html: '" + rawHTML + "'\n" +
 		"raw_html_reviewed: " + boolStr(reviewed) + "\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(filepath.Join(claimsDir, "mockup.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write mockup claim: %v", err)
 	}

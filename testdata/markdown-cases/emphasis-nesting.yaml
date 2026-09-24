@@ -8,6 +8,3 @@ body: |
   ` **not bold** ` does not, because a code span wins over everything.
 
   **`a`** and *__b__* and ~~**c**~~ and [**text**](https://example.com/d).
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - the nesting matrix, including code-span precedence

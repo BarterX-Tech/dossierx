@@ -43,7 +43,7 @@ func disclosureFixture(t *testing.T) (cfgPath, claimPath string) {
 		"  the retry policy allows two attempts.\n" +
 		"  Backoff is exponential, starting at 200ms.\n" +
 		"  A dead-letter queue receives whatever still fails.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

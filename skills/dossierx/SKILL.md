@@ -6,7 +6,7 @@ description: >-
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
   any DossierX command. It is short on purpose: the seven nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, which command (flag vs unlock vs reaudit,
-  track vs module depends_on), mixed-cycle guidance, and companion skill routing. Load a companion skill only when this one sends you there.
+  track vs module depends_on), and companion skill routing. Load a companion skill only when this one sends you there.
 ---
 
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
@@ -17,7 +17,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 20 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
+| Surface | the CLI — all 20 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`, filters by track, and overlays isolated claims, dependency cycles, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
@@ -75,7 +75,7 @@ synced" in chat is neither and is never a certificate; when the evidence is miss
 | `config_not_found` | 2 | not a DossierX project (yet). Do not create one unasked — see Bootstrap below. |
 | `invalid_config` | 1 | `project.config.yaml` exists but does not load or validate. Fix the field the message names and re-run. |
 | `claim_not_found` | 2 | you guessed an id. Run `dossierx claim list --match "<what the human said>"` and confirm the id back to them. |
-| `lint_failed` | 1 | findings are in **`data.lint_findings`** — on `check` and on `claim lock` alike (`claim lock` keeps a second copy under `error.details.lint_findings`). Fix the claims, then re-check **with the command that refused you**: `dossierx check --validate` after a `check` failure, `dossierx claim lock <id> --dry-run` after a `claim lock` failure. Re-running `check --validate` after a lock refusal is a **loop, not a recovery**: it does not re-attempt the lock, and it reports *zero* findings for every rule that keys off a claim's own status (`rest-on-locked`, `roll-up`) because the claim is still `draft` on disk. The dry run lints the about-to-be-locked form, which is the only form that answers. **If `data.lint_findings[].lint` is `mixed-cycle`, read its section below before anything else: you did not cause it, and "fix the claims" is not where you start.** (Lint findings key on `lint`; the ledger findings two rows down key on `rule`.) |
+| `lint_failed` | 1 | findings are in **`data.lint_findings`** — on `check` and on `claim lock` alike (`claim lock` keeps a second copy under `error.details.lint_findings`). Fix the claims, then re-check **with the command that refused you**: `dossierx check --validate` after a `check` failure, `dossierx claim lock <id> --dry-run` after a `claim lock` failure. Re-running `check --validate` after a lock refusal is a **loop, not a recovery**: it does not re-attempt the lock, and it reports *zero* findings for every rule that keys off a claim's own status (`rest-on-locked`, `roll-up`) because the claim is still `draft` on disk. The dry run lints the about-to-be-locked form, which is the only form that answers. (Lint findings key on `lint`; the ledger findings two rows down key on `rule`.) |
 | `integrity_failed` | 1 | **read `data.ledger_findings` and branch on `rule`** — one code, three kinds of arm. `lock-ledger-pre-ledger` is a project whose lock store predates the lock ledger and that still holds something locked (see The pre-ledger crossing below) — it is SILENT on a pre-ledger project holding nothing locked, which crosses correctly on its next lock. `store-gitignored` is not tampering either: a store the engine writes under `build/ledger` or `build/code-links` is matched by `.gitignore` and untracked, so the approval never reaches the repository — recover by replacing the pattern with the `RecommendedGitignore` block (README's "Where DossierX writes") or pointing `build_dir` elsewhere; `restore from git` and `unlock → fix → lock` are both wrong for it, an agent looping either one is chasing an unchanged finding about *where the store sits*, not its content. Everything else — `lock-ledger-missing`, `lock-ledger-deleted`, `lock-content-drift`, `lock-ledger-released`, `lock-ledger-orphan`, `lock-ledger-abandoned`, `lock-ledger-absent`, `lock-ledger-downgraded`, `comment-ledger-drift`, and the `comment-digest-*` family — is a locked artifact moved outside the approval path: **do not re-lock to make it go away**, restore the file from git or unlock → fix → lock. Two of them are now refusals on the WRITE path too, so you will meet them as a failed `claim lock` and not only as a finding: `lock-ledger-deleted` and `comment-digest-unrecorded`. Re-locking was the step that erased each of them, so there is no command that clears either — the recovery is restoring the named store file, and `unlock → fix → lock` is **wrong** here because it signs the edit. |
 | `unresolved_comments` | 1 | the claim has an open thread. Reply on it; the **human** clicks Resolve in the viewer. That click is the approval this gate waits for. |
 | `dependency_not_locked` | 1 | a doctrine dependency is still draft. Lock it first (with approval), then retry. |
@@ -168,23 +168,6 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
 |---|---|---|
 | a user feature, across modules | `dossierx track status <id>` | read-only: COMPLETE when every claim it owns or cites is locked. It gates nothing and orders nothing. |
 | what to implement next | locked claims, module depends_on, and claim rests_on / build_role | follow those edges; there is no sequencer |
-
-## `mixed-cycle` — what v0.5.0 changed under you
-
-**A corpus that passed `dossierx check` before v0.5.0 can exit 1 after it with no edit on your
-side.** `mixed-cycle` (ERROR) reports a loop alternating the two edge kinds — "A `rests_on` B, B
-`governed_by` A". `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so
-that shape presented no back edge to either and passed the whole registry.
-
-You meet it as `lint_failed` carrying `mixed-cycle`, one finding per claim on the loop. Three things
-make it unlike any other finding:
-
-1. **You did not cause it** — no edit, no content-hash move, nothing in the lock store. Do not hunt
-   for what you broke, and do not report it as a regression you introduced.
-2. **No migration command and no migration document**, deliberately: the corpus was always
-   malformed. Break the loop — the finding names every claim on it.
-3. **Those claims are usually LOCKED** (that is how the loop survived), so the recovery is
-   `unlock → fix → lock` and needs the human's recorded approval. Show them the loop first.
 
 ## The pre-ledger crossing and the staged gate — what v0.4.0 changed under you
 

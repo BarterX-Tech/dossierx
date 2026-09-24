@@ -11,11 +11,7 @@ facet: contract
 module: widget
 status: draft
 body: |
-  another claim under review.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  another claim under review.`
 
 const statusTwoFacetConfigYAML = `schema_version: 1
 facets:
@@ -33,11 +29,7 @@ facet: contract
 module: widget
 status: draft
 body: |
-  the contract facet has one review issue.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-rests_on:
+  the contract facet has one review issue.rests_on:
   - widget.contract.missing
 `
 
@@ -46,11 +38,7 @@ facet: behavior
 module: widget
 status: draft
 body: |
-  the behavior facet has a different review issue.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-rests_on:
+  the behavior facet has a different review issue.rests_on:
   - widget.behavior.missing
 `
 
@@ -59,22 +47,14 @@ facet: contract
 module: other
 status: draft
 body: |
-  the other module has no review issue.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  the other module has no review issue.`
 
 const cleanWidgetFacetClaimYAML = `id: widget.schema.clean
 facet: schema
 module: widget
 status: draft
 body: |
-  the widget schema facet has no review issue.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  the widget schema facet has no review issue.`
 
 const longClaimYAML = `id: widget.contract.long-body
 facet: contract
@@ -83,11 +63,7 @@ status: draft
 body: |
   This deliberately long claim body needs more than four rendered lines at desktop width. It preserves complete structured HTML while the reading view initially shows a calm four-line preview. The control must reveal every word without replacing the body node.
 
-  A second paragraph makes the overflow deterministic and verifies that the disclosure works across block markup rather than truncating a string.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  A second paragraph makes the overflow deterministic and verifies that the disclosure works across block markup rather than truncating a string.`
 
 func TestClaimAndFacetCollapseControlsAreRemoved(t *testing.T) {
 	p := newProject(t)

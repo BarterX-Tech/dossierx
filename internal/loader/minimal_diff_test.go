@@ -27,9 +27,6 @@ import (
 const authoredClaimYAML = `facet: contract
 id: widget.contract.overview
 module: widget
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine
 status: draft
 layout: card
 body: |

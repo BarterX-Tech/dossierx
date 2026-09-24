@@ -183,7 +183,7 @@ func TestClaimAsset_APartialWriteKeepsThePreviousIndex(t *testing.T) {
 	writeFile(t, claim,
 		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
 			"body: |\n  the diagram was removed from this claim.\n"+
-			"governed_by:\n  type: none\n  reason: fixture\n")
+			"")
 	assertNotFoundWithin(t, base, p, stalenessBound)
 }
 
@@ -229,7 +229,7 @@ func TestClaimAsset_AKeptIndexStopsAuthorisingAfterTheGrace(t *testing.T) {
 	// error, which is what a non-claim YAML dropped into claims/ looks like.
 	stray := filepath.Join(root, "claims", "facet-a", "stray.yaml")
 	writeFile(t, stray, "id: widget.contract.stray\nfacet: contract\nmodule: widget\nstatus: draft\n"+
-		"body: x\nnot_a_real_field: true\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		"body: x\nnot_a_real_field: true\n")
 	// And the claim stops referencing drop.png, so the allowlist is now wrong.
 	writeFile(t, filepath.Join(root, "claims", "facet-a", "one.yaml"),
 		twoImageClaim("widget.contract.one", "assets/keep.png"))
@@ -278,7 +278,7 @@ func twoImageClaim(id string, srcs ...string) string {
 	for _, src := range srcs {
 		s += "  ![d](" + src + ")\n\n"
 	}
-	return s + "governed_by:\n  type: none\n  reason: fixture\n"
+	return s + ""
 }
 
 // assertOKWithin polls until path is served, for assertions about a route that

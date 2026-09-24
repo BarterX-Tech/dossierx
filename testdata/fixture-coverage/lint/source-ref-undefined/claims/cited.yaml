@@ -15,6 +15,3 @@ sources:
     accessed_on: "2026-08-01"
 rests_on:
   - srcundef.internals.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

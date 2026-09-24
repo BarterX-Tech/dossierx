@@ -33,11 +33,7 @@ module: widget
 status: draft
 layout: steps
 body: |
-  a short lede that on its own would not need a disclosure at all.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-steps:
+  a short lede that on its own would not need a disclosure at all.steps:
 `+steps.String())
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),

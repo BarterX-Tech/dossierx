@@ -30,7 +30,7 @@ func orderedClaimIn(module, id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\n" +
 		"build_role: behavior\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 }
 
 // committedBuildOrderFixture is a project whose one module is fully locked,

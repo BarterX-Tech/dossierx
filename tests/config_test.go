@@ -74,7 +74,7 @@ func TestClaimsDirResolvedAgainstConfigDirAtCLILevel(t *testing.T) {
 		"facet: contract\n" +
 		"module: relmod\n" +
 		"status: draft\n" +
-		"governed_by:\n  type: none\n  reason: test fixture\n" +
+		"" +
 		"body: exercises relative claims_dir resolution\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "only.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)

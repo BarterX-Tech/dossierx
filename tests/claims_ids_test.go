@@ -49,20 +49,12 @@ func TestClaimsIDs_DuplicateIDAcrossFiles(t *testing.T) {
 facet: contract
 module: widget
 status: draft
-body: first claim with this id
-governed_by:
-  type: none
-  reason: fixture
-`)
+body: first claim with this id`)
 	writeIDsClaim(t, claimsDir, "b.yaml", `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
-body: second claim with the same id
-governed_by:
-  type: none
-  reason: fixture
-`)
+body: second claim with the same id`)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
@@ -85,11 +77,7 @@ func TestClaimsIDs_MalformedIDShape(t *testing.T) {
 facet: contract
 module: widget
 status: draft
-body: id has only one segment, not module.facet.slug
-governed_by:
-  type: none
-  reason: fixture
-`)
+body: id has only one segment, not module.facet.slug`)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
@@ -110,11 +98,7 @@ func TestClaimsIDs_UnknownFacet(t *testing.T) {
 facet: doctrine
 module: widget
 status: draft
-body: doctrine is not a configured facet
-governed_by:
-  type: none
-  reason: fixture
-`)
+body: doctrine is not a configured facet`)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
@@ -138,11 +122,7 @@ func TestClaimsIDs_UnknownModule(t *testing.T) {
 facet: contract
 module: gadget
 status: draft
-body: gadget is not a configured module
-governed_by:
-  type: none
-  reason: fixture
-`)
+body: gadget is not a configured module`)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
@@ -186,11 +166,7 @@ func TestClaimsIDs_NoContentIsInvalid(t *testing.T) {
 	writeIDsClaim(t, claimsDir, "a.yaml", `id: widget.contract.empty
 facet: contract
 module: widget
-status: draft
-governed_by:
-  type: none
-  reason: fixture
-`)
+status: draft`)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
@@ -222,11 +198,7 @@ rows:
   - field: id
     type: string
   - field: name
-    type: string
-governed_by:
-  type: none
-  reason: fixture
-`)
+    type: string`)
 
 	if stdout, stderr, code := run(t, root, "check"); code != 0 {
 		t.Fatalf("expected exit 0 for a claim with both body and rows, got %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
@@ -244,10 +216,7 @@ func TestClaimsIDs_UnicodeSlugRejected(t *testing.T) {
 		"facet: contract\n"+
 		"module: widget\n"+
 		"status: draft\n"+
-		"body: slug contains an accented character outside [a-z0-9-]\n"+
-		"governed_by:\n"+
-		"  type: none\n"+
-		"  reason: fixture\n")
+		"body: slug contains an accented character outside [a-z0-9-]\n")
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {

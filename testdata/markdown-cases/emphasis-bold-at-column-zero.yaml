@@ -10,6 +10,3 @@ body: |
   * So is this.
 
   *Italic at the head of a line* is not a list item either.
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - unorderedMarker's required whitespace is what separates a bullet from a bold run

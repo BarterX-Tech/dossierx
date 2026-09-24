@@ -97,7 +97,7 @@ func TestFlagRefusesARawHTMLCardEndToEnd(t *testing.T) {
 	claim := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 		"body: |\n  a card claim that also renders markup.\n" +
 		"raw_html: \"<div>a rendered mock</div>\"\nraw_html_reviewed: true\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

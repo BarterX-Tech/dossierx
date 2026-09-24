@@ -20,9 +20,6 @@ status: draft
 body: |
   The vendor documents no such property [1], and our own requirement
   record says the same [2].
-governed_by:
-  type: none
-  reason: fixture
 sources:
   - ref: 1
     kind: external
@@ -91,7 +88,7 @@ func TestClaim_Sources_RoundTrip(t *testing.T) {
 // claim file in every project on the next save and report content drift on
 // every locked one.
 func TestClaim_Sources_OptionalAndOmitted(t *testing.T) {
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\n")
 	if c.Sources != nil {
 		t.Fatalf("Sources = %+v, want nil when omitted", c.Sources)
 	}

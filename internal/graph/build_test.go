@@ -204,14 +204,12 @@ func TestBuildEdges(t *testing.T) {
 		return model.Claim{ID: id, Module: "widget", Facet: "contract", Status: model.StatusDraft}
 	}
 
-	t.Run("both remaining types, in the declared direction", func(t *testing.T) {
-		a, b, d := base("widget.contract.a"), base("widget.contract.b"), base("widget.contract.d")
+	t.Run("rests_on, in the declared direction", func(t *testing.T) {
+		a, b := base("widget.contract.a"), base("widget.contract.b")
 		a.RestsOn = []string{"widget.contract.b"}
-		a.Governed = model.Governed{Type: "widget.contract.d"}
-		p := buildFrom(t, cfg, a, b, d)
+		p := buildFrom(t, cfg, a, b)
 
 		want := []Edge{
-			{From: "widget.contract.a", To: "widget.contract.d", Type: EdgeGovernedBy},
 			{From: "widget.contract.a", To: "widget.contract.b", Type: EdgeRestsOn},
 		}
 		if !reflect.DeepEqual(p.Edges, want) {
@@ -222,32 +220,15 @@ func TestBuildEdges(t *testing.T) {
 		}
 	})
 
-	// The same guard internal/lint/dangling.go applies: "" and "none" are
-	// both "deliberately not governed", and neither is an edge.
-	for _, typ := range []string{"", "none"} {
-		t.Run(fmt.Sprintf("governed_by type %q produces no edge", typ), func(t *testing.T) {
-			a := base("widget.contract.a")
-			a.Governed = model.Governed{Type: typ, Reason: "not backed by doctrine"}
-			p := buildFrom(t, cfg, a)
-			if len(p.Edges) != 0 {
-				t.Errorf("edges = %#v, want none", p.Edges)
-			}
-			if p.Dropped.UnresolvedEdges != 0 {
-				t.Errorf("dropped = %d, want 0 (a non-edge is not a drop)", p.Dropped.UnresolvedEdges)
-			}
-		})
-	}
-
-	t.Run("unknown targets are dropped and counted, of every type", func(t *testing.T) {
+	t.Run("unknown targets are dropped and counted", func(t *testing.T) {
 		a := base("widget.contract.a")
 		a.RestsOn = []string{"widget.contract.ghost"}
-		a.Governed = model.Governed{Type: "widget.contract.spectre"}
 		p := buildFrom(t, cfg, a)
 		if len(p.Edges) != 0 {
 			t.Errorf("edges = %#v, want none", p.Edges)
 		}
-		if p.Dropped.UnresolvedEdges != 2 {
-			t.Errorf("dropped.unresolved_edges = %d, want 2", p.Dropped.UnresolvedEdges)
+		if p.Dropped.UnresolvedEdges != 1 {
+			t.Errorf("dropped.unresolved_edges = %d, want 1", p.Dropped.UnresolvedEdges)
 		}
 	})
 
@@ -287,19 +268,16 @@ func TestBuildDegrees(t *testing.T) {
 		return model.Claim{ID: id, Module: "m", Facet: "f", Status: model.StatusDraft}
 	}
 
-	// hub is rested on by two claims and is governed by one —
-	// so both remaining edge types contribute to its degrees.
-	hub, a, b, doc := base("m.f.hub"), base("m.f.a"), base("m.f.b"), base("m.f.doc")
+	// hub is rested on by two claims.
+	hub, a, b := base("m.f.hub"), base("m.f.a"), base("m.f.b")
 	a.RestsOn = []string{"m.f.hub"}
 	b.RestsOn = []string{"m.f.hub"}
-	hub.Governed = model.Governed{Type: "m.f.doc"}
-	p := buildFrom(t, cfg, hub, a, b, doc)
+	p := buildFrom(t, cfg, hub, a, b)
 
 	want := map[string][2]int{ // id -> {in, out}
-		"m.f.hub": {2, 1},
+		"m.f.hub": {2, 0},
 		"m.f.a":   {0, 1},
 		"m.f.b":   {0, 1},
-		"m.f.doc": {1, 0},
 	}
 	for id, wd := range want {
 		n := nodeByID(t, p, id)
@@ -384,9 +362,6 @@ func TestBuildDeterministic(t *testing.T) {
 		}
 		if i%5 == 0 && i+1 < len(claims) {
 			claims[i].RestsOn = append(claims[i].RestsOn, claims[i+1].ID)
-		}
-		if i%7 == 0 {
-			claims[i].Governed = model.Governed{Type: claims[0].ID}
 		}
 		byID[claims[i].ID] = claims[i]
 	}

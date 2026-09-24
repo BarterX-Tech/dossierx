@@ -131,23 +131,6 @@ const (
 	KindFact Kind = "fact"
 )
 
-// GovernedType is the kind of doctrine governance backing a claim.
-type GovernedType string
-
-const (
-	// GovernedNone means the claim is deliberately not backed by any
-	// doctrine claim; Reason is required in that case (see Governed.Reason).
-	GovernedNone GovernedType = "none"
-)
-
-// Governed records why a claim is (or is deliberately not) governed by a
-// doctrine claim. Type is either "none" or a doctrine claim id. Reason is
-// required by the lint suite whenever Type == GovernedNone.
-type Governed struct {
-	Type   string `yaml:"type"`
-	Reason string `yaml:"reason,omitempty"`
-}
-
 // Row is one structured data row under a claim's Rows. It is intentionally
 // a generic string-keyed map so claims can carry arbitrary columns; the
 // rows-shape lint is responsible for checking that all rows on a claim
@@ -317,15 +300,17 @@ type Claim struct {
 	// them in order.
 	Steps []string `yaml:"steps,omitempty"`
 
-	// Edges. rests_on is the required dependency chain; governed_by is
-	// authority (and a drift input when claim-valued).
+	// Edges. rests_on is the required dependency chain and the only
+	// remaining claim-to-claim relation the engine walks.
 	//
 	// Mirrors is not an edge. The field exists only so KnownFields still
 	// names the historical YAML key and LockedClaimHash / ContentHash stay
-	// byte-identical. Nothing walks it.
-	Mirrors  []string `yaml:"mirrors,omitempty"`
-	RestsOn  []string `yaml:"rests_on,omitempty"`
-	Governed Governed `yaml:"governed_by"`
+	// byte-identical for that leftover. Nothing walks it.
+	//
+	// governed_by is gone: KnownFields(true) refuses a file that still
+	// carries the key (NIT-29). No leftover field, no alias.
+	Mirrors []string `yaml:"mirrors,omitempty"`
+	RestsOn []string `yaml:"rests_on,omitempty"`
 
 	// Sources is the evidence this claim rests on, cited from Body by "[n]"
 	// markers matching each entry's Ref. See model.Source for the whole
@@ -364,13 +349,9 @@ type Claim struct {
 
 	// Emphasis marks a claim as carrying outsized weight for its facet (the
 	// docs/ source's "hard boundary" cards — border-color:var(--warn) with a
-	// matching .k color — are the hand-authored precedent this mirrors). It
-	// is deliberately its own field rather than being inferred from Governed:
-	// GovernedNone/GovernedType answer "what backs this claim's truth", which
-	// is orthogonal to "how loudly should this render" — a governed claim can
-	// still be a hard boundary, and an ungoverned-with-reason claim usually
-	// isn't one. render/components/card.html uses Emphasis to add the
-	// claim-card--warn class.
+	// matching .k color — are the hand-authored precedent this mirrors).
+	// render/components/card.html uses Emphasis to add the claim-card--warn
+	// class.
 	Emphasis bool `yaml:"emphasis,omitempty"`
 
 	// ReviewPending is engine-managed: it is only meaningful when

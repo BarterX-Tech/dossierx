@@ -21,7 +21,7 @@ func writeLockedFixtureClaim(t *testing.T, claimsDir, id, module, body string) s
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
 	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
 		"body: |\n  " + body + "\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}
@@ -404,7 +404,7 @@ func writeLockedStepsFixtureClaim(t *testing.T, claimsDir, id, module string, st
 	for _, s := range steps {
 		src += "  - " + s + "\n"
 	}
-	src += "governed_by:\n  type: none\n  reason: fixture\n"
+	src += ""
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}

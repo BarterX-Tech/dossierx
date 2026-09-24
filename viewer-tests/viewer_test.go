@@ -369,11 +369,7 @@ facet: contract
 module: ` + module + `
 status: draft
 body: |
-  a claim in module ` + module + `.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  a claim in module ` + module + `.`
 }
 
 func TestDelegatedTabNavigationSwitchesModules(t *testing.T) {

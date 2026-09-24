@@ -7,6 +7,3 @@ body: |
   | a | b |
   | --- | --- |
   | 1 | 2 | dropped | also dropped |
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - a row with more cells than the header has the extra cells dropped

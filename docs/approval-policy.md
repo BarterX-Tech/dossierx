@@ -16,11 +16,12 @@ content change in a dependency
 creates review on the direct consumer and an inherited review cause on every
 downstream consumer, with the full path shown on that consumer.
 
-`governed_by` remains a drift input. A change to its claim-valued target can
-create a direct dependency review cause, but its approval status does not by
-itself become a `rests_on` approval prerequisite. Hashes detect comparable
-content changes; they do not decide semantic compatibility. Existing lint,
-integrity, comment, and human-review gates still apply.
+A `rests_on` target's content change can create a direct dependency review
+cause. Approval status of a named claim does not by itself become a
+`rests_on` approval prerequisite. Hashes detect comparable content changes;
+they do not decide semantic compatibility. Existing lint, integrity,
+comment, and human-review gates still apply. Hub-gating still walks
+`rests_on` only.
 
 ## Preview and approval
 

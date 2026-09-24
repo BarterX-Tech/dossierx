@@ -142,7 +142,7 @@ func icWriteRoledClaim(t *testing.T, claimPath, module string) {
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
 		"build_role: schema\n" +
 		"body: |\n  fixture claim for in-process CLI tests.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("rewrite claim with a build_role: %v", err)
 	}
@@ -468,7 +468,7 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 	claimPath := filepath.Join(claimsDir, "a.yaml")
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"build_role: schema\nbody: |\n  claim a.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -517,7 +517,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 	} {
 		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"build_role: " + c.role + "\nbody: |\n  claim " + c.name + ".\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n"
+			""
 		if err := os.WriteFile(filepath.Join(claimsDir, c.name+".yaml"), []byte(claim), 0o644); err != nil {
 			t.Fatalf("write claim %s: %v", c.id, err)
 		}

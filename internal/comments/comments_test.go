@@ -32,22 +32,14 @@ const draftAYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: draft
-body: claim a
-governed_by:
-  type: none
-  reason: fixture
-`
+body: claim a`
 
 const lockedAYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: locked
 build_role: schema
-body: claim a
-governed_by:
-  type: none
-  reason: fixture
-`
+body: claim a`
 
 const lockedARestsOnBYAML = `id: widget.contract.a
 facet: contract
@@ -56,32 +48,20 @@ status: locked
 build_role: schema
 body: claim a
 rests_on:
-  - widget.contract.b
-governed_by:
-  type: none
-  reason: fixture
-`
+  - widget.contract.b`
 
 const draftBYAML = `id: widget.contract.b
 facet: contract
 module: widget
 status: draft
-body: claim b
-governed_by:
-  type: none
-  reason: fixture
-`
+body: claim b`
 
 const bannerYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: draft
 layout: banner
-body: a banner
-governed_by:
-  type: none
-  reason: fixture
-`
+body: a banner`
 
 // project is a test harness: a temp project dir (config + claims) plus the two
 // in-memory stores the ops read. deps() reloads the claims fresh each call so a
@@ -685,11 +665,7 @@ comments:
     author: human
     created: 2026-07-24T10:12:00Z
     body: existing thread
-    edited: false
-governed_by:
-  type: none
-  reason: fixture
-`
+    edited: false`
 
 const claimWithReplyIDYAML = `id: widget.contract.a
 facet: contract
@@ -708,11 +684,7 @@ comments:
         author: agent
         created: 2026-07-24T10:40:00Z
         body: existing reply
-        edited: false
-governed_by:
-  type: none
-  reason: fixture
-`
+        edited: false`
 
 const claimWithIDLessCommentsYAML = `id: widget.contract.a
 facet: contract
@@ -729,11 +701,7 @@ comments:
       - author: agent
         created: 2026-07-24T10:40:00Z
         body: legacy id-less reply
-        edited: false
-governed_by:
-  type: none
-  reason: fixture
-`
+        edited: false`
 
 func stubRand(t *testing.T, hexes ...string) {
 	t.Helper()

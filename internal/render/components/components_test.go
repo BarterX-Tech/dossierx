@@ -373,11 +373,10 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			name: "governed_restson_dependedby_no_files",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
-				Governed: model.Governed{Type: "doctrine.hub.retries"},
-				RestsOn:  []string{"widget.contract.b", "widget.contract.c"},
+				RestsOn: []string{"widget.contract.b", "widget.contract.c"},
 			},
 			dependedBy: []string{"widget.internals.d", "widget.internals.e"},
-			wantChip:   "5 relationships",
+			wantChip:   "4 relationships",
 		},
 		{
 			// Linked files no longer add to the relationships count at all —
@@ -386,21 +385,19 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			name: "governed_restson3_one_clean_file",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
-				Governed: model.Governed{Type: "doctrine.hub.retries"},
-				RestsOn:  []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
+				RestsOn: []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
 			},
 			files:    []implink.ViewFile{{File: "a.go"}},
-			wantChip: "4 relationships",
+			wantChip: "3 relationships",
 		},
 		{
 			name: "governed_restson3_two_files_one_drifted",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
-				Governed: model.Governed{Type: "doctrine.hub.retries"},
-				RestsOn:  []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
+				RestsOn: []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
 			},
 			files:    []implink.ViewFile{{File: "a.go", Drifted: true}, {File: "b.go"}},
-			wantChip: "4 relationships",
+			wantChip: "3 relationships",
 		},
 		{
 			// One relationship, singular.
@@ -409,14 +406,11 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			wantChip: "1 relationship",
 		},
 		{
-			// A NAMED governed_by target is one relationship — the half of
-			// the governed_by rule that did NOT change.
-			name: "governed_named_only",
+			name: "no_edges_only",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
-				Governed: model.Governed{Type: "doctrine.hub.retries"},
 			},
-			wantChip: "1 relationship",
+			wantChip: "No relationships",
 		},
 		{
 			// A file with no relationships still opens the footer (the
@@ -439,7 +433,7 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			// the strip (RETRY: the strip no longer suppresses at all-zero),
 			// with the chip reading the numeral "0 relationships".
 			name:     "governed_none_only",
-			claim:    model.Claim{Facet: "contract", Governed: model.Governed{Type: string(model.GovernedNone)}},
+			claim:    model.Claim{Facet: "contract"},
 			wantChip: "0 relationships",
 		},
 		{
@@ -447,8 +441,7 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			// either, and does not change the chip's count.
 			name: "governed_none_with_reason_only",
 			claim: model.Claim{
-				Facet:    "contract",
-				Governed: model.Governed{Type: string(model.GovernedNone), Reason: "no doctrine covers this yet"},
+				Facet: "contract",
 			},
 			wantChip: "0 relationships",
 		},
@@ -457,7 +450,7 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			// comes back — and the governed_by: none row rides along inside
 			// it while still counting zero.
 			name:     "governed_none_plus_one_file",
-			claim:    model.Claim{Facet: "contract", Governed: model.Governed{Type: string(model.GovernedNone)}},
+			claim:    model.Claim{Facet: "contract"},
 			files:    []implink.ViewFile{{File: "a.go"}},
 			wantChip: "0 relationships",
 		},
@@ -467,8 +460,7 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			name: "governed_none_plus_one_rests_on",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
-				Governed: model.Governed{Type: string(model.GovernedNone)},
-				RestsOn:  []string{"widget.contract.a"},
+				RestsOn: []string{"widget.contract.a"},
 			},
 			wantChip: "1 relationship",
 		},
@@ -523,7 +515,6 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 	c := model.Claim{
 		ID: "widget.contract.self", Module: "widget", Facet: "contract",
-		Governed: model.Governed{Type: "doctrine.hub.retries"},
 	}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
@@ -536,11 +527,8 @@ func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 	if !strings.HasSuffix(got, `</button></span></div>`) {
 		t.Fatalf("the strip must end with its footer comment slot, got: %s", got)
 	}
-	// The GOVERNED BY row is byte-identical to before the redesign; it
-	// simply moved inside the RELATIONSHIPS panel's direction block.
-	if !strings.Contains(got, `<li class="claim-governed governed-none claim-relationship-none">`) &&
-		!strings.Contains(got, `<a class="claim-ref" href="#doctrine.hub.retries"`) {
-		t.Fatalf("the governed_by row must survive the move into the strip, got: %s", got)
+	if strings.Contains(got, "GOVERNED BY") || strings.Contains(got, "claim-governed") {
+		t.Fatalf("governed_by is gone; the strip must not emit a GOVERNED BY row, got: %s", got)
 	}
 }
 
@@ -572,27 +560,24 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 	c := model.Claim{
 		ID: "widget.contract.retry-policy", Module: "widget", Facet: "contract",
 		Status: model.StatusLocked, ReviewPending: true,
-		Governed: model.Governed{Type: "doctrine.hub.retries"},
-		RestsOn:  []string{"widget.contract.retry-budget", "platform.http.client"},
+		RestsOn: []string{"widget.contract.retry-budget", "platform.http.client"},
 	}
 	files := []implink.ViewFile{
 		{File: "internal/http/retry.go", Symbol: "Do", Drifted: true},
 		{File: "internal/http/backoff.go"},
 	}
-	// relationships = 1 (governed_by) + 2 (rests_on ids) + 1 (review_pending)
-	// = 4. CLOSED: the door carries no `open` attribute even though this claim
-	// is both review_pending and has a drifted file. Those two signals used to
+	// relationships = 2 (rests_on ids) + 1 (review_pending) = 3. CLOSED: the
+	// door carries no `open` attribute even though this claim is both
+	// review_pending and has a drifted file. Those two signals used to
 	// auto-open it, which contradicted Paper node Z7-0 ("Never opens by
 	// default") and the reading view's all-closed footer; both were removed.
 	want := `<div class="claim-footer">` +
 		`<details class="claim-links" name="claim-footer-widget.contract.retry-policy">` +
-		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">4 relationships</span><svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg></summary></details>` +
+		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">3 relationships</span><svg class="claim-footer__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg></summary></details>` +
 		`<div class="claim-footer-panel claim-links-panel">` +
-		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">4</span></div>` +
-		`<div class="claim-relationship-direction"><div class="claim-relationship-direction-head"><span class="claim-relationship-arrow" aria-hidden="true">↑</span><span class="claim-relationship-direction-label">GOVERNED BY</span></div><ul class="claim-edges claim-relationship-list">` +
-		`<li class="claim-governed claim-relationship"><a class="claim-ref" href="#doctrine.hub.retries" data-claim-id="doctrine.hub.retries" title="doctrine.hub.retries"><span class="claim-ref-label">Retries</span></a><span class="claim-relationship-line2"><span class="claim-relationship-meta">Doctrine · Hub</span></span></li>` +
-		`</ul></div>` +
+		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">3</span></div>` +
 		`<div class="claim-relationship-direction"><div class="claim-relationship-direction-head"><span class="claim-relationship-arrow" aria-hidden="true">↓</span><span class="claim-relationship-direction-label">DEPENDS ON</span><span class="claim-relationship-direction-count">2</span></div><ul class="claim-edges claim-relationship-list">` +
+
 		`<li class="claim-rests-on claim-relationship"><a class="claim-ref" href="#widget.contract.retry-budget" data-claim-id="widget.contract.retry-budget" title="widget.contract.retry-budget"><span class="claim-ref-label">Retry Budget</span></a><span class="claim-relationship-line2"><span class="claim-relationship-meta">Widget · Contract</span></span></li>` +
 		`<li class="claim-rests-on claim-relationship"><a class="claim-ref" href="#platform.http.client" data-claim-id="platform.http.client" title="platform.http.client"><span class="claim-ref-label">Client</span></a><span class="claim-relationship-line2"><span class="claim-relationship-meta">Platform · Http</span></span></li>` +
 		`</ul></div>` +
@@ -683,161 +668,10 @@ func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 	}
 }
 
-// The governed_by: none ROW itself — its class, its reason, and the inline
-// markdown ceiling on that reason — is asserted on a claim that also carries a
-// second edge, because "none" alone no longer counts as a link and therefore no
-// longer emits a footer to look in (see
-// TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter). MigratedFrom is the
-// cheapest edge that opens the disclosure: one flat <li>, no nested id list, no
-// claim-ref markup to confuse a Contains check on the reason.
-func TestEdgesHTML_GovernedNoneWithReason(t *testing.T) {
-	c := model.Claim{
-		Facet:        "contract",
-		MigratedFrom: "docs/tabs/widget.html",
-		Governed:     model.Governed{Type: string(model.GovernedNone), Reason: "fixture <claim>"},
-	}
-	got := string(edgesHTML(c))
-	if !strings.Contains(got, `governed-none`) {
-		t.Fatalf("expected the governed-none class, got: %s", got)
-	}
-	// 05 §8 item 15: the stated-absence form is the bare word "none" inside
-	// the GOVERNED BY direction block, not "governed_by: none" — the "governed_by:"
-	// label belonged to the old flat <li>, which the direction header now
-	// supplies instead.
-	if !strings.Contains(got, `>none<span class="claim-governed-reason"> — `) || !strings.Contains(got, `fixture &lt;claim&gt;`) {
-		t.Fatalf("expected the stated-absence 'none' plus an HTML-escaped reason, got: %s", got)
-	}
-}
-
-// TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown covers the
-// change routing Governed.Reason through markdown.RenderInline instead of a
-// bare html.EscapeString: Reason is hand-written prose that routinely names
-// a claim id or a path, so it should be able to carry a code span or a
-// link (the INLINE ceiling — no block constructs), the same subset every
-// other prose field already gets via the "markdown"/"cell" funcs.
-func TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
-	c := model.Claim{
-		Facet:        "contract",
-		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "see `widget.contract.retry-policy` for the real gate",
-		},
-	}
-	got := string(edgesHTML(c))
-	if !strings.Contains(got, "<code>widget.contract.retry-policy</code>") {
-		t.Fatalf("expected the code span in Reason to render as <code>, got: %s", got)
-	}
-	if strings.Contains(got, "`widget.contract.retry-policy`") {
-		t.Fatalf("Reason's backticks should not survive as literal text, got: %s", got)
-	}
-}
-
-// TestEdgesHTML_GovernedNoneReasonHostileHTMLStillEscaped guards the
-// INLINE ceiling: RenderInline still HTML-escapes anything that isn't one
-// of its recognized inline constructs, so a Reason is never a vector for
-// raw markup even after the switch away from a bare html.EscapeString.
-func TestEdgesHTML_GovernedNoneReasonHostileHTMLStillEscaped(t *testing.T) {
-	c := model.Claim{
-		Facet:        "contract",
-		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
-		Governed:     model.Governed{Type: string(model.GovernedNone), Reason: `<script>alert(1)</script>`},
-	}
-	got := string(edgesHTML(c))
-	if !strings.Contains(got, "governed-none") {
-		t.Fatalf("this test only proves anything if the none row rendered at all, got: %s", got)
-	}
-	if strings.Contains(got, "<script>") {
-		t.Fatalf("hostile HTML in Reason leaked unescaped: %s", got)
-	}
-}
-
-// TestEdgesHTMLWithLinks_GovernedNoneAloneStillRendersTheStrip is the RETRY
-// re-pin (fix-list item 10) of what this test used to call the "newly-
-// reachable zero-footer case". "governed_by: none" is a stated absence, not
-// a link, so a claim whose only footer content is that row has no edges and
-// no files — and, before this retry, that all-zero state suppressed the
-// WHOLE footer, reason and GOVERNED BY row included.
-//
-// That was the exact defect the retry's verifier evidence names ("852
-// footers vs 290 sources chips; no footer at all for an edgeless claim"):
-// governed_by is mandatory (internal/lint's governed-required), so this
-// all-zero shape is not a rare edge case, it is the FIRST state most real
-// projects' claims are in, and it was rendering no strip at all — the
-// GOVERNED BY row (with its author-written Reason) simply vanished. 05 §8
-// item 5 is explicit that this state still shows "four zeros and the
-// comment count", so the strip, the RELATIONSHIPS door and the GOVERNED BY
-// row (with its reason) now all render — only the numeral is zero.
-func TestEdgesHTMLWithLinks_GovernedNoneAloneStillRendersTheStrip(t *testing.T) {
-	c := model.Claim{
-		ID: "widget.contract.ungoverned", Module: "widget", Facet: "contract",
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "no doctrine hub covers retries yet",
-		},
-	}
-
-	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
-	if !strings.Contains(got, `<div class="claim-footer">`) {
-		t.Fatalf("a claim whose only footer content is governed_by: none must still render the strip, got: %s", got)
-	}
-	if !strings.Contains(got, `<span class="claim-footer-chip-label">0 relationships</span>`) {
-		t.Fatalf("expected the zero-relationships chip, got: %s", got)
-	}
-	if !strings.Contains(got, `<li class="claim-governed governed-none claim-relationship-none">none<span class="claim-governed-reason"> — no doctrine hub covers retries yet</span></li>`) {
-		t.Fatalf("expected the governed_by: none row with its reason, got: %s", got)
-	}
-	if !strings.Contains(got, `<span class="claim-footer-chip-label">No sources</span>`) {
-		t.Fatalf("expected the zero-sources chip, got: %s", got)
-	}
-
-	// One linked file changes nothing about whether the row or the strip
-	// render — both already do — only the relationships panel gains its
-	// implemented-in row alongside the unchanged "none" row.
-	withFile := string(EdgesHTMLWithLinks(c, []implink.ViewFile{{File: "a.go"}}, nil, nil))
-	if !strings.Contains(withFile, `<span class="claim-footer-chip-label">0 relationships</span>`) {
-		t.Fatalf("expected a 0-relationships chip once something is disclosable, got: %s", withFile)
-	}
-	if !strings.Contains(withFile, `<li class="claim-governed governed-none claim-relationship-none">none<span class="claim-governed-reason"> — no doctrine hub covers retries yet</span></li>`) {
-		t.Fatalf("the governed_by: none row must ride along inside a footer that is emitted, got: %s", withFile)
-	}
-}
-
-func TestEdgesHTML_GovernedByDoctrineClaim(t *testing.T) {
-	c := model.Claim{
-		Facet:    "contract",
-		Governed: model.Governed{Type: "widget.doctrine.hub"},
-	}
-	got := string(edgesHTML(c))
-	if strings.Contains(got, "governed-none") {
-		t.Fatalf("a doctrine-governed claim must not carry the governed-none class, got: %s", got)
-	}
-	// governed_by now routes through the shared writeClaimRef like every other
-	// claim-to-claim edge, inside the GOVERNED BY direction block's own row
-	// (05 §4.10) rather than a flat "governed_by: <a>" <li> — the direction
-	// header supplies the label the old row's leading text used to carry.
-	if !strings.Contains(got, `<span class="claim-relationship-direction-label">GOVERNED BY</span>`) {
-		t.Fatalf("expected a GOVERNED BY direction header, got: %s", got)
-	}
-	// RETRY RE-PIN (fix-list item 9; 05 §4.10's four columns, R-I.2): the
-	// rendering claim here has no Module and a different Facet from the
-	// target, which used to be the widest ("Module · Facet › Label") elision
-	// tier for the inline `claim-ref-prefix`. A fixed-direction relationship
-	// row no longer carries that inline prefix at all — writeRelationshipRow
-	// calls writeClaimRef with showPrefix=false — because the target's own
-	// `module · facet` is now its own unconditional meta column instead
-	// (writeRelationshipMeta), wrapped with the badge in a
-	// claim-relationship-line2 span.
-	if !strings.Contains(got, `<li class="claim-governed claim-relationship"><a class="claim-ref" href="#widget.doctrine.hub" data-claim-id="widget.doctrine.hub" title="widget.doctrine.hub"><span class="claim-ref-label">Hub</span></a><span class="claim-relationship-line2"><span class="claim-relationship-meta">Widget · Doctrine</span></span></li>`) {
-		t.Fatalf("expected governed_by to link to the doctrine claim by hash, labeled, id-bearing and meta-columned, got: %s", got)
-	}
-}
-
 func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 	c := model.Claim{
 		Facet:         "contract",
 		Module:        "widget",
-		Governed:      model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
 		RestsOn:       []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
 		MigratedFrom:  "docs/tabs/widget.html",
 		Status:        model.StatusLocked,
@@ -1040,31 +874,6 @@ func TestEdgesHTMLWithLinks_TargetPill_NilStatuses_DegradesToNoPill(t *testing.T
 		t.Fatalf("edgesHTML (the default binding) must never render a target pill, got: %s", got)
 	}
 }
-
-func TestEdgesHTMLWithLinks_TargetPill_OnGovernedByEdge(t *testing.T) {
-	// governed_by is a claim-edge target too (it renders through the same
-	// writeRelationshipRow as DEPENDS ON/DEPENDED ON BY), so a draft
-	// governing claim gets the same lifecycle dot+badge.
-	c := model.Claim{
-		Facet:    "contract",
-		Module:   "widget",
-		Governed: model.Governed{Type: "widget.doctrine.hub"},
-	}
-	statuses := map[string]TargetStatus{
-		"widget.doctrine.hub": {Status: model.StatusDraft},
-	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
-	if !strings.Contains(got, `<span class="claim-relationship-badge claim-relationship-badge--draft">DRAFT</span>`) {
-		t.Fatalf("expected a draft badge on an actionable governed_by target, got: %s", got)
-	}
-}
-
-// ---------------------------------------------------------------------
-// table.html cell rendering (DX-AUD-02): each <td> routes its value through
-// the shared inline markdown renderer via the cell helper, so code spans and
-// links render (not literal), and a non-string cell value doesn't break
-// template execution.
-// ---------------------------------------------------------------------
 
 func TestTablePartial_CellRendersInlineMarkdown(t *testing.T) {
 	partials, err := Load("")

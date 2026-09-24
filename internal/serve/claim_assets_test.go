@@ -30,7 +30,7 @@ var pngBytes = []byte("\x89PNG\r\n\x1a\n-fixture")
 func imageClaim(id, src string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  ![A diagram](" + src + ")\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 }
 
 // assetProject is the standard fixture for this file: one claim in
@@ -369,7 +369,7 @@ func TestClaimAsset_AllowlistFollowsAClaimEdit(t *testing.T) {
 	writeFile(t, filepath.Join(root, "claims", "facet-a", "one.yaml"),
 		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
 			"body: |\n  no image in this body any more, at all, whatsoever.\n"+
-			"governed_by:\n  type: none\n  reason: fixture\n")
+			"")
 
 	assertNotFoundWithin(t, base, p, stalenessBound)
 }

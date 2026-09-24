@@ -331,10 +331,6 @@ func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
 			Status: model.StatusDraft,
 			Layout: model.LayoutCard,
 			Body:   "An anchor claim with nothing wrong with it.",
-			Governed: model.Governed{
-				Type:   string(model.GovernedNone),
-				Reason: "fixture claim, not backed by any real doctrine",
-			},
 		},
 		{
 			ID:     "widget.contract.crafty",
@@ -347,10 +343,6 @@ func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
 				"that ends in a break marker with nothing to break to\\\n\n" +
 				"- a\n - b\n",
 			RestsOn: []string{"widget.contract.anchor"},
-			Governed: model.Governed{
-				Type:   string(model.GovernedNone),
-				Reason: "fixture claim, not backed by any real doctrine",
-			},
 		},
 	}
 

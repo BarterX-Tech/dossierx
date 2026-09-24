@@ -71,11 +71,7 @@ status: draft
 		body += "tracks:\n" + memberships
 	}
 	return body + `body: |
-  a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  a claim in the ` + facet + ` facet.`
 }
 
 // newTrackProject:

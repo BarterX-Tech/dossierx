@@ -242,17 +242,16 @@ func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
 	cycleA := lockedClaim("fixture.contract.cycle-a", "fixture.contract.cycle-b")
 	cycleB := lockedClaim("fixture.contract.cycle-b", cycleA.ID)
 	governor := model.Claim{ID: "fixture.doctrine.rule", Facet: "doctrine", Status: model.StatusDraft, Body: "draft doctrine"}
-	governed := lockedClaim("fixture.contract.governed")
-	governed.Governed.Type = governor.ID
+	ungated := lockedClaim("fixture.contract.ungated")
 	legacyA := lockedClaim("fixture.contract.legacy-a")
 	legacyB := lockedClaim("fixture.contract.legacy-b", legacyA.ID)
 
-	s := standingStore(missing, retired, cycleA, cycleB, governed, legacyA, legacyB)
-	recordBaseline(s, governed.ID, governor)
+	s := standingStore(missing, retired, cycleA, cycleB, ungated, legacyA, legacyB)
+	recordBaseline(s, ungated.ID, governor)
 	// An old policy store keeps the approval record but has no attributable
 	// dependency baseline. Readiness must remain explicitly unknown.
 	s.PolicyVersion = lock.PolicyLegacy
-	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, governor, governed, legacyA, legacyB}
+	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, governor, ungated, legacyA, legacyB}
 	got := Compute(claims, s, nil)
 	if !hasCondition(got[missing.ID], ConditionMissingDependency, missing.ID, "fixture.contract.does-not-exist") {
 		t.Fatalf("missing required dependency must be visible: %+v", got[missing.ID].DependencyConditions)
@@ -266,8 +265,8 @@ func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
 	if !hasCondition(got[cycleB.ID], ConditionDependencyCycle, cycleB.ID, cycleA.ID, cycleB.ID) {
 		t.Fatalf("reverse cycle assessment must also terminate and report its path: %+v", got[cycleB.ID].DependencyConditions)
 	}
-	if !got[governed.ID].DependencyReady || hasCondition(got[governed.ID], ConditionDependencyUnapproved, governed.ID, governor.ID) {
-		t.Fatalf("governed_by must remain outside approval prerequisites: %+v", got[governed.ID])
+	if !got[ungated.ID].DependencyReady || hasCondition(got[ungated.ID], ConditionDependencyUnapproved, ungated.ID, governor.ID) {
+		t.Fatalf("a claim with no rests_on to a draft doctrine claim must stay dependency-ready: %+v", got[ungated.ID])
 	}
 	if got[legacyB.ID].DependencyReady || !hasCondition(got[legacyB.ID], ConditionUnknownHistoricalBaseline, legacyB.ID, legacyA.ID) {
 		t.Fatalf("legacy missing baseline must remain unknown: %+v", got[legacyB.ID])
@@ -744,9 +743,6 @@ func TestIndependentDifferentialDAG(t *testing.T) {
 				if rng.Intn(2) == 0 {
 					c.RestsOn = append(c.RestsOn, fmt.Sprintf("n%d", j))
 				}
-			}
-			if rng.Intn(4) == 0 {
-				c.Governed.Type = "n5"
 			}
 			claims = append(claims, c)
 		}

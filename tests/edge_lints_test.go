@@ -35,7 +35,7 @@ func writeRestOnLockedFixture(t *testing.T, root, module string) (aPath, bPath s
 	aClaim := "id: " + module + ".contract.a\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
 		"body: |\n  original body for A.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(aPath, []byte(aClaim), 0o644); err != nil {
 		t.Fatalf("write claim a: %v", err)
 	}
@@ -44,7 +44,7 @@ func writeRestOnLockedFixture(t *testing.T, root, module string) (aPath, bPath s
 	bClaim := "id: " + module + ".contract.b\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
 		"body: |\n  B rests on A.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n" +
+		"" +
 		"rests_on:\n  - " + module + ".contract.a\n"
 	if err := os.WriteFile(bPath, []byte(bClaim), 0o644); err != nil {
 		t.Fatalf("write claim b: %v", err)
@@ -99,7 +99,7 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 	changedA := "id: restlockmod.contract.a\n" +
 		"facet: contract\nmodule: restlockmod\nstatus: locked\nlayout: card\n" +
 		"body: |\n  CHANGED body for A, after B was locked against it.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(aPath, []byte(changedA), 0o644); err != nil {
 		t.Fatalf("rewrite claim a: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestLockSucceedsWithOnlyWarningSeverityFinding(t *testing.T) {
 	claim := "id: orphanmod.contract.lonely\n" +
 		"facet: contract\nmodule: orphanmod\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a claim with no edges at all, so only the warning-severity orphan lint fires.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		""
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

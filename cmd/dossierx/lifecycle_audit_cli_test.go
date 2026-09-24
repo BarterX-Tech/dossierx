@@ -24,7 +24,7 @@ func writeLayoutClaim(t *testing.T, claimsDir, id, layout, extra string) string 
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
 	src := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: " + layout + "\n" +
 		"body: |\n  a " + layout + " claim.\n" + extra +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}
@@ -50,7 +50,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	depPath := filepath.Join(claimsDir, "dep.yaml")
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  dependency claim, v1.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(depPath, []byte(dep), 0o644); err != nil {
 		t.Fatalf("write dep: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	mainClaim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  the real, correct main body.\n" +
 		"rests_on:\n  - widget.contract.dep\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		""
 	if err := os.WriteFile(mainPath, []byte(mainClaim), 0o644); err != nil {
 		t.Fatalf("write main: %v", err)
 	}

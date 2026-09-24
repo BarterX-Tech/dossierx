@@ -167,7 +167,7 @@ func TestRun_LedgerCatchesSwappedRawHTML(t *testing.T) {
 		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: mockup\n" +
 			"raw_html: '<div class=\"gcp-row\">approved markup</div>'\nraw_html_reviewed: true\n" +
 			"body: |\n  a locked mockup.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 	if got := lock.ContentHash(claims[0]); got == lock.ContentHash(swapRawHTML(claims[0])) {
 		t.Fatalf("precondition failed: since v0.4.1 ContentHash covers raw_html, but it did not move (got %s for both)", got)
@@ -212,7 +212,7 @@ func TestRun_CommentLedgerDrift(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -236,7 +236,7 @@ func TestRun_NoDigestStoreMeansUnknownNotDrifted(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -445,7 +445,7 @@ func TestRun_DeletingTheDigestStoreIsReported(t *testing.T) {
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
 		"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -631,7 +631,7 @@ func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
 func TestRun_DeletingTheOnlyThreadAndTheDigestStoreIsStillReported(t *testing.T) {
 	const commented = "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"" +
 		"comments:\n" +
 		"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n"
 
@@ -679,7 +679,7 @@ func TestRun_DigestStoreAbsenceIsSilentWithoutLedgerCoverage(t *testing.T) {
 		cfg, claims := project(t, baseConfig, map[string]string{
 			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 				"body: |\n  a draft claim.\n" +
-				"governed_by:\n  type: none\n  reason: fixture\n" +
+				"" +
 				"comments:\n" +
 				"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 		})

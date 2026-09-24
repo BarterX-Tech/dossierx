@@ -60,11 +60,7 @@ facet: ` + facet + `
 module: widget
 status: draft
 body: |
-  a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  a claim in the ` + facet + ` facet.`
 }
 
 // longBodyClaim is a card whose markdown body is many paragraphs. The live
@@ -76,7 +72,7 @@ func longBodyClaim(id, facet string, paragraphs int) string {
 	for i := 0; i < paragraphs; i++ {
 		b.WriteString("  Paragraph " + strconv.Itoa(i) + " lorem ipsum dolor sit amet consectetur adipiscing.\n\n")
 	}
-	b.WriteString("governed_by:\n  type: none\n  reason: viewer-test fixture, not backed by any doctrine claim\n")
+	b.WriteString("")
 	return b.String()
 }
 

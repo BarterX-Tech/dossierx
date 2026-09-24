@@ -63,11 +63,7 @@ status: draft
 		body += "rests_on:\n  - " + restsOn + "\n"
 	}
 	return body + `body: |
-  a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  a claim in the ` + facet + ` facet.`
 }
 
 // newGraphProject is the common two-claim corpus: one claim resting on
@@ -165,10 +161,9 @@ func jsQuote(s string) string { return "\"" + s + "\"" }
 // Step 70 — cycle rendering, proven by INJECTING a cycle-carrying payload
 // ---------------------------------------------------------------------
 
-// injectedCyclePayload carries all three structural shapes at once: a plain
-// rests_on loop, the MIXED rests_on/governed_by loop that neither engine
-// cycle lint could see before v0.5.0, and a literal self-edge — which is
-// reported under its own rule id and never merged into the cycle list.
+// injectedCyclePayload carries two structural shapes at once: a pair of
+// rests_on loops, and a literal self-edge — which is reported under its
+// own rule id and never merged into the cycle list.
 //
 // core.contract.free is in no cycle and no self-edge, and it is what makes the
 // CANVAS half of this test mean something: with every node ringed red, "the
@@ -194,7 +189,7 @@ func injectedCyclePayload(t *testing.T) string {
 			map[string]any{"from": "core.contract.c1", "to": "core.contract.c2", "type": "rests_on"},
 			map[string]any{"from": "core.contract.c2", "to": "core.contract.c1", "type": "rests_on"},
 			map[string]any{"from": "core.contract.m1", "to": "core.contract.m2", "type": "rests_on"},
-			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "governed_by"},
+			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "rests_on"},
 			map[string]any{"from": "core.contract.s1", "to": "core.contract.s1", "type": "rests_on"},
 			// Into a cycle but not part of one. Its line must NOT be drawn as
 			// a cycle edge: a cycle edge is one whose endpoints share a
@@ -432,11 +427,7 @@ facet: "</script><img src=x>"
 module: widget
 status: draft
 body: |
-  a claim whose facet is a script-closing breakout attempt.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  a claim whose facet is a script-closing breakout attempt.`)
 
 	base, _ := p.serve()
 	ctx := browserContext(t)
@@ -552,8 +543,8 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// EDGE_TYPES rather than a literal, plus the two View controls.
 	types := evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-type]'))
 		.map(function (e) { return e.getAttribute('data-dxg-type'); })`)
-	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on", "governed_by"}) {
-		t.Fatalf("edge-type toggles = %v, want the two remaining relation types", types)
+	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on"}) {
+		t.Fatalf("edge-type toggles = %v, want the remaining relation type", types)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-labels], [data-dxg-relayout]').length`); n != 2 {
 		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
@@ -647,11 +638,7 @@ facet: contract
 module: `+module+`
 status: draft
 body: |
-  one of many claims.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`)
+  one of many claims.`)
 	}
 
 	ctx := staticGraphTab(t, p)
@@ -832,7 +819,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 
 	// Now paste a full deep link: a reading-view target AND a graph state.
 	// Both halves must apply.
-	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=rg&lb=1&ex=&se=';`)
+	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=r&lb=1&ex=&se=';`)
 	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'governance'`)
 	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {

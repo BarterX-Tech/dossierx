@@ -209,13 +209,12 @@ func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing
 
 func TestCatalogProjectionUpperBoundCoversEscapedIndentedOutput(t *testing.T) {
 	claim := model.Claim{
-		ID:       "widget.contract.escaped",
-		Module:   "widget<&>",
-		Facet:    "contract",
-		Status:   model.StatusDraft,
-		Layout:   model.LayoutCard,
-		RestsOn:  []string{"widget.contract.\x00quoted\"", "widget.contract.<rest>"},
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "<&>\\\"\n"},
+		ID:      "widget.contract.escaped",
+		Module:  "widget<&>",
+		Facet:   "contract",
+		Status:  model.StatusDraft,
+		Layout:  model.LayoutCard,
+		RestsOn: []string{"widget.contract.\x00quoted\"", "widget.contract.<rest>"},
 	}
 	cat, err := Build([]model.Claim{claim}, nil)
 	if err != nil {
@@ -311,10 +310,6 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 			Module: "widget",
 			Status: model.StatusLocked,
 			Layout: model.LayoutCard,
-			Governed: model.Governed{
-				Type:   "none",
-				Reason: "fixture claim, not backed by any real doctrine",
-			},
 		},
 		{
 			ID:     "widget.internals.fields",
@@ -325,9 +320,6 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 				{"field": "id", "type": "string"},
 			},
 			RestsOn: []string{"widget.contract.overview", "widget.internals.other"},
-			Governed: model.Governed{
-				Type: "widget.doctrine.hub",
-			},
 		},
 	}
 
@@ -362,10 +354,6 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	if overview.Edges.RestsOn != nil {
 		t.Errorf("overview should have no rests_on edges, got %#v", overview.Edges)
 	}
-	if overview.Edges.GovernedBy == nil || overview.Edges.GovernedBy.Type != "none" ||
-		overview.Edges.GovernedBy.Reason != "fixture claim, not backed by any real doctrine" {
-		t.Errorf("overview governed_by = %#v, want type=none with reason", overview.Edges.GovernedBy)
-	}
 
 	fields, ok := byID["widget.internals.fields"]
 	if !ok {
@@ -376,9 +364,6 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	}
 	if len(fields.Edges.RestsOn) != 2 {
 		t.Errorf("fields rests_on = %v, want 2 entries", fields.Edges.RestsOn)
-	}
-	if fields.Edges.GovernedBy == nil || fields.Edges.GovernedBy.Type != "widget.doctrine.hub" || fields.Edges.GovernedBy.Reason != "" {
-		t.Errorf("fields governed_by = %#v, want type=widget.doctrine.hub with no reason", fields.Edges.GovernedBy)
 	}
 
 	// Entries must be sorted by id regardless of input order.

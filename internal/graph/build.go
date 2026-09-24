@@ -102,11 +102,6 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 		for _, target := range c.RestsOn {
 			p.appendEdge(known, c.ID, target, EdgeRestsOn)
 		}
-		// The same guard internal/lint/dangling.go uses: "none" and the
-		// empty type are both "deliberately not governed", not an edge.
-		if t := c.Governed.Type; t != "" && t != "none" {
-			p.appendEdge(known, c.ID, t, EdgeGovernedBy)
-		}
 		// c.Tracks IS NOT WALKED HERE, AND NOTHING BELONGS IN THIS LOOP FOR
 		// IT. Track membership is a set, not a dependency: it has no
 		// direction, so it cannot be a cycle, and the client's scc() walks
@@ -114,7 +109,7 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 		// ring every claim in a track red under the `cycle` rule and hand a
 		// reviewer a structural defect the corpus does not have. Membership
 		// rides on the node instead (Node.Tracks), where a set belongs. See
-		// model.TrackRef and internal/lint/mixed_cycle.go for the same
+		// model.TrackRef for the same
 		// decision taken twice before this one.
 	}
 
@@ -130,7 +125,7 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 		return a.To < b.To
 	})
 
-	// Project-wide degrees, over all three edge types, counted over the
+	// Project-wide degrees, over the remaining rests_on edges, counted over the
 	// edges that actually reached the payload. Counting dropped edges here
 	// too would hand the client a degree it cannot reconcile against the
 	// edge list sitting beside it.

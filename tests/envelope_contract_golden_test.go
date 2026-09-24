@@ -293,17 +293,17 @@ func envTracked(t *testing.T, dir string) map[string]string {
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim\n",
+			"",
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim\n",
+			"",
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
 			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
 			"tracks:\n  - id: guest-checkout\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim\n",
+			"",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
@@ -414,7 +414,7 @@ func envDangling(t *testing.T, dir string) map[string]string {
 	}
 	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a claim resting on an id nothing declares.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n" +
+		"" +
 		"rests_on:\n  - widget.contract.ghost\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
@@ -465,7 +465,7 @@ func envelopeCases() []envelopeCase {
 		{"claim show / a draft claim", envFresh, []string{"claim", "show", "widget.contract.overview"}},
 		{"claim show / an id no claim carries", envFresh, []string{"claim", "show", "widget.contract.ghost"}},
 		{"claim list / every claim", envFresh, []string{"claim", "list"}},
-		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--body", "another fact", "--governed-reason", "fixture"}},
+		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--body", "another fact"}},
 
 		{"claim lock / approved", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},

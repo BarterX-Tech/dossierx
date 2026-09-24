@@ -7,6 +7,3 @@ body: |
   ### Trimmed ###
 
   ### Kept#
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - ATX closing hash run is trimmed per CommonMark

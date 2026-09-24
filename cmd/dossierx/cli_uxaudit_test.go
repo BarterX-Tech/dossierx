@@ -117,7 +117,7 @@ func TestCLI_VersionFlag(t *testing.T) {
 
 func TestCLI_BuildOrderStatus_UnknownModuleRejected(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  leftover.\ngoverned_by:\n  type: none\n  reason: fixture\n",
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  leftover.\n",
 	})
 	_, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "nope")
 	if err == nil {

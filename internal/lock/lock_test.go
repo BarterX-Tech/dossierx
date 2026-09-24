@@ -703,7 +703,7 @@ func TestContentHash_ExcludesComments(t *testing.T) {
 // rather than recomputed so it cannot drift along with the implementation: it
 // is the only thing standing between a future edit to ContentHash's field list
 // and every consuming project's recorded baselines mismatching at once.
-const contentHashNoRawHTML = "5f8766204a1f739054b452d5871bc51e917260a23e961481e48a66c5e3e4e4d2"
+const contentHashNoRawHTML = "b39a06c885236b934cece1487107d58c1feab7b7b641825021f152afcbca9b91"
 
 // TestContentHash_RawHTMLIsHashedOnlyWhenPresent pins both halves of the
 // conditional in ContentHash's raw_html stanza, because each half guards a
@@ -1136,51 +1136,30 @@ func TestTheUnrecordedDigestLockGateIsSilentWhereEvidenceIsHonestlyAbsent(t *tes
 	})
 }
 
-// ---------------------------------------------------------------------
-// governed_by is a DRIFT dependency (#21)
-// ---------------------------------------------------------------------
-
-// TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy pins the whole of
-// what the baseline set is: rests_on, and a governed_by.type that
-// names a claim — with "none" and the empty string excluded by the same guard
-// internal/lint/dangling.go uses, and repeats collapsed deterministically.
-func TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy(t *testing.T) {
+// TestBaselineDependencyIDsIsRestsOnOnly pins the baseline set after NIT-29:
+// only rests_on, with repeats collapsed deterministically.
+func TestBaselineDependencyIDsIsRestsOnOnly(t *testing.T) {
 	cases := []struct {
 		name  string
 		claim model.Claim
 		want  []string
 	}{
 		{
-			name:  "governed_by names a claim",
-			claim: model.Claim{ID: "child", Governed: model.Governed{Type: "widget.doctrine.hub"}},
-			want:  []string{"widget.doctrine.hub"},
-		},
-		{
-			name:  "governed_by none is not a dependency",
-			claim: model.Claim{ID: "child", Governed: model.Governed{Type: "none", Reason: "deliberately ungoverned"}},
-			want:  []string{},
-		},
-		{
-			name:  "governed_by unset is not a dependency",
+			name:  "no rests_on is empty",
 			claim: model.Claim{ID: "child"},
 			want:  []string{},
 		},
 		{
-			name: "both remaining edge types, in order",
+			name: "rests_on in authored order",
 			claim: model.Claim{
-				ID: "child", RestsOn: []string{"r"},
-				Governed: model.Governed{Type: "widget.doctrine.hub"},
+				ID: "child", RestsOn: []string{"r", "widget.doctrine.hub"},
 			},
 			want: []string{"r", "widget.doctrine.hub"},
 		},
 		{
-			// The reason dedupeStable is required rather than incidental: a
-			// claim may reach the same target through two edge types, and the
-			// baseline table must not depend on which edge was walked first.
-			name: "the same target through two edges is one dependency",
+			name: "the same target twice is one dependency",
 			claim: model.Claim{
-				ID: "two-edge", RestsOn: []string{"widget.doctrine.hub"},
-				Governed: model.Governed{Type: "widget.doctrine.hub"},
+				ID: "two-edge", RestsOn: []string{"widget.doctrine.hub", "widget.doctrine.hub"},
 			},
 			want: []string{"widget.doctrine.hub"},
 		},
@@ -1201,94 +1180,15 @@ func TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy(t *testing.T) {
 	}
 }
 
-// TestLockRecordsAGovernanceBaseline is the bug in #21 at its source: before
-// the fix a claim-valued governed_by.type never became an approved baseline, so
-// there was nothing for DetectStale to compare against and editing the
-// governing doctrine claim moved nothing to review_pending.
-func TestLockRecordsAGovernanceBaseline(t *testing.T) {
-	withRegistry(t) // empty registry: lint always passes
-
-	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "the governing doctrine"}
-	// governed_by is the ONLY edge: no rests_on naming the hub.
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "child", Governed: model.Governed{Type: hub.ID}}
-	claims := []model.Claim{hub, child}
-
-	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
-	if err != nil {
-		t.Fatalf("LoadStore: %v", err)
-	}
-	if _, err := Lock(child, claims, testConfig(), store, testApproval()); err != nil {
-		t.Fatalf("Lock: %v", err)
-	}
-
-	got, known := store.Baseline(child.ID, hub.ID)
-	if !known {
-		t.Fatalf("locking a claim with a claim-valued governed_by.type must record the governor's content hash as a per-dependent baseline; store has %v", store.Hashes)
-	}
-	if got != ContentHash(hub) {
-		t.Fatalf("governance baseline = %q, want the governor's current ContentHash %q", got, ContentHash(hub))
-	}
-
-	// And the drift half: edit the governor's comparable content and the
-	// directly governed locked claim flips to review_pending.
-	hub.Body = "the governing doctrine, reworded"
-	locked := child
-	locked.Status = model.StatusLocked
-	out := DetectStale([]model.Claim{hub, locked}, store)
-	for _, c := range out {
-		if c.ID == child.ID && !c.ReviewPending {
-			t.Fatalf("expected review_pending true after the governor's content changed")
-		}
-	}
-}
-
-// TestGovernanceDriftPropagationIsStaged: flagging a directly governed claim
-// does not itself flag claims downstream of it. DetectStale compares stored
-// baselines against CURRENT content, and the downstream claim's baseline is
-// over its dependency's content — which review_pending does not change (see
-// ContentHash's field list).
-func TestGovernanceDriftPropagationIsStaged(t *testing.T) {
-	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "child", Governed: model.Governed{Type: hub.ID}}
-	downstream := model.Claim{ID: "widget.contract.downstream", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "downstream", RestsOn: []string{child.ID}}
-
-	store := &Store{
-		Version: storeSchemaVersion,
-		Hashes: map[string]map[string]string{
-			child.ID:      {hub.ID: ContentHash(hub)},
-			downstream.ID: {child.ID: ContentHash(child)},
-		},
-		LockedAt: map[string]string{},
-		path:     filepath.Join(t.TempDir(), "store.json"),
-	}
-
-	hub.Body = "doctrine v2"
-	out := DetectStale([]model.Claim{hub, child, downstream}, store)
-	for _, c := range out {
-		switch c.ID {
-		case child.ID:
-			if !c.ReviewPending {
-				t.Fatalf("the directly governed claim must be flagged")
-			}
-		case downstream.ID:
-			if c.ReviewPending {
-				t.Fatalf("propagation is staged: a claim resting on a newly-flagged claim must not be flagged in the same pass")
-			}
-		}
-	}
-}
-
-// TestHubGatingIgnoresGovernedBy is the behavioural half of "hub gating is
-// byte-for-byte unchanged" (D-6, branch (a)): governance is a DRIFT edge, not a
-// GATING edge. A child naming an UNLOCKED doctrine-facet claim only through
-// governed_by.type still locks. Widening dependencyIDs instead of adding
-// BaselineDependencyIDs is exactly what this test refuses, and it is a refusal
-// documented in internal/lint/governed_cycle.go and FORMAT.md.
-func TestHubGatingIgnoresGovernedBy(t *testing.T) {
+// TestHubGatingWalksRestsOnOnly is NIT-23's walk: hub gating refuses only
+// when rests_on names an unlocked doctrine-facet claim. A claim that does
+// not rest on the hub still locks (NIT-29 deleted the governed_by drift
+// path that used to sit beside this).
+func TestHubGatingWalksRestsOnOnly(t *testing.T) {
 	withRegistry(t) // empty registry: lint always passes
 
 	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusDraft, Body: "still draft"}
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "child", Governed: model.Governed{Type: hub.ID}}
+	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "child"}
 	claims := []model.Claim{hub, child}
 
 	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
@@ -1297,7 +1197,7 @@ func TestHubGatingIgnoresGovernedBy(t *testing.T) {
 	}
 	got, err := Lock(child, claims, testConfigWithDoctrine(), store, testApproval())
 	if err != nil {
-		t.Fatalf("a claim naming an unlocked doctrine claim ONLY through governed_by must still lock; got %v", err)
+		t.Fatalf("a claim that does not rests_on an unlocked doctrine claim must still lock; got %v", err)
 	}
 	if got.Status != model.StatusLocked {
 		t.Fatalf("expected status locked, got %q", got.Status)
@@ -1313,39 +1213,14 @@ func TestHubGatingIgnoresGovernedBy(t *testing.T) {
 	}
 }
 
-// TestRefreshBaselineRefreshesTheGovernanceBaseline is the reaudit half: a
-// confirmed reaudit re-snapshots the governor, so the drift trigger clears.
-func TestRefreshBaselineRefreshesTheGovernanceBaseline(t *testing.T) {
-	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "child", Governed: model.Governed{Type: hub.ID}}
-	store := &Store{
-		Version:  storeSchemaVersion,
-		Hashes:   map[string]map[string]string{child.ID: {hub.ID: ContentHash(hub)}},
-		LockedAt: map[string]string{},
-		path:     filepath.Join(t.TempDir(), "store.json"),
-	}
-
-	hub.Body = "doctrine v2"
-	RefreshBaseline(child, []model.Claim{hub, child}, store)
-
-	got, known := store.Baseline(child.ID, hub.ID)
-	if !known || got != ContentHash(hub) {
-		t.Fatalf("governance baseline after RefreshBaseline = %q (known=%v), want the governor's new ContentHash %q", got, known, ContentHash(hub))
-	}
-	if out := DetectStale([]model.Claim{hub, child}, store); out[1].ReviewPending {
-		t.Fatalf("a refreshed governance baseline must clear the drift trigger")
-	}
-}
-
-// TestGovernedByNoneCreatesNoBaseline: "none" is a sentinel, not a claim id. It
-// must never become a baseline key — a store row keyed "none" would compare
-// against a claim that cannot exist and quietly do nothing forever.
-func TestGovernedByNoneCreatesNoBaseline(t *testing.T) {
+// TestNoRestsOnCreatesNoBaseline: a claim with no rests_on records no
+// baseline keys.
+func TestNoRestsOnCreatesNoBaseline(t *testing.T) {
 	withRegistry(t) // empty registry: lint always passes
 
 	claim := model.Claim{
 		ID: "widget.contract.ungoverned", Facet: "contract", Module: "widget", Status: model.StatusDraft,
-		Body: "ungoverned", Governed: model.Governed{Type: "none", Reason: "deliberately ungoverned"},
+		Body: "ungoverned",
 	}
 	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
 	if err != nil {
@@ -1355,19 +1230,19 @@ func TestGovernedByNoneCreatesNoBaseline(t *testing.T) {
 		t.Fatalf("Lock: %v", err)
 	}
 	if _, known := store.Baseline(claim.ID, "none"); known {
-		t.Fatalf("governed_by.type: none must create no baseline; store has %v", store.Hashes)
+		t.Fatalf("a claim with no rests_on must create no baseline; store has %v", store.Hashes)
 	}
 }
 
-// TestTwoEdgeDependencyRecordsExactlyOneBaseline is dedupeStable at the store
-// level: rests_on X plus governed_by X is one dependency, recorded once.
+// TestDuplicateRestsOnRecordsExactlyOneBaseline is dedupeStable at the store
+// level: listing the same rests_on target twice is one dependency, recorded once.
 func TestTwoEdgeDependencyRecordsExactlyOneBaseline(t *testing.T) {
 	withRegistry(t) // empty registry: lint always passes
 
 	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine"}
 	twoEdge := model.Claim{
 		ID: "widget.contract.two-edge", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "two edges",
-		RestsOn: []string{hub.ID}, Governed: model.Governed{Type: hub.ID},
+		RestsOn: []string{hub.ID},
 	}
 	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
 	if err != nil {

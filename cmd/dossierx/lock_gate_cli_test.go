@@ -114,15 +114,15 @@ func rollUpDeadlockFixture(t *testing.T, bannerStatus string) string {
 		"claims/banner.yaml": "id: widget.contract.banner\nfacet: contract\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\n" +
 			"build_role: orientation\n" +
 			"body: |\n  read the contract claims below in order.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  the first draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"build_role: behavior\n" +
 			"body: |\n  the second draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"",
 	})
 }
 

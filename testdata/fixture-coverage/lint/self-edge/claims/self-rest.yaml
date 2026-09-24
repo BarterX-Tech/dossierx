@@ -6,8 +6,5 @@ layout: card
 body: |
   A claim whose rests_on edge names its own id -- a self-edge that is
   also the one-node cycle case. Both self-edge and cycle report it.
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine
 rests_on:
   - selfmod.contract.self-rest

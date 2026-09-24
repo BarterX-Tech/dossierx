@@ -63,11 +63,7 @@ facet: contract
 module: widget
 status: draft
 body: |
-  browser scale fixture at layer %d, node %d.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-%s`, id, layer, node, restsOn.String()))
+  browser scale fixture at layer %d, node %d.%s`, id, layer, node, restsOn.String()))
 		}
 	}
 	return p
@@ -239,11 +235,7 @@ facet: contract
 module: widget
 status: draft
 body: |
-  the claim whose readiness a reviewer is deciding.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-rests_on:
+  the claim whose readiness a reviewer is deciding.rests_on:
   - widget.contract.alpha
   - widget.contract.beta
 `
@@ -253,22 +245,14 @@ facet: contract
 module: widget
 status: draft
 body: |
-  a direct prerequisite awaiting approval.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  a direct prerequisite awaiting approval.`
 
 const readinessBetaYAML = `id: widget.contract.beta
 facet: contract
 module: widget
 status: draft
 body: |
-  a direct prerequisite with an upstream prerequisite.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-rests_on:
+  a direct prerequisite with an upstream prerequisite.rests_on:
   - widget.contract.gamma
 `
 
@@ -277,11 +261,7 @@ facet: contract
 module: widget
 status: draft
 body: |
-  an upstream prerequisite awaiting approval.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
+  an upstream prerequisite awaiting approval.`
 
 func newReadinessProject(t *testing.T) *project {
 	t.Helper()
@@ -313,33 +293,21 @@ facet: contract
 module: widget
 status: draft
 body: |
-  an upstream prerequisite awaiting approval.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`, id))
+  an upstream prerequisite awaiting approval.`, id))
 	}
 	p.writeClaim("hub.yaml", `id: widget.contract.hub
 facet: contract
 module: widget
 status: draft
 body: |
-  the single first-hop route to many upstream blockers.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-rests_on:
+  the single first-hop route to many upstream blockers.rests_on:
   - `+strings.Join(leafIDs, "\n  - ")+"\n")
 	p.writeClaim("root.yaml", `id: widget.contract.root
 facet: contract
 module: widget
 status: draft
 body: |
-  a root with one grouped module.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-rests_on:
+  a root with one grouped module.rests_on:
   - widget.contract.hub
 `)
 

@@ -222,8 +222,4 @@ facet: contract
 module: widget
 status: locked
 build_role: schema
-body: claim b
-governed_by:
-  type: none
-  reason: fixture
-`
+body: claim b`

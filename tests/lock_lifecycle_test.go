@@ -80,7 +80,7 @@ func llWriteClaim(t *testing.T, root string, spec llClaimSpec) string {
 			b.WriteString("  - " + r + "\n")
 		}
 	}
-	b.WriteString("governed_by:\n  type: none\n  reason: lock-lifecycle test fixture, not backed by any doctrine claim\n")
+	b.WriteString("")
 
 	path := filepath.Join(root, "claims", lastSegment(spec.id)+".yaml")
 	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {

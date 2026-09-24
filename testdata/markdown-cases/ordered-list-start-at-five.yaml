@@ -6,6 +6,3 @@ layout: card
 body: |
   5. Fifth
   6. Sixth
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - <ol start> is emitted when the first item's number is not 1
