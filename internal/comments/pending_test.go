@@ -21,15 +21,14 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// governedPair returns a locked doctrine hub and a locked claim governed by it
-// through governed_by.type ONLY — no rests_on naming the hub — plus
-// a store already baselined at the hub's current content.
-func governedPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
+// dependentPair returns a locked hub and a locked claim that rests_on it,
+// plus a store already baselined at the hub's current content.
+func dependentPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 	t.Helper()
-	hub = model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
+	hub = model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "hub v1"}
 	child = model.Claim{
 		ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked,
-		Body: "child", Governed: model.Governed{Type: hub.ID},
+		Body: "child", RestsOn: []string{hub.ID},
 	}
 	var err error
 	store, err = lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
@@ -40,19 +39,19 @@ func governedPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 	return hub, child, store
 }
 
-func TestPendingTriggers_GovernorEditIsDrift(t *testing.T) {
-	hub, child, store := governedPair(t)
+func TestPendingTriggers_DependencyEditIsDrift(t *testing.T) {
+	hub, child, store := dependentPair(t)
 
 	// Baselined and unchanged: no trigger at all.
 	if drift, flag, open := PendingTriggers(child, []model.Claim{hub, child}, store, nil); drift || flag || open != 0 {
 		t.Fatalf("a freshly baselined claim has no trigger; got drift=%v flag=%v open=%d", drift, flag, open)
 	}
 
-	// The governor's comparable content changes.
-	hub.Body = "doctrine v2"
+	// The dependency's comparable content changes.
+	hub.Body = "hub v2"
 	drift, _, _ := PendingTriggers(child, []model.Claim{hub, child}, store, nil)
 	if !drift {
-		t.Fatalf("editing the governing claim must report drift=true — this is the trigger lock.DetectStale acted on when it wrote review_pending")
+		t.Fatalf("editing the dependency must report drift=true — this is the trigger lock.DetectStale acted on when it wrote review_pending")
 	}
 	if !Recompute(child, []model.Claim{hub, child}, store, nil) {
 		t.Fatalf("Recompute must agree with PendingTriggers; a comment op that disagrees erases the drift silently")
@@ -62,9 +61,11 @@ func TestPendingTriggers_GovernorEditIsDrift(t *testing.T) {
 // TestPendingTriggers_AgreesWithDetectStale is the invariant this package's own
 // doc claims and the reason the hand-copy was deleted rather than widened: for
 // the same claims and the same store, comments and lock must reach the same
-// verdict. It is asserted over every edge type at once.
+// verdict. It is asserted over every edge type at once — one, since the
+// governed_by drift edge retired (NIT-29); the table stays a table for the
+// next one.
 func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
-	hub := model.Claim{ID: "widget.doctrine.hub", Facet: "doctrine", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
+	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "hub v1"}
 	rested := model.Claim{ID: "widget.contract.rested", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "rested"}
 
 	cases := []struct {
@@ -72,11 +73,6 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 		child model.Claim
 		edit  func(claims []model.Claim)
 	}{
-		{
-			name:  "governed_by",
-			child: model.Claim{ID: "c1", Facet: "contract", Module: "widget", Status: model.StatusLocked, Governed: model.Governed{Type: hub.ID}},
-			edit:  func(claims []model.Claim) { claims[0].Body = "doctrine v2" },
-		},
 		{
 			name:  "rests_on",
 			child: model.Claim{ID: "c3", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{rested.ID}},
@@ -108,26 +104,5 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 				t.Fatalf("expected the %s edit to be drift", tc.name)
 			}
 		})
-	}
-}
-
-// TestPendingTriggers_GovernedByNoneIsNotADependency: "none" is the sentinel for
-// "deliberately ungoverned". It names no claim, so it can never drift.
-func TestPendingTriggers_GovernedByNoneIsNotADependency(t *testing.T) {
-	claim := model.Claim{
-		ID: "widget.contract.ungoverned", Facet: "contract", Module: "widget", Status: model.StatusLocked,
-		Body: "ungoverned", Governed: model.Governed{Type: "none", Reason: "deliberately ungoverned"},
-	}
-	store, err := lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
-	if err != nil {
-		t.Fatalf("lock.LoadStore: %v", err)
-	}
-	lock.RefreshBaseline(claim, []model.Claim{claim}, store)
-
-	if _, known := store.Baseline(claim.ID, "none"); known {
-		t.Fatalf("governed_by.type: none must create no baseline; store has %v", store.Hashes)
-	}
-	if drift, _, _ := PendingTriggers(claim, []model.Claim{claim}, store, nil); drift {
-		t.Fatalf("governed_by.type: none must never report drift")
 	}
 }

@@ -89,8 +89,7 @@ type Cause struct {
 }
 
 // DependencyCondition is a live readiness obstacle on a required dependency
-// path. A governed_by edge is intentionally absent from this set: governance
-// is a drift edge, not an approval prerequisite.
+// path.
 type DependencyCondition struct {
 	Kind         ConditionKind `json:"kind"`
 	DependencyID string        `json:"dependency_id,omitempty"`
@@ -541,30 +540,17 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 		}
 		return out
 	}
+	// The baseline set and the required chain are the same set — rests_on,
+	// deduplicated — so every baselined dependency is also an approval
+	// prerequisite. (The retired governed_by edge was the one drift-only
+	// input that sat in the first set and not the second; NIT-29.)
 	for _, depID := range lock.BaselineDependencyIDs(c) {
 		dep, exists := byID[depID]
 		if !exists {
-			// A missing governed_by input is still reported by the
-			// relevant integrity/lint gate; it is deliberately not turned into
-			// an approval prerequisite here. rests_on is the required chain.
-			if contains(c.RestsOn, depID) {
-				out.conditions = append(out.conditions, DependencyCondition{
-					Kind: ConditionMissingDependency, DependencyID: depID,
-					Path: Path{c.ID, depID}, Detail: "required dependency is missing",
-				})
-			}
-			continue
-		}
-		if !contains(c.RestsOn, depID) {
-			// governed_by is a comparable drift input, but it does not
-			// create an approval prerequisite.
-			if stored, known := baseline(store, c.ID, depID); known && stored != lock.ContentHash(dep) {
-				out.causes = append(out.causes, Cause{
-					Kind: CauseDirectDependencyChange, SourceKind: CauseDirectDependencyChange,
-					DependencyID: depID, Path: Path{c.ID, depID}, Direct: true,
-					Detail: "dependency content differs from the reviewed baseline",
-				})
-			}
+			out.conditions = append(out.conditions, DependencyCondition{
+				Kind: ConditionMissingDependency, DependencyID: depID,
+				Path: Path{c.ID, depID}, Detail: "required dependency is missing",
+			})
 			continue
 		}
 		state := dependencyState(dep)

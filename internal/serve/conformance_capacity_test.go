@@ -13,7 +13,7 @@ import (
 func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
 	files := make(map[string]string)
 	for i := 0; i < 64; i++ {
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
@@ -66,7 +66,7 @@ func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
 func TestServeConformanceCapacityReportsFailure(t *testing.T) {
 	files := make(map[string]string)
 	for i := 0; i < 64; i++ {
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
@@ -94,7 +94,7 @@ func TestServeLintPrecedesConformanceCapacityLikeEveryCheckMode(t *testing.T) {
 		if i == 0 {
 			restsOn = "rests_on:\n  - widget.contract.missing\n"
 		}
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\n%[2]sgoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i, restsOn)
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\n%[2]sembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i, restsOn)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
@@ -127,11 +127,11 @@ func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecove
 	for i := range facets {
 		facet := fmt.Sprintf("f%03d", i)
 		facets[i] = facet
-		files[fmt.Sprintf("claims/f%03d.yaml", i)] = fmt.Sprintf("id: widget.%s.one\nfacet: %s\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\ngoverned_by:\n  type: none\n  reason: fixture\n", facet, facet)
+		files[fmt.Sprintf("claims/f%03d.yaml", i)] = fmt.Sprintf("id: widget.%s.one\nfacet: %s\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\n", facet, facet)
 	}
 	capacityPath := "claims/f000.yaml"
 	capacity := func(reason string) string {
-		return "id: widget.f000.one\nfacet: f000\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
+		return "id: widget.f000.one\nfacet: f000\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
 	}
 	files[capacityPath] = capacity(strings.Repeat("x", 70<<20))
 	cfg := "schema_version: 1\nfacets: [" + strings.Join(facets, ", ") + "]\nmodules: [widget]\nclaims_dir: claims\n"

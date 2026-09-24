@@ -219,8 +219,7 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"body: |\n  the original approved body.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  the original approved body.\n",
 	})
 	claimFile := filepath.Join(root, "claims", "a.yaml")
 

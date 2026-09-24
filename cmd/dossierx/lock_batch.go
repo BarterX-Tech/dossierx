@@ -97,13 +97,13 @@ type batchLockData struct {
 // lint.Finding (internal/lint/lint.go) carries no structured field naming the
 // OTHER claim in a two-claim relationship — no "DependsOn" or "Target", only
 // LintName, ClaimID, Message and Severity. rest-on-locked's unmet dependency,
-// a cycle's other members, a governed-cycle's other members: every one of
+// a cycle's other members: every one of
 // them is named ONLY in Message, in prose ("locked claim rests_on X which is
 // not locked", "rests_on cycle detected: a -> b -> c -> a"). So the "names a
 // requested claim as the unmet dependency" half of the scoping rule falls
 // back to a substring search over Message — there is no structured field to
-// prefer it over. This is exact for rest-on-locked, cycle, mixed-cycle,
-// governed-cycle and dangling, because each of those writes the OTHER
+// prefer it over. This is exact for rest-on-locked, cycle and dangling,
+// because each of those writes the OTHER
 // claim's id verbatim into its Message; a lint added later that names a
 // dependency only in free prose (no id substring) would silently stop being
 // caught by this fallback, the same way a human reading that finding would
@@ -113,8 +113,8 @@ type batchLockData struct {
 // the ClaimID check: the only claim rest-on-locked ever attaches a finding
 // to is the one doing the resting (the "locked claim" in its own message),
 // so f.ClaimID already names the requested claim whenever this finding
-// exists at all. The fallback earns its keep on graph-shaped lints (cycle,
-// mixed-cycle, governed-cycle) where every member of a cycle gets its OWN
+// exists at all. The fallback earns its keep on graph-shaped lints (cycle)
+// where every member of a cycle gets its OWN
 // finding with its OWN ClaimID — a cycle finding on a non-requested member
 // still names every other member of the same cycle in its Message, including
 // a requested one, and that cycle is exactly as real a problem for the

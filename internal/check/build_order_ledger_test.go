@@ -77,8 +77,7 @@ func lockBuildOrder(t *testing.T, cfg *config.Config, _ []model.Claim, module st
 func orderedClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 		"build_role: behavior\n" +
-		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  a locked claim.\n"
 }
 
 // A properly locked build order must be SILENT. This is the assertion that

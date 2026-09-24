@@ -28,12 +28,11 @@ var brickingBodies = []string{
 
 func brickClaim(path, body string) model.Claim {
 	return model.Claim{
-		ID:       "widget.contract.a",
-		Facet:    "contract",
-		Module:   "widget",
-		Status:   model.StatusDraft,
-		Body:     "base claim body",
-		Governed: model.Governed{Type: "none", Reason: "fixture"},
+		ID:     "widget.contract.a",
+		Facet:  "contract",
+		Module: "widget",
+		Status: model.StatusDraft,
+		Body:   "base claim body",
 		Comments: []model.Comment{{
 			ID:      "c-000001",
 			Status:  model.CommentStatusOpen,

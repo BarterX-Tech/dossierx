@@ -128,7 +128,7 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "claim", "list"},
 		{"--config", cfgPath, "claim", "list", "--review-pending"},
 		{"--config", cfgPath, "claim", "list", "--migrated"},
-		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--body", "a new fact", "--governed-reason", "fixture"},
+		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--body", "a new fact"},
 		{"--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "unlock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "flag", "widget.contract.overview", "--dry-run"},
@@ -250,8 +250,7 @@ func TestEnvelope_CheckFailsAtLint(t *testing.T) {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  broken fixture.\n" +
-			"rests_on:\n  - widget.contract.does-not-exist\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")
@@ -426,8 +425,7 @@ func TestEnvelope_BuildOrderStatusIsRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  leftover.\n",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -590,8 +588,7 @@ func TestLockGateCodes(t *testing.T) {
 	broken := t.TempDir()
 	brokenCfg := writeCheckFixture(t, broken, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\nrests_on:\n  - widget.contract.nope\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a claim.\nrests_on:\n  - widget.contract.nope\n",
 	})
 	env, _, err = execReviewedCLIJSON(t, "--config", brokenCfg, "claim", "lock", "widget.contract.a", "--reason", "approved")
 	if err == nil {
@@ -779,8 +776,7 @@ func buildOrderFixture(t *testing.T) string {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  a locked claim with a build role.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a locked claim with a build role.\n",
 	})
 	return cfgPath
 }
@@ -789,8 +785,7 @@ func TestEnvelope_BuildOrderVerbsAreRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  leftover.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  leftover.\n",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -887,8 +882,7 @@ func TestEnvelopeKeysAreSnakeCase(t *testing.T) {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  broken fixture.\n" +
-			"rests_on:\n  - widget.contract.does-not-exist\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")

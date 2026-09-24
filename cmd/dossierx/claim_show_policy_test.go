@@ -133,7 +133,7 @@ func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 				body += "  - " + dep + "\n"
 			}
 		}
-		return body + "governed_by:\n  type: none\n  reason: fixture\n"
+		return body
 	}
 	cases := []struct {
 		name        string
@@ -282,7 +282,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		wantConditions int
 	}
 	claim := func(id string, deps ...string) model.Claim {
-		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, BuildRole: model.BuildRoleBehavior, Body: "bounded fixture", RestsOn: deps, Governed: model.Governed{Type: "none", Reason: "fixture"}}
+		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, BuildRole: model.BuildRoleBehavior, Body: "bounded fixture", RestsOn: deps}
 	}
 
 	makeChain := func(size int) shape {

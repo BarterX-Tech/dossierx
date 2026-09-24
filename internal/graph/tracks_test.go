@@ -247,7 +247,7 @@ func TestTrackLessPayloadIsByteIdenticalToPreTracks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	const want = `{"schema":1,"generated_at":"","nodes":[{"id":"widget.contract.one",` +
+	const want = `{"schema":2,"generated_at":"","nodes":[{"id":"widget.contract.one",` +
 		`"title":"One","module":"widget","facet":"contract","status":"locked","kind":"fact",` +
 		`"build_role":"api","emphasis":false,"review_pending":false,"open_comments":0,` +
 		`"in_degree":0,"out_degree":0}],"edges":[],` +

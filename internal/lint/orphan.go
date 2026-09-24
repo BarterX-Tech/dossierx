@@ -4,11 +4,6 @@
 // an isolated claim (e.g. a standalone glossary entry) can be entirely
 // intentional, but is worth surfacing since the far more common case is a
 // claim that was meant to be wired into the graph and wasn't.
-//
-// governed_by is not counted as an edge here: type: none with a reason is
-// the normal, expected state for a claim with no doctrine backing, so
-// treating every such claim as "has an edge" would make this lint nearly
-// useless; the governed-required lint is what enforces the reason itself.
 package lint
 
 import (

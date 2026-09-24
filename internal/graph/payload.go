@@ -67,18 +67,20 @@ import (
 // built against an older shape cannot read. It rides on the wire as the
 // payload's "schema" key so the client can refuse a payload it does not
 // understand rather than silently mis-rendering one.
-const SchemaVersion = 1
+//
+// 2 (NIT-29): the governed_by edge type is gone from the wire. A client built
+// against schema 1 would still parse this payload, but it would offer a
+// governed_by toggle, a governance overlay and a GOVERNED BY block that can
+// never light, so the bump is deliberate.
+const SchemaVersion = 2
 
 // Edge type values. These are the wire strings, matching the claim
-// edge kinds model.Claim declares (RestsOn, Governed). They are
+// edge kinds model.Claim declares (RestsOn). They are
 // constants rather than literals because graph-core.js keys its edge-type
 // toggles off them and viewer-tests asserts on them, so they are contract.
 const (
 	// EdgeRestsOn is one entry of model.Claim.RestsOn.
 	EdgeRestsOn = "rests_on"
-	// EdgeGovernedBy is a claim's single governed_by edge, emitted only
-	// when the type names a real doctrine claim (see Build).
-	EdgeGovernedBy = "governed_by"
 )
 
 // Node is one claim, projected down to the facts the pane draws with.
@@ -185,8 +187,8 @@ type Node struct {
 // NodeTrack is one claim's membership in one track.
 //
 // MEMBERSHIP IS NOT AN EDGE, and this type existing beside Edge rather than
-// inside it is the whole statement. RestsOn and Governed are
-// semantic dependencies between claims and carry cycle lints; a track is a
+// inside it is the whole statement. RestsOn is a
+// semantic dependency between claims and carries a cycle lint; a track is a
 // SET, and a set has no direction to run in a circle. Emitting membership as
 // an Edge would put it into the client's scc() walk and ring every track
 // member red. See model.TrackRef, which decides this for the model, and
@@ -219,7 +221,7 @@ type NodeTrack struct {
 type Edge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
-	// Type is one of EdgeRestsOn, EdgeGovernedBy.
+	// Type is EdgeRestsOn.
 	Type string `json:"type"`
 }
 

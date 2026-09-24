@@ -102,11 +102,6 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 		for _, target := range c.RestsOn {
 			p.appendEdge(known, c.ID, target, EdgeRestsOn)
 		}
-		// The same guard internal/lint/dangling.go uses: "none" and the
-		// empty type are both "deliberately not governed", not an edge.
-		if t := c.Governed.Type; t != "" && t != "none" {
-			p.appendEdge(known, c.ID, t, EdgeGovernedBy)
-		}
 		// c.Tracks IS NOT WALKED HERE, AND NOTHING BELONGS IN THIS LOOP FOR
 		// IT. Track membership is a set, not a dependency: it has no
 		// direction, so it cannot be a cycle, and the client's scc() walks

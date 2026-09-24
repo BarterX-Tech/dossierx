@@ -234,25 +234,21 @@ func TestComputeIntegrityDriftPropagatesAndStaleBitCannotMakeReady(t *testing.T)
 	}
 }
 
-func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
+func TestComputeMissingRetiredCycleAndLegacyHistory(t *testing.T) {
 	missing := lockedClaim("fixture.contract.missing-user", "fixture.contract.does-not-exist")
 	retiredDep := lockedClaim("fixture.contract.retired")
 	retiredDep.Status = model.Status("retired")
 	retired := lockedClaim("fixture.contract.retired-user", retiredDep.ID)
 	cycleA := lockedClaim("fixture.contract.cycle-a", "fixture.contract.cycle-b")
 	cycleB := lockedClaim("fixture.contract.cycle-b", cycleA.ID)
-	governor := model.Claim{ID: "fixture.doctrine.rule", Facet: "doctrine", Status: model.StatusDraft, Body: "draft doctrine"}
-	governed := lockedClaim("fixture.contract.governed")
-	governed.Governed.Type = governor.ID
 	legacyA := lockedClaim("fixture.contract.legacy-a")
 	legacyB := lockedClaim("fixture.contract.legacy-b", legacyA.ID)
 
-	s := standingStore(missing, retired, cycleA, cycleB, governed, legacyA, legacyB)
-	recordBaseline(s, governed.ID, governor)
+	s := standingStore(missing, retired, cycleA, cycleB, legacyA, legacyB)
 	// An old policy store keeps the approval record but has no attributable
 	// dependency baseline. Readiness must remain explicitly unknown.
 	s.PolicyVersion = lock.PolicyLegacy
-	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, governor, governed, legacyA, legacyB}
+	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, legacyA, legacyB}
 	got := Compute(claims, s, nil)
 	if !hasCondition(got[missing.ID], ConditionMissingDependency, missing.ID, "fixture.contract.does-not-exist") {
 		t.Fatalf("missing required dependency must be visible: %+v", got[missing.ID].DependencyConditions)
@@ -265,9 +261,6 @@ func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
 	}
 	if !hasCondition(got[cycleB.ID], ConditionDependencyCycle, cycleB.ID, cycleA.ID, cycleB.ID) {
 		t.Fatalf("reverse cycle assessment must also terminate and report its path: %+v", got[cycleB.ID].DependencyConditions)
-	}
-	if !got[governed.ID].DependencyReady || hasCondition(got[governed.ID], ConditionDependencyUnapproved, governed.ID, governor.ID) {
-		t.Fatalf("governed_by must remain outside approval prerequisites: %+v", got[governed.ID])
 	}
 	if got[legacyB.ID].DependencyReady || !hasCondition(got[legacyB.ID], ConditionUnknownHistoricalBaseline, legacyB.ID, legacyA.ID) {
 		t.Fatalf("legacy missing baseline must remain unknown: %+v", got[legacyB.ID])
@@ -744,9 +737,6 @@ func TestIndependentDifferentialDAG(t *testing.T) {
 				if rng.Intn(2) == 0 {
 					c.RestsOn = append(c.RestsOn, fmt.Sprintf("n%d", j))
 				}
-			}
-			if rng.Intn(4) == 0 {
-				c.Governed.Type = "n5"
 			}
 			claims = append(claims, c)
 		}

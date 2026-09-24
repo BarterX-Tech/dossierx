@@ -214,9 +214,11 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":      7,
-		"commands":   20,
-		"lint_rules": 33,
+		"nouns":    7,
+		"commands": 20,
+		// 33 -> 29 with the governed_by kill (NIT-29): governed-cycle,
+		// governed-required, mixed-cycle and validated-on-missing are gone.
+		"lint_rules": 29,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
 		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):

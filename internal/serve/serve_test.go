@@ -27,8 +27,7 @@ const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widg
 // thread to a draft never sets review_pending, so the file stays predictable).
 func draftClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  a draft claim.\n"
 }
 
 // lockedClaimWithOpenThread is a locked card carrying one open thread c-aaaaaa,
@@ -36,7 +35,6 @@ func draftClaim(id string) string {
 func lockedClaimWithOpenThread(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n"
 }
@@ -552,8 +550,7 @@ func TestPing_Shape(t *testing.T) {
 func TestRoot_RendersBrokenProjectsNotBlank(t *testing.T) {
 	danglingRef := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  rests on a ghost.\n" +
-		"rests_on:\n  - widget.contract.ghost\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.ghost\n"
 
 	dupA := draftClaim("widget.contract.dup")
 	dupB := draftClaim("widget.contract.dup") // same id in a second file
@@ -856,7 +853,6 @@ func TestListComments_OpenFilter(t *testing.T) {
 	files := map[string]string{
 		"claims/mixed.yaml": "id: widget.contract.mixed\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"body: |\n  mixed threads.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-open01\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: still open\n    edited: false\n" +
 			"  - id: c-done01\n    status: resolved\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: all done\n    edited: false\n    resolved_by: human\n    resolved_at: \"2026-07-24T11:00:00Z\"\n",

@@ -66,8 +66,7 @@ func TestClaimNewRefusesRetiredOverviewFacet(t *testing.T) {
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.router",
-		"--body", "read the contract claims below in order.",
-		"--governed-reason", "fixture")
+		"--body", "read the contract claims below in order.")
 	if err == nil || env.OK {
 		t.Fatalf("claim new must refuse the retired overview facet, got %+v", env)
 	}
@@ -79,8 +78,7 @@ func TestClaimNewHonoursAnExplicitLayout(t *testing.T) {
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.explicit",
 		"--layout", "banner",
-		"--body", "deliberately a banner.",
-		"--governed-reason", "fixture")
+		"--body", "deliberately a banner.")
 	if err != nil {
 		t.Fatalf("claim new: %v", err)
 	}
@@ -105,8 +103,7 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  the approved body.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  the approved body.\n",
 	})
 	// A hand edit to a LOCKED claim, after the ledger recorded it: the drift the
 	// gate exists to catch.
@@ -115,8 +112,7 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	// And, entirely separately, a draft claim that does not lint.
 	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  rests on nothing that exists.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "broken.yaml"), []byte(broken), 0o644); err != nil {
 		t.Fatalf("write broken claim: %v", err)
 	}
@@ -151,7 +147,7 @@ func TestDryRunDetailsDescribeTheVerdictTheyStandNextTo(t *testing.T) {
 
 	// claim new, on an id nothing has taken.
 	dr := dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.fresh",
-		"--body", "a new claim.", "--governed-reason", "fixture")
+		"--body", "a new claim.")
 	assertPassingDetailsDoNotContradict(t, "claim new", dr.Preconditions, map[string]string{
 		"id_is_unused":   "already exists",
 		"file_is_unused": "already exists",

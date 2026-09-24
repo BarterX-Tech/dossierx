@@ -64,9 +64,7 @@
 //     The image refusal is different in kind — it is a security boundary, and
 //     it is the one thing about a comment body that the claim's own lint run
 //     is the right place to surface.
-//   - Governed.Reason and RawHTML are not scanned: the first renders no
-//     images and carries no markdown ceiling worth warning about, and the
-//     second is raw-html-scope's entirely.
+//   - RawHTML is not scanned: it is raw-html-scope's entirely.
 package lint
 
 import (
