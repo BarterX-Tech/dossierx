@@ -7,3 +7,6 @@ body: |
   Feature | Status
   ------- | ------
   tables  | shipped
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - leading and trailing pipes are optional on every row

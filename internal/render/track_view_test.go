@@ -36,13 +36,14 @@ func trackTestConfig(t *testing.T, tracksYAML string) *config.Config {
 
 func trackTestClaim(module, slug string, status model.Status, tracks ...model.TrackRef) model.Claim {
 	return model.Claim{
-		ID:     module + ".contract." + slug,
-		Module: module,
-		Facet:  "contract",
-		Status: status,
-		Layout: model.LayoutCard,
-		Body:   slug + " body",
-		Tracks: tracks,
+		ID:      module + ".contract." + slug,
+		Module:  module,
+		Facet:   "contract",
+		Status:  status,
+		Layout:  model.LayoutCard,
+		Body:    slug + " body",
+		RestsOn: model.RestsNone("test fixture"),
+		Tracks:  tracks,
 	}
 }
 
@@ -99,8 +100,11 @@ func TestRender_NoTracksEmitsNoTrackMarkup(t *testing.T) {
 	if !strings.Contains(out, "</details>\n          </div>\n        </div>\n") {
 		t.Errorf("the sidebar's track guard left markup behind ahead of </nav>")
 	}
-	if !strings.Contains(out, "</section>\n\n\n    </main>") {
-		t.Errorf("the content area's track guard left markup behind ahead of </main>")
+	// The Constitution section (NIT-27) is a constant presence at the end of
+	// the content area, so the track guard's slot is the bytes between the
+	// last module section and it — still exactly two guard newlines.
+	if !strings.Contains(out, "</section>\n\n\n        <section class=\"module-section constitution-section\"") {
+		t.Errorf("the content area's track guard left markup behind ahead of the constitution section")
 	}
 }
 

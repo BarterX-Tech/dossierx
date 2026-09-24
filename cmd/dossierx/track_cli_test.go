@@ -57,6 +57,7 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 
 	claims := map[string]string{
 		// The track's OWN sentence: feature-level, locked, and the only claim
@@ -64,22 +65,26 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: owns\n",
+			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		// A citation with an EXPLICIT cites role, already locked.
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: cites\n",
+			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		// A citation with NO role — the default, which must read as cites — in a
 		// different module, and still draft. This is the blocker.
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
 			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
-			"tracks:\n  - id: guest-checkout\n",
+			"tracks:\n  - id: guest-checkout\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		// In no track at all: it must not appear in any track's report.
 		"unrelated.yaml": "id: payments.contract.settlement\n" +
 			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
-			"body: |\n  settlement runs nightly.\n",
+			"body: |\n  settlement runs nightly.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {

@@ -145,6 +145,9 @@ module: %[1]s
 status: draft
 body: |
   a claim under review.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 %[2]s
 `
 

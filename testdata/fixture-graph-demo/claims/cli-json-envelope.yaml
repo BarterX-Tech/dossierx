@@ -8,3 +8,4 @@ body: |
   Every run emits exactly one envelope carrying a success flag, a data object and, on failure, a stable machine-readable code.
 rests_on:
   - engine.schema.claim-shape
+review_pending: true

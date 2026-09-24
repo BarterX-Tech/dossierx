@@ -1,0 +1,11 @@
+{
+  "version": 3,
+  "policy_version": 1,
+  "hashes": {},
+  "locked_at": {},
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-24T15:43:12.312131Z"
+  }
+}

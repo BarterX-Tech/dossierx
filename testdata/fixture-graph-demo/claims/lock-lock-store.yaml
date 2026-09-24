@@ -8,3 +8,4 @@ body: |
   The store records, per approved claim, when it was approved and what the approved content hashed to.
 rests_on:
   - engine.schema.claim-shape
+review_pending: true

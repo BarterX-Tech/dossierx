@@ -182,7 +182,8 @@ func TestClaimAsset_APartialWriteKeepsThePreviousIndex(t *testing.T) {
 	// gone, the entry goes away like any other edit.
 	writeFile(t, claim,
 		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
-			"body: |\n  the diagram was removed from this claim.\n")
+			"body: |\n  the diagram was removed from this claim.\n"+
+			"rests_on:\n  none: true\n  reason: fixture\n")
 	assertNotFoundWithin(t, base, p, stalenessBound)
 }
 
@@ -228,7 +229,7 @@ func TestClaimAsset_AKeptIndexStopsAuthorisingAfterTheGrace(t *testing.T) {
 	// error, which is what a non-claim YAML dropped into claims/ looks like.
 	stray := filepath.Join(root, "claims", "facet-a", "stray.yaml")
 	writeFile(t, stray, "id: widget.contract.stray\nfacet: contract\nmodule: widget\nstatus: draft\n"+
-		"body: x\nnot_a_real_field: true\n")
+		"body: x\nnot_a_real_field: true\nrests_on:\n  none: true\n  reason: fixture\n")
 	// And the claim stops referencing drop.png, so the allowlist is now wrong.
 	writeFile(t, filepath.Join(root, "claims", "facet-a", "one.yaml"),
 		twoImageClaim("widget.contract.one", "assets/keep.png"))
@@ -277,7 +278,7 @@ func twoImageClaim(id string, srcs ...string) string {
 	for _, src := range srcs {
 		s += "  ![d](" + src + ")\n\n"
 	}
-	return s
+	return s + "rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 // assertOKWithin polls until path is served, for assertions about a route that

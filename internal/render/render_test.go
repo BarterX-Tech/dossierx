@@ -51,11 +51,12 @@ func TestRender_NilCatalog(t *testing.T) {
 
 func claimFor(layout model.Layout) model.Claim {
 	c := model.Claim{
-		ID:     "widget." + string(layout) + ".sample",
-		Facet:  string(layout),
-		Module: "widget",
-		Status: model.StatusDraft,
-		Layout: layout,
+		ID:      "widget." + string(layout) + ".sample",
+		Facet:   string(layout),
+		Module:  "widget",
+		Status:  model.StatusDraft,
+		Layout:  layout,
+		RestsOn: model.RestsNone("test fixture"),
 	}
 	switch layout {
 	case model.LayoutCard, model.LayoutTree:
@@ -140,12 +141,13 @@ func TestRender_PreservesAuthoredSignificantWhitespace(t *testing.T) {
 // <table> element.
 func TestRender_TableExplicitEmptyRows(t *testing.T) {
 	claim := model.Claim{
-		ID:     "widget.table.empty-rows",
-		Facet:  "contract",
-		Module: "widget",
-		Status: model.StatusDraft,
-		Layout: model.LayoutTable,
-		Rows:   []model.Row{}, // explicit empty array, not nil/omitted
+		ID:      "widget.table.empty-rows",
+		Facet:   "contract",
+		Module:  "widget",
+		Status:  model.StatusDraft,
+		Layout:  model.LayoutTable,
+		Rows:    []model.Row{}, // explicit empty array, not nil/omitted
+		RestsOn: model.RestsNone("test fixture"),
 	}
 
 	cat, err := catalog.Build([]model.Claim{claim}, nil)
@@ -260,12 +262,13 @@ func TestRender_OverrideMissingPartialFallsBack(t *testing.T) {
 
 func groupedClaim(id, module, facet string, status model.Status) model.Claim {
 	return model.Claim{
-		ID:     id,
-		Module: module,
-		Facet:  facet,
-		Status: status,
-		Layout: model.LayoutBanner,
-		Body:   "x",
+		ID:      id,
+		Module:  module,
+		Facet:   facet,
+		Status:  status,
+		Layout:  model.LayoutBanner,
+		Body:    "x",
+		RestsOn: model.RestsNone("test fixture"),
 	}
 }
 
@@ -994,12 +997,13 @@ func TestBuildGroups_UndeclaredFacetIsUngroupedNotInjected(t *testing.T) {
 
 func TestRender_ClaimBodyAppearsOncePerClaim(t *testing.T) {
 	note := model.Claim{
-		ID:     "widget.contract.router",
-		Module: "widget",
-		Facet:  "contract",
-		Status: model.StatusDraft,
-		Layout: model.LayoutCard,
-		Body:   "CONTRACT-BODY",
+		ID:      "widget.contract.router",
+		Module:  "widget",
+		Facet:   "contract",
+		Status:  model.StatusDraft,
+		Layout:  model.LayoutCard,
+		Body:    "CONTRACT-BODY",
+		RestsOn: model.RestsNone("test fixture"),
 	}
 	claims := []model.Claim{
 		note,

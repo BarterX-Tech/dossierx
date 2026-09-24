@@ -124,7 +124,7 @@ func TestClaimShowCorruptStoreCannotClaimReadinessAndWritesNothing(t *testing.T)
 }
 
 func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
-	const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - doctrine\nmodules:\n  - widget\nclaims_dir: claims\ndoctrine_facet: doctrine\n"
+	const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	claimYAML := func(id, facet, status string, rests []string) string {
 		body := "id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: " + status + "\nlayout: card\nbuild_role: behavior\nbody: |\n  fixture claim.\n"
 		if len(rests) > 0 {
@@ -132,8 +132,9 @@ func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 			for _, dep := range rests {
 				body += "  - " + dep + "\n"
 			}
+			return body
 		}
-		return body
+		return body + "rests_on:\n  none: true\n  reason: fixture\n"
 	}
 	cases := []struct {
 		name        string
@@ -142,10 +143,6 @@ func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 		wantAdvice  string
 		admissible  bool
 	}{
-		{"doctrine rests_on", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.doctrine.hub"}),
-			"claims/hub.yaml":   claimYAML("widget.doctrine.hub", "doctrine", "draft", nil),
-		}, "doctrine_dependency_not_locked", "dependency widget.doctrine.hub is doctrine", false},
 		{"missing dependency", map[string]string{
 			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.gone"}),
 		}, "missing_dependency", "missing_dependency", false},
@@ -221,7 +218,6 @@ func TestPolicyVerdictAdviceNeverTurnsRefusalsIntoReady(t *testing.T) {
 		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:rest-on-locked"}, LintFindings: []lint.Finding{{LintName: "rest-on-locked", ClaimID: "child", Message: "unlocked dependency"}}}, "rest-on-locked"},
 		{"own roll-up", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:roll-up"}, LintFindings: []lint.Finding{{LintName: "roll-up", ClaimID: "child", Message: "draft sibling"}}}, "roll-up"},
 		{"open comments", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"unresolved_comments"}, OpenThreads: []string{"c-1"}}, "open comment thread"},
-		{"doctrine rests_on or mirror", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"doctrine_dependency_not_locked:doctrine:hub"}}, "dependency hub is doctrine"},
 		{"missing prerequisite", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"missing_dependency:gone"}}, "missing_dependency:gone"},
 		{"unreadable prerequisite", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"unreadable_dependency:bad"}}, "unreadable_dependency:bad"},
 		{"cycle", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"dependency_cycle:parent"}}, "dependency_cycle:parent"},
@@ -282,7 +278,11 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		wantConditions int
 	}
 	claim := func(id string, deps ...string) model.Claim {
-		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, BuildRole: model.BuildRoleBehavior, Body: "bounded fixture", RestsOn: deps}
+		ro := model.RestsNone("fixture")
+		if len(deps) > 0 {
+			ro = model.RestsOnIDs(deps...)
+		}
+		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, BuildRole: model.BuildRoleBehavior, Body: "bounded fixture", RestsOn: ro}
 	}
 
 	makeChain := func(size int) shape {
@@ -306,7 +306,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 	wide := []model.Claim{claim("shape.contract.wideroot")}
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("shape.contract.wide%03d", i)
-		wide[0].RestsOn = append(wide[0].RestsOn, id)
+		wide[0].RestsOn.AppendIDs(id)
 		wide = append(wide, claim(id))
 	}
 	makeDense := func(layers, width int) shape {

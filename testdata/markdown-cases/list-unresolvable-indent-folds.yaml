@@ -7,3 +7,6 @@ body: |
   - L1
       - L2
     stray continuation
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - an indent matching no open level folds into the deepest reachable item

@@ -7,3 +7,6 @@ body: |
   - [x] done
 
   - [ ] todo
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the checkbox precedes the <p> wrapper in a loose task list

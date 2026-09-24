@@ -7,3 +7,6 @@ body: |
   - First item that
     wraps to the next line
   - Second item here
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

@@ -9,3 +9,6 @@ body: |
   ```
   <script>alert(1)</script> & "quoted" & 'val'
   ```
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

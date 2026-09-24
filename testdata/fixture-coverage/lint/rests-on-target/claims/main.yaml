@@ -1,0 +1,8 @@
+id: local.contract.main
+facet: contract
+module: local
+status: draft
+layout: card
+body: Rests on a foreign internals claim.
+rests_on:
+  - other.internals.secret

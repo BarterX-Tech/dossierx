@@ -6,3 +6,6 @@ layout: card
 body: |
   > - [x] done
   > - [ ] todo
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - task items are legal in a blockquote interior

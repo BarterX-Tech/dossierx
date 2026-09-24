@@ -109,6 +109,14 @@ func TestStatus_LedgerFindingsNeverNull(t *testing.T) {
 // is CSRF-exempt, so a bare unauthenticated poll would be the trigger.
 func TestStatus_DoesNotWriteLedgerStores(t *testing.T) {
 	_, base, root := startServer(t, baseConfig, standardFiles())
+	storesBefore := map[string]string{}
+	for _, rel := range []string{"build/ledger/lock-store.json", "build/ledger/comment-digest.json"} {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("the fixture's roof lock must have written %s: %v", rel, err)
+		}
+		storesBefore[rel] = string(raw)
+	}
 
 	for i := 0; i < 3; i++ {
 		if resp, data := do(t, http.MethodGet, base+"/api/status", ""); resp.StatusCode != http.StatusOK {
@@ -116,9 +124,13 @@ func TestStatus_DoesNotWriteLedgerStores(t *testing.T) {
 		}
 	}
 
-	for _, rel := range []string{"build/ledger/lock-store.json", "build/ledger/comment-digest.json"} {
-		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
-			t.Fatalf("GET /api/status created %s (stat err=%v); the ledger gate is a pure read and serve must never adopt a store on a poll", rel, err)
+	// The roof lock (NIT-6) is the fixture's first ledger write, so both stores
+	// exist before the first poll; the assertion is that the poll leaves them
+	// byte-identical — the gate is a pure read and never adopts on a poll.
+	for rel, before := range storesBefore {
+		after, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil || string(after) != before {
+			t.Fatalf("GET /api/status touched %s (err=%v); the ledger gate is a pure read and serve must never adopt a store on a poll", rel, err)
 		}
 	}
 }

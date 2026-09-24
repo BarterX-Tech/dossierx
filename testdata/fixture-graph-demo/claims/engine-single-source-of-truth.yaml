@@ -7,3 +7,6 @@ build_role: orientation
 emphasis: true
 body: |
   Every fact in this project has exactly one home. A second place that states the same thing is a second place to keep correct, and the two will disagree.
+rests_on:
+  none: true
+  reason: fixture claim; nothing to rest on

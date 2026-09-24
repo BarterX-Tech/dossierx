@@ -37,12 +37,14 @@ func disclosureFixture(t *testing.T) (cfgPath, claimPath string) {
 	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "main.yaml")
 	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
 		"body: |\n" +
 		"  the retry policy allows two attempts.\n" +
 		"  Backoff is exponential, starting at 200ms.\n" +
-		"  A dead-letter queue receives whatever still fails.\n"
+		"  A dead-letter queue receives whatever still fails.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

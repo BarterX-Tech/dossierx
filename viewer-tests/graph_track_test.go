@@ -72,6 +72,9 @@ status: draft
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 

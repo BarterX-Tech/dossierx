@@ -7,3 +7,6 @@ body: |
   - First item
   - Second item
   - Third item
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

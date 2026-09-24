@@ -115,9 +115,10 @@ check / refused at lint by a dangling edge, writing
     argv          check
     exit          1
     ok            false
-    envelope      command data error ok stopped_at
+    envelope      command data error ok stopped_at warnings
     command       check
-    data          gitignore_check:string
+    data          comment_digests_adopted:[string]
+                  gitignore_check:string
                   ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
@@ -148,7 +149,7 @@ claim show / a draft claim
     command       claim show
     data          claim_id:string
                   comments:{open:number,open_thread_ids:[],replies:number,resolved:number,threads:number}
-                  edges:{depended_on_by:[],rests_on:[]}
+                  edges:{depended_on_by:[],rests_on:[],rests_on_none:bool,rests_on_reason:string}
                   facet:string
                   implemented_in:[]
                   kind:string
@@ -188,7 +189,7 @@ claim list / every claim
                   total:number
 
 claim new / a fresh draft
-    argv          claim new widget.contract.second --body another fact
+    argv          claim new widget.contract.second --body another fact --rests-on-none-reason fixture
     exit          0
     ok            true
     envelope      command data ok warnings
@@ -574,6 +575,66 @@ skills export / into an explicit directory
                   target_dir:string
                   written:[string]
 
+constitution show / absent file
+    argv          constitution show
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       constitution show
+    data          digest:{decisions:number,glossary:number,hash:string,invariants:number,near_cap:bool,over_cap:bool,path:string,present:bool,status:string,word_cap:number,words:number}
+                  lock:{hash:string,locked_at:string,near_cap:bool,over_cap:bool,path:string,reason:string,state:string,stored_hash:string,word_cap:number,words:number}
+                  path:string
+                  present:bool
+                  sections:[{entries:[{Body:string,Slug:string,Title:string}],name:string}|{entries:null,name:string}]
+                  status:string
+                  text:string
+
+constitution lock / absent file
+    argv          constitution lock --reason fixture
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       constitution lock
+    error         code:string
+                  details:object
+                  hint:string
+                  message:string
+    error.code    already_locked
+    error.details constitution:{hash:string,locked_at:string,near_cap:bool,over_cap:bool,path:string,reason:string,state:string,stored_hash:string,word_cap:number,words:number}
+                  path:string
+                  state:string
+
+manifest show / constitution digest
+    argv          manifest show
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       
+    error         code:string
+                  message:string
+    error.code    usage
+
+usage / constitution with no leaf
+    argv          constitution
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       constitution
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    usage
+
+usage / manifest with no leaf
+    argv          manifest
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       
+    error         code:string
+                  message:string
+    error.code    usage
+
 usage / a noun with no leaf
     argv          claim
     exit          1
@@ -597,7 +658,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (13 of 48)
+    pinned by an invocation above (13 of 49)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -611,9 +672,11 @@ ERROR-CODE COVERAGE
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (35)
+    reachable only from states no fixture here builds (36)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
+        CONSTITUTION_NOT_LOCKED
+        CONSTITUTION_OVER_CAP
         bad_request
         banner_claim
         claim_file_changed
@@ -622,7 +685,6 @@ ERROR-CODE COVERAGE
         comment_digest_unavailable
         conformance_capacity_exceeded
         conformance_failed
-        dependency_not_locked
         empty_body
         implink_refused
         integrity_failed

@@ -50,6 +50,7 @@ func implinkTestClaim(module string) model.Claim {
 		Layout:    model.LayoutCard,
 		Body:      "main claim",
 		BuildRole: model.BuildRoleBehavior,
+		RestsOn:   model.RestsNone("test fixture"),
 	}
 }
 

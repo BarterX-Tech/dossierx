@@ -1,0 +1,5 @@
+status: draft
+invariants:
+  - slug: one-roof
+    title: One roof
+    body: This fixture has one lockable constitution above every module.

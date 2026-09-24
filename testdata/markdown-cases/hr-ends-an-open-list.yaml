@@ -8,3 +8,6 @@ body: |
   - b
   ---
   After.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a thematic break closes an open list

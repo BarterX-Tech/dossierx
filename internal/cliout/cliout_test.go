@@ -100,7 +100,7 @@ func TestExitCodesStayInTheDocumentedThreeFamilies(t *testing.T) {
 		CodeCommentDigestDrift, CodeCommentDigestUnavailable, CodeInternal,
 		CodeConfigNotFound, CodeInvalidConfig, CodeInvalidClaim, CodeLintFailed, CodeNotLocked,
 		CodeAlreadyLocked, CodeReviewPending, CodeNotReviewPending, CodeWrongState,
-		CodeUnresolvedComments, CodeDependencyNotLocked, CodeStructuredLayout,
+		CodeUnresolvedComments, CodeConstitutionOverCap, CodeStructuredLayout,
 		CodeNoArtifact, CodeImplinkRefused,
 		CodeUnknownModule, CodeMissingFlag, CodeUnsupportedFormat, CodeUsage, CodeWriteConflict,
 		CodeWriteFailed, CodeConformanceCapacityExceeded, CodeConformanceFailed,

@@ -7,3 +7,6 @@ body: |
   ### Section Heading
 
   Content under the heading.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests level 3 heading

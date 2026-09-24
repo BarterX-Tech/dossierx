@@ -55,7 +55,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "portability fixture claim, not backed by any real doctrine"
+      },
       "readiness": {
         "claim_id": "beacon.spec.overview",
         "policy_version": 1,

@@ -7,3 +7,6 @@ body: |
   | syntax | note |
   | --- | --- |
   | `a\|b` | one cell, one code span |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the documented escape exception - an escaped pipe is the only way to put a pipe in a cell's code span

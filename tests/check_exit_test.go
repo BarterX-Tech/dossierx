@@ -34,6 +34,7 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
+		lockFixtureConstitution(t, root)
 	}
 
 	t.Run("clean project exits 0", func(t *testing.T) {
@@ -41,7 +42,8 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		writeConfig(t, root)
 		writeClaim(t, root, "locked.yaml",
 			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n"+
-				"body: |\n  a locked claim.\n")
+				"body: |\n  a locked claim.\n"+
+				"rests_on:\n  none: true\n  reason: fixture\n")
 		// "Clean" now includes the lock-ledger gate: a hand-written
 		// "status: locked" with no approval record is exactly what it refuses,
 		// so record the approval this fixture always implied.

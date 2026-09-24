@@ -7,3 +7,6 @@ body: |
   Helper claim, targeted by the other claim's rests_on edge so neither trips the
   orphan warning. It joins no track either, which is what leaves the declared
   track empty.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

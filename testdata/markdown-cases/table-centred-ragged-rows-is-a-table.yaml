@@ -9,3 +9,6 @@ body: |
   | x |
   | y |
   | z |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - four centre-aligned columns with three ragged rows - the exact shape the markup ceiling silently turned into a paragraph

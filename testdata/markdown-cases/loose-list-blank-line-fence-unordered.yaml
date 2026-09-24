@@ -11,3 +11,6 @@ body: |
     ```
 
   - Then run it.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the loose-list rule for an unordered list; a blank line before an indented fence must not split the list

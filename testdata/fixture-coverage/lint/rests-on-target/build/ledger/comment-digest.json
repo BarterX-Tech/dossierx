@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "digests": {
+    "local.contract.main": "3925d0d6cf7177d4c598312deedb7cb59ef519f5de5586d2aa34f799a61b6f35",
+    "other.internals.secret": "d13aa4319e664970b41aee5a6fe502a4b04145644996e4e4f9122d44b1ce4dcc"
+  }
+}

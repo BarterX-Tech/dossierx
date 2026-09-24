@@ -130,6 +130,7 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	lockFixtureConstitution(t, root)
 
 	claims := map[string]string{
 		"sprocket-blueprint.yaml": "id: sprocket.blueprint.overview\n" +
@@ -138,7 +139,8 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 			"rests_on:\n  - gizmo.lineage.overview\n",
 		"gizmo-lineage.yaml": "id: gizmo.lineage.overview\n" +
 			"facet: lineage\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
-			"body: gizmo lineage overview.\n",
+			"body: gizmo lineage overview.\n" +
+			"rests_on:\n  none: true\n  reason: toy project fixture\n",
 		"gizmo-risk.yaml": "id: gizmo.risk.overview\n" +
 			"facet: risk\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
 			"body: gizmo risk overview.\n" +
@@ -840,9 +842,11 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	lockFixtureConstitution(t, root)
 	claim := "id: offlinemod.contract.overview\n" +
 		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\n" +
-		"body: offline fixture claim.\n"
+		"body: offline fixture claim.\n" +
+		"rests_on:\n  none: true\n  reason: offline fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -913,9 +917,11 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(projectRoot, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	lockFixtureConstitution(t, projectRoot)
 	claim := "id: collidemod.contract.overview\n" +
 		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\n" +
-		"body: fixture claim exercised from a colliding-parent-path build.\n"
+		"body: fixture claim exercised from a colliding-parent-path build.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -7,3 +7,6 @@ body: |
   | pattern | meaning |
   | --- | --- |
   | a \| b | either a or b |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - an escaped pipe is literal cell content, not a cell separator

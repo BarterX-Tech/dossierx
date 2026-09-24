@@ -60,7 +60,8 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"raw_html_reviewed": {hashed: true, mutate: func(c *model.Claim) { c.RawHTMLReviewed = false }},
 	"steps":             {hashed: true, mutate: func(c *model.Claim) { c.Steps = []string{"step one", "step two"} }},
 	"mirrors":           {hashed: true, mutate: func(c *model.Claim) { c.Mirrors = []string{"widget.contract.elsewhere"} }},
-	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = nil }},
+	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = model.RestsOnIDs("widget.contract.elsewhere") }},
+	"scope":             {hashed: true, mutate: func(c *model.Claim) { c.Scope = model.ScopeProject }},
 	"migrated_from":     {hashed: true, mutate: func(c *model.Claim) { c.MigratedFrom = "docs/other.html" }},
 
 	// sources: SIGNED, and this field is close to the reason the hash is a
@@ -113,7 +114,7 @@ func fullyPopulatedClaim() model.Claim {
 		RawHTMLReviewed: true,
 		Steps:           []string{"step one"},
 		Mirrors:         []string{"widget.internals.mirror"},
-		RestsOn:         []string{"widget.contract.dep"},
+		RestsOn:         model.RestsNone("a governed reason"),
 		Sources: []model.Source{
 			{Ref: 1, Kind: model.SourceKindExternal, Title: "Vendor API reference", URL: "https://example.invalid/api", AccessedOn: "2026-01-01", Supports: "the approved sentence"},
 			{Ref: 2, Kind: model.SourceKindInternal, Title: "Requirement record", Path: "records/requirements.jsonl", RecordID: "REQ-001", SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
@@ -242,7 +243,7 @@ func TestLockedClaimHashIsIndependentOfStatus(t *testing.T) {
 }
 
 // TestLockedClaimHashSeesWhatContentHashCannot is the audit's headline finding,
-// as a test. model.Claim persists twenty-four fields; ContentHash covers a small
+// as a test. model.Claim persists twenty-two fields; ContentHash covers a small
 // allowlist. A ledger built on ContentHash would certify each of the edits below
 // as unchanged.
 //
@@ -314,8 +315,11 @@ func TestContentHashIsUnchangedByTheLedger(t *testing.T) {
 		ID: "widget.contract.overview", Facet: "contract", Module: "widget",
 		Status: model.StatusLocked, Layout: model.LayoutCard, Body: "the approved body",
 		Steps: []string{"step one"}, Mirrors: []string{"widget.internals.mirror"},
-		RestsOn: []string{"widget.contract.dep"},
+		RestsOn: model.RestsOnIDs("widget.contract.dep"),
 	}
+	// The v0.7.21 (NIT-29) value: the retired governed_by line left it then,
+	// and the rests_on shape change (NIT-24) must NOT move it — a target list
+	// hashes exactly as the []string it used to be.
 	const want = "14de6c9efe5ce36286ac5961982262a74dcf831a29fc225f57e0aeedac361584"
 
 	if got := ContentHash(c); got != want {
@@ -331,6 +335,7 @@ func TestContentHashEmbodimentCompatibilityAndMeaning(t *testing.T) {
 	base := model.Claim{
 		ID: "widget.contract.state", Facet: "contract", Module: "widget",
 		Status: model.StatusDraft, Layout: model.LayoutCard, Body: "A state vocabulary.",
+		RestsOn: model.RestsNone("standalone fixture"),
 	}
 	without := ContentHash(base)
 	if got := ContentHash(base); got != without {

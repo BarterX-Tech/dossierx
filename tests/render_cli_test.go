@@ -27,13 +27,15 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, root)
 
 	// rows: [] on disk decodes to a non-nil, zero-length slice — distinct
 	// from an omitted rows key — and must be treated as valid, intentional
 	// data, not a shape error.
 	claim := "id: emptyrowsmod.internals.empty-table\n" +
 		"facet: internals\nmodule: emptyrowsmod\nstatus: draft\nlayout: table\n" +
-		"rows: []\n"
+		"rows: []\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "empty-table.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -151,6 +153,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, root)
 
 	status := "draft"
 	if locked {
@@ -160,7 +163,8 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 		"facet: internals\nmodule: widget\nstatus: " + status + "\nlayout: mockup\n" +
 		"body: A console mockup.\n" +
 		"raw_html: '" + rawHTML + "'\n" +
-		"raw_html_reviewed: " + boolStr(reviewed) + "\n"
+		"raw_html_reviewed: " + boolStr(reviewed) + "\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "mockup.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write mockup claim: %v", err)
 	}

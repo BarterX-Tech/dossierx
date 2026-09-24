@@ -6,3 +6,6 @@ layout: card
 body: |
   A beacon is a tiny portability-fixture concept used only to prove the engine
   has zero hardcoded assumptions about facet/module naming or doctrine gating.
+rests_on:
+  none: true
+  reason: portability fixture claim, not backed by any real doctrine

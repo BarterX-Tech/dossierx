@@ -8,3 +8,6 @@ body: |
     ### not a heading
     ---
     > not a quote
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - list-item interiors take nested lists, task items and fences only

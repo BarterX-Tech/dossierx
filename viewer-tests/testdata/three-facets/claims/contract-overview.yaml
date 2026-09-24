@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   A widget is the smallest unit this fixture documents.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim

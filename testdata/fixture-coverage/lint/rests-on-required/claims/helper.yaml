@@ -1,0 +1,8 @@
+id: restreq.contract.helper
+facet: contract
+module: restreq
+status: draft
+layout: card
+body: A helper that rests on the bare claim, so neither is an orphan.
+rests_on:
+  - restreq.contract.missing

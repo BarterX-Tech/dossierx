@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   Visit https://example.com for more information.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests bare URL autolink

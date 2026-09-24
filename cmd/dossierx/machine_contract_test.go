@@ -141,7 +141,8 @@ func icWriteRoledClaim(t *testing.T, claimPath, module string) {
 	claim := "id: " + module + ".contract.overview\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
 		"build_role: schema\n" +
-		"body: |\n  fixture claim for in-process CLI tests.\n"
+		"body: |\n  fixture claim for in-process CLI tests.\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("rewrite claim with a build_role: %v", err)
 	}
@@ -383,6 +384,7 @@ func TestClaimLinkDryRunAgreesWithTheWritePath(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("rewrite config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture"); err != nil {
 		t.Fatalf("lock the claim so it is linkable: %v", err)
 	}
@@ -464,9 +466,11 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	claimPath := filepath.Join(claimsDir, "a.yaml")
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"build_role: schema\nbody: |\n  claim a.\n"
+		"build_role: schema\nbody: |\n  claim a.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -507,6 +511,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	// Two claims in DIFFERENT phases, so the artifact has two phase blocks to
 	// reverse. One claim could not express this edit at all.
 	for _, c := range []struct{ name, id, role string }{
@@ -514,7 +519,8 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 		{"b", "widget.contract.b", "behavior"},
 	} {
 		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"build_role: " + c.role + "\nbody: |\n  claim " + c.name + ".\n"
+			"build_role: " + c.role + "\nbody: |\n  claim " + c.name + ".\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n"
 		if err := os.WriteFile(filepath.Join(claimsDir, c.name+".yaml"), []byte(claim), 0o644); err != nil {
 			t.Fatalf("write claim %s: %v", c.id, err)
 		}
@@ -563,7 +569,13 @@ func TestClaimsSentinelContentionIsAWriteConflictOnEveryVerb(t *testing.T) {
 	if err := os.Chmod(root, 0o555); err != nil {
 		t.Fatalf("make the project dir read-only: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(root, 0o755) }) //nolint:errcheck // best-effort restore so TempDir cleanup works
+	// The roof lock already created build/ledger; the sentinels live there,
+	// so it has to be read-only too for the write to be refused.
+	if err := os.Chmod(filepath.Join(root, "build", "ledger"), 0o555); err != nil {
+		t.Fatalf("make the ledger dir read-only: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Join(root, "build", "ledger"), 0o755) }) //nolint:errcheck // best-effort restore
+	t.Cleanup(func() { os.Chmod(root, 0o755) })                                   //nolint:errcheck // best-effort restore so TempDir cleanup works
 
 	for _, tc := range []struct {
 		name string

@@ -94,14 +94,17 @@ modules:
 claims_dir: claims
 `
 
-// draftClaimYAML is a single lockable draft claim with no edges, so it is
-// lint-clean on its own.
+// draftClaimYAML is a single lockable draft claim with a governed_by: none
+// escape hatch (so it needs no doctrine claim to be lint-clean).
 const draftClaimYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
 body: |
   a claim under review.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const testClaimID = "widget.contract.overview"
@@ -134,7 +137,49 @@ func newProjectRaw(t *testing.T, configYAML string) *project {
 	if err := os.WriteFile(cfg, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	return &project{t: t, bin: bin, dir: dir, config: cfg, claimsDir: claimsDir}
+	p := &project{t: t, bin: bin, dir: dir, config: cfg, claimsDir: claimsDir}
+	p.lockConstitution()
+	return p
+}
+
+// fixtureConstitutionYAML is the smallest roof a fixture can carry.
+const fixtureConstitutionYAML = "status: draft\n" +
+	"invariants:\n" +
+	"  - slug: one-roof\n" +
+	"    title: One roof\n" +
+	"    body: This fixture has one lockable constitution above every module.\n"
+
+// lockConstitution gives the project the locked roof the gate demands
+// (NIT-26), through the real binary, so its claims can lock and plain check
+// can render the viewer.
+func (p *project) lockConstitution() {
+	p.t.Helper()
+	path := filepath.Join(p.dir, "constitution.yaml")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte(fixtureConstitutionYAML), 0o644); err != nil {
+			p.t.Fatalf("write fixture constitution: %v", err)
+		}
+	}
+	// Idempotent and tolerant, like the other suites' helper: a roof that is
+	// locked and unchanged is done, and a config that cannot load yet (an
+	// override dir the test writes later) has no roof to lock — serve() arms
+	// it again once the layout is complete.
+	out, err := exec.Command(p.bin, "--config", p.config, "--format", "json", "constitution", "lock", "--reason", "fixture roof").CombinedOutput()
+	if err == nil {
+		return
+	}
+	var env struct {
+		Error *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(out, &env) == nil && env.Error != nil {
+		switch env.Error.Code {
+		case "already_locked", "invalid_config", "config_not_found":
+			return
+		}
+	}
+	p.t.Fatalf("lock fixture constitution: %v\n%s", err, out)
 }
 
 func (p *project) writeClaim(name, content string) {
@@ -306,6 +351,10 @@ func (p *project) claimBytes() []byte {
 // registered with t.Cleanup so a failing test never leaks the process.
 func (p *project) serve() (base string, stop func()) {
 	p.t.Helper()
+	// The roof, armed again here: a test that wrote its override directory
+	// after newProjectRaw skipped the lock, and serve renders the gate's
+	// verdict.
+	p.lockConstitution()
 	cmd := exec.Command(p.bin, "--config", p.config, "serve")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

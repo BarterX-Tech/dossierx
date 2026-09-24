@@ -87,7 +87,7 @@ func TestAuditBoundary_TheDisownedClaimIsNotDetected(t *testing.T) {
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep"}
 	victim := model.Claim{
 		ID: "widget.contract.main", Facet: "contract", Module: "widget",
-		Status: model.StatusLocked, Body: "the approved body", RestsOn: []string{dep.ID},
+		Status: model.StatusLocked, Body: "the approved body", RestsOn: model.RestsOnIDs(dep.ID),
 	}
 
 	honest, honestDigests := boundaryProject(t)

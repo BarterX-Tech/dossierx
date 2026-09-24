@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   This text has _italic content_ in it.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests italic with underscore, under CommonMark flanking

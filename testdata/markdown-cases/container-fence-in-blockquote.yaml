@@ -10,3 +10,6 @@ body: |
   > code block
   > inside blockquote
   > ```
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests fence inside blockquote (currently escapes prefixes)

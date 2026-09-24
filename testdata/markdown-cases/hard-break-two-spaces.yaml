@@ -6,3 +6,6 @@ layout: card
 body: |
   First line  
   Second line after break.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests hard break with two trailing spaces

@@ -32,6 +32,20 @@ const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widg
 // see ledger_test.go.
 func project(t *testing.T, cfgBody string, files map[string]string) (*config.Config, []model.Claim) {
 	t.Helper()
+	return projectWithRoof(t, cfgBody, files, true)
+}
+
+// projectUnroofed is project without the locked constitution: the shape of a
+// project that has not yet locked its roof, which is what the roof gate
+// (NIT-26) refuses and what a test about "never ledger-covered" must now
+// build, since the roof lock is the first ledger write a project makes.
+func projectUnroofed(t *testing.T, cfgBody string, files map[string]string) (*config.Config, []model.Claim) {
+	t.Helper()
+	return projectWithRoof(t, cfgBody, files, false)
+}
+
+func projectWithRoof(t *testing.T, cfgBody string, files map[string]string, roof bool) (*config.Config, []model.Claim) {
+	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfgBody), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -52,6 +66,9 @@ func project(t *testing.T, cfgBody string, files map[string]string) (*config.Con
 	claims, err := loader.LoadClaims(cfg.ClaimsDir)
 	if err != nil {
 		t.Fatalf("load claims: %v", err)
+	}
+	if roof {
+		armConstitution(t, cfg)
 	}
 	armLedger(t, cfg, claims)
 	armDigestsIfCommented(t, cfg, claims)
@@ -80,12 +97,14 @@ func armDigestsIfCommented(t *testing.T, cfg *config.Config, claims []model.Clai
 
 func draftClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  a draft claim.\n"
+		"body: |\n  a draft claim.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 func lockedClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-		"body: |\n  a locked claim.\n"
+		"body: |\n  a locked claim.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 // lockedCodeClaim is lockedClaim in a code-producing build_role: the shape the
@@ -93,7 +112,8 @@ func lockedClaim(id string) string {
 // is therefore never expected to be linked.
 func lockedCodeClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
-		"body: |\n  a locked claim with code behind it.\n"
+		"body: |\n  a locked claim with code behind it.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 func severities(findings []lint.Finding) map[lint.Severity]int {
@@ -109,7 +129,8 @@ func severities(findings []lint.Finding) map[lint.Severity]int {
 func TestRun_SuccessWritesAndReports(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  start here.\n",
+			"body: |\n  start here.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/one.yaml": draftClaim("widget.contract.one"),
 	})
 
@@ -264,6 +285,7 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
 			"body: |\n  a locked claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -296,7 +318,8 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
-			"body: |\n  a locked claim, review_pending with no active trigger.\n",
+			"body: |\n  a locked claim, review_pending with no active trigger.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -376,7 +399,8 @@ func TestRun_StepTagScanAndStatus(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
-			"steps:\n  - do the thing\n",
+			"steps:\n  - do the thing\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
@@ -469,7 +493,8 @@ func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
-			"steps:\n  - do the thing\n  - do the other thing\n",
+			"steps:\n  - do the thing\n  - do the other thing\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
@@ -489,7 +514,7 @@ func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml":  lockedCodeClaim("widget.contract.locked"),
-		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\n",
+		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\nrests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go":         "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
 	})
 

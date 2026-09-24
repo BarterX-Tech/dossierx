@@ -4,3 +4,6 @@ module: widget
 status: draft
 layout: card
 body: The **inline** surface has no paragraph wrapper.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

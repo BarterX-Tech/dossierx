@@ -9,4 +9,6 @@ body: |
   ![Retry state machine](assets/retry.svg)
 
   and the prose carries on after it.
-
+rests_on:
+  none: true
+  reason: "markdown renderer test fixture - the ordinary case: one co-located image in a claim body's prose"

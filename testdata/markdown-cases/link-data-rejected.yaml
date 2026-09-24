@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   This [link](data:text/html,<script>) has a data scheme.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests scheme rejection

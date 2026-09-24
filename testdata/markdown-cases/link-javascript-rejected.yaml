@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   This [link](javascript:alert('xss')) has a dangerous scheme.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests scheme rejection

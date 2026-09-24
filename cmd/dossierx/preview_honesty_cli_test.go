@@ -66,7 +66,8 @@ func TestClaimNewRefusesRetiredOverviewFacet(t *testing.T) {
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.router",
-		"--body", "read the contract claims below in order.")
+		"--body", "read the contract claims below in order.",
+		"--rests-on-none-reason", "fixture")
 	if err == nil || env.OK {
 		t.Fatalf("claim new must refuse the retired overview facet, got %+v", env)
 	}
@@ -78,7 +79,8 @@ func TestClaimNewHonoursAnExplicitLayout(t *testing.T) {
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.explicit",
 		"--layout", "banner",
-		"--body", "deliberately a banner.")
+		"--body", "deliberately a banner.",
+		"--rests-on-none-reason", "fixture")
 	if err != nil {
 		t.Fatalf("claim new: %v", err)
 	}
@@ -103,7 +105,8 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  the approved body.\n",
+			"body: |\n  the approved body.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	// A hand edit to a LOCKED claim, after the ledger recorded it: the drift the
 	// gate exists to catch.
@@ -147,7 +150,7 @@ func TestDryRunDetailsDescribeTheVerdictTheyStandNextTo(t *testing.T) {
 
 	// claim new, on an id nothing has taken.
 	dr := dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.fresh",
-		"--body", "a new claim.")
+		"--body", "a new claim.", "--rests-on-none-reason", "fixture")
 	assertPassingDetailsDoNotContradict(t, "claim new", dr.Preconditions, map[string]string{
 		"id_is_unused":   "already exists",
 		"file_is_unused": "already exists",

@@ -16,6 +16,9 @@ module: widget
 status: draft
 layout: card
 body: neutral conformance gate fixture
+rests_on:
+  none: true
+  reason: fixture
 embodiment:
   mode: compare
   checks:
@@ -57,6 +60,7 @@ func blockingCLIProjectWithPolicy(t *testing.T, policy, claim, observations stri
 			t.Fatal(err)
 		}
 	}
+	lockFixtureConstitution(t, cfgPath)
 	return root, cfgPath
 }
 
@@ -256,7 +260,7 @@ func TestConformanceBlockingPreservesLintAndThemePrecedence(t *testing.T) {
 		wantStop string
 	}{
 		{name: "lint", mutate: func(claim string) string {
-			return strings.Replace(claim, "embodiment:\n", "rests_on:\n  - widget.contract.missing\nembodiment:\n", 1)
+			return strings.Replace(claim, "rests_on:\n  none: true\n  reason: fixture\n", "rests_on:\n  - widget.contract.missing\n", 1)
 		}, wantCode: "lint_failed", wantStop: "lint"},
 		{name: "theme", mutate: func(claim string) string { return claim }, wantCode: "invalid_config", wantStop: "config"},
 	} {

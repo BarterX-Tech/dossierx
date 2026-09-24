@@ -44,7 +44,7 @@ func claimFile(id, layout, body string, steps ...string) string {
 			s += "  - \"" + st + "\"\n"
 		}
 	}
-	return s
+	return s + "rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 // --- the index must not be wider than the render ----------------------------

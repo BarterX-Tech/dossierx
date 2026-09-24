@@ -541,11 +541,13 @@ func TestStaged_OutsideAWorkTreeIsErrNoIndex(t *testing.T) {
 func TestStagedDecodeMatchesLoader(t *testing.T) {
 	cases := map[string]string{
 		"ordinary": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\n",
+			"body: |\n  a claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"unknown field": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: hi\nnot_a_real_field: 1\n",
+			"body: hi\nnot_a_real_field: 1\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"two documents": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: hi\n" +
+			"body: hi\nrests_on:\n  none: true\n  reason: fixture\n" +
 			"---\nid: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: hi\n",
 		"malformed yaml": "id: [unterminated\n",
 	}

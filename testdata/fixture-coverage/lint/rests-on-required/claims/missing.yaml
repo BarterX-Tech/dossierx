@@ -1,0 +1,6 @@
+id: restreq.contract.missing
+facet: contract
+module: restreq
+status: draft
+layout: card
+body: Omits rests_on entirely.

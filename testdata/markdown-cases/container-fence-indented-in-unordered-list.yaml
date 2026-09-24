@@ -10,3 +10,6 @@ body: |
       code inside the nested item
       ```
   - Another top level item.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a fence indented under a NESTED unordered item; pins that the block attaches to the deepest open item, not the top-level one

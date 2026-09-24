@@ -9,3 +9,6 @@ body: |
   - Outer two
     - inner a
     - inner b
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - looseness is a property of the list, not of the document

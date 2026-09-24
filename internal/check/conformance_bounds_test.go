@@ -9,10 +9,49 @@ import (
 	"strings"
 	"testing"
 
+	"time"
+
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
+
+// armConstitution is the internal-package twin of the external suite's
+// helper (ledger_test.go): a minimal locked roof plus its lock-store record,
+// so the roof gate (NIT-26) lets these projections run.
+func armConstitution(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	path := cfg.ConstitutionPath()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		roof := "status: locked\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture has one lockable constitution above every module.\n"
+		if err := os.WriteFile(path, []byte(roof), 0o644); err != nil {
+			t.Fatalf("arm constitution: write: %v", err)
+		}
+	}
+	f, err := constitution.Load(path)
+	if err != nil {
+		t.Fatalf("arm constitution: load: %v", err)
+	}
+	store, err := lock.LoadStore(cfg.LockStorePath())
+	if err != nil {
+		t.Fatalf("arm constitution: load store: %v", err)
+	}
+	lock.LockConstitution(store, f, "fixture roof", time.Now())
+	// The crossing the real command performs on a fresh project: the comment
+	// threads already on disk are taken into digest coverage now, silently,
+	// so a fixture that hand-writes a thread before arming is not "unrecorded".
+	if !store.LedgerCovered() && !store.PreLedger() {
+		if claims, loadErr := loader.LoadAll(cfg); loadErr == nil {
+			lock.SweepCommentDigests(store, claims, false)
+		}
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("arm constitution: save store: %v", err)
+	}
+}
 
 func TestConformanceArtifactBounds(t *testing.T) {
 	for _, kind := range []string{"catalog", "render: viewer"} {
@@ -43,12 +82,13 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	armConstitution(t, cfg)
 	heavy := strings.Repeat("x", 1<<20)
 	var claims []model.Claim
 	for _, facet := range facets {
 		claims = append(claims, model.Claim{
 			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: heavy,
+			Layout: model.LayoutCard, Body: heavy, RestsOn: model.RestsNone("fixture"),
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -87,12 +127,13 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	armConstitution(t, cfg)
 	heavy := strings.Repeat("x", 1<<20)
 	var claims []model.Claim
 	for _, facet := range facets {
 		claims = append(claims, model.Claim{
 			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: heavy,
+			Layout: model.LayoutCard, Body: heavy, RestsOn: model.RestsNone("fixture"),
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -132,11 +173,12 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	armConstitution(t, cfg)
 	claims := make([]model.Claim, 96)
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.shared-%03d", i), Facet: "contract", Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "shared target fixture",
+			Layout: model.LayoutCard, Body: "shared target fixture", RestsOn: model.RestsNone("fixture"),
 			Embodiment: &model.Embodiment{Mode: model.EmbodimentModeCompare, Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "neutral/v1", Target: "widget://shared", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{fmt.Sprintf("expected-%03d", i)}}}}},
 		}
 	}
@@ -175,15 +217,14 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The payload rides in the id: it is the one free-text field the catalog
-	// entry carries that no lint caps (id-shape checks grammar, not length),
-	// and four of these overflow the projection budget on their own.
+	armConstitution(t, cfg)
 	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {
 		claims[i] = model.Claim{
-			ID: fmt.Sprintf("widget.contract.capacity-%d-%s", i, shared), Facet: "contract", Module: "widget",
+			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
+			RestsOn: model.RestsNone(shared),
 		}
 	}
 	old := []byte("previous-complete-artifact")
@@ -223,15 +264,14 @@ func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The payload rides in the id: it is the one free-text field the catalog
-	// entry carries that no lint caps (id-shape checks grammar, not length),
-	// and four of these overflow the projection budget on their own.
+	armConstitution(t, cfg)
 	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {
 		claims[i] = model.Claim{
-			ID: fmt.Sprintf("widget.contract.capacity-%d-%s", i, shared), Facet: "contract", Module: "widget",
+			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
+			RestsOn: model.RestsNone(shared),
 		}
 	}
 

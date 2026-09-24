@@ -409,7 +409,7 @@ func TestAStoreThatPredatesTheLedgerCannotCarryLedgerRecords(t *testing.T) {
 // adopting whatever drift already happened as the new baseline.
 func TestLoadStoreKeepsVersion1NestedBaselines(t *testing.T) {
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v2 (drifted since main was locked)"}
-	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	path := filepath.Join(t.TempDir(), "store.json")
 	v1 := `{
@@ -463,7 +463,7 @@ func TestMigrateLegacyStoreDoesNotReArmACurrentStore(t *testing.T) {
 	}
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep"}
-	handFlipped := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	handFlipped := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	if MigrateLegacyStore(store, []model.Claim{handFlipped, dep}) {
 		t.Fatalf("MigrateLegacyStore must not re-arm a store already at the per-dependent schema")
@@ -492,7 +492,7 @@ func TestPrepareStoreMigratesBaselinesButNeverCrosses(t *testing.T) {
 	silenceAnnouncements(t)
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
-	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 	claims := []model.Claim{main, dep}
 
 	path := filepath.Join(t.TempDir(), "store.json")
