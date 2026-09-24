@@ -11,7 +11,7 @@ import (
 )
 
 // The roof gate (NIT-6 / NIT-26), end to end through the CLI: every claim-lock
-// path and plain check refuse CONSTITUTION_NOT_LOCKED while the constitution
+// path, a confirmed reaudit and plain check refuse CONSTITUTION_NOT_LOCKED while the constitution
 // is missing, draft, unrecorded or edited after its lock; the read-only modes
 // carry it as an error finding; the drafting and reading verbs keep working;
 // and `constitution lock` records the hash, re-locks an edited roof and
@@ -378,5 +378,176 @@ func TestCheckStagedJudgesTheIndexsRoof(t *testing.T) {
 	envData(t, env, &data)
 	if !data.Staged || !data.ReadOnly {
 		t.Fatalf("staged data = %+v", data)
+	}
+}
+
+// reviewPendingFixture is icWriteFixtureProject with its one claim locked and
+// then flagged: the locked+review_pending state a reaudit is about. The roof
+// is locked when this returns; the caller unroofs it.
+func reviewPendingFixture(t *testing.T) (root, cfgPath, claimPath, id string) {
+	t.Helper()
+	root = t.TempDir()
+	cfgPath, claimPath = icWriteFixtureProject(t, root, "widget")
+	id = "widget.contract.overview"
+	if env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil || !env.OK {
+		t.Fatalf("lock: %v %+v", err, env.Error)
+	}
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "flag", id,
+		"--claim-says", "it retries twice", "--now-does", "it retries five times", "--reason", "code changed")
+	if err != nil || !env.OK {
+		t.Fatalf("flag: %v %+v", err, env.Error)
+	}
+	return root, cfgPath, claimPath, id
+}
+
+// A confirmed reaudit writes an approval to the lock ledger, so it is module
+// work and refuses at the roof gate exactly as `claim lock` does: the same
+// code, the same details.state, the same hint, from the same helper. The bare
+// preview and the dry run stay open — the dry run names the roof as a failing
+// precondition — and nothing is written by a refused confirm.
+func TestClaimReauditConfirmRefusesWhileTheRoofIsNotLocked(t *testing.T) {
+	root, cfgPath, claimPath, id := reviewPendingFixture(t)
+	roof := filepath.Join(root, "constitution.yaml")
+	second := "id: widget.contract.second\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"body: |\n  a second draft, for the lock refusal to compare against.\n" +
+		"rests_on:\n  - widget.contract.overview\n"
+	if err := os.WriteFile(filepath.Join(root, "claims", "second.yaml"), []byte(second), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(before), "review_pending: true") {
+		t.Fatalf("fixture claim must be review_pending:\n%s", before)
+	}
+	storeBefore, err := os.ReadFile(storePathForTest(t, cfgPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refused := func(state constitution.State) {
+		t.Helper()
+		env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "re-read, still true")
+		if err == nil || env.OK || env.Error == nil || env.Error.Code != cliout.CodeConstitutionNotLocked {
+			t.Fatalf("reaudit --confirm under a %s roof must refuse %s, got %+v", state, cliout.CodeConstitutionNotLocked, env.Error)
+		}
+		if got := roofState(t, env); got != string(state) {
+			t.Fatalf("details.state = %q, want %s", got, state)
+		}
+		if env.Error.Hint == "" || !strings.HasPrefix(env.Error.Message, "reaudit: refused") {
+			t.Fatalf("the refusal must name the verb and carry the recovery hint: %+v", env.Error)
+		}
+		// The same refusal `claim lock` makes, from the same helper: code,
+		// state and hint agree; only the verb prefix differs.
+		lockEnv, _, _ := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.second", "--reason", "go")
+		if lockEnv.Error == nil || lockEnv.Error.Code != env.Error.Code || roofState(t, lockEnv) != roofState(t, env) || lockEnv.Error.Hint != env.Error.Hint {
+			t.Fatalf("reaudit and lock must refuse identically under a %s roof:\nreaudit=%+v\nlock=%+v", state, env.Error, lockEnv.Error)
+		}
+		if strings.TrimPrefix(lockEnv.Error.Message, "lock:") != strings.TrimPrefix(env.Error.Message, "reaudit:") {
+			t.Fatalf("the two refusals must differ only in the verb:\nreaudit=%q\nlock=%q", env.Error.Message, lockEnv.Error.Message)
+		}
+
+		// A refused confirm writes nothing: the claim and the ledger are as
+		// they were, and the flag still waits.
+		after, err := os.ReadFile(claimPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != string(before) {
+			t.Fatalf("a refused reaudit must not touch the claim:\n%s", after)
+		}
+		storeAfter, err := os.ReadFile(storePathForTest(t, cfgPath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(storeAfter) != string(storeBefore) {
+			t.Fatalf("a refused reaudit must not touch the ledger:\n%s", storeAfter)
+		}
+
+		// The preview stays open: it is how the agent shows the human what a
+		// confirm would write.
+		env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id)
+		if err != nil || !env.OK {
+			t.Fatalf("a bare reaudit is a preview and must keep working under a %s roof: %v %+v", state, err, env.Error)
+		}
+		var preview reauditData
+		envData(t, env, &preview)
+		if preview.Applied || preview.Trigger != "flag" || preview.ResultingBody == "" {
+			t.Fatalf("preview = %+v", preview)
+		}
+
+		// The dry run names the roof and is blocked by it.
+		dr := dryRunOf(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "re-read, still true")
+		found := false
+		for _, pc := range dr.Preconditions {
+			if pc.Name == "constitution_locked" {
+				found = true
+				if pc.OK {
+					t.Fatalf("constitution_locked must fail under a %s roof: %+v", state, pc)
+				}
+			}
+		}
+		if !found || !dr.Blocked {
+			t.Fatalf("the dry run must name constitution_locked and be blocked: %+v", dr)
+		}
+	}
+
+	// (a) missing.
+	if err := os.Remove(roof); err != nil {
+		t.Fatal(err)
+	}
+	refused(constitution.StateMissing)
+
+	// (b) draft.
+	if err := os.WriteFile(roof, []byte(fixtureConstitutionYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refused(constitution.StateDraft)
+
+	// (c) edited after its lock.
+	lockFixtureConstitution(t, cfgPath)
+	raw, err := os.ReadFile(roof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(raw), "One roof", "One roof, amended", 1)
+	if edited == string(raw) {
+		t.Fatalf("fixture roof lacks the title to edit:\n%s", raw)
+	}
+	if err := os.WriteFile(roof, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	storeBefore, err = os.ReadFile(storePathForTest(t, cfgPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused(constitution.StateEdited)
+
+	// Locked by the human: the same confirm now applies.
+	if env, _, err := execCLIJSON(t, "--config", cfgPath, "constitution", "lock", "--reason", "re-read and approved"); err != nil || !env.OK {
+		t.Fatalf("re-lock: %v %+v", err, env.Error)
+	}
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "re-read, still true")
+	for _, pc := range dr.Preconditions {
+		if pc.Name == "constitution_locked" && !pc.OK {
+			t.Fatalf("constitution_locked must hold under a locked roof: %+v", pc)
+		}
+	}
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "re-read, still true")
+	if err != nil || !env.OK {
+		t.Fatalf("reaudit --confirm under a locked roof must apply: %v %+v", err, env.Error)
+	}
+	var applied reauditData
+	envData(t, env, &applied)
+	if !applied.Applied || applied.ReviewPending {
+		t.Fatalf("a confirmed reaudit must apply and clear review_pending, got %+v", applied)
+	}
+	after, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(after), "review_pending: true") || !strings.Contains(string(after), "it retries five times") {
+		t.Fatalf("the confirm must have written the flagged wording and cleared review_pending:\n%s", after)
 	}
 }

@@ -489,7 +489,7 @@
   ],
   "render_fingerprint": "sha256:b29a3d13a463daee57f9dddf300a01390896cd3e8ae71fb1775265a9da402814",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:6b859869536fd6d08bbe2d5cc684aeba18c2b967d349832a499af4d0fb4fcb46",
+    "cmd/dossierx": "sha256:9ec8968703dc7eb80f3276dbcec6788ce34522f4999674e195e4c390ed094c5a",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -520,7 +520,7 @@
     "internal/serve": "sha256:0ad4bd18550a8d50d5a55b39293549398a62c78379c20b97b9c4969305ea6867",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:882f46d9f03cfc7f20c547cbdc60a30955682fad2ae3a6e0fb1b72e638205ac5"
+    "skills": "sha256:338fee81d6d761e21be22922a58e57e458e0b0e1713bedf4deb721151c9c4e0a"
   },
   "envelope": {
     "keys": [

@@ -103,8 +103,8 @@ Three classes of thing, and you author two of them:
   the words, the meter and the lock state). It is not a module, not a claim, and **never a
   `rests_on` target**: every claim builds toward it by definition, so nothing cites it. You draft it
   and show it; the **human** locks it — `dossierx constitution lock --dry-run`, then
-  `--reason "<their words>"` — and until they do, `claim lock` and plain `check` refuse
-  `CONSTITUTION_NOT_LOCKED`. An edit after the lock stops module work the same way until they re-lock;
+  `--reason "<their words>"` — and until they do, `claim lock`, `claim reaudit --confirm` and plain `check` refuse
+  `CONSTITUTION_NOT_LOCKED` (the bare reaudit preview stays open). An edit after the lock stops module work the same way until they re-lock;
   the edited file is what everyone reads meanwhile.
 - **Project claims** — project-wide facts that are not roof law. `dossierx claim new project.<slug>
   --body "..." --rests-on ...` writes `project-claims/<slug>.yaml` with `scope: project`, no `module`

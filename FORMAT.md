@@ -840,7 +840,9 @@ lock verdict; an agent drafts against the words, never the hash.
 | `edited` | a record stands but the content hash moved — **the edited file is what every module now reads**; nothing from the old version stays in force, and module work stops until a human runs `constitution lock` again |
 
 **No module work until the constitution is locked** (NIT-26). `dossierx claim
-lock` — single, batch and policy-v1 paths alike — and plain `dossierx check`
+lock` — single, batch and policy-v1 paths alike — `dossierx claim reaudit
+--confirm` (a confirmed reaudit writes an approval to the lock ledger; the
+bare preview and `--dry-run` stay open) and plain `dossierx check`
 refuse with `CONSTITUTION_NOT_LOCKED` in every state but `locked`; `check`
 regenerates the catalog and the viewer first and refuses at `stopped_at:
 constitution`, like the ledger gate — a gate, not an outage. `check --validate`
