@@ -71,9 +71,6 @@ embodiment:                    # optional project-neutral implementation expecta
         shape: scalar
         value: "3"
 rests_on: [ id, ... ]          # optional
-governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
-  type: none | doctrine_id
-  reason: string                # required when type is "none"
 migrated_from: string           # optional provenance note — what this claim REPLACED
 sources:                        # optional — what evidence BACKS this claim; cited from prose as [n] (see below)
   - ref: 1                      # positive int, unique within the claim
@@ -168,10 +165,8 @@ system. That is the only legal value. `kind-shape` refuses every other string.
 
 `emphasis: true` is optional and marks a claim as carrying outsized weight for
 its facet; the viewer renders it as a warn / hard-boundary card. It is
-deliberately its own field rather than being derived from `governed_by`: what
-backs a claim's truth and how loudly it should render are different questions —
-a governed claim can still be a hard boundary, and an ungoverned-with-reason
-claim usually is not.
+deliberately its own field rather than being derived from the claim's edges:
+what a claim rests on and how loudly it should render are different questions.
 
 Both `kind` and `emphasis` are outside the dependency-drift `ContentHash` (see
 "What is signed, and what is not"), so changing either never flags a dependent
@@ -238,7 +233,7 @@ constructs below; the only thing that differs between them is images (see
   `_italic_` both become `<em>`, and `~~strike~~` becomes `<del>`, under
   strict CommonMark left/right-flanking delimiter rules. In particular, an
   **intraword** underscore can neither open nor close emphasis, so ordinary
-  identifier-shaped prose (`governed_by`, `rests_on`, `build_role`) never
+  identifier-shaped prose (`claims_dir`, `rests_on`, `build_role`) never
   italicizes by accident — a run of underscores that is genuinely flanked on
   both sides (e.g. `__init__` as a whole word) does still pair and italicize.
   Strikethrough is exactly two tildes; one tilde or three-or-more is literal.
@@ -537,7 +532,7 @@ what is not":
   and reported as `lock-content-drift`. This is the thing the field exists for:
   approving a claim now approves the evidence behind it too.
 - `sources` is **not** part of the dependency-drift `ContentHash`, the baseline a
-  dependent records for the claims it `rests_on` or is `governed_by`.
+  dependent records for the claims it `rests_on`.
   Adding or correcting a citation does not change what a claim *promises*, so it
   must not flip every dependent to `review_pending`. Provenance is not contract.
 - The field is `omitempty`: a claim carrying no sources serializes and hashes
@@ -576,12 +571,11 @@ criteria are statements that belong to no single module, and without an owning
 track they have nowhere in the corpus to live. With one, they are an ordinary
 claim: linted, reviewable, and lockable like any other.
 
-**Track membership is not an edge.** `rests_on` and `governed_by` are
-semantic dependencies, which is why each carries a cycle lint — a loop in them is
-a set of claims that can only be reviewed together, and drift has no order to
-propagate in. A track is a *set*, and a set has no direction to run in a circle.
-Track membership therefore joins no cycle walk: not `cycle`, not
-`governed-cycle`, and not the `mixed-cycle` union graph.
+**Track membership is not an edge.** `rests_on` is a semantic dependency,
+which is why it carries a cycle lint — a loop in it is a set of claims that can
+only be reviewed together, and drift has no order to propagate in. A track is a
+*set*, and a set has no direction to run in a circle. Track membership therefore
+joins no cycle walk.
 
 **Five lints police the axis:**
 
@@ -696,9 +690,8 @@ schema field instead of a path convention.
   has any error-level finding, if doctrine hub-gating blocks it, or if the claim
   still carries an unresolved comment thread); also carries an engine-managed
   `review_pending` bool. `review_pending` is `true` while ANY of three
-  independent triggers stands: a dependency's content — a
-  `rests_on` target, or a claim-valued `governed_by` — has drifted since the
-  claim was last locked or reaudited; a `dossierx claim flag` has recorded a
+  independent triggers stands: a `rests_on` target's content has drifted
+  since the claim was last locked or reaudited; a `dossierx claim flag` has recorded a
   spec mismatch; or the claim carries an unresolved (`status: open`) comment
   thread. It is set automatically but never cleared automatically — a locked
   claim's `status` never reverts to `draft` on its own, and `review_pending`
@@ -724,34 +717,23 @@ edge, each with a different meaning:
   identical to it. When a `rests_on` target's content changes underneath a
   locked claim, the locked claim is flagged `review_pending` rather than
   invalidated outright.
-- **`governed_by`** — names the doctrine claim (by id) that backs this
-  claim's authority, or explicitly declares `type: none` with a required
-  `reason` when no such doctrine claim exists. Note that `governed_by` is
-  **not** itself a gated edge: when the project config sets
-  `doctrine_facet`, hub-gating refuses to lock a claim whose **`rests_on`**
-  names an unlocked claim in that facet — that list is the whole of what
-  it walks. A doctrine claim named *only* by `governed_by` is not gated,
-  so to have hub-gating cover it, name it as a `rests_on` dependency as
-  well. If `doctrine_facet` is unset, hub-gating does not run at all. A
-  claim-valued `governed_by` **is** a semantic-consequence edge on the
-  same terms as `rests_on`: when the named governor's content changes
-  underneath a locked claim, the locked claim is flagged `review_pending`
-  rather than invalidated outright. Only a claim-valued `governed_by.type`
-  participates — `type: none` names no claim, so there is nothing for it
-  to drift against. `governed_by` is **also** checked for the authority
-  chain terminating — see `governed-cycle` below. The drift edge is new
-  in v0.4.0 and is not backfilled: a claim locked before the upgrade
-  carries no governance baseline until its next `claim lock` or confirmed
-  `claim reaudit`, so the first governor edit after upgrading does not
-  flag it.
+- **`governed_by`** — **gone as of v0.7.21** (NIT-29). It named a doctrine
+  claim as the authority behind a claim, or `type: none` with a reason. The
+  constitution replaces that with typed roof refs, so the field, its
+  `governed-cycle` / `governed-required` / `mixed-cycle` /
+  `validated-on-missing` lints, its graph edge and its drift baseline are all
+  removed, with no alias and no migrate command: a claim file that still
+  carries a `governed_by:` block **fails to load**. Where the old
+  `governed_by.type` named a claim the dependent genuinely relies on, name it
+  under `rests_on` instead — that is the only edge the engine walks, gates
+  and baselines. See the CHANGELOG entry for the client-project migration.
 
 ### Graph invariants
 
-Each edge kind is not just a per-claim field but a directed graph over the
-whole claim set, and each of those graphs has a shape it must hold to — plus a
-fourth graph, the union of two of them, whose shape neither of its halves can
-see. These are enforced by the lint suite, so a violation blocks
-`dossierx claim lock` the same way any other error-severity finding does:
+An edge kind is not just a per-claim field but a directed graph over the
+whole claim set, and that graph has a shape it must hold to. This is enforced
+by the lint suite, so a violation blocks `dossierx claim lock` the same way
+any other error-severity finding does:
 
 1. **`rests_on` must be acyclic.** It is a dependency edge, so a cycle means
    a set of claims each of which is true only if the others are — no claim
@@ -759,34 +741,15 @@ see. These are enforced by the lint suite, so a violation blocks
    that flips dependents to `review_pending` has no order to run in. Every
    claim in the loop is reported by the `cycle` lint, with the cycle path in
    the message.
-2. **`governed_by` must terminate.** Following `governed_by` from any claim
-   has to reach `type: none` (with its required `reason`) in finitely many
-   steps — that sentinel is the only grounded end state. A cycle in this
-   graph means a set of claims whose authority rests only on each other,
-   which is to say on nothing, and is reported by the `governed-cycle` lint.
-3. **The UNION of `rests_on` and `governed_by` must be acyclic** — new in
-   v0.5.0, and that release's one BREAKING change to what a claim corpus may
-   look like. `mixed-cycle` walks both edge kinds as one graph, carrying the
-   edge kind on every hop, and reports a cycle whose hops include at least one
-   of each: "A `rests_on` B, B `governed_by` A". Neither rule above can see that
-   shape — `cycle` walks `rests_on` alone and `governed-cycle` walks
-   `governed_by` alone, so a mixed loop presents no back edge to either walk and
-   passed the whole registry before v0.5.0. It runs at **error** severity, so
-   satisfying `cycle` and `governed-cycle` is *not* the whole of the cycle rule:
-   a corpus carrying a mixed loop passed `dossierx check` before v0.5.0 and
-   exits 1 after it, with no edit on the author's side, no content-hash move and
-   nothing in the lock store to explain it. The recovery is to break the loop —
-   the finding names every claim on it — and re-run `check`; where those claims
-   are locked that is unlock, edit, lock, like any other correction.
 
-`tracks` is not a fourth edge kind and appears in none of these graphs. It is a
+`tracks` is not a second edge kind and appears in no graph. It is a
 membership set, not a dependency: no claim's truth rests on another claim's track
 membership, so there is no direction for a track to run in a circle and nothing
 for a cycle walk to find. Two claims in the same track constrain each other in
 exactly one way — `track-multi-owner`, at most one owner apiece — which is a
 per-track count, not a walk. See "`tracks` and the second ownership axis" above.
 
-Across all three, a claim may never name **its own id** in any edge
+A claim may never name **its own id** in `rests_on`
 (`self-edge`). A self-edge is trivially satisfied by every content rule —
 a claim always equals itself and always resolves — so it asserts nothing
 while looking like a well-formed edge. An edge is a statement about a

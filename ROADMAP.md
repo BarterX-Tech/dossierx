@@ -16,11 +16,11 @@ Update this entry once that cycle completes in a real consuming project.
 
 ## Deferred: Tarjan SCC cycle reporting
 
-The `cycle`, `governed-cycle`, and related graph-invariant lints currently report a cycle by
+The `cycle` lint and related graph-invariant lints currently report a cycle by
 walking an explicit depth-first search stack and naming the claims on it. A proper Tarjan
 strongly-connected-components pass would let the engine report every disjoint cycle in one run
 instead of the first one the walk happens to hit, and would give a tighter, more structural
-diagnostic when a project's `rests_on` or `governed_by` graph has more than one broken loop at
+diagnostic when a project's `rests_on` graph has more than one broken loop at
 once. This is a formal deferral, not a scheduled item: no release currently commits to it.
 
 ## Deferred: a cycle signal on the reading view itself
@@ -47,7 +47,7 @@ finds an unintended partner emphasises everything in between. Neither case is un
 nothing fires, and an author who did not intend either result has no lint telling them so.
 
 This is the residual exposure the whole "intraword underscores don't italicize" argument was won
-on: the rule that makes ordinary identifier text (`governed_by`, `rests_on`) safe from accidental
+on: the rule that makes ordinary identifier text (`claims_dir`, `rests_on`) safe from accidental
 emphasis is a flanking rule, not a rule against pairing at all, and a full-word token like
 `__init__` is exactly the shape the flanking rule was designed to still let through. Deferred by
 human decision for this release rather than by a missing capability — the workaround, for an
