@@ -18,29 +18,26 @@ func TestDanglingLint(t *testing.T) {
 				{
 					ID:       "widget.contract.overview",
 					RestsOn:  nil,
-					Mirrors:  nil,
 					Governed: model.Governed{Type: "none", Reason: "fixture"},
 				},
 				{
 					ID:       "widget.internals.fields",
 					RestsOn:  []string{"widget.contract.overview"},
-					Mirrors:  []string{"widget.contract.overview"},
 					Governed: model.Governed{Type: "widget.contract.overview"},
 				},
 			},
 			wantFindings: 0,
 		},
 		{
-			name: "failing: mirrors, rests_on, and governed_by all dangle",
+			name: "failing: rests_on and governed_by both dangle",
 			claims: []model.Claim{
 				{
 					ID:       "widget.internals.fields",
 					RestsOn:  []string{"widget.contract.missing"},
-					Mirrors:  []string{"widget.contract.also-missing"},
 					Governed: model.Governed{Type: "widget.doctrine.ghost"},
 				},
 			},
-			wantFindings: 3,
+			wantFindings: 2,
 		},
 	}
 

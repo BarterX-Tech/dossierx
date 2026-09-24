@@ -31,7 +31,7 @@
   // suite off these names.
   //
   // Constants (all frozen, all JSON-able):
-  //   EDGE_TYPES           ["rests_on", "mirrors", "governed_by"]
+  //   EDGE_TYPES           ["rests_on", "governed_by"]
   //   DIRECTED_EDGE_TYPES  ["rests_on", "governed_by"] — the SCC edge set
   //   GHOST_PREFIX         "ghost:" — id prefix of an out-of-scope endpoint
   //   FACET_SLOT_COUNT     20 — the categorical palette's slot count
@@ -87,11 +87,12 @@
 
   // EDGE_TYPES is the closed set of relations model.Claim declares. It is the
   // canonical ordering used by encodeState and by every by-type sort.
-  var EDGE_TYPES = Object.freeze(['rests_on', 'mirrors', 'governed_by']);
+  var EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
-  // DIRECTED_EDGE_TYPES is the subset scc() walks. `mirrors` is excluded
-  // because it is reciprocal by design — a mirrored pair is not a dependency
-  // loop, and counting it as one would ring every mirrored claim red.
+  // DIRECTED_EDGE_TYPES is the subset scc() walks. Today that is every
+  // remaining edge kind; the name is kept because gapRules and the pane
+  // still distinguish "types that participate in cycles" from display-only
+  // filters if a later kind is added.
   var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
 
   // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
@@ -657,11 +658,9 @@
   // ------------------------------------------------------------------
 
   // isDirectedType reports whether an edge type participates in cycle
-  // detection. `mirrors` does not: reciprocity is the lint's job and a
-  // mirrored pair is a two-cycle by construction, so including it would ring
-  // every correctly mirrored claim red. An untyped edge ("") is treated as
-  // directed, which is what makes the [from, to] pair form usable in a
-  // one-liner harness.
+  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
+  // An untyped edge ("") is treated as directed, which is what makes
+  // the [from, to] pair form usable in a one-liner harness.
   function isDirectedType(type) {
     if (type === '') {
       return true;
@@ -819,7 +818,8 @@
   }
 
   // selfEdges returns the ids in nodeIds that are their own target under ANY
-  // edge type — rests_on, mirrors or governed_by. It is reported separately
+  // edge type — rests_on or governed_by, plus any retired kind still present
+  // in a payload. It is reported separately
   // from scc() and never merged into the cycle list, because the engine
   // already has a dedicated error-severity `self-edge` lint distinct from
   // `cycle`, and a pane that folded the two together would be telling a
@@ -1478,9 +1478,11 @@
     'status'
   ]);
 
-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
-  var TYPE_LETTERS = 'rmg';
+  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
+  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
+  // two cannot drift. Letter identity is stable across the retired `mirrors`
+  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
+  var TYPE_LETTERS = 'rg';
 
   // defaultState returns a fresh state object — everything on, nothing
   // filtered, nothing selected. Fresh rather than shared: a caller that

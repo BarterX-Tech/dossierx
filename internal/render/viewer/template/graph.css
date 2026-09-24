@@ -993,13 +993,13 @@ body.dxg-open #dxgOpen {
    rows come back when the overlay is cleared. graph-ui.js builds the rows;
    this file only styles them.
 
-   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
-   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
-   the part of an edge that ends up hidden under the node it points at — so a
-   legend naming only the third relation left a reader with two lines that
-   looked identical and no way to find out which was which. Each row draws the
-   same sample the canvas draws: solid with one chevron, dashed with none, and
-   the reserved hue curved with a double chevron. */
+   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
+   rests_on and governed_by differ on the canvas by routing and arrowhead —
+   an arrowhead is exactly the part of an edge that ends up hidden under the
+   node it points at — so a legend naming only one relation left a reader
+   with two lines and no way to find out which was which. Each row draws the
+   same sample the canvas draws: solid with one chevron, and the reserved
+   hue curved with a double chevron. */
 
 .dxg-legend {
   flex-shrink: 0;

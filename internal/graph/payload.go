@@ -69,17 +69,13 @@ import (
 // understand rather than silently mis-rendering one.
 const SchemaVersion = 1
 
-// Edge type values. These are the wire strings, matching the three claim
-// edge kinds model.Claim declares (Mirrors, RestsOn, Governed). They are
+// Edge type values. These are the wire strings, matching the claim
+// edge kinds model.Claim declares (RestsOn, Governed). They are
 // constants rather than literals because graph-core.js keys its edge-type
 // toggles off them and viewer-tests asserts on them, so they are contract.
 const (
 	// EdgeRestsOn is one entry of model.Claim.RestsOn.
 	EdgeRestsOn = "rests_on"
-	// EdgeMirrors is one entry of model.Claim.Mirrors. Directional in
-	// storage even though reciprocity is a lint rather than a model
-	// invariant — see internal/lint/mirror_reciprocal.go.
-	EdgeMirrors = "mirrors"
 	// EdgeGovernedBy is a claim's single governed_by edge, emitted only
 	// when the type names a real doctrine claim (see Build).
 	EdgeGovernedBy = "governed_by"
@@ -189,7 +185,7 @@ type Node struct {
 // NodeTrack is one claim's membership in one track.
 //
 // MEMBERSHIP IS NOT AN EDGE, and this type existing beside Edge rather than
-// inside it is the whole statement. RestsOn, Mirrors and Governed are
+// inside it is the whole statement. RestsOn and Governed are
 // semantic dependencies between claims and carry cycle lints; a track is a
 // SET, and a set has no direction to run in a circle. Emitting membership as
 // an Edge would put it into the client's scc() walk and ring every track
@@ -223,7 +219,7 @@ type NodeTrack struct {
 type Edge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
-	// Type is one of EdgeRestsOn, EdgeMirrors, EdgeGovernedBy.
+	// Type is one of EdgeRestsOn, EdgeGovernedBy.
 	Type string `json:"type"`
 }
 

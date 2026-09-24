@@ -1,5 +1,5 @@
 // dangling.go implements the "dangling" lint: every id referenced by a
-// claim's edges (mirrors, rests_on, and a governed_by.type that names a
+// claim's edges (rests_on, and a governed_by.type that names a
 // doctrine claim rather than "none") must resolve to a claim that actually
 // exists in the claim set. A reference to an id with no matching claim is a
 // dangling edge.
@@ -14,7 +14,7 @@ func init() {
 	Registry = append(Registry, DanglingLint{})
 }
 
-// DanglingLint reports edges (mirrors, rests_on, governed_by) that point at
+// DanglingLint reports edges (rests_on, governed_by) that point at
 // an id with no corresponding claim.
 type DanglingLint struct{}
 
@@ -28,15 +28,6 @@ func (DanglingLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 
 	var findings []Finding
 	for _, c := range claims {
-		for _, target := range c.Mirrors {
-			if !known[target] {
-				findings = append(findings, Finding{
-					LintName: "dangling",
-					ClaimID:  c.ID,
-					Message:  "mirrors references unknown claim id " + target,
-				})
-			}
-		}
 		for _, target := range c.RestsOn {
 			if !known[target] {
 				findings = append(findings, Finding{

@@ -10,7 +10,7 @@
 // dependency's content changes underneath a claim; "dossierx claim flag" flips the
 // very same field when an agent asserts the claim itself is now wrong,
 // based on something it just observed (e.g. its own code change) rather
-// than a tracked mirrors/rests_on edge. Both these paths converge on the same
+// than a tracked rests_on edge. Both these paths converge on the same
 // boolean field and the same confirm-before-write "dossierx reaudit --confirm"
 // gate.
 //

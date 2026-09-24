@@ -987,8 +987,7 @@ func hasUnlockedDoctrineDep(c model.Claim, claims []model.Claim, cfg *config.Con
 	if cfg == nil || !cfg.HubGatingEnabled() {
 		return false
 	}
-	deps := make([]string, 0, len(c.Mirrors)+len(c.RestsOn))
-	deps = append(deps, c.Mirrors...)
+	deps := make([]string, 0, len(c.RestsOn))
 	deps = append(deps, c.RestsOn...)
 	for _, dep := range deps {
 		for _, d := range claims {

@@ -132,12 +132,11 @@ func TestMixedCycle(t *testing.T) {
 			wantFindings: 0,
 		},
 		{
-			// mirrors is not part of the union: it is reciprocal by design,
-			// so every mirrored pair would otherwise be a "cycle".
-			name: "passing: mirrors is not one of the two union edge kinds",
+			// An unrelated pair with no mixed loop must stay silent.
+			name: "passing: two claims with no mixed loop",
 			claims: []model.Claim{
-				{ID: "widget.contract.a", Mirrors: []string{"widget.contract.b"}, Governed: model.Governed{Type: "widget.contract.b"}},
-				{ID: "widget.contract.b", Mirrors: []string{"widget.contract.a"}, Governed: model.Governed{Type: "none", Reason: "fixture"}},
+				{ID: "widget.contract.a", Governed: model.Governed{Type: "widget.contract.b"}},
+				{ID: "widget.contract.b", Governed: model.Governed{Type: "none", Reason: "fixture"}},
 			},
 			wantFindings: 0,
 		},

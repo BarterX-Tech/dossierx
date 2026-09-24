@@ -607,9 +607,6 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "mirrors": [
-          "viewer.decision.facts-not-verdicts"
-        ],
         "governed_by": {
           "type": "engine.decision.single-source-of-truth"
         }
@@ -1933,9 +1930,6 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "mirrors": [
-          "engine.decision.facts-not-verdicts"
-        ],
         "governed_by": {
           "type": "engine.decision.single-source-of-truth"
         }

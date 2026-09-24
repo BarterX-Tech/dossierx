@@ -148,7 +148,7 @@ claim show / a draft claim
     command       claim show
     data          claim_id:string
                   comments:{open:number,open_thread_ids:[],replies:number,resolved:number,threads:number}
-                  edges:{depended_on_by:[],governed_by:string,governed_reason:string,mirrored_by:[],mirrors:[],rests_on:[]}
+                  edges:{depended_on_by:[],governed_by:string,governed_reason:string,rests_on:[]}
                   facet:string
                   implemented_in:[]
                   kind:string

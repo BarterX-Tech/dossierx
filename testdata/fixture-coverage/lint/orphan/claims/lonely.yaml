@@ -4,7 +4,7 @@ module: orphanmod
 status: draft
 layout: card
 body: |
-  A standalone claim with zero mirrors/rests_on edges in either direction --
+  A standalone claim with zero rests_on edges in either direction --
   the orphan lint's WARNING-severity finding. "dossierx check --validate" must
   still exit 0
   for this fixture: a warning is reported, not a failure.

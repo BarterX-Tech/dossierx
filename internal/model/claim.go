@@ -317,7 +317,12 @@ type Claim struct {
 	// them in order.
 	Steps []string `yaml:"steps,omitempty"`
 
-	// Edges.
+	// Edges. rests_on is the required dependency chain; governed_by is
+	// authority (and a drift input when claim-valued).
+	//
+	// Mirrors is not an edge. The field exists only so KnownFields still
+	// names the historical YAML key and LockedClaimHash / ContentHash stay
+	// byte-identical. Nothing walks it.
 	Mirrors  []string `yaml:"mirrors,omitempty"`
 	RestsOn  []string `yaml:"rests_on,omitempty"`
 	Governed Governed `yaml:"governed_by"`

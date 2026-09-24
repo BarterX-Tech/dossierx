@@ -45,8 +45,8 @@ const (
 
 // TrackRef is one claim's membership in one track.
 //
-// Membership is deliberately NOT modelled as an edge alongside RestsOn,
-// Mirrors and Governed. Those are semantic dependencies between claims, and
+// Membership is deliberately NOT modelled as an edge alongside RestsOn
+// and Governed. Those are semantic dependencies between claims, and
 // they carry cycle lints (cycle, governed-cycle, mixed-cycle) that would
 // report nonsense over a membership graph: a track is a set, and a set has no
 // direction to run in a circle. See internal/lint/mixed_cycle.go's doc comment

@@ -60,14 +60,13 @@ it out.
   before a claim can lock** once a module uses the feature. It classifies a claim for
   implementation reading (schema before behavior, and so on) and has nothing to do with `section`/`order`, which are the
   human's reading order in the viewer.
-- Edges: `mirrors` (value equality; both sides must declare it), `rests_on` (semantic dependency;
-  the target must exist), `governed_by: {type, reason}` —
+- Edges: `rests_on` (semantic dependency; the target must exist), `governed_by: {type, reason}` —
   `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
   changing under a locked claim flags `review_pending`) but never a gating one, so it cannot block
-  a lock.
+  a   lock.
 - **Loops are refused in all three shapes**, at ERROR: `rests_on` → `cycle`, `governed_by` →
   `governed-cycle`, and as of v0.5.0 one *alternating* the two → `mixed-cycle`. "B is governed by A"
-  buys no free back edge when A already rests on B; `mirrors` is exempt. The router's `mixed-cycle`
+  buys no free back edge when A already rests on B. The router's `mixed-cycle`
   section covers why an untouched corpus can start failing this.
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
@@ -82,7 +81,7 @@ the id grammar, the body requirement and the governed-reason rule **before** it 
 the project with the new claim in it — an `orphan` warning on a claim with no edges yet is a
 warning, not a refusal.
 
-`--rests-on` / `--mirrors` / `--governed-by` / `--build-role` / `--section` / `--layout` are all
+`--rests-on` / `--governed-by` / `--build-role` / `--section` / `--layout` are all
 available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks
 nothing else, so a claim written outside it reports success and is then invisible). After creation
 the claim is a **draft** — edit its file freely.
@@ -177,8 +176,8 @@ Each row carries `claim_id`, `title`, `status`, `review_pending`, `drifted`, `op
 ## `dossierx claim show` — one call, the whole picture
 
 Prefer it over reading the YAML. It reports status, lock state and `locked_at`, `review_pending`
-plus **which** trigger caused it, both edge directions (`rests_on`/`mirrors` outgoing,
-`depended_on_by`/`mirrored_by` incoming), `implemented_in[]` with per-file drift, comment counts
+plus **which** trigger caused it, both edge directions (`rests_on` outgoing,
+`depended_on_by` incoming), `implemented_in[]` with per-file drift, comment counts
 with the open thread ids, and `next_actions` — computed from the *same* gate evaluation the write
 path uses, so it can never disagree with what the command would do. Read it rather than re-deriving
 the lifecycle yourself.
@@ -213,7 +212,7 @@ three independent triggers stands:
 
 | trigger | set by | cleared by |
 |---|---|---|
-| a baselined dependency's content changed underneath it — `mirrors`, `rests_on`, or a claim-valued `governed_by.type` | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
+| a baselined dependency's content changed underneath it — `rests_on`, or a claim-valued `governed_by.type` | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
 | shipped code no longer matches the claim | `dossierx claim flag` — body-only claims; one that renders from `rows`/`steps`/`raw_html`/`mockup` is refused (`structured_layout`) and goes through unlock → fix → lock instead (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**) | the same confirmed reaudit |
 | an open comment thread on the claim | anyone commenting (see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**) | the **human** resolving it in the viewer |
 

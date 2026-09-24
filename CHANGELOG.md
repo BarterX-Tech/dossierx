@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Leftover artifact files and leftover ledger rows must not refuse `check`.
   The viewer has no Build order tab and no Mermaid bundle. The consumer
   skill `dossierx-build-order` is not embedded. `build_role` remains a
-  claim field. Mirrors are unchanged.
+  claim field.
 - The lock-policy adoption CLI leaf is deleted. Existing lock stores stay on
   their recorded policy; a new project still starts on lock policy v1. Policy
   evaluation, approvals, and baselines are unchanged. The surface is now
@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   belongs on ordinary declared-facet claims (and, once it exists, a
   module `manifest.yaml` `summary` — NIT-7). `build_role: orientation` is
   unchanged.
+- The `mirrors` edge is gone. `claim new --mirrors` is gone; `claim show`
+  no longer reports `mirrors`/`mirrored_by`; catalog, graph payload, and
+  the viewer no longer draw that relation (`EDGE_TYPES` is `rests_on` and
+  `governed_by` only). The `mirror-mismatch`, `mirror-reciprocal`, and
+  `mirror-unanchored` lints are gone. Hub-gating and dependency drift
+  walk `rests_on` and a claim-valued `governed_by` only. The YAML key
+  remains on the claim struct so existing lock hashes stay
+  byte-identical; the engine does not walk it. (NIT-17)
 
 ## [0.7.20] - 2026-09-22
 

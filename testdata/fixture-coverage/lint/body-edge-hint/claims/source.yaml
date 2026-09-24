@@ -5,7 +5,7 @@ status: draft
 layout: card
 body: |
   This claim's prose mentions bodyhintmod.contract.target in passing, but
-  never declares it under mirrors, rests_on, or governed_by -- exactly the
+  never declares it under rests_on or governed_by -- exactly the
   forgotten-edge shape the body-edge-hint lint exists to catch.
 governed_by:
   type: none

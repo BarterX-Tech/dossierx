@@ -1,28 +1,21 @@
 // self_edge.go implements the "self-edge" lint: no claim may name its own id
-// in any of its three edge kinds (rests_on, mirrors, governed_by).
+// in either of its edge kinds (rests_on, governed_by).
 //
-// This rule exists because two of the three self-edges were silently legal,
-// and the third was caught only as a side effect:
+// This rule exists because a self-edge is an authoring mistake (nearly always
+// a copy-pasted id) that other rules only catch as a side effect:
 //
-//   - rests_on: [self] was already reported, but incidentally — as the
-//     degenerate one-node case of the "cycle" lint, with a cycle message that
-//     describes the shape of the graph rather than the mistake.
-//   - mirrors: [self] passed everything. mirror-reciprocal asks whether the
-//     target mirrors the source back, and when the target IS the source the
-//     answer is trivially yes; mirror-mismatch compares the two claims'
-//     comparable content, and a claim's content always equals its own. So a
-//     self-mirror read as a perfectly formed equality edge while asserting
-//     nothing about any other claim.
+//   - rests_on: [self] is also the degenerate one-node case of the "cycle"
+//     lint, with a cycle message that describes the graph rather than the
+//     mistake.
 //   - governed_by: self resolved cleanly — the claim exists, so dangling and
 //     validated-on-missing are both satisfied — and asserted that the claim's
 //     authority rests on the claim itself, which is exactly the circularity
 //     governed_by exists to force an author to make explicit.
 //
-// All three are the same authoring mistake (nearly always a copy-pasted id),
-// so they get one rule, one name, and a per-edge-kind message. Error
-// severity: unlike an orphan claim, a self-edge is never a defensible
-// modeling choice — an edge is a statement about another claim, and these
-// statements have no other claim in them.
+// Both are the same authoring mistake, so they get one rule, one name, and a
+// per-edge-kind message. Error severity: unlike an orphan claim, a self-edge
+// is never a defensible modeling choice — an edge is a statement about
+// another claim, and these statements have no other claim in them.
 //
 // A rests_on self-edge therefore fires both this rule and "cycle", by design:
 // the two say different true things about it (a self-reference, and a cycle
@@ -60,19 +53,11 @@ func (SelfEdgeLint) Check(claims []model.Claim, _ *config.Config) []Finding {
 		// names the claim's own id twice is still one thing to delete, and
 		// duplicate entries within a single list are not this rule's
 		// subject.
-		if containsString(c.RestsOn, c.ID) {
+		if contains(c.RestsOn, c.ID) {
 			findings = append(findings, Finding{
 				LintName: "self-edge",
 				ClaimID:  c.ID,
 				Message:  "rests_on names this claim's own id: a claim cannot rest on itself",
-				Severity: SeverityError,
-			})
-		}
-		if containsString(c.Mirrors, c.ID) {
-			findings = append(findings, Finding{
-				LintName: "self-edge",
-				ClaimID:  c.ID,
-				Message:  "mirrors names this claim's own id: a claim cannot mirror itself",
 				Severity: SeverityError,
 			})
 		}

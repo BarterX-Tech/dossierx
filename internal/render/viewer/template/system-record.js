@@ -859,12 +859,12 @@
 
   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
+  // labels back to "Rests On" / "Governed By" and renamed the
   // "edge types" / "edges" headings to "Relationships" — a fixup for a
   // pre-13 build of the pane that had no display-label map of its own.
   // graph-ui.js now builds every one of those labels correctly at the
-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
+  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
+  // "Governed by", the "Relations" eyebrow, the "marks"
   // legend group), and this shim was firing on every rebuild and silently
   // reverting all of it back to the pre-13 wording — removed here rather
   // than left to fight graph-ui.js on every interaction. Found via

@@ -209,8 +209,12 @@ func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing
 
 func TestCatalogProjectionUpperBoundCoversEscapedIndentedOutput(t *testing.T) {
 	claim := model.Claim{
-		ID: "widget.contract.escaped", Module: "widget<&>", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard,
-		Mirrors: []string{"widget.contract.\x00quoted\""}, RestsOn: []string{"widget.contract.<rest>"},
+		ID:       "widget.contract.escaped",
+		Module:   "widget<&>",
+		Facet:    "contract",
+		Status:   model.StatusDraft,
+		Layout:   model.LayoutCard,
+		RestsOn:  []string{"widget.contract.\x00quoted\"", "widget.contract.<rest>"},
 		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "<&>\\\"\n"},
 	}
 	cat, err := Build([]model.Claim{claim}, nil)
@@ -320,7 +324,6 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 			Rows: []model.Row{
 				{"field": "id", "type": "string"},
 			},
-			Mirrors: []string{"widget.contract.overview"},
 			RestsOn: []string{"widget.contract.overview", "widget.internals.other"},
 			Governed: model.Governed{
 				Type: "widget.doctrine.hub",
@@ -356,8 +359,8 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	if overview.Layout != model.LayoutCard {
 		t.Errorf("overview layout = %q, want card", overview.Layout)
 	}
-	if overview.Edges.Mirrors != nil || overview.Edges.RestsOn != nil {
-		t.Errorf("overview should have no mirrors/rests_on edges, got %#v", overview.Edges)
+	if overview.Edges.RestsOn != nil {
+		t.Errorf("overview should have no rests_on edges, got %#v", overview.Edges)
 	}
 	if overview.Edges.GovernedBy == nil || overview.Edges.GovernedBy.Type != "none" ||
 		overview.Edges.GovernedBy.Reason != "fixture claim, not backed by any real doctrine" {
@@ -370,9 +373,6 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	}
 	if fields.Layout != model.LayoutTable {
 		t.Errorf("fields layout = %q, want table (inferred from rows)", fields.Layout)
-	}
-	if len(fields.Edges.Mirrors) != 1 || fields.Edges.Mirrors[0] != "widget.contract.overview" {
-		t.Errorf("fields mirrors = %v, want [widget.contract.overview]", fields.Edges.Mirrors)
 	}
 	if len(fields.Edges.RestsOn) != 2 {
 		t.Errorf("fields rests_on = %v, want 2 entries", fields.Edges.RestsOn)
@@ -431,7 +431,7 @@ func TestBuild_LargeListDeterminism(t *testing.T) {
 				Module: module,
 				Status: model.StatusDraft,
 				Body:   "filler",
-				Mirrors: []string{
+				RestsOn: []string{
 					fmt.Sprintf("%s.%s.slug-%04d", module, facet, (i+1)%n),
 				},
 			})

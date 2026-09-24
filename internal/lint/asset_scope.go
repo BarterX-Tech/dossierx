@@ -56,7 +56,7 @@
 //     co-location mistake, and the message below is the only one in the engine
 //     that explains where images must live — so both rules fire on it, on the
 //     package's existing co-firing precedent (cycle/self-edge,
-//     dangling/mirror-unanchored). See urlsafe.IsOffOrigin.
+//     dangling/validated-on-missing). See urlsafe.IsOffOrigin.
 //
 //   - It skips a claim whose SourcePath is empty. SourcePath is populated by
 //     the loader and is not part of the YAML schema, so a claim built in

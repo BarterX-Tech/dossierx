@@ -69,8 +69,8 @@ For changes touching approval or readiness, preserve these current boundaries:
 - Clearing one boundary must not clear another independent boundary.
 - Readiness computation must not refresh baselines, rewrite approvals, or mutate
   claims, receipts, flags, or graph edges.
-- `governed_by` and `mirrors` are drift inputs, not lock prerequisites solely
-  because their target is unapproved. Existing integrity and lint gates remain.
+- `governed_by` is a drift input, not a lock prerequisite solely
+  because its target is unapproved. Existing integrity and lint gates remain.
 - Singleton and batch locking use the same evaluator and snapshot rules. Refused
   batches write nothing; write failures follow the contract's rollback or
   explicit recovery behavior and never look like successful partial approval.

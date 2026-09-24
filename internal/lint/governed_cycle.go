@@ -9,7 +9,7 @@
 // Hub gating is NOT one of the rules that reads this edge, and saying otherwise
 // here would be worse than saying nothing: a reader who believed it would drop
 // the redundant rests_on edge and lock against an unapproved doctrine claim.
-// lock.checkHubGating walks lock.dependencyIDs, which is mirrors ++ rests_on
+// lock.checkHubGating walks lock.dependencyIDs, which is rests_on
 // and nothing else (the same list check.hasUnlockedDoctrineDep and the CLI's
 // dry-run twin build), so a doctrine claim named ONLY by governed_by is not
 // gated — to have hub gating cover it, name it as a rests_on dependency too.

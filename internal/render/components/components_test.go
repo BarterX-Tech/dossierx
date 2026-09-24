@@ -324,7 +324,7 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 	if !strings.Contains(got, `<div class="claim-footer">`) || !strings.Contains(got, `class="claim-edges`) {
 		t.Fatalf("a claim with one edge must still render the footer strip and its edges ul, got: %s", got)
 	}
-	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-governed", "claim-mirrors", "claim-rests-on", "claim-review-pending"} {
+	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-governed", "claim-rests-on", "claim-review-pending"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("edgesHTML should omit %q, got: %s", absent, got)
 		}
@@ -341,7 +341,7 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 // a-time.md §6's "a noun and a count, never a score" (R-F.1), now
 // "N relationship"/"N relationships" rather than the pre-redesign "N links".
 // links counts what the reader FINDS ON EXPANDING — one per id inside the
-// three R09.4 direction blocks and the "extra" mirrors/migrated_from/
+// three R09.4 direction blocks and the "extra" migrated_from/
 // review_pending rows — never the linked files or sources, which are their
 // own doors (§6: "files and drifted do not appear in the strip"; sources is
 // its own door per R09.5) and no longer ride in this chip's count at all.
@@ -370,15 +370,14 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 		wantChip   string
 	}{
 		{
-			name: "governed_mirrors_restson_dependedby_no_files",
+			name: "governed_restson_dependedby_no_files",
 			claim: model.Claim{
 				Module: "widget", Facet: "contract",
 				Governed: model.Governed{Type: "doctrine.hub.retries"},
-				Mirrors:  []string{"widget.contract.a"},
 				RestsOn:  []string{"widget.contract.b", "widget.contract.c"},
 			},
 			dependedBy: []string{"widget.internals.d", "widget.internals.e"},
-			wantChip:   "6 relationships",
+			wantChip:   "5 relationships",
 		},
 		{
 			// Linked files no longer add to the relationships count at all —
@@ -839,8 +838,7 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		Facet:         "contract",
 		Module:        "widget",
 		Governed:      model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
-		Mirrors:       []string{"widget.contract.a", "widget.contract.b"},
-		RestsOn:       []string{"widget.contract.c"},
+		RestsOn:       []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
 		MigratedFrom:  "docs/tabs/widget.html",
 		Status:        model.StatusLocked,
 		ReviewPending: true,
@@ -852,10 +850,9 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`claim-mirrors`,
+		`claim-rests-on`,
 		`href="#widget.contract.a"`,
 		`href="#widget.contract.b"`,
-		`claim-rests-on`,
 		`href="#widget.contract.c"`,
 		`migrated_from: docs/tabs/widget.html`,
 		`claim-review-pending`,
@@ -863,12 +860,6 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("edgesHTML missing %q, got: %s", want, got)
 		}
-	}
-	// Two mirror ids each get their own bulleted <li>. Both targets share this
-	// claim's module AND facet, so they are the bare-label tier: no prefix at
-	// all, since "widget.contract." is the tab the reader is already on.
-	if !strings.Contains(got, `<li><a class="claim-ref" href="#widget.contract.a" data-claim-id="widget.contract.a" title="widget.contract.a"><span class="claim-ref-label">A</span></a></li><li><a class="claim-ref" href="#widget.contract.b" data-claim-id="widget.contract.b" title="widget.contract.b"><span class="claim-ref-label">B</span></a></li>`) {
-		t.Fatalf("expected multiple ids in an edge list rendered as separate <li> bullets, got: %s", got)
 	}
 	if strings.Contains(got, "claim-ref-prefix") {
 		t.Errorf("a same-module, same-facet target must carry no prefix at all, got: %s", got)
@@ -980,7 +971,7 @@ func TestEdgesHTMLWithLinks_NilDependedBy_OmitsLine(t *testing.T) {
 // BY/GOVERNED BY rows specifically: writeRelationshipRow passes a nil
 // targetStatuses to the shared writeClaimRef so the old pill never doubles
 // up beside the new dot+badge. targetPillHTML's original actionable-only
-// contract still holds for the "extra" rows (mirrors) below.
+// contract still holds for the "extra" rows below.
 func TestEdgesHTMLWithLinks_TargetPill_DraftTarget(t *testing.T) {
 	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
 	statuses := map[string]TargetStatus{
@@ -1280,7 +1271,7 @@ func TestClaimLabel_DerivesFromSlugOrFallsBackToRawID(t *testing.T) {
 // (writeRelationshipMeta) instead, shown on every row regardless of how far
 // the target is from the reader's own context. The three-tier elision this
 // test used to pin is real, but it now lives in writeClaimRef's OTHER
-// caller, writeIDListItems (mirrors, migrated_from-adjacent extras) — see
+// caller, writeIDListItems (migrated_from-adjacent extras) — see
 // TestEdgesHTML_ElisionTiers_ExtrasStillElide below for that half.
 func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	c := model.Claim{
@@ -1314,7 +1305,7 @@ func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	}
 
 	// No prefix spans at all: the elided inline prefix is exclusively
-	// writeIDListItems' territory now (mirrors/migrated_from-adjacent
+	// writeIDListItems' territory now (migrated_from-adjacent
 	// extras), never a fixed-direction relationship row's.
 	if strings.Contains(got, "claim-ref-prefix") {
 		t.Errorf("a fixed-direction relationship row must carry no inline prefix span, got: %s", got)
@@ -1325,35 +1316,34 @@ func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	}
 }
 
-// TestEdgesHTML_ElisionTiers_ExtrasStillElide is the RETRY addition proving
-// the elision tiers TestEdgesHTML_ElisionTiers used to pin for RestsOn still
-// exist, just relocated to writeIDListItems' callers (mirrors), which have
-// no meta column of their own and so keep writeClaimRef's original,
-// context-relative claim-ref-prefix behaviour unchanged.
-func TestEdgesHTML_ElisionTiers_ExtrasStillElide(t *testing.T) {
+// TestEdgesHTML_RestsOnUsesMetaColumn not prefix elision: rests_on rows
+// carry module/facet in claim-relationship-meta, not claim-ref-prefix.
+func TestEdgesHTML_RestsOnUsesMetaColumn(t *testing.T) {
 	c := model.Claim{
 		ID:     "widget.contract.self",
 		Module: "widget",
 		Facet:  "contract",
-		Mirrors: []string{
-			"widget.contract.retry-policy",  // same module + facet -> bare
-			"widget.internals.retry-buffer", // same module, other facet
-			"ledger.contract.spend-cap",     // other module entirely
+		RestsOn: []string{
+			"widget.contract.retry-policy",
+			"widget.internals.retry-buffer",
+			"ledger.contract.spend-cap",
 		},
 	}
 	got := string(edgesHTML(c))
 
 	for _, want := range []string{
 		`title="widget.contract.retry-policy"><span class="claim-ref-label">Retry Policy</span>`,
-		`title="widget.internals.retry-buffer"><span class="claim-ref-prefix">Internals › </span><span class="claim-ref-label">Retry Buffer</span>`,
-		`title="ledger.contract.spend-cap"><span class="claim-ref-prefix">Ledger · Contract › </span><span class="claim-ref-label">Spend Cap</span>`,
+		`title="widget.internals.retry-buffer"><span class="claim-ref-label">Retry Buffer</span>`,
+		`title="ledger.contract.spend-cap"><span class="claim-ref-label">Spend Cap</span>`,
+		`Widget · Internals`,
+		`Ledger · Contract`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %q in the edges footer, got: %s", want, got)
 		}
 	}
-	if n := strings.Count(got, "claim-ref-prefix"); n != 2 {
-		t.Errorf("expected 2 prefix spans (the two cross-boundary targets), got %d in: %s", n, got)
+	if strings.Contains(got, "claim-ref-prefix") {
+		t.Errorf("rests_on rows must not use claim-ref-prefix, got: %s", got)
 	}
 }
 

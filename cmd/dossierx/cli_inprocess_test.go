@@ -174,7 +174,7 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 
 	// --validate first, on a clean tree: it must report the lint verdict and
 	// leave the two artifacts ABSENT. The fixture claims carry no
-	// mirrors/rests_on edges, which trips the warning-severity "orphan" lint —
+	// rests_on edges, which trips the warning-severity "orphan" lint —
 	// expected and non-fatal (only an error-severity finding fails a run).
 	out, _, err := execCLI(t, "--config", cfgPath, "check", "--validate")
 	if err != nil {
@@ -264,7 +264,7 @@ func TestCLI_ClaimShowReportsBothEdgeDirections(t *testing.T) {
 	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "governed_by") {
 		t.Fatalf("expected claim show to describe the claim, got: %s", out)
 	}
-	if !strings.Contains(out, "incoming mirrors") || !strings.Contains(out, "incoming rests_on") {
+	if !strings.Contains(out, "incoming rests_on") {
 		t.Fatalf("expected claim show to report incoming edges, got: %s", out)
 	}
 	// The two things "deps" never said, and the reason claim show replaced it.

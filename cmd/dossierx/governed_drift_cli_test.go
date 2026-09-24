@@ -72,7 +72,7 @@ func governedDriftFixture(t *testing.T) (cfgPath, projectDir string) {
 			"build_role: orientation\n" +
 			"body: |\n  the governing doctrine, first wording.\n" +
 			"governed_by:\n  type: none\n  reason: the hub is the doctrine\n",
-		// governed_by is the ONLY edge to the hub: no mirrors, no rests_on.
+		// governed_by is the ONLY edge to the hub: no rests_on.
 		"child.yaml": "id: " + govChild + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  a claim the doctrine governs.\n" +
@@ -374,7 +374,7 @@ func TestCommentOpsDoNotEraseGovernanceDrift(t *testing.T) {
 }
 
 // TestReauditNamesTheGovernorAndRefreshesItsBaseline is done-when 8 and 9. The
-// inline mirrors ++ rests_on copy inside pickChangedDependency returned a zero
+// inline rests_on-only copy inside pickChangedDependency returned a zero
 // model.Claim for a governance-only drift, so the proposal read
 // `dependency "" changed but no proposal was generated` — a preview that names
 // nothing, asking a human to approve nothing in particular.

@@ -172,7 +172,7 @@ func TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget(t *testing.T) {
 // TestLockSucceedsWithOnlyWarningSeverityFinding proves "dossierx claim lock"'s lint
 // gate mirrors "dossierx check --validate"/"dossierx check"'s own pass/fail semantics: a claim
 // that trips only a warning-severity lint (here, the real "orphan" lint —
-// a lone claim with no mirrors/rests_on edges in either direction) must
+// a lone claim with no rests_on edges in either direction) must
 // still lock successfully, exactly as "dossierx check --validate" exits 0 for it (findings
 // reported, no error-level findings). This is the CLI-level companion to
 // internal/lock/lock_test.go's TestLockSucceedsWithOnlyWarningFindings,

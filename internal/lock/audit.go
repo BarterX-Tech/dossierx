@@ -158,14 +158,11 @@ const (
 	//
 	//   - OTHER CLAIMS' BASELINES that name this claim as a dependency
 	//     (hashes[dependent][id]). Unsound in both directions. Baselines are
-	//     recorded for BaselineDependencyIDs = mirrors ++ rests_on ++ a
-	//     claim-valued governed_by.type, and a LOCKED claim may
-	//     legitimately mirror a DRAFT one — mirror-mismatch compares Layout, Body,
-	//     Rows and Steps and documents status as EXPECTED to differ — so the rule
-	//     would fire on correct state, which is the outage this gate exists to
-	//     avoid. Narrowing it to rests_on does not save it: baselines are never
-	//     removed when an edge is removed, so one written while the target sat in
-	//     mirrors outlives a later draft edit that moves it to rests_on. And in
+	//     recorded for BaselineDependencyIDs = rests_on ++ a
+	//     claim-valued governed_by.type. Baselines are never
+	//     removed when an edge is removed, so one written while the target
+	//     sat on a later-deleted edge outlives a later draft edit that
+	//     moves it to rests_on. And in
 	//     the one shape where the inference IS sound (the dependent is currently
 	//     locked and currently rests_on the claim) the error-severity
 	//     rest-on-locked lint already refuses, so the rule buys nothing there.
