@@ -2,8 +2,8 @@ package viewertests
 
 // graph-core.js is the DossierX claims graph's pure-computation half: scope
 // filtering, the representative-node rule, edge aggregation, scope-relative
-// degrees, iterative Tarjan SCC, facet slot assignment, the governance
-// channels, the gap rules and the hash-state codec. It has no DOM, no canvas
+// degrees, iterative Tarjan SCC, facet slot assignment, the gap rules and
+// the hash-state codec. It has no DOM, no canvas
 // and no global beyond one namespace — which is exactly what lets this file
 // prove all of it through a single chromedp.Evaluate against ONE loaded page.
 //
@@ -220,9 +220,9 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		// The exported constants are a stated API: the pane, the CSS ramp and
 		// this suite all key off them, so they are pinned rather than assumed.
 		{name: "EDGE_TYPES", expr: "window.dossierxGraphCore.EDGE_TYPES",
-			want: []any{"rests_on", "governed_by"}},
+			want: []any{"rests_on"}},
 		{name: "DIRECTED_EDGE_TYPES", expr: "window.dossierxGraphCore.DIRECTED_EDGE_TYPES",
-			want: []any{"rests_on", "governed_by"}},
+			want: []any{"rests_on"}},
 		{name: "GHOST_PREFIX", expr: "window.dossierxGraphCore.GHOST_PREFIX", want: "ghost:"},
 		{name: "FACET_SLOT_COUNT", expr: "window.dossierxGraphCore.FACET_SLOT_COUNT", want: 20},
 		{name: "FACT_RULE_IDS", expr: "window.dossierxGraphCore.FACT_RULE_IDS",
@@ -230,7 +230,7 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "HINT_RULE_IDS", expr: "window.dossierxGraphCore.HINT_RULE_IDS",
 			want: []any{"missing_build_phase", "density_outlier"}},
 		{name: "OVERLAYS", expr: "window.dossierxGraphCore.OVERLAYS",
-			want: []any{"none", "isolated", "cycles", "governance", "review", "comments", "status"}},
+			want: []any{"none", "isolated", "cycles", "review", "comments", "status"}},
 		{name: "BUILD_PHASES", expr: "window.dossierxGraphCore.BUILD_PHASES",
 			want: []any{"orientation", "schema", "behavior", "api", "verification"}},
 
@@ -363,16 +363,18 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 			args: []any{coreNodes(), "facet", []any{}}, post: ".repByClaim",
 			want: map[string]any{"a.one": "facet:contract", "a.two": "facet:contract", "b.one": "facet:contract", "c.one": "facet:schema"}},
 
-		// Aggregation: the type toggle drops governed_by, two claim-level
-		// edges collapse into one weighted group edge, and the intra-module
-		// edge becomes a self-loop and is dropped rather than drawn.
+		// Aggregation: the type toggle drops a type that is not enabled (a
+		// retired kind still present in an old payload, here), two
+		// claim-level edges collapse into one weighted group edge, and the
+		// intra-module edge becomes a self-loop and is dropped rather than
+		// drawn.
 		{name: "aggregateEdges collapses, weights and drops self-loops", fn: "aggregateEdges",
 			args: []any{
 				[]any{
 					edge("a.one", "b.one", "rests_on"),
 					edge("a.two", "b.one", "rests_on"),
 					edge("a.one", "a.two", "rests_on"),
-					edge("a.one", "b.one", "governed_by"),
+					edge("a.one", "b.one", "mirrors"),
 				},
 				map[string]any{"a.one": "module:a", "a.two": "module:a", "b.one": "module:b"},
 				[]any{"rests_on"},
@@ -392,7 +394,7 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "degrees are scope-relative and count both ends", fn: "degrees",
 			args: []any{
 				[]any{"x", "y"},
-				[]any{[]any{"x", "y"}, edge("y", "x", "governed_by"), edge("x", "q", "rests_on")},
+				[]any{[]any{"x", "y"}, edge("y", "x", "rests_on"), edge("x", "q", "rests_on")},
 			},
 			want: map[string]any{
 				"x": map[string]any{"in": 1, "out": 2, "total": 3},
@@ -411,7 +413,7 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// SCC, self-edges, facet slots and the governance channels
+// SCC, self-edges and facet slots
 // ---------------------------------------------------------------------
 
 func TestGraphCoreStructureAndChannels(t *testing.T) {
@@ -422,17 +424,9 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 		facets23 = append(facets23, "f"+string(rune('a'+i)))
 	}
 
-	govEdges := []any{
-		edge("a", "g", "governed_by"),
-		edge("b", "g", "governed_by"),
-		edge("a", "b", "rests_on"),
-	}
-
 	runCoreCases(t, []coreCase{
-		// The loop that neither engine cycle lint could see before v0.5.0:
-		// one rests_on hop and one governed_by hop. scc walks the union.
-		{name: "scc finds a mixed rests_on/governed_by cycle", fn: "scc",
-			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "rests_on"), edge("b", "a", "governed_by")}},
+		{name: "scc finds a two-node rests_on cycle", fn: "scc",
+			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "rests_on"), edge("b", "a", "rests_on")}},
 			want: []any{[]any{"a", "b"}}},
 		{name: "scc ignores an unknown edge type", fn: "scc",
 			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "unknown"), edge("b", "a", "unknown")}},
@@ -485,11 +479,12 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 			})()`,
 			want: map[string]any{"components": 1, "size": 10000, "first": "n00000", "last": "n09999"}},
 
-		// self_edge is reported under its own name and over ALL three types,
-		// because the engine has a dedicated self-edge lint distinct from
-		// cycle and the rail must tell the same story check does.
+		// self_edge is reported under its own name and over ANY edge type —
+		// a retired kind still present in an old payload included — because
+		// the engine has a dedicated self-edge lint distinct from cycle and
+		// the rail must tell the same story check does.
 		{name: "selfEdges spans every edge type", fn: "selfEdges",
-			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "rests_on"), edge("b", "b", "governed_by")}},
+			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "rests_on"), edge("b", "b", "mirrors")}},
 			want: []any{"a", "b"}},
 		{name: "selfEdges ignores an id outside the node set", fn: "selfEdges",
 			args: []any{[]any{"a"}, []any{edge("z", "z", "rests_on")}},
@@ -503,17 +498,6 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 		{name: "facetSlot past the wrap", fn: "facetSlot", args: []any{facets23, "fw"}, want: 2},
 		{name: "facetSlot of an unknown facet is the other slot", fn: "facetSlot", args: []any{facets23, "nope"}, want: -1},
 		{name: "facetSlot of no facet is the other slot", fn: "facetSlot", args: []any{facets23, ""}, want: -1},
-
-		// A claim declares governed_by, so the edge runs claim -> governor and
-		// the wedge marker belongs on `to`.
-		{name: "governors are the targets of governance edges", fn: "governors",
-			args: []any{govEdges}, want: []any{"g"}},
-		{name: "governanceScope keeps only governance edges", fn: "governanceScope",
-			args: []any{govEdges},
-			want: map[string]any{
-				"nodeIds":  []any{"a", "b", "g"},
-				"edgeKeys": []any{"a|governed_by|g", "b|governed_by|g"},
-			}},
 	})
 }
 
@@ -538,10 +522,9 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		"id": "m3.schema.a", "module": "m3", "facet": "schema", "status": "draft",
 	})
 
-	// A cycle that alternates edge types, with no types enabled: the
-	// structural rules must ignore the edge-type toggles while the
-	// connectivity rules honour them.
-	mixedCycle := []any{edge("a.one", "a.two", "rests_on"), edge("a.two", "a.one", "governed_by")}
+	// A cycle with no types enabled: the structural rules must ignore the
+	// edge-type toggles while the connectivity rules honour them.
+	mixedCycle := []any{edge("a.one", "a.two", "rests_on"), edge("a.two", "a.one", "rests_on")}
 
 	runCoreCases(t, []coreCase{
 		{name: "gapRules facts over the default type set", fn: "gapRules",
@@ -559,7 +542,7 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		// Turning rests_on off isolates every claim: "connected" means
 		// connected by the relations the reader is currently looking at.
 		{name: "connectivity rules honour the edge-type toggles", fn: "gapRules",
-			args: []any{coreNodes(), coreEdges(), map[string]any{"enabledTypes": []any{"governed_by"}}},
+			args: []any{coreNodes(), coreEdges(), map[string]any{"enabledTypes": []any{}}},
 			post: ".facts.filter(function (f) { return f.rule === 'isolated' || f.rule === 'weakly_linked'; })",
 			want: []any{
 				fact("isolated", "a.one", "a.two", "b.one", "c.one"),
@@ -586,31 +569,31 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: []any{hint("missing_build_phase"), hint("density_outlier", "module:m3")}},
 
 		{name: "encodeState of the default state", fn: "encodeState",
-			args: []any{nil}, want: "md=&fc=&gr=claims&ov=none&ty=rg&lb=1&ex=&se="},
+			args: []any{nil}, want: "md=&fc=&gr=claims&ov=none&ty=r&lb=1&ex=&se="},
 		{name: "encodeState escapes the separator and the delimiters", fn: "encodeState",
 			args: []any{map[string]any{
-				"scopeModule": "a b", "scopeFacet": "c&d", "granularity": "facet", "overlay": "governance",
-				"types": []any{"governed_by"}, "labels": false,
+				"scopeModule": "a b", "scopeFacet": "c&d", "granularity": "facet", "overlay": "review",
+				"types": []any{}, "labels": false,
 				"expanded": []any{"module:b", "module:a"}, "selected": "x.y",
 			}},
-			want: "md=a%20b&fc=c%26d&gr=facet&ov=governance&ty=g&lb=0&ex=module%3Aa,module%3Ab&se=x.y"},
+			want: "md=a%20b&fc=c%26d&gr=facet&ov=review&ty=&lb=0&ex=module%3Aa,module%3Ab&se=x.y"},
 		// The two axes are INDEPENDENT in the hash as well as in the control
 		// bar: either one alone encodes, and neither implies the other.
 		{name: "encodeState carries the module axis alone", fn: "encodeState",
 			args: []any{map[string]any{"scopeModule": "viewer"}},
-			want: "md=viewer&fc=&gr=claims&ov=none&ty=rg&lb=1&ex=&se="},
+			want: "md=viewer&fc=&gr=claims&ov=none&ty=r&lb=1&ex=&se="},
 		{name: "encodeState carries the facet axis alone", fn: "encodeState",
 			args: []any{map[string]any{"scopeFacet": "contract"}},
-			want: "md=&fc=contract&gr=claims&ov=none&ty=rg&lb=1&ex=&se="},
+			want: "md=&fc=contract&gr=claims&ov=none&ty=r&lb=1&ex=&se="},
 		{name: "encodeState carries both axes at once", fn: "encodeState",
 			args: []any{map[string]any{"scopeModule": "viewer", "scopeFacet": "contract"}},
-			want: "md=viewer&fc=contract&gr=claims&ov=none&ty=rg&lb=1&ex=&se="},
+			want: "md=viewer&fc=contract&gr=claims&ov=none&ty=r&lb=1&ex=&se="},
 		{name: "decodeState reads both axes back", fn: "decodeState",
 			args: []any{"md=viewer&fc=contract"},
 			want: map[string]any{
 				"scopeModule": "viewer", "scopeFacet": "contract", "scopeTrack": "",
 				"granularity": "claims", "overlay": "none",
-				"types": []any{"rests_on", "governed_by"}, "labels": true,
+				"types": []any{"rests_on"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
 		// Each axis decodes on its own, so a hash carrying one is not silently
@@ -628,19 +611,20 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: map[string]any{
 				"scopeModule": "", "scopeFacet": "", "scopeTrack": "",
 				"granularity": "module", "overlay": "none",
-				"types": []any{"rests_on", "governed_by"}, "labels": true,
+				"types": []any{"rests_on"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
-		// Same MEANING, same string: the codec canonicalises the two
-		// order-sensitive fields so a hash never churns on array order.
+		// Same MEANING, same string: the codec canonicalises the
+		// order-sensitive fields so a hash never churns on array order, and
+		// drops a retired kind an old hash still names.
 		{name: "encodeState is stable under argument order",
-			expr: `window.dossierxGraphCore.encodeState({ types: ['governed_by', 'rests_on'] }) ===
-				window.dossierxGraphCore.encodeState({ types: ['rests_on', 'governed_by'] })`,
+			expr: `window.dossierxGraphCore.encodeState({ types: ['mirrors', 'rests_on'], expanded: ['module:b', 'module:a'] }) ===
+				window.dossierxGraphCore.encodeState({ types: ['rests_on'], expanded: ['module:a', 'module:b'] })`,
 			want: true},
 		{name: "encodeState/decodeState round-trip losslessly",
 			expr: `(function () {
 				var s = { scopeModule: 'a b', scopeFacet: 'c d', granularity: 'module', overlay: 'cycles',
-					types: ['governed_by'], labels: false, expanded: ['facet:d', 'facet:c'], selected: 'a.b' };
+					types: [], labels: false, expanded: ['facet:d', 'facet:c'], selected: 'a.b' };
 				var once = window.dossierxGraphCore.encodeState(s);
 				return window.dossierxGraphCore.encodeState(window.dossierxGraphCore.decodeState(once)) === once;
 			})()`,
@@ -659,7 +643,7 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: map[string]any{
 				"scopeModule": "", "scopeFacet": "", "scopeTrack": "",
 				"granularity": "claims", "overlay": "none",
-				"types": []any{"rests_on", "governed_by"}, "labels": true,
+				"types": []any{"rests_on"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
 		// A key present with an empty value means the empty value; that is
@@ -674,7 +658,7 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: map[string]any{
 				"scopeModule": "%E0%A4%A", "scopeFacet": "%E0%A4%A", "scopeTrack": "",
 				"granularity": "claims", "overlay": "none",
-				"types": []any{"rests_on", "governed_by"}, "labels": true,
+				"types": []any{"rests_on"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
 
@@ -688,10 +672,10 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		// every project that has no tracks at all.
 		{name: "encodeState omits the track key when no track is selected", fn: "encodeState",
 			args: []any{map[string]any{"scopeModule": "viewer"}},
-			want: "md=viewer&fc=&gr=claims&ov=none&ty=rg&lb=1&ex=&se="},
+			want: "md=viewer&fc=&gr=claims&ov=none&ty=r&lb=1&ex=&se="},
 		{name: "encodeState carries a selected track", fn: "encodeState",
 			args: []any{map[string]any{"scopeTrack": "check out"}},
-			want: "md=&fc=&tk=check%20out&gr=claims&ov=none&ty=rg&lb=1&ex=&se="},
+			want: "md=&fc=&tk=check%20out&gr=claims&ov=none&ty=r&lb=1&ex=&se="},
 		{name: "decodeState reads the track axis back", fn: "decodeState",
 			args: []any{"tk=checkout"}, post: ".scopeTrack", want: "checkout"},
 		{name: "a track round-trips by value",

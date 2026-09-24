@@ -481,8 +481,7 @@ body {
 }
 
 /* Applied for 2s by shell.html's showModuleFacet when a hash resolves to a
-   specific claim card (an edges-footer rests_on/governed_by link,
-   or a deep link), so the reader's eye lands on the right card instead of
+   specific claim card (an edges-footer rests_on link, or a deep link), so the reader's eye lands on the right card instead of
    just the top of the right tab. outline (not border/box-shadow) so it
    doesn't shift layout or fight .claim-card--warn's own border-color. */
 .claim-target-highlight {
@@ -2097,11 +2096,9 @@ th {
 }
 
 /* RETRY FIX (05 §4.10: "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
-   --color-faint. GOVERNED BY carries no count because it has exactly one
-   target."; 07a §6 pins "DEPENDS ON · 1" / "DEPENDED ON BY · 1"). Emitted by
-   components.go's writeRelationshipDirection for DEPENDS ON / DEPENDED ON BY
-   only — GOVERNED BY's caller passes the "omit" sentinel, so no element with
-   this class exists in that direction's head at all. */
+   --color-faint"; 07a §6 pins "DEPENDS ON · 1" / "DEPENDED ON BY · 1").
+   Emitted by components.go's writeRelationshipDirection for DEPENDS ON /
+   DEPENDED ON BY. */
 .claim-relationship-direction-count {
   color: var(--faint);
   font-family: var(--font-mono);
@@ -2215,14 +2212,11 @@ th {
 .claim-relationship-badge--locked { color: var(--accent); }
 .claim-relationship-badge--draft { color: var(--status-draft); }
 
-/* RETRY FIX: font-size/line-height were unset, so this fell through to the
-   inherited ~12px `.claim-edges` body copy. 05 §8 item 15 is explicit that
-   the stated-absence form of GOVERNED BY reads "in --color-faint Inter
-   14/18 where a title would be, no dot and no badge" — this is the ONLY
-   spec for this state in L4's reading list (07 §4.10, which draws a
-   competing NONE-badge-plus-serif-sentence form, is outside L4's verified
-   region per LANES.md's Screens-verified column, which names 07 §4.7/§4.8
-   only). */
+/* The stated-absence row (05 §8 item 15: "--color-faint Inter 14/18 where a
+   title would be, no dot and no badge"). GOVERNED BY's "none" was its only
+   occupant until that edge retired (NIT-29); components.go emits nothing with
+   this class today, and the rules stay for the next direction that states an
+   absence rather than omitting itself. */
 .claim-relationship-none {
   color: var(--faint);
   font-family: var(--font-sans);
@@ -2230,14 +2224,11 @@ th {
   line-height: 18px;
 }
 
-/* RETRY FIX companion to the rule above: this <li> is NOT `li.claim-
-   relationship` (components.go gives it `claim-governed governed-none
-   claim-relationship-none` — no "claim-relationship" class), so it never
-   picked up the `.claim-relationship-list > li.claim-relationship` reset
-   two rules up: it kept the shared `.claim-edges > li` bullet dot and
-   0.9rem indent. 05 §8 item 15 says "no dot" in as many words; this reset
-   is keyed on the class the markup already carries, so no Go change is
-   needed and every test pinning that exact class string is undisturbed. */
+/* Companion to the rule above: a stated-absence <li> is NOT
+   `li.claim-relationship`, so it never picked up the
+   `.claim-relationship-list > li.claim-relationship` reset two rules up and
+   kept the shared `.claim-edges > li` bullet dot and 0.9rem indent. 05 §8
+   item 15 says "no dot" in as many words. */
 .claim-footer-panel .claim-relationship-list > li.claim-relationship-none {
   padding-left: 0;
 }
@@ -2296,7 +2287,7 @@ th {
 }
 
 /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
-   governed_by/rests_on/depended-on-by/migrated_from/review_pending/
+   rests_on/depended-on-by/migrated_from/review_pending/
    implemented-in fact is its own <li>, stacked vertically rather than
    wrapped inline, so a card with many edges reads as a scannable list
    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
@@ -2360,7 +2351,7 @@ th {
 }
 
 /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
-   (components.go's writeClaimRef): governed_by, rests_on and
+   (components.go's writeClaimRef): rests_on and
    depended-on-by, all inside the shared claim footer. Its two inner spans carry
    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
    when the target is outside the reading claim's own module/facet, and the
@@ -9071,7 +9062,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 
    DISCLOSURE (Q4). Paper has no disclosure widget, so a printed viewer that
    honoured the collapsed <details> would silently drop every claim's
-   governed_by/rests_on/implemented-in footer — the exact facts a reviewer
+   rests_on/implemented-in footer — the exact facts a reviewer
    prints the page to read.
    Revealing the contents through CSS is deliberate rather than setting `open`,
    which CSS cannot do: `open` is a content attribute, not a property a rule

@@ -62,8 +62,8 @@ import (
 
 // deepLinkHash is a full shared link: a reading-view target, then the graph
 // segment. Every graph field in it differs from defaultState() —
-// granularity claims -> module, overlay none -> governance, labels on -> off,
-// both remaining edge types -> one, nothing selected -> a node, facet scope all ->
+// granularity claims -> module, overlay none -> review, labels on -> off,
+// the one edge type on -> off, nothing selected -> a node, facet scope all ->
 // contract — so "the pane restored this state" cannot be satisfied by a pane
 // that simply opened on its defaults.
 //
@@ -75,7 +75,7 @@ import (
 // both modules on screen. Leaving BOTH axes at their default would have made
 // this test blind to a codec that dropped scope entirely.
 const deepLinkHash = "#gadget.contract.overview" +
-	"!g=md=&fc=contract&gr=module&ov=governance&ty=r&lb=0&se=module%3Awidget&ex="
+	"!g=md=&fc=contract&gr=module&ov=review&ty=&lb=0&se=module%3Awidget&ex="
 
 // deepLinkSelected is the node the link says was selected. It is a GROUP id
 // because the link also says granularity=module, and the selection is asserted
@@ -143,10 +143,9 @@ func TestGraphDeepLinkOnLoadOpensAndRestoresThePane(t *testing.T) {
 		{"module scope", `document.getElementById('dxgModule').value`, ""},
 		{"facet scope", `document.getElementById('dxgFacet').value`, "contract"},
 		{"granularity", `document.getElementById('dxgGranularity').value`, "module"},
-		{"overlay", `document.getElementById('dxgOverlay').value`, "governance"},
+		{"overlay", `document.getElementById('dxgOverlay').value`, "review"},
 		{"labels toggle", `document.querySelector('[data-dxg-labels]').getAttribute('aria-pressed')`, "false"},
-		{"rests_on toggle", `document.querySelector('[data-dxg-type="rests_on"]').getAttribute('aria-pressed')`, "true"},
-		{"governed_by toggle", `document.querySelector('[data-dxg-type="governed_by"]').getAttribute('aria-pressed')`, "false"},
+		{"rests_on toggle", `document.querySelector('[data-dxg-type="rests_on"]').getAttribute('aria-pressed')`, "false"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

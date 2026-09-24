@@ -3,7 +3,7 @@
 // citation marker in the body lands on.
 //
 // WHY PROVENANCE IS FOOTER METADATA AND NOT BODY PROSE. A source is a fact
-// ABOUT the claim, in the same family as governed_by and migrated_from — it is
+// ABOUT the claim, in the same family as rests_on and migrated_from — it is
 // authored in the claim's YAML, signed by the lock hash, and checked by the
 // source-* lints. Writing it into the body instead would put it beyond every
 // one of those: nothing could tell a citation from a sentence, so nothing
@@ -340,7 +340,8 @@ func writeInternalSource(b *strings.Builder, s model.Source) {
 // quoted phrase, so it goes through the same INLINE-ceiling renderer every
 // other prose field in this footer uses (markdown.RenderInline: code spans and
 // links, no block constructs) rather than a bare html.EscapeString — the
-// identical treatment governed.reason gets, and for the identical reason.
+// identical treatment every other footer prose field gets, and for the
+// identical reason.
 //
 // THE THREE-LINE CLAMP AND WHY THE BUTTON SHIPS HIDDEN. A supports/
 // does_not_support line is the one field in this footer with no natural length

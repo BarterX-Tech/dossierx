@@ -64,9 +64,6 @@ module: widget
 status: draft
 body: |
   browser scale fixture at layer %d, node %d.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 %s`, id, layer, node, restsOn.String()))
 		}
 	}
@@ -240,9 +237,6 @@ module: widget
 status: draft
 body: |
   the claim whose readiness a reviewer is deciding.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.alpha
   - widget.contract.beta
@@ -254,9 +248,6 @@ module: widget
 status: draft
 body: |
   a direct prerequisite awaiting approval.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const readinessBetaYAML = `id: widget.contract.beta
@@ -265,9 +256,6 @@ module: widget
 status: draft
 body: |
   a direct prerequisite with an upstream prerequisite.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.gamma
 `
@@ -278,9 +266,6 @@ module: widget
 status: draft
 body: |
   an upstream prerequisite awaiting approval.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 func newReadinessProject(t *testing.T) *project {
@@ -314,9 +299,6 @@ module: widget
 status: draft
 body: |
   an upstream prerequisite awaiting approval.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `, id))
 	}
 	p.writeClaim("hub.yaml", `id: widget.contract.hub
@@ -325,9 +307,6 @@ module: widget
 status: draft
 body: |
   the single first-hop route to many upstream blockers.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - `+strings.Join(leafIDs, "\n  - ")+"\n")
 	p.writeClaim("root.yaml", `id: widget.contract.root
@@ -336,9 +315,6 @@ module: widget
 status: draft
 body: |
   a root with one grouped module.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.hub
 `)

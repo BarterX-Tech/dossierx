@@ -75,9 +75,9 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// The footer only renders when a claim has at least one link or file (see
-// components.EdgesHTMLWithLinks — "governed_by: none" is a stated absence and
-// does not count), and it must render CLOSED, so no auto-open signal may
+// The footer's relationships door only renders when a claim has at least one
+// link or file (see components.EdgesHTMLWithLinks), and it must render
+// CLOSED, so no auto-open signal may
 // fire: no drifted implemented-in file, deep's own status draft rather than
 // locked + review_pending, AND — since lane L5 gave readiness its own door
 // sharing this claim's name group — base must be LOCKED (via lockRevealBase,
@@ -100,9 +100,6 @@ module: widget
 status: draft
 body: |
   the claim the deep-linked one rests on; its own footer must stay collapsed.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // lockRevealBase locks widget.contract.base through the CLI (the ledger gate
@@ -121,9 +118,6 @@ body: |
   the deep-link target: landing on its id must reveal the footer below.
 rests_on:
   - widget.contract.base
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const (
@@ -433,9 +427,6 @@ module: widget
 status: draft
 body: |
   the inactive facet's base claim.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // lockPrintFacetInterfaceBase is lockRevealBase's twin for the inactive
@@ -452,9 +443,6 @@ body: |
   a claim in the facet the reader is NOT looking at; its footer never reaches paper.
 rests_on:
   - widget.interface.base
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const (

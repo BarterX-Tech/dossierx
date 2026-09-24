@@ -15,12 +15,10 @@ func TestRender_SmallCorpusKeepsEagerClaimDOM(t *testing.T) {
 		{
 			ID: "widget.contract.alpha", Module: "widget", Facet: "contract",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "alpha body",
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
 		},
 		{
 			ID: "widget.internals.beta", Module: "widget", Facet: "internals",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "beta body",
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
 		},
 	}
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
@@ -58,8 +56,7 @@ func TestRender_LargeCorpusDefersClaimBodiesIntoSurfaceTemplates(t *testing.T) {
 			ID:     fmt.Sprintf("widget.contract.c%03d", i),
 			Module: "widget", Facet: "contract",
 			Status: model.StatusDraft, Layout: model.LayoutCard,
-			Body:     fmt.Sprintf("body-%03d", i),
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			Body: fmt.Sprintf("body-%03d", i),
 		})
 	}
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}

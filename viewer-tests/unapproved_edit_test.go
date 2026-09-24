@@ -23,9 +23,6 @@ body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
   A widget without an id is not a widget.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const editedBodyYAML = `id: widget.contract.overview
@@ -36,9 +33,6 @@ body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
   An object with no identifier is not a widget and is not stored.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // editedAfterApproval drives the exact lifecycle the feature is about — lock,
@@ -204,9 +198,6 @@ body: |
   a claim that rests on something nobody approved.
 rests_on:
   - `+testClaimID+`
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	ctx := browserContext(t)
 
@@ -320,9 +311,6 @@ body: |
   **The field is outward, not internal.** A claim in the support authority already depends on it.
   An observer revision changing is enumerated there among the material changes that revoke a
   support verdict. A change nobody can see revokes nothing.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const rewrappedEditedYAML = `id: widget.contract.overview
@@ -333,9 +321,6 @@ body: |
   **The field is outward, not private.** A claim in the support authority already depends on
   it. An observer revision changing is enumerated there among the material changes that
   revoke a support verdict. A change nobody can see revokes nothing.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // A one-word change must read as a one-word change, whatever the author's
@@ -445,9 +430,6 @@ body: |
   a claim that rests on something nobody approved.
 rests_on:
   - ` + testClaimID + `
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -897,9 +879,6 @@ body: |
 
   The catalogue is the only place a widget may be declared. A widget that exists
   in code and not in the catalogue is a defect in the catalogue, not a widget.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const longEditedCurrentYAML = `id: widget.contract.overview
@@ -918,9 +897,6 @@ body: |
 
   The catalogue is the only place a widget may be declared. A widget that exists
   in code and not in the catalogue is a defect in the catalogue, not a widget.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // ---------------------------------------------------------------------
@@ -944,9 +920,6 @@ steps:
   - the store returns the widget or a stated absence
 audit_notes:
   - 2026-01-01 approved against the schema as written
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const metadataOnlyEditedYAML = `id: widget.contract.overview
@@ -962,9 +935,6 @@ steps:
 audit_notes:
   - 2026-01-01 approved against the schema as written
   - 2026-02-01 unlocked to retarget step one after the code audit
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // editedFieldsOnly runs the same real lifecycle as editedAfterApproval, but
@@ -1109,9 +1079,6 @@ body: |
   A widget is the smallest unit this project documents.
 audit_notes:
   - "before <b>bold</b> and **stars**"
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 	const edited = `id: widget.contract.overview
 facet: contract
@@ -1121,9 +1088,6 @@ body: |
   A widget is the smallest unit this project documents.
 audit_notes:
   - "after <b>bold</b> and **stars**"
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 	p.writeClaim("overview.yaml", approved)
 	p.run("claim", "lock", testClaimID, "--reason", "one note, checked")
@@ -1168,9 +1132,6 @@ body: |
   A widget without an id is not a widget.
 steps:
   - the shell resolves the widget id
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 	const edited = `id: widget.contract.overview
 facet: contract
@@ -1181,9 +1142,6 @@ body: |
   An object with no identifier is not a widget and is not stored.
 steps:
   - the shell resolves the widget handle
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 	p.writeClaim("overview.yaml", approved)
 	p.run("claim", "lock", testClaimID, "--reason", "checked")

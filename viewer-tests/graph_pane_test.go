@@ -19,8 +19,7 @@ package viewertests
 //
 // CYCLES ARE PROVEN BY INJECTION, NOT BY A FIXTURE. dossierx check returns
 // above the render stage on the first error-severity lint partition, and
-// cycle, governed-cycle, self-edge and (from v0.5.0) mixed-cycle are all
-// error severity. So no corpus that renders at all can contain a cycle of
+// cycle and self-edge are both error severity. So no corpus that renders at all can contain a cycle of
 // any shape. Because the pane parses the payload block at FIRST OPEN rather
 // than at parse time, a test can replace that block's textContent before
 // opening the pane: the rendered document never contained a cycle, the pane
@@ -64,9 +63,6 @@ status: draft
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -165,10 +161,9 @@ func jsQuote(s string) string { return "\"" + s + "\"" }
 // Step 70 — cycle rendering, proven by INJECTING a cycle-carrying payload
 // ---------------------------------------------------------------------
 
-// injectedCyclePayload carries all three structural shapes at once: a plain
-// rests_on loop, the MIXED rests_on/governed_by loop that neither engine
-// cycle lint could see before v0.5.0, and a literal self-edge — which is
-// reported under its own rule id and never merged into the cycle list.
+// injectedCyclePayload carries the structural shapes at once: two plain
+// rests_on loops and a literal self-edge — which is reported under its own
+// rule id and never merged into the cycle list.
 //
 // core.contract.free is in no cycle and no self-edge, and it is what makes the
 // CANVAS half of this test mean something: with every node ringed red, "the
@@ -194,7 +189,7 @@ func injectedCyclePayload(t *testing.T) string {
 			map[string]any{"from": "core.contract.c1", "to": "core.contract.c2", "type": "rests_on"},
 			map[string]any{"from": "core.contract.c2", "to": "core.contract.c1", "type": "rests_on"},
 			map[string]any{"from": "core.contract.m1", "to": "core.contract.m2", "type": "rests_on"},
-			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "governed_by"},
+			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "rests_on"},
 			map[string]any{"from": "core.contract.s1", "to": "core.contract.s1", "type": "rests_on"},
 			// Into a cycle but not part of one. Its line must NOT be drawn as
 			// a cycle edge: a cycle edge is one whose endpoints share a
@@ -433,9 +428,6 @@ module: widget
 status: draft
 body: |
   a claim whose facet is a script-closing breakout attempt.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 
 	base, _ := p.serve()
@@ -552,8 +544,8 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// EDGE_TYPES rather than a literal, plus the two View controls.
 	types := evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-type]'))
 		.map(function (e) { return e.getAttribute('data-dxg-type'); })`)
-	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on", "governed_by"}) {
-		t.Fatalf("edge-type toggles = %v, want the two remaining relation types", types)
+	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on"}) {
+		t.Fatalf("edge-type toggles = %v, want the one remaining relation type", types)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-labels], [data-dxg-relayout]').length`); n != 2 {
 		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
@@ -648,9 +640,6 @@ module: `+module+`
 status: draft
 body: |
   one of many claims.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	}
 

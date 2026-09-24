@@ -421,7 +421,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 			canOpen, canClose := delimFlags(c, f)
 			if !canOpen && !canClose {
 				// The overwhelmingly common case for "_": an intraword run in
-				// a token like governed_by, which can neither open nor close.
+				// a token like claims_dir, which can neither open nor close.
 				// It never becomes a delimiter run at all, so it costs the
 				// pairing pass nothing and allocates nothing.
 				i += n
@@ -536,7 +536,7 @@ func byteRun(s string, i int) int {
 //
 // WHY THAT EXTRA CLAUSE FOR "_" IS THE ENTIRE UNDERSCORE ARGUMENT. Take an
 // INTRAWORD underscore — alphanumerics on both sides, which is every one of the
-// nine corpus tokens the gate-0 scan named (rests_on, governed_by, claims_dir,
+// eight corpus tokens the gate-0 scan named (rests_on, claims_dir,
 // schema_version, build_role, raw_html, migrated_from, validated_at,
 // depended_by). BEFORE and AFTER are both word characters, so the run is BOTH
 // left- and right-flanking. Can it open? left-flanking is true, but it is also

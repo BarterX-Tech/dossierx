@@ -36,14 +36,13 @@ func trackTestConfig(t *testing.T, tracksYAML string) *config.Config {
 
 func trackTestClaim(module, slug string, status model.Status, tracks ...model.TrackRef) model.Claim {
 	return model.Claim{
-		ID:       module + ".contract." + slug,
-		Module:   module,
-		Facet:    "contract",
-		Status:   status,
-		Layout:   model.LayoutCard,
-		Body:     slug + " body",
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
-		Tracks:   tracks,
+		ID:     module + ".contract." + slug,
+		Module: module,
+		Facet:  "contract",
+		Status: status,
+		Layout: model.LayoutCard,
+		Body:   slug + " body",
+		Tracks: tracks,
 	}
 }
 

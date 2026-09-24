@@ -50,7 +50,6 @@ func implinkTestClaim(module string) model.Claim {
 		Layout:    model.LayoutCard,
 		Body:      "main claim",
 		BuildRole: model.BuildRoleBehavior,
-		Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
 	}
 }
 

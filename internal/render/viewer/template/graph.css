@@ -114,35 +114,10 @@
    collapsed MODULE group node wears — a module has no single facet, and
    borrowing one of its members' colours would assert something false.
 
-   ---------------------------------------------------------------------------
-   --dxg-governed IS OUTSIDE THE RAMP, AND THAT IS THE LOAD-BEARING PART
-   ---------------------------------------------------------------------------
-
-   governed_by is the relation a reader most often needs to isolate, and the
-   one an edge style alone cannot make findable: telling a dashed line from a
-   dotted line across a 400-node canvas means tracing lines, which is exactly
-   the work this pane exists to remove. It gets four independent channels —
-   this reserved hue, quadratic-curve routing where the other two relations
-   are straight, a double-chevron arrowhead, and a wedge marker on every node
-   that governs another — plus an overlay that dims everything else.
-
-   The hue is reserved rather than merely different, and "reserved" is stated
-   in the same metric the ramp is solved in rather than in degrees of hue: the
-   ramp solver treats --dxg-governed, --dxg-cycle, --dxg-halo and
-   --dxg-facet-other as members of the already-chosen set with a hard floor of
-   CIEDE2000 20, so no slot it picks can land near any of them. Measured
-   against the values DECLARED IN THIS FILE, the closest any of the twenty
-   slots comes to a reserved colour is 14.4 in dark and 11.1 in light — and
-   the light 11.1 is frozen slot 5 (#67717E) against this file's
-   --dxg-facet-other (#7D8C85), two greys this file inherited rather than
-   chose. Read that figure as a bound on this file alone: shell.html emits
-   style.css after graph.css, and style.css re-declares --dxg-facet-other
-   (blue, not grey) for the shipped viewer, so the only project that sees the
-   grey — and therefore that 11.1 — is one whose viewer.template_overrides
-   replaces style.css. Against --dxg-governed itself, which style.css does not
-   re-declare, every slot in both themes is at least 20 away. A governance
-   edge cannot be mistaken for a facet's colour at any facet count in either
-   theme.
+   The retired governed_by edge (NIT-29) used to own a reserved hue,
+   --dxg-governed, kept a CIEDE2000 floor of 20 away from every ramp slot.
+   That token is gone with the edge; the ramp solver's reserved set is now
+   --dxg-cycle, --dxg-halo and --dxg-facet-other.
 
    --dxg-cycle and --dxg-halo are STATE colours, not identity colours. They
    are drawn as a ring and a halo — never as a plain node fill — except under
@@ -194,7 +169,6 @@
   --color-dark-graph-other: #6C7F75;
   --color-dark-graph-cycle: #F5615C;
   --color-dark-graph-halo: #EFB44D;
-  --color-dark-graph-governed: #F06A9C;
 
   --dxg-facet-1: var(--color-dark-graph-facet-1);
   --dxg-facet-2: var(--color-dark-graph-facet-2);
@@ -235,8 +209,6 @@
   --dxg-cycle: var(--color-dark-graph-cycle);
   --dxg-halo: var(--color-dark-graph-halo);
 
-  /* Reserved governance hue, outside the ramp. See the block comment above. */
-  --dxg-governed: var(--color-dark-graph-governed);
 }
 
 /* `, print`: paper is light, whatever the OS says. A printed graph pane with
@@ -255,7 +227,6 @@
     --color-graph-other: #7D8C85;
     --color-graph-cycle: #D1201A;
     --color-graph-halo: #C07E0C;
-    --color-graph-governed: #C11F5B;
 
     --dxg-facet-1: var(--color-graph-facet-1);
     --dxg-facet-2: var(--color-graph-facet-2);
@@ -290,7 +261,6 @@
     --dxg-cycle: var(--color-graph-cycle);
     --dxg-halo: var(--color-graph-halo);
 
-    --dxg-governed: var(--color-graph-governed);
   }
 }
 
@@ -354,7 +324,6 @@
     --color-dark-graph-other: #6C7F75;
     --color-dark-graph-cycle: #F5615C;
     --color-dark-graph-halo: #EFB44D;
-    --color-dark-graph-governed: #F06A9C;
 
     --dxg-facet-1: var(--color-dark-graph-facet-1);
     --dxg-facet-2: var(--color-dark-graph-facet-2);
@@ -395,8 +364,6 @@
     --dxg-cycle: var(--color-dark-graph-cycle);
     --dxg-halo: var(--color-dark-graph-halo);
 
-    /* Reserved governance hue, outside the ramp. See the block comment above. */
-    --dxg-governed: var(--color-dark-graph-governed);
   }
 
   html[data-theme="light"] {
@@ -411,7 +378,6 @@
     --color-graph-other: #7D8C85;
     --color-graph-cycle: #D1201A;
     --color-graph-halo: #C07E0C;
-    --color-graph-governed: #C11F5B;
 
     --dxg-facet-1: var(--color-graph-facet-1);
     --dxg-facet-2: var(--color-graph-facet-2);
@@ -446,11 +412,8 @@
     --dxg-cycle: var(--color-graph-cycle);
     --dxg-halo: var(--color-graph-halo);
 
-    --dxg-governed: var(--color-graph-governed);
-
   }
 }
-
 
 /* =========================================================================
    PANE CHROME
@@ -993,13 +956,9 @@ body.dxg-open #dxgOpen {
    rows come back when the overlay is cleared. graph-ui.js builds the rows;
    this file only styles them.
 
-   THE EDGE ROWS ARE BOTH REMAINING RELATIONS, NEVER ONLY governed_by.
-   rests_on and governed_by differ on the canvas by routing and arrowhead —
-   an arrowhead is exactly the part of an edge that ends up hidden under the
-   node it points at — so a legend naming only one relation left a reader
-   with two lines and no way to find out which was which. Each row draws the
-   same sample the canvas draws: solid with one chevron, and the reserved
-   hue curved with a double chevron. */
+   THE EDGE ROWS NAME EVERY RELATION THE ENGINE DECLARES — one, rests_on,
+   since governed_by retired (NIT-29). The row draws the same sample the
+   canvas draws: solid with one chevron. */
 
 .dxg-legend {
   flex-shrink: 0;
@@ -1095,7 +1054,6 @@ body.dxg-open #dxgOpen {
    holds a second copy of the other's value. */
 .dxg-swatch-cycle { background: var(--dxg-cycle); }
 .dxg-swatch-halo { background: var(--dxg-halo); }
-.dxg-swatch-governed { background: var(--dxg-governed); }
 .dxg-swatch-accent { background: var(--accent); }
 .dxg-swatch-link { background: var(--link); }
 .dxg-swatch-warn { background: var(--warn); }
@@ -1127,13 +1085,6 @@ body.dxg-open #dxgOpen {
   width: 34px;
   height: 12px;
   color: var(--muted);
-}
-
-/* RETRY fix list item 9 / 13 §4.5: every legend LABEL paints --color-muted
-   — only the 34x12 mark itself carries the governance hue. Dropped
-   .dxg-legend-name from this selector. */
-.dxg-legend-item--governed .dxg-legend-edge {
-  color: var(--dxg-governed);
 }
 
 /* The two track rows, shown only while a track is selected.
@@ -1567,10 +1518,12 @@ body.dxg-open #dxgOpen {
 .dxg-detail-rows dd.dxg-v-draft { color: var(--status-draft); }
 .dxg-detail-rows dd.dxg-v-muted { color: var(--muted); }
 
-/* GOVERNED BY's value: one or more clickable claim titles, --color-accent
-   (engine --link) — 13 §4.7's "Value, link". A plain button rather than an
-   <a>: it jumps the canvas to the governor and selects it, the same action
-   every other rail jump target takes, not a navigation to a new document. */
+/* A rail "Value, link" row (13 §4.7): one or more clickable claim titles,
+   --color-accent (engine --link). A plain button rather than an <a>: it
+   jumps the canvas to the target and selects it, the same action every
+   other rail jump target takes, not a navigation to a new document. GOVERNED
+   BY was its only caller until that edge retired (NIT-29); the rule stays for
+   the next linked value. */
 .dxg-detail-link {
   border: 0;
   background: transparent;

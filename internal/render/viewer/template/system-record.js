@@ -197,7 +197,7 @@
 
   // enhanceFooters and enhanceFieldLabels were retired here: both targeted
   // the pre-redesign single-<details> mono digest and flat <li> labels
-  // ("N links - N files - N drifted", "governed_by:" text prefixes) that
+  // ("N links - N files - N drifted", "rests_on:" text prefixes) that
   // components.EdgesHTMLWithLinks no longer emits — see that Go function's
   // doc comment and docs/design/screens/05-claim-one-expansion-at-a-time.md
   // R09.1/R-F.1. The new footer strip (.claim-footer, .claim-footer-chip*,
@@ -859,12 +859,12 @@
 
   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
-  // labels back to "Rests On" / "Governed By" and renamed the
+  // labels back to "Rests On" and renamed the
   // "edge types" / "edges" headings to "Relationships" — a fixup for a
   // pre-13 build of the pane that had no display-label map of its own.
   // graph-ui.js now builds every one of those labels correctly at the
   // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
-  // "Governed by", the "Relations" eyebrow, the "marks"
+  // the "Relations" eyebrow, the "marks"
   // legend group), and this shim was firing on every rebuild and silently
   // reverting all of it back to the pre-13 wording — removed here rather
   // than left to fight graph-ui.js on every interaction. Found via
