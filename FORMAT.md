@@ -42,6 +42,7 @@ would be silently clobbered). Split multiple claims into separate files.
 ```yaml
 id: module.facet.slug          # e.g. widget.contract.overview
 facet: string                  # must be in project.config.yaml's facets[]
+scope: project                 # project claims only (id project.<slug>, no module, no facet); module claims omit it
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
 layout: card | table | list | steps | tree | banner | mockup  # optional
@@ -70,7 +71,12 @@ embodiment:                    # optional project-neutral implementation expecta
       expectation:
         shape: scalar
         value: "3"
-rests_on: [ id, ... ]          # optional
+rests_on:                       # REQUIRED — a list of claim ids, or none with a reason
+  - module.facet.slug           # any module's *.contract.*, this module's own *.internals.*,
+  - project.slug                # or a project claim; never a foreign module's internals
+  # or, for a claim that rests on nothing:
+  # none: true
+  # reason: string              # required when none: true
 migrated_from: string           # optional provenance note — what this claim REPLACED
 sources:                        # optional — what evidence BACKS this claim; cited from prose as [n] (see below)
   - ref: 1                      # positive int, unique within the claim
@@ -687,7 +693,7 @@ schema field instead of a path convention.
 
 - `draft` — freely editable, not yet reviewed.
 - `locked` — has passed human review via `dossierx claim lock` (refused if lint
-  has any error-level finding, if doctrine hub-gating blocks it, or if the claim
+  has any error-level finding, or if the claim
   still carries an unresolved comment thread); also carries an engine-managed
   `review_pending` bool. `review_pending` is `true` while ANY of three
   independent triggers stands: a `rests_on` target's content has drifted
@@ -709,24 +715,39 @@ schema field instead of a path convention.
 
 ## Edge types
 
-A claim may reference other claims by `id` via two distinct kinds of
-edge, each with a different meaning:
+A claim may reference other claims by `id` via one directed edge kind:
 
 - **`rests_on`** — a semantic-consequence edge. This claim depends on the
   target claim remaining true, but is not required to be textually
   identical to it. When a `rests_on` target's content changes underneath a
   locked claim, the locked claim is flagged `review_pending` rather than
   invalidated outright.
+- **`rests_on` NONE** — `{none: true, reason}` is a stated absence, not an
+  edge. The author's reason is required and never empty. It is not a graph
+  node and never a drift baseline. A claim must carry one or the other:
+  `rests-on-required` refuses a claim with neither (NIT-24).
+- **The constitution is never a target.** `constitution.yaml` is the brief for
+  the whole system and every claim builds toward it by definition, so no claim
+  cites it: there is no `constitution.*` ref grammar, the file is not a graph
+  node, and editing it never touches a claim (no baseline, no finding, no
+  `review_pending`). Its reach is the lock gate (`CONSTITUTION_NOT_LOCKED`),
+  the viewer's Constitution pin, and the digest and text `manifest show` will
+  carry. See "The constitution" below.
 - **`governed_by`** — **gone as of v0.7.21** (NIT-29). It named a doctrine
   claim as the authority behind a claim, or `type: none` with a reason. The
-  constitution replaces that with typed roof refs, so the field, its
-  `governed-cycle` / `governed-required` / `mixed-cycle` /
+  field, its `governed-cycle` / `governed-required` / `mixed-cycle` /
   `validated-on-missing` lints, its graph edge and its drift baseline are all
   removed, with no alias and no migrate command: a claim file that still
   carries a `governed_by:` block **fails to load**. Where the old
   `governed_by.type` named a claim the dependent genuinely relies on, name it
   under `rests_on` instead — that is the only edge the engine walks, gates
-  and baselines. See the CHANGELOG entry for the client-project migration.
+  and baselines. Where it was `type: none`, `rests_on: {none: true, reason}`
+  is the replacement. See the CHANGELOG entry for the client-project
+  migration.
+- **The doctrine hub is gone too** (NIT-23): there is no `doctrine_facet`
+  config key and no hub-gating. Critical former doctrine bodies become
+  constitution entries; the rest become project claims under
+  `project-claims/`.
 
 ### Graph invariants
 
@@ -755,6 +776,110 @@ a claim always equals itself and always resolves — so it asserts nothing
 while looking like a well-formed edge. An edge is a statement about a
 *different* claim.
 
+## The constitution
+
+One lockable `constitution.yaml` beside `project.config.yaml`, **outside**
+`claims_dir` (NIT-6). It is the roof: the critical brief for the whole system,
+which every claim of every module builds toward by definition. It is not a
+module (it is not in `modules[]`, has no facets, no `manifest.yaml`), not a
+claim, not a graph node, and **never a `rests_on` target** — there is no
+`constitution.*` ref grammar, and nothing in the constitution points at,
+depends on, or is hashed against a claim. Its reach is the lock gate below,
+the viewer's Constitution pin, and the digest and full text `manifest show`
+carries into an agent's context (NIT-10).
+
+```yaml
+status: draft | locked        # written by `dossierx constitution lock`; half of the lock state
+invariants:                    # each section optional; three sections only
+  - slug: single-roof          # required, kebab-case, unique across the file
+    title: One roof            # optional
+    body: Every module builds toward this file.   # plain text (markdown is an open question)
+glossary:
+  - slug: claim
+    body: One reviewable fact, in one file.
+decisions:
+  - slug: no-refs
+    title: Claims never cite the constitution
+    body: It is unsaid context for every claim.
+```
+
+Unknown keys are refused, one document per file, `status` defaults to `draft`.
+The path is `constitution:` in the config (default `constitution.yaml`).
+
+**The word cap.** Words, not bytes: every entry's title and body, counted as
+letter/number runs (slugs are identifiers and do not count). Over **800**
+words `check` and `constitution lock` refuse with `CONSTITUTION_OVER_CAP`;
+from **720** `check` reports `constitution-near-cap` at warning severity.
+The viewer's meter reads "N of 800 words".
+
+**The lock record.** `dossierx constitution lock --reason "<the human's
+words>"` flips `status:` to `locked` and writes, into the same
+`build/ledger/lock-store.json` the claim ledger lives in, a sibling of the
+ledger rather than a record inside it:
+
+```json
+"constitution": {"hash": "<sha256 of the sections' content>", "reason": "...", "locked_at": "<RFC3339Nano UTC>"}
+```
+
+The hash covers every section's entries in order (slug, title, body,
+length-prefixed) and deliberately not `status`, so the lock's own rewrite
+cannot move it. That is the same integrity contract a claim gets: a hand edit
+after the lock leaves a file whose hash no longer matches the record.
+`constitution show` prints the full text, the digest (counts and hash) and the
+lock verdict; an agent drafts against the words, never the hash.
+
+**Five states, one gate.** `check` judges the file against the record:
+
+| state | meaning |
+|---|---|
+| `locked` | `status: locked`, a record stands, the hashes agree — module work may proceed |
+| `missing` | no file at the configured path |
+| `unreadable` | the file exists and does not parse |
+| `draft` | `status: draft` |
+| `unrecorded` | `status: locked` but the store holds no record — a status line flipped by hand |
+| `edited` | a record stands but the content hash moved — **the edited file is what every module now reads**; nothing from the old version stays in force, and module work stops until a human runs `constitution lock` again |
+
+**No module work until the constitution is locked** (NIT-26). `dossierx claim
+lock` — single, batch and policy-v1 paths alike — and plain `dossierx check`
+refuse with `CONSTITUTION_NOT_LOCKED` in every state but `locked`; `check`
+regenerates the catalog and the viewer first and refuses at `stopped_at:
+constitution`, like the ledger gate — a gate, not an outage. `check --validate`
+and `check --staged` report `constitution-not-locked` as an error-severity
+lint finding (`claim_id: constitution`) and exit 1 with the same code; the
+staged gate reads the constitution and the record from the index, like every
+other store. Always on, no config switch, no warn-and-continue. `claim new`,
+`claim show`, `claim list`, `serve`, `constitution show` and `constitution
+lock` keep working, so the agent can draft and the human can read and re-lock.
+`constitution lock` refuses `already_locked` only when the roof is locked AND
+unchanged; an edited roof re-locks. Every fixture and every upgrading project
+needs a locked constitution before any claim can lock — the roof lock is the
+project's first ledger write, and it takes the comment threads on disk into
+digest coverage the way the first `check` used to.
+
+### Project claims
+
+Project-wide facts that are not critical roof law live in the **project-claims
+store** (NIT-25): `project-claims/<slug>.yaml` (`project_claims_dir:` in the
+config, default `project-claims`, a sibling of `claims/` and never inside it).
+A project claim is an ordinary claim — linted, reviewable, lockable, a graph
+node — with three differences:
+
+- `id: project.<slug>` (exactly two segments, `project` reserved), `scope:
+  project`, and **no** `module` and **no** `facet` (`id-shape` refuses either).
+- A separate loader: `loader.LoadProjectClaims` is never mixed into the module
+  walk, and `loader.LoadAll` merges the two stores for lint, lock and the
+  projections.
+- **No cap and no manifest.** Every module may rest on every project claim, so
+  there is no export boundary to curate; project claims do not count toward a
+  per-module cap. The tier-1 read is the system-generated **project claims
+  index** — one line per claim, id plus summary (the first non-blank body line
+  until NIT-8's `summary` field lands) — that `manifest show --isolation` and
+  `--integration` carry; `claim show project.<slug>` is the body on demand.
+
+A project claim's `rests_on` may name other `project.*` ids and any module's
+`*.contract.*`; never any module's `*.internals.*` (`rests-on-target`). The
+viewer's Constitution section lists the store under its **Project claims** tab.
+
 ## Integrity invariants
 
 Claim files are YAML in git, so nothing in this format can *prevent* a hand
@@ -777,6 +902,11 @@ share a severity ladder — registering these as lints would let one tampered
 file freeze locking project-wide and stop the viewer regenerating.
 
 ### The stores under `build/ledger/` are tracked artifacts
+
+The lock store also carries the constitution's lock record (`"constitution"`,
+see "The constitution"); a store that travels without it arrives with a roof
+that reads as `unrecorded`, and no claim in that clone locks until a human
+locks the roof again.
 
 | File | Holds |
 |---|---|
@@ -1286,7 +1416,9 @@ conformance:                     # optional; read only with declared embodiment
                                   # relative to this config and outside build_dir
   blocking: bool                 # optional; default false. If true, any owed,
                                   # mismatch, or uncheckable check fails check
-doctrine_facet: string           # optional; omitted disables hub-gating entirely
+constitution: path               # optional; default constitution.yaml at the project root
+                                  # (the roof: not a module, not a graph node)
+project_claims_dir: path         # optional; default project-claims (scope: project nodes)
 source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-claim: <id>" and
                                   # "dossierx-step: <id> #<n> <sha256-hex>"
