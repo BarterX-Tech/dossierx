@@ -109,18 +109,15 @@ func TestBuildNodes(t *testing.T) {
 			},
 		},
 		{
-			// The reserved overview facet implies orientation-note whether
-			// or not the author set kind — EffectiveKind's rule, which the
-			// payload must carry resolved so the client never re-derives it.
-			name: "overview facet infers orientation-note without an explicit kind",
+			name: "explicit fact kind is emitted as fact",
 			claim: model.Claim{
-				ID: "widget.overview.read-me-first", Module: "widget",
-				Facet: config.ReservedOverviewFacet, Status: model.StatusDraft,
+				ID: "widget.contract.read-me-first", Module: "widget",
+				Facet: "contract", Status: model.StatusDraft, Kind: model.KindFact,
 			},
 			want: Node{
-				ID: "widget.overview.read-me-first", Title: "Read Me First",
-				Module: "widget", Facet: "overview",
-				Status: "draft", Kind: "orientation-note",
+				ID: "widget.contract.read-me-first", Title: "Read Me First",
+				Module: "widget", Facet: "contract",
+				Status: "draft", Kind: "fact",
 			},
 		},
 		{
@@ -342,7 +339,7 @@ func TestBuildGroups(t *testing.T) {
 	p := buildFrom(t, cfg,
 		model.Claim{ID: "cli.contract.a", Module: "cli", Facet: "contract"},
 		model.Claim{ID: "zeta.behavior.b", Module: "zeta", Facet: "behavior"},
-		model.Claim{ID: "alpha.overview.c", Module: "alpha", Facet: "overview"},
+		model.Claim{ID: "alpha.telemetry.c", Module: "alpha", Facet: "telemetry"},
 		model.Claim{ID: "engine.verification.d", Module: "engine", Facet: "verification"},
 		model.Claim{ID: "orphan.x.e", Module: "", Facet: ""},
 	)
@@ -351,7 +348,7 @@ func TestBuildGroups(t *testing.T) {
 	if !reflect.DeepEqual(p.Groups.Modules, wantModules) {
 		t.Errorf("groups.modules = %v, want %v (config order, then extras sorted)", p.Groups.Modules, wantModules)
 	}
-	wantFacets := []string{"contract", "schema", "behavior", "overview", "verification"}
+	wantFacets := []string{"contract", "schema", "behavior", "telemetry", "verification"}
 	if !reflect.DeepEqual(p.Groups.Facets, wantFacets) {
 		t.Errorf("groups.facets = %v, want %v (config order, then extras sorted)", p.Groups.Facets, wantFacets)
 	}
@@ -375,7 +372,7 @@ func TestBuildDeterministic(t *testing.T) {
 	claims := make([]model.Claim, 0, 60)
 	byID := make(map[string]model.Claim, 60)
 	mods := []string{"viewer", "engine", "cli", "extra"}
-	facets := []string{"contract", "schema", "behavior", "overview"}
+	facets := []string{"contract", "schema", "behavior", "telemetry"}
 	for i := range 60 {
 		c := model.Claim{
 			ID:     fmt.Sprintf("%s.%s.claim-%02d", mods[i%len(mods)], facets[i%len(facets)], i),

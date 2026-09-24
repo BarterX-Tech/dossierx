@@ -531,11 +531,12 @@ func TestClaimListRefusesAnUndeclaredFacet(t *testing.T) {
 		t.Fatalf("the refusal must name what the project DOES declare: %q", env.Error.Message)
 	}
 
-	// The declared facet still works, and so does the reserved overview facet.
-	for _, facet := range []string{"contract", "overview"} {
-		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "list", "--facet", facet); err != nil {
-			t.Fatalf("--facet %q must be accepted: %v", facet, err)
-		}
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "list", "--facet", "contract"); err != nil {
+		t.Fatalf("--facet contract must be accepted: %v", err)
+	}
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "list", "--facet", "overview")
+	if err == nil || env.OK {
+		t.Fatalf("the retired overview facet must be refused: %+v", env)
 	}
 }
 

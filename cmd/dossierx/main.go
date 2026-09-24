@@ -1138,9 +1138,8 @@ type checkData struct {
 	// gated:false with the same counts, so a consumer can never read a
 	// read-only green as a linked one. See check.Result.CodeLinks.
 	CodeLinks        *codeLinksData `json:"code_links,omitempty"`
-	OpenComments     map[string]int `json:"open_comments,omitempty"`
-	OrientationNotes []string       `json:"orientation_notes,omitempty"`
-	NextSteps        []string       `json:"next_steps,omitempty"`
+	OpenComments map[string]int `json:"open_comments,omitempty"`
+	NextSteps    []string       `json:"next_steps,omitempty"`
 }
 
 // codeLinksData is check.CodeLinksReport on the wire.
@@ -1219,7 +1218,6 @@ func newCheckData(res check.Result) checkData {
 		ScanErrors:                 scanErrors,
 		CodeLinks:                  newCodeLinksData(res.CodeLinks),
 		OpenComments:               res.OpenComments,
-		OrientationNotes:           res.OrientationNotes,
 		NextSteps:                  res.NextSteps,
 	}
 }
@@ -1974,15 +1972,12 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 
 	// Success tail: the scan summary (only on a clean scan, and only when a
 	// file was actually scanned), "check: OK", then the non-blocking
-	// per-module reporting — orientation notes, open comments, impl-link
-	// status, and the next-steps advisory — in the same order as before.
+	// per-module reporting — open comments, impl-link status, and the
+	// next-steps advisory — in the same order as before.
 	if res.ScanFilesScanned > 0 {
 		fmt.Fprintln(out, res.ScanSummary)
 	}
 	fmt.Fprintln(out, "check: OK")
-	for _, line := range res.OrientationNotes {
-		fmt.Fprintln(out, line)
-	}
 	if len(res.OpenComments) > 0 {
 		modules := make([]string, 0, len(res.OpenComments))
 		for m := range res.OpenComments {

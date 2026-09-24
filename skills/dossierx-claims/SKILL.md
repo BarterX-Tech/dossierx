@@ -69,8 +69,7 @@ it out.
   `governed-cycle`, and as of v0.5.0 one *alternating* the two → `mixed-cycle`. "B is governed by A"
   buys no free back edge when A already rests on B; `mirrors` is exempt. The router's `mixed-cycle`
   section covers why an untouched corpus can start failing this.
-- `kind: orientation-note` (implied by the reserved `overview` facet) marks a claim that tells a
-  reader how to read the *rest* of the module. It renders as a banner and sorts ahead of fact claims.
+- `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
   **Citing your evidence** below.
 - `tracks` — optional, cross-cutting feature membership: `- {id: checkout, role: owns|cites}`,

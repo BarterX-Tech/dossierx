@@ -45,7 +45,7 @@ facet: string                  # must be in project.config.yaml's facets[]
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
 layout: card | table | list | steps | tree | banner | mockup  # optional
-kind: fact | orientation-note  # optional, default fact (see below)
+kind: fact                     # optional, default fact; any other value is refused
 build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
 # CONTENT — at least one of the next four is REQUIRED (see "Content is required"):
 body: markdown string          # optional on its own, illustrative prose
@@ -160,20 +160,10 @@ refuses `dossierx claim lock` like any other error-severity finding.
 `mockup.html` is the field's documented primary use; the finding's message
 predates that and names three fields rather than four.
 
-### `kind` and orientation notes
+### `kind`
 
 `kind` is optional and defaults to `fact`: a claim stating something about the
-system, which is everything the engine rendered before this field existed. The
-other value is `orientation-note` — a claim that is *reading guidance about
-other claims* rather than a fact ("if you only call the public API, read
-Contract, never Internals").
-
-This is a different axis from `build_role`. A `build_role: orientation` claim
-is still a fact the module rests on ("why this module exists"); a
-`kind: orientation-note` claim is a pointer *at* other claims. Two lints police
-the non-default value — `orientation-note-shape` and `orientation-note-order` —
-and every claim under the reserved `overview` facet is an orientation note
-whether or not the field is set, so a claim there need not repeat it.
+system. That is the only legal value. `kind-shape` refuses every other string.
 
 ### `emphasis` and hard-boundary cards
 

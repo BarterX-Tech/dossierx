@@ -1,10 +1,9 @@
-// Package lint defines the Lint interface every one of the 37 lints
+// Package lint defines the Lint interface every one of the 36 lints
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, governed-cycle,
 // mixed-cycle, self-edge, governed-required,
 // mirror-mismatch, mirror-unanchored, mirror-reciprocal, rows-shape,
 // supersede, raw-html-scope, roll-up, validated-on-missing, body-edge-hint,
-// code-orphan, orphan, layout-shape-mismatch,
-// orientation-note-order, orientation-note-shape, status-shape,
+// code-orphan, orphan, layout-shape-mismatch, kind-shape, status-shape,
 // comments-unresolved, markdown-sanity, asset-scope,
 // source-shape, source-ref-undefined, source-ref-unused,
 // source-external-unanchored, source-internal-drift,

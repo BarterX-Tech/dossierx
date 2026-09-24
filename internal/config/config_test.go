@@ -117,6 +117,23 @@ claims_dir: claims
 	}
 }
 
+func TestLoadConfig_OverviewFacetRefused(t *testing.T) {
+	dir := t.TempDir()
+	p := writeConfig(t, dir, "project.config.yaml", `
+schema_version: 1
+facets: [contract, overview]
+modules: [ledger]
+claims_dir: claims
+`)
+	_, err := LoadConfig(p)
+	if err == nil {
+		t.Fatal("expected error for reserved overview facet, got nil")
+	}
+	if !strings.Contains(err.Error(), "overview") || !strings.Contains(err.Error(), "removed") {
+		t.Errorf("expected error to refuse overview as removed, got: %v", err)
+	}
+}
+
 func TestLoadConfig_DuplicateFacets(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `

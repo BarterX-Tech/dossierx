@@ -103,7 +103,7 @@ var commentsPanelTmpl = template.Must(
 
 // commentsPanelView is the shape comments.html executes against: the claim id
 // (carried on the panel as data-claim-id, never id=, so the viewer JS can fan
-// state out across an overview claim's N rendered copies) plus its threads
+// state out across every rendered copy of the same claim) plus its threads
 // split into the open ones shown inline and the resolved ones tucked into the
 // <details> collapse.
 type commentsPanelView struct {
@@ -898,9 +898,9 @@ const claimFooterChevronHTML = `<svg class="claim-footer__chevron" aria-hidden="
 // chromedp suite reach for via closest('.claim-comments-slot').
 //
 // This func emits no ` id="` sequence anywhere, deliberately: render's
-// stripOverviewIDs matches a leading-space ` id="<claim-id>"` literal to strip
-// the duplicate ids an overview claim's N rendered copies would otherwise carry,
-// and it must keep hitting only the root <section>.
+// stripDuplicateClaimIDs matches a leading-space ` id="<claim-id>"` literal
+// to strip ids from a track's non-canonical copy, and it must keep hitting
+// only the root <section>.
 func CommentChipHTML(c model.Claim) template.HTML {
 	open := len(c.OpenThreadIDs())
 	total := len(c.Comments)

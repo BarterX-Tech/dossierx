@@ -42,7 +42,7 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"facet":      {hashed: true, mutate: func(c *model.Claim) { c.Facet = "internals" }},
 	"module":     {hashed: true, mutate: func(c *model.Claim) { c.Module = "gadget" }},
 	"layout":     {hashed: true, mutate: func(c *model.Claim) { c.Layout = model.LayoutTable }},
-	"kind":       {hashed: true, mutate: func(c *model.Claim) { c.Kind = model.KindOrientationNote }},
+	"kind":       {hashed: true, mutate: func(c *model.Claim) { c.Kind = model.Kind("other") }},
 	"build_role": {hashed: true, mutate: func(c *model.Claim) { c.BuildRole = model.BuildRoleAPI }},
 	"embodiment": {hashed: true, mutate: func(c *model.Claim) {
 		c.Embodiment = &model.Embodiment{
@@ -260,7 +260,7 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 	blindSpots := map[string]func(*model.Claim){
 		"raw_html_reviewed": func(c *model.Claim) { c.RawHTMLReviewed = false },
 		"build_role":        func(c *model.Claim) { c.BuildRole = model.BuildRoleOutOfScope },
-		"kind":              func(c *model.Claim) { c.Kind = model.KindOrientationNote },
+		"kind":              func(c *model.Claim) { c.Kind = model.Kind("other") },
 		"section":           func(c *model.Claim) { c.Section = "somewhere else entirely" },
 		"order":             func(c *model.Claim) { c.Order = 1000 },
 		"emphasis":          func(c *model.Claim) { c.Emphasis = false },

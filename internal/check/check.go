@@ -1,6 +1,6 @@
 // Package check is the value-returning core of the "dossierx check" pipeline:
 // lint, catalog build+write, viewer render+write, impl-link scan, and the
-// per-module non-blocking reporting (orientation notes, open comments,
+// per-module non-blocking reporting (open comments,
 // impl-link status, and the next-steps advisory). It exists so BOTH the
 // "dossierx check" CLI command and "dossierx serve" can drive the same
 // pipeline without duplicating it — the CLI (cmd/dossierx) formats the
@@ -43,7 +43,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
@@ -225,13 +224,12 @@ type Result struct {
 	// "check: OK" line. The reporting fields below are populated only then.
 	OK bool
 
-	// OrientationNotes and NextSteps are fully-composed lines/hints; the
-	// terminal prints each verbatim (NextSteps under a "next steps:" header,
-	// two-space indented). OpenComments maps module -> open-thread count, left
-	// to the caller to sort and format ("open comments: module %q: %d").
-	// ImplinkStatusStdout/Stderr are the impl-link status reporter's stdout and
-	// stderr lines respectively, already formatted.
-	OrientationNotes    []string
+	// NextSteps are fully-composed hints; the terminal prints each verbatim
+	// under a "next steps:" header, two-space indented. OpenComments maps
+	// module -> open-thread count, left to the caller to sort and format
+	// ("open comments: module %q: %d"). ImplinkStatusStdout/Stderr are the
+	// impl-link status reporter's stdout and stderr lines respectively,
+	// already formatted.
 	OpenComments        map[string]int
 	ImplinkStatusStdout []string
 	ImplinkStatusStderr []string
@@ -567,7 +565,6 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// derived from the same claims/cfg (and the read-only lock/flag stores),
 	// exactly as check's RunE tail produced it.
 	res.OK = true
-	res.OrientationNotes = orientationNotes(cfg, claims)
 	res.OpenComments = openCommentCounts(claims)
 	res.BuildOrders = nil
 	stdout, stderr, implinkHints := implinkStatus(cfg, claims)
@@ -801,49 +798,6 @@ func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	// runs is answerable from the one tree in front of it, so there is no longer
 	// a state in which the gate looked at less than it claims to.
 	return res
-}
-
-// orientationNotes returns one "orientation notes: module %q: %d (…)" line
-// per module (in cfg.Modules order) that has at least one orientation-note
-// claim, broken down by facet (facets sorted for determinism). It is the
-// value form of cmd/dossierx.reportOrientationNotes.
-func orientationNotes(cfg *config.Config, claims []model.Claim) []string {
-	type counts struct {
-		total   int
-		byFacet map[string]int
-	}
-	byModule := map[string]*counts{}
-	for _, c := range claims {
-		if c.EffectiveKind() != model.KindOrientationNote {
-			continue
-		}
-		cnt, ok := byModule[c.Module]
-		if !ok {
-			cnt = &counts{byFacet: map[string]int{}}
-			byModule[c.Module] = cnt
-		}
-		cnt.total++
-		cnt.byFacet[c.Facet]++
-	}
-
-	var lines []string
-	for _, module := range cfg.Modules {
-		cnt, ok := byModule[module]
-		if !ok {
-			continue
-		}
-		facets := make([]string, 0, len(cnt.byFacet))
-		for f := range cnt.byFacet {
-			facets = append(facets, f)
-		}
-		sort.Strings(facets)
-		var parts []string
-		for _, f := range facets {
-			parts = append(parts, fmt.Sprintf("%d in %s", cnt.byFacet[f], f))
-		}
-		lines = append(lines, fmt.Sprintf("orientation notes: module %q: %d (%s)", module, cnt.total, strings.Join(parts, ", ")))
-	}
-	return lines
 }
 
 // openCommentCounts returns module -> number of open comment threads across

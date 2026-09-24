@@ -221,8 +221,7 @@ type Group struct {
 	// exists because at least one claim produced it), but the check is
 	// written defensively regardless.
 	AllLocked bool
-	// ClaimCount and LockedCount are catalog facts for this facet (plus
-	// overview claims, counted once on the module's first facet). The
+	// ClaimCount and LockedCount are catalog facts for this facet. The
 	// viewer header reads the module-level sums, not live DOM cards.
 	ClaimCount  int
 	LockedCount int
@@ -815,17 +814,11 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 
 	type groupKey struct{ module, facet string }
 	claimsByKey := map[groupKey][]model.Claim{}
-	overviewByModule := map[string][]model.Claim{}
 	moduleSeen := map[string]bool{}
 	facetSeenByModule := map[string]map[string]bool{}
 	var ungrouped []model.Claim
 
 	for _, c := range cat.Claims {
-		if c.Facet == config.ReservedOverviewFacet && knownModule(c.Module) {
-			overviewByModule[c.Module] = append(overviewByModule[c.Module], c)
-			moduleSeen[c.Module] = true
-			continue
-		}
 		if !knownModule(c.Module) || !knownFacet(c.Facet) {
 			ungrouped = append(ungrouped, c)
 			continue
@@ -841,33 +834,13 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 
 	var groups []Group
 	for _, m := range orderedNames(declaredModules, moduleSeen) {
-		overview := model.OrderClaims(overviewByModule[m])
-		// The overview note renders on every facet tab of its module, but a
-		// given claim id may appear only once in a valid document: the first
-		// (default) facet keeps the canonical, id-bearing copy, every other
-		// facet gets an id-less, purely-presentational copy (DX-AUD-16).
-		canonicalOverview := renderOverviewHTML(overview, renderedByID)
-		idlessOverview := stripOverviewIDs(canonicalOverview, overview)
-		for fi, f := range orderedNames(declaredFacets, facetSeenByModule[m]) {
-			overviewHTML := idlessOverview
-			if fi == 0 {
-				overviewHTML = canonicalOverview
-			}
-			g := newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID, overviewHTML)
-			if fi == 0 {
-				for _, c := range overview {
-					g.ClaimCount++
-					if c.Status == model.StatusLocked {
-						g.LockedCount++
-					}
-				}
-			}
-			groups = append(groups, g)
+		for _, f := range orderedNames(declaredFacets, facetSeenByModule[m]) {
+			groups = append(groups, newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID))
 		}
 	}
 
 	if len(ungrouped) > 0 {
-		groups = append(groups, newGroup(ungroupedModuleName, "", ungrouped, renderedByID, nil))
+		groups = append(groups, newGroup(ungroupedModuleName, "", ungrouped, renderedByID))
 	}
 
 	markFirstInModule(groups)
@@ -875,78 +848,12 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 	return groups
 }
 
-// renderOverviewHTML pulls the already-rendered HTML (from renderedByID,
-// keyed by claim ID, same lookup newGroup itself uses) for a module's
-// overview claims, in the given order. It never re-renders — renderClaimsWithBudget
-// already rendered every catalog claim, including overview-facet ones,
-// exactly once.
-func renderOverviewHTML(overview []model.Claim, renderedByID map[string]template.HTML) []template.HTML {
-	if len(overview) == 0 {
-		return nil
-	}
-	out := make([]template.HTML, 0, len(overview))
-	for _, c := range overview {
-		out = append(out, renderedByID[c.ID])
-	}
-	return out
-}
-
-// stripOverviewIDs returns copies of a module's already-rendered overview
-// HTML (canonical, from renderOverviewHTML) with each claim's root
-// id="<claim-id>" attribute removed — one entry per input, in the same
-// order (canonical and overview are index-aligned, both built from the same
-// ordered claim slice). buildGroups injects a module's overview claims into
-// every one of that module's facet groups so the orientation note stays
-// visible on every facet tab (see newGroup); but a given id may appear only
-// once in a valid document, so only the module's first/default facet keeps
-// the canonical (id-bearing) copy and every other facet gets these id-less,
-// purely-presentational copies (DX-AUD-16). Only the exact ` id="<claim-id>"`
-// attribute — and only its first occurrence, the root element's — is
-// removed, so the visible content is untouched: a #<claim-id> deep-link
-// resolves to the single canonical copy while the note still renders
-// identically on every tab. Claim ids are constrained to [A-Za-z0-9_.-]
-// (internal/lint's id-shape lint), none of which html/template escapes in a
-// double-quoted attribute value, so the literal match is exact.
-//
-// The leading space in the match pattern is load-bearing, and more so since
-// the claim-edge label work: the .k header now also carries the claim id, as
-// data-claim-id="<claim-id>" and title="<claim-id>" (its visible text is the
-// derived label — see components.ClaimLabel). Neither is preceded by a space
-// immediately before `id="`, so neither can be mistaken for the root
-// attribute, and both survive on every copy on purpose — a data-* hook and a
-// tooltip are not document-unique the way id= is, and the reader of an
-// injected copy still needs the machine id to act on it.
-//
-// The comment chip is the final footer control inside
-// <span class="claim-comments-slot"> (components.CommentChipHTML).
-// Re-verified against the new
-// markup, and the code below is unchanged: the slot span and the chip <button>
-// it wraps carry class / hidden / data-claim-id / aria-* only — no ` id="`
-// sequence anywhere — so the single Replace still lands on the root
-// <section>'s id and nothing else. A third data-claim-id per copy is exactly
-// the intended fan-out, for the reason above: shell.html's chip handlers
-// address claims by data-claim-id precisely so an overview note injected into
-// N facet tabs stays clickable in all N, while only one copy keeps id=.
-func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []template.HTML {
-	if len(canonical) == 0 {
-		return nil
-	}
-	out := make([]template.HTML, len(canonical))
-	for i, h := range canonical {
-		out[i] = stripDuplicateClaimIDs(h, overview[i])
-	}
-	return out
-}
-
 // stripDuplicateClaimIDs returns one already-rendered claim with every element
 // id it carries removed, for use as a NON-CANONICAL copy: the same claim is
 // also rendered somewhere else on the page, and that copy keeps the ids.
 //
-// It exists because two features now inject a second copy of a claim — a
-// module's overview note, repeated on each of that module's facet tabs, and a
-// track section, which renders the claims the track owns inline while their
-// modules keep guaranteeing them. Both need exactly this, and a claim id may
-// appear only once in a valid document.
+// Tracks render the claims they own inline while their modules keep
+// guaranteeing them. A claim id may appear only once in a valid document.
 //
 // TWO KINDS OF ID, BOTH FROM THE SAME PLACE THAT WROTE THEM. The root
 // <section>'s ` id="<claim-id>"` is matched with its leading space and its
@@ -959,8 +866,7 @@ func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []templ
 //
 // The consequence for the duplicate copy is a degraded, never wrong, landing:
 // its citation markers still name the canonical copy's rows, so a reader
-// clicking one is taken to the same evidence in the claim's own module. That
-// is the same trade the overview note has always made with `#<claim-id>`.
+// clicking one is taken to the same evidence in the claim's own module.
 //
 // Claim ids are constrained to [A-Za-z0-9_.-] (internal/lint's id-shape lint),
 // none of which html/template escapes in a double-quoted attribute value, so
@@ -1087,17 +993,10 @@ func orderClaims(claims []model.Claim) []model.Claim {
 // of renderedByID (keyed by claim ID) so claims are rendered exactly once
 // regardless of how many places reference them. A claim's Section remains
 // part of the ordering model, but the Reading View does not repeat that
-// metadata as a visible heading between cards. overviewHTML, if non-empty,
-// is the calling
-// module's already-rendered overview-facet claims (see renderOverviewHTML)
-// and is prepended ahead of any section heading — a module-level
-// orientation note isn't its own tab, so buildGroups renders it once per
-// module and injects the same HTML into every one of that module's facet
-// groups.
-func newGroup(module, facet string, claims []model.Claim, renderedByID map[string]template.HTML, overviewHTML []template.HTML) Group {
+// metadata as a visible heading between cards.
+func newGroup(module, facet string, claims []model.Claim, renderedByID map[string]template.HTML) Group {
 	claims = orderClaims(claims)
-	htmls := make([]template.HTML, 0, len(claims)+len(overviewHTML))
-	htmls = append(htmls, overviewHTML...)
+	htmls := make([]template.HTML, 0, len(claims))
 	allLocked := len(claims) > 0
 	lockedCount := 0
 	for _, c := range claims {

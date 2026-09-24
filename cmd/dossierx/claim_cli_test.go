@@ -800,7 +800,7 @@ func envelopeOf(t *testing.T, args ...string) (cliout.Envelope, error) {
 func restOnUnlockedFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/banner.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
+		"claims/banner.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: banner\n" +
 			"build_role: orientation\n" +
 			"body: |\n  read the contract claims below in order.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
@@ -828,7 +828,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 		t.Fatalf("fixture precondition: check --validate must be clean, got %v", err)
 	}
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.router", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("locking a banner while a sibling is draft must be refused, got %+v", env)
 	}
@@ -849,7 +849,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 		if !ok {
 			t.Fatalf("a lint finding must be an object: %#v", raw)
 		}
-		if f["lint"] == "roll-up" && f["claim_id"] == "widget.overview.router" {
+		if f["lint"] == "roll-up" && f["claim_id"] == "widget.contract.router" {
 			named = true
 		}
 		// The same snake_case shape check publishes as data.lint_findings, so an
@@ -866,7 +866,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 
 	// And the command claim show points at answers the same question. A
 	// next_action naming a command that reports nothing is worse than none.
-	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.overview.router")
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.router")
 	lintDetail := ""
 	for _, p := range dr.Preconditions {
 		if p.Name == "lint_clean" {
@@ -883,7 +883,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go"); err != nil {
 		t.Fatalf("locking the sibling first: %v", err)
 	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.router", "--reason", "go"); err != nil {
 		t.Fatalf("with the sibling locked, the banner lock must succeed: %v", err)
 	}
 }
@@ -896,7 +896,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 func TestClaimShowPointsAtACommandThatNamesTheBlockingLint(t *testing.T) {
 	cfgPath := restOnUnlockedFixture(t)
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.overview.router")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.router")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
@@ -917,7 +917,7 @@ func TestClaimShowPointsAtACommandThatNamesTheBlockingLint(t *testing.T) {
 	if strings.Contains(action, "check --validate") {
 		t.Fatalf("check --validate reports zero of these findings; sending the agent there is the loop: %q", action)
 	}
-	if !strings.Contains(action, "dossierx claim lock widget.overview.router --dry-run") {
+	if !strings.Contains(action, "dossierx claim lock widget.contract.router --dry-run") {
 		t.Fatalf("the next_action must name a command that can answer it: %q", action)
 	}
 	// The rule is named here too, so the cheapest read already carries it.

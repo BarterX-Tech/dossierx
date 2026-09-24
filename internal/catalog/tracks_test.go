@@ -13,7 +13,7 @@ import (
 // written out resolved rather than raw. A membership authored without a role
 // means "cites", and a consumer of the index must never have to know that
 // rule to read the file correctly — the same contract Entry.Kind holds for
-// the overview-facet rule.
+// an omitted kind field (fact).
 func TestDocument_TrackMembershipIsResolved(t *testing.T) {
 	cat, err := Build([]model.Claim{{
 		ID: "payment.contract.authorize", Facet: "contract", Module: "payment",

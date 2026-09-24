@@ -67,26 +67,6 @@ governed_by:
 `
 }
 
-// overviewCardClaim is a reserved-overview-facet claim forced to layout: card
-// (instead of the orientation-note default of banner) so it CARRIES a comment
-// chip and is injected — chip and all — into every facet group of its module.
-// That duplication (one id-bearing canonical copy in the default facet, id-less
-// copies elsewhere) is exactly the fan-out the chip's data-claim-id keying must
-// survive.
-func overviewCardClaim(id string) string {
-	return "id: " + id + `
-facet: overview
-module: widget
-status: draft
-layout: card
-body: |
-  an overview note rendered as a card so it carries a comment chip.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-`
-}
-
 // longBodyClaim is a card whose markdown body is many paragraphs. The live
 // reading view clamps a long body to four lines until the reader expands it,
 // so one of these cards is NOT by itself taller than a desktop viewport.
@@ -334,41 +314,23 @@ func TestReloadNewClaimResolvesViaClaimToFacet(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------
-// A chip click on a second facet opens the visible (id-less) card's thread —
-// the overview-duplication fan-out — and it still works after a reload.
-// ---------------------------------------------------------------------
-
 func TestReloadSecondFacetChipOpensThread(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
 	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
-	p.writeClaim("ov.yaml", overviewCardClaim("widget.overview.summary"))
-	p.run("comment", "add", "widget.overview.summary", "--as", "human", "--body", "overview discussion")
+	p.run("comment", "add", "widget.design.thing", "--as", "human", "--body", "design discussion")
 	ctx := serveAndOpenLive(t, p)
 
-	// Switch to the design (second) facet. The overview claim is duplicated into
-	// it as an id-LESS copy that still carries the chip (data-claim-id).
 	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-design"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, facetVisibleExpr("widget-design"))
 
-	// External change -> reload; the design facet stays active and the delegated
-	// chip listener survives the swap.
 	p.run("comment", "add", "widget.contract.base", "--as", "human", "--body", "ping")
 	pollTrue(t, ctx, `!!document.querySelector('#widget-contract [data-claim-id="widget.contract.base"]')`)
 	pollTrue(t, ctx, facetVisibleExpr("widget-design"))
 
-	// The design-facet copy of the overview card must be id-less (the canonical
-	// id-bearing copy lives in the first/default facet).
-	if evalBool(t, ctx, `!!document.querySelector('#widget-design [id="widget.overview.summary"]')`) {
-		t.Fatal("the design-facet overview copy should be id-less")
-	}
-
-	// Click the chip on that VISIBLE (design-facet) copy. It opens the panel for
-	// the overview claim purely by data-claim-id fan-out.
-	runCDP(t, ctx, chromedp.Click(`#widget-design [data-claim-id="widget.overview.summary"].comment-chip`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Click(`#widget-design [data-claim-id="widget.design.thing"].comment-chip`, chromedp.ByQuery))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)
-	pollTrue(t, ctx, `Array.from(document.querySelectorAll('#commentsPanel .comment-body')).some(function(b){return b.textContent.indexOf('overview discussion') >= 0;})`)
+	pollTrue(t, ctx, `Array.from(document.querySelectorAll('#commentsPanel .comment-body')).some(function(b){return b.textContent.indexOf('design discussion') >= 0;})`)
 }
 
 // ---------------------------------------------------------------------

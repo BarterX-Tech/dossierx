@@ -1,5 +1,5 @@
-id: lock.overview.ledger-first
-facet: overview
+id: lock.contract.ledger-first
+facet: contract
 module: lock
 status: draft
 layout: banner

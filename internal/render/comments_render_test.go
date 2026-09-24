@@ -28,19 +28,13 @@ func openComment(id, body string) model.Comment {
 	return model.Comment{ID: id, Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-24T10:00:00Z", Body: body}
 }
 
-// TestRender_CommentedOverviewChipFansOutToEveryFacet is the overview
-// N-copies case: an overview/orientation claim is injected into every facet
-// group of its module, so its chip + baked panel must appear once per facet
-// (here 2), all keyed by data-claim-id — while stripOverviewIDs still keeps
-// exactly ONE id-bearing canonical copy (comments add no new id= anywhere).
-func TestRender_CommentedOverviewChipFansOutToEveryFacet(t *testing.T) {
-	overview := commentedClaim(
-		"widget.overview.router", "widget", "overview", model.LayoutCard,
-		[]model.Comment{openComment("c-aaaaaa", "ORIENTATION-THREAD-BODY")},
+func TestRender_CommentedClaimChipDoesNotFanOutAcrossFacets(t *testing.T) {
+	note := commentedClaim(
+		"widget.contract.router", "widget", "contract", model.LayoutCard,
+		[]model.Comment{openComment("c-aaaaaa", "THREAD-BODY")},
 	)
 	claims := []model.Claim{
-		overview,
-		commentedClaim("widget.contract.a", "widget", "contract", model.LayoutCard, nil),
+		note,
 		commentedClaim("widget.internals.b", "widget", "internals", model.LayoutCard, nil),
 	}
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
@@ -53,38 +47,20 @@ func TestRender_CommentedOverviewChipFansOutToEveryFacet(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	// The overview note is injected into both facet tabs, so its open chip and
-	// its baked thread body both appear twice. Match the full class attribute,
-	// not the bare token, so the .comment-chip--open rule embedded in the page's
-	// <style> block isn't miscounted as a third chip.
-	if got := strings.Count(out, `class="comment-chip comment-chip--open"`); got != 2 {
-		t.Fatalf("overview open chip appears %d times, want 2 (one per facet):\n%s", got, out)
+	if got := strings.Count(out, `class="comment-chip comment-chip--open"`); got != 1 {
+		t.Fatalf("open chip appears %d times, want 1:\n%s", got, out)
 	}
-	if got := strings.Count(out, "ORIENTATION-THREAD-BODY"); got != 2 {
-		t.Fatalf("overview baked thread body appears %d times, want 2 (one per facet):\n%s", got, out)
+	if got := strings.Count(out, "THREAD-BODY"); got != 1 {
+		t.Fatalf("baked thread body appears %d times, want 1:\n%s", got, out)
 	}
-	if got := strings.Count(out, `class="comments-panel"`); got != 2 {
-		t.Fatalf("overview baked panel appears %d times, want 2 (one per facet):\n%s", got, out)
+	if got := strings.Count(out, `class="comments-panel"`); got != 1 {
+		t.Fatalf("baked panel appears %d times, want 1:\n%s", got, out)
 	}
-	// The .k heading, the chip <button> and the baked panel each carry
-	// data-claim-id, so an overview claim in two facets yields 2 copies * 3 = 6
-	// — every one a data-* hook, never a duplicate id=. Re-derived against
-	// v0.4.1's markup rather than carried over: the chip moved out of the edges
-	// footer and into the .k heading, but it moved as a whole <button> inside a
-	// new <span class="claim-comments-slot"> — the slot span carries no
-	// data-claim-id of its own — so the per-copy count is still heading + chip +
-	// panel = 3, not 2 and not 4.
-	// The heading's copy is the point of that attribute: its visible text is
-	// now the derived label ("Router"), so data-claim-id is what keeps the id
-	// "dossierx claim lock <id>" needs greppable in the rendered document.
-	if got := strings.Count(out, `data-claim-id="widget.overview.router"`); got != 6 {
-		t.Fatalf("overview data-claim-id appears %d times, want 6 (heading+chip+panel per facet):\n%s", got, out)
+	if got := strings.Count(out, `data-claim-id="widget.contract.router"`); got != 3 {
+		t.Fatalf("data-claim-id appears %d times, want 3 (heading+chip+panel):\n%s", got, out)
 	}
-
-	// Comments must not perturb the canonical-id-appears-once invariant
-	// (DX-AUD-16): the chip/panel use data-claim-id, never id=.
-	if got := strings.Count(out, ` id="widget.overview.router"`); got != 1 {
-		t.Fatalf("overview canonical id appears %d times, want exactly 1 (comments add no id=):\n%s", got, out)
+	if got := strings.Count(out, ` id="widget.contract.router"`); got != 1 {
+		t.Fatalf("canonical id appears %d times, want 1:\n%s", got, out)
 	}
 }
 
@@ -93,7 +69,7 @@ func TestRender_CommentedOverviewChipFansOutToEveryFacet(t *testing.T) {
 // quiet card is unreachable from the viewer. This is the render-level companion
 // to components.TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault: it
 // pins that nothing between the footer and the finished document (facet
-// grouping, overview injection, the shell) drops the zero-state chip, and that
+// grouping, the shell) drops the zero-state chip, and that
 // its slot arrives `hidden` — the static file:// export has no comment API and
 // therefore no composer, so shell.html's probe is what reveals these.
 //
