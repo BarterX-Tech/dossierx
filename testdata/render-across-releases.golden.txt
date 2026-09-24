@@ -47,8 +47,10 @@ EXPLAINED BY AN INPUT CHANGE
 ----------------------------
 
 testdata/fixture-basic/build/catalog/catalog.json  (+3 -9)
-    inputs changed  testdata/fixture-basic/claims/widget-fields.yaml
+    inputs changed  testdata/fixture-basic/build/ledger/lock-store.json
+                    testdata/fixture-basic/claims/widget-fields.yaml
                     testdata/fixture-basic/claims/widget-overview.yaml
+                    testdata/fixture-basic/constitution.yaml
     size            97 lines / 2597 bytes -> 91 lines / 2443 bytes
 @@ -8,10 +8,8 @@
        "layout": "card",
@@ -78,8 +80,10 @@ testdata/fixture-basic/build/catalog/catalog.json  (+3 -9)
          "claim_id": "widget.internals.fields",
 
 testdata/fixture-basic/build/viewer/index.html  (+627 -655)
-    inputs changed  testdata/fixture-basic/claims/widget-fields.yaml
+    inputs changed  testdata/fixture-basic/build/ledger/lock-store.json
+                    testdata/fixture-basic/claims/widget-fields.yaml
                     testdata/fixture-basic/claims/widget-overview.yaml
+                    testdata/fixture-basic/constitution.yaml
     size            23276 lines / 1234179 bytes -> 23248 lines / 1228537 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
@@ -2021,11 +2025,13 @@ testdata/fixture-basic/build/viewer/index.html  (+627 -655)
    // Auto-collapse above AUTO_COLLAPSE_ABOVE claims
 
 testdata/fixture-conformance-v1/build/catalog/catalog.json  (+10 -20)
-    inputs changed  testdata/fixture-conformance-v1/claims/declared-none.yaml
+    inputs changed  testdata/fixture-conformance-v1/build/ledger/lock-store.json
+                    testdata/fixture-conformance-v1/claims/declared-none.yaml
                     testdata/fixture-conformance-v1/claims/matched.yaml
                     testdata/fixture-conformance-v1/claims/mismatch.yaml
                     testdata/fixture-conformance-v1/claims/owed.yaml
                     testdata/fixture-conformance-v1/claims/uncheckable.yaml
+                    testdata/fixture-conformance-v1/constitution.yaml
     size            275 lines / 7660 bytes -> 265 lines / 7545 bytes
 @@ -8,10 +8,8 @@
        "layout": "card",
@@ -2094,11 +2100,13 @@ testdata/fixture-conformance-v1/build/catalog/catalog.json  (+10 -20)
          "claim_id": "widget.contract.uncheckable",
 
 testdata/fixture-conformance-v1/build/viewer/index.html  (+630 -658)
-    inputs changed  testdata/fixture-conformance-v1/claims/declared-none.yaml
+    inputs changed  testdata/fixture-conformance-v1/build/ledger/lock-store.json
+                    testdata/fixture-conformance-v1/claims/declared-none.yaml
                     testdata/fixture-conformance-v1/claims/matched.yaml
                     testdata/fixture-conformance-v1/claims/mismatch.yaml
                     testdata/fixture-conformance-v1/claims/owed.yaml
                     testdata/fixture-conformance-v1/claims/uncheckable.yaml
+                    testdata/fixture-conformance-v1/constitution.yaml
     size            23601 lines / 1288309 bytes -> 23573 lines / 1283342 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
@@ -4127,6 +4135,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+1591 -472)
                     testdata/fixture-graph-demo/claims/viewer-render-is-pure.yaml
                     testdata/fixture-graph-demo/claims/viewer-representative-node-rule.yaml
                     testdata/fixture-graph-demo/claims/viewer-scope-filter.yaml
+                    testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
     size            2182 lines / 65184 bytes -> 3301 lines / 106243 bytes
 @@ -10,11 +10,7 @@
@@ -7076,6 +7085,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+706 -867)
                     testdata/fixture-graph-demo/claims/viewer-render-is-pure.yaml
                     testdata/fixture-graph-demo/claims/viewer-representative-node-rule.yaml
                     testdata/fixture-graph-demo/claims/viewer-scope-filter.yaml
+                    testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
     size            23990 lines / 1496790 bytes -> 23829 lines / 1487580 bytes
 @@ -124,36 +124,11 @@
@@ -9751,9 +9761,11 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+706 -867)
    // Auto-collapse above AUTO_COLLAPSE_ABOVE claims
 
 testdata/fixture-portability/build/catalog/catalog.json  (+4 -14)
-    inputs changed  testdata/fixture-portability/claims/beacon-overview.yaml
+    inputs changed  testdata/fixture-portability/build/ledger/lock-store.json
+                    testdata/fixture-portability/claims/beacon-overview.yaml
                     testdata/fixture-portability/claims/beacon-signals.yaml
                     testdata/fixture-portability/claims/beacon-why.yaml
+                    testdata/fixture-portability/constitution.yaml
     size            151 lines / 4182 bytes -> 141 lines / 3873 bytes
 @@ -10,11 +10,7 @@
        "edges": {
@@ -9796,9 +9808,11 @@ testdata/fixture-portability/build/catalog/catalog.json  (+4 -14)
          "claim_id": "beacon.spec.signals",
 
 testdata/fixture-portability/build/viewer/index.html  (+628 -656)
-    inputs changed  testdata/fixture-portability/claims/beacon-overview.yaml
+    inputs changed  testdata/fixture-portability/build/ledger/lock-store.json
+                    testdata/fixture-portability/claims/beacon-overview.yaml
                     testdata/fixture-portability/claims/beacon-signals.yaml
                     testdata/fixture-portability/claims/beacon-why.yaml
+                    testdata/fixture-portability/constitution.yaml
     size            23267 lines / 1238682 bytes -> 23239 lines / 1232557 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
@@ -11760,6 +11774,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+40 -52)
                     testdata/fixture-theme-flat/claims/widget-overview.yaml
                     testdata/fixture-theme-flat/claims/widget-reviewed.yaml
                     testdata/fixture-theme-flat/claims/widget-walkthrough.yaml
+                    testdata/fixture-theme-flat/constitution.yaml
     size            436 lines / 11807 bytes -> 424 lines / 11639 bytes
 @@ -10,11 +10,7 @@
        "edges": {
@@ -11963,6 +11978,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
                     testdata/fixture-theme-flat/claims/widget-overview.yaml
                     testdata/fixture-theme-flat/claims/widget-reviewed.yaml
                     testdata/fixture-theme-flat/claims/widget-walkthrough.yaml
+                    testdata/fixture-theme-flat/constitution.yaml
     size            27403 lines / 4877586 bytes -> 23393 lines / 1272924 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
