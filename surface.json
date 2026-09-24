@@ -71,8 +71,6 @@
         "--dry-run",
         "--file",
         "--format",
-        "--governed-by",
-        "--governed-reason",
         "--layout",
         "--rests-on",
         "--section"
@@ -239,13 +237,10 @@
     "comments-unresolved",
     "cycle",
     "dangling",
-    "governed-cycle",
-    "governed-required",
     "id-shape",
     "kind-shape",
     "layout-shape-mismatch",
     "markdown-sanity",
-    "mixed-cycle",
     "orphan",
     "raw-html-scope",
     "rest-on-locked",
@@ -263,8 +258,7 @@
     "track-multi-owner",
     "track-shape",
     "track-unknown",
-    "track-unowned",
-    "validated-on-missing"
+    "track-unowned"
   ],
   "error_codes": [
     "already_locked",
@@ -471,38 +465,38 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:7db9462246b014aa0785cb72e4b95ee934bdfeda53856532a4b4cc9044a535e0",
+  "render_fingerprint": "sha256:7d24740fe241f8d3c2061126fc26e29f784abffd07735c50b3eab18b21406a76",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:9f94352c900ba07450eca24506119d5bedd70f524a517b4a1dc1e21172964a55",
+    "cmd/dossierx": "sha256:e6e9a1f0807e2efcbbf4961d7cd928c25346efb4da2c190ba72b1214406ffcbe",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/catalog": "sha256:b64c3634348e9f34624e3950492f3048400c4d8a7a8fccf3037282d9d61cb3b0",
+    "internal/catalog": "sha256:e9e56304c81edf2cef7b738d38bcc998c311b4bd87033c7e19650e116c31eda9",
     "internal/check": "sha256:51ff1a5c75d7195229494fcf080458f9e2c6efded279ba7461bb9245c9fbf785",
     "internal/cliout": "sha256:5e7003ed5d09de7bf32a3ad9ceffd6b0ae0273c124ee57047702a765d07deb9c",
-    "internal/comments": "sha256:f9ef2f61ed7a6d88be1ed3ded80ec778c6995f5301b35ffa9a77dc97689b30fb",
+    "internal/comments": "sha256:4a217e3a5102ce466ca4b09e0c1d3224d5be7ce6a01a5e52157011971f528de0",
     "internal/config": "sha256:d9233e4ad8765d687fdbcbe440b5e301d12c8da35f0b7d433982a9665efca193",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
-    "internal/graph": "sha256:152a23b3bb36a5b7639e677220802c902e4255f8466c56d1ede4430bd0bcff43",
+    "internal/graph": "sha256:48d5f45b676bde198dcfa6d6e4ede3b87964412f9832e70ba11df73e8788ecd0",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:1fca952b5fddffbaba64d4f415f88c958a8f1593d30a8b25ca70a44655f8f245",
+    "internal/lint": "sha256:6491548125243af139d31032f39ccd10ed1170a2f80cf1b5da11117364383d4b",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
-    "internal/lock": "sha256:c9ec8c678e58380141ae3fd5bd559d80a444a2c06e9335bf4bbfd31f5dbb32df",
-    "internal/model": "sha256:5eb68695b506315761ed90065902fb1f0d72cc57b511a2e7fa164c9cd7b23285",
-    "internal/readiness": "sha256:46ede421a0430a89ca4f8d0aa0938e31086455d9a7457ddc7dd85bc53c52dd9c",
+    "internal/lock": "sha256:a64c2c193ad1599a73f184e71f75a5575825144b39018b826908fcf1c060600c",
+    "internal/model": "sha256:d6322adbe6c290c89b98b4b2073ddb78b992c56a757295aedbd9f1900c8f57df",
+    "internal/readiness": "sha256:99cf703234cba9643098919b692b9eaa80a5403d3e4a2eaa791da15a4f5f09de",
     "internal/reaudit": "sha256:cfa9ca71f387eac1ec8ce841cf80a59d2acd14f20a001820987d7cde7ccf5852",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:63bae97a77cd82ad4e680941c8969719b20f966abda443ee8fde839c94e3cf83",
-    "internal/render/components": "sha256:8d8e8635f4f30357bd6f9dfb95552babb4c846fbbb636d439e6173a1a57d6df7",
+    "internal/render": "sha256:16f9cbd62f6c2cef2a55c860b62b81e2b09ceb80d93f5f616b68af54873bfbe2",
+    "internal/render/components": "sha256:6cfed800d09a386429410bc89788a667f66bd6bd0c6b10e2f37379c44800b79e",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:ed2e6931fdba04eed8ec354c59a4a8f875c8672f0827269e0425ebbd4de41bf8"
+    "skills": "sha256:5843ee914070e885d431aa907eaaccc3d09f32b814527b5424cb5ca4c44e0868"
   },
   "envelope": {
     "keys": [
@@ -606,8 +600,6 @@
       ],
       "claimEdgesData": [
         "depended_on_by",
-        "governed_by",
-        "governed_reason",
         "rests_on"
       ],
       "claimLinkData": [
@@ -865,7 +857,7 @@
     "commands": 20,
     "error_codes": 48,
     "http_routes": 14,
-    "lint_rules": 33,
+    "lint_rules": 29,
     "nouns": 7
   }
 }

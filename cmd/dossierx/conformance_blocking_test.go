@@ -15,7 +15,8 @@ facet: contract
 module: widget
 status: draft
 layout: card
-body: neutral conformance gate fixtureembodiment:
+body: neutral conformance gate fixture
+embodiment:
   mode: compare
   checks:
     - id: state
@@ -255,7 +256,7 @@ func TestConformanceBlockingPreservesLintAndThemePrecedence(t *testing.T) {
 		wantStop string
 	}{
 		{name: "lint", mutate: func(claim string) string {
-			return strings.Replace(claim, "rests_on:\n", "rests_on:\n  - widget.contract.missing\n", 1)
+			return claim + "rests_on:\n  - widget.contract.missing\n"
 		}, wantCode: "lint_failed", wantStop: "lint"},
 		{name: "theme", mutate: func(claim string) string { return claim }, wantCode: "invalid_config", wantStop: "config"},
 	} {

@@ -428,22 +428,16 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			wantChip: "0 relationships",
 		},
 		{
-			// governed_by: none counts ZERO — a stated absence, not a
-			// relationship — so a claim carrying nothing else still renders
-			// the strip (RETRY: the strip no longer suppresses at all-zero),
-			// with the chip reading the numeral "0 relationships".
 			name:     "governed_none_only",
 			claim:    model.Claim{Facet: "contract"},
-			wantChip: "0 relationships",
+			wantChip: "No relationships",
 		},
 		{
-			// Same claim plus a reason: the reason is not a relationship
-			// either, and does not change the chip's count.
 			name: "governed_none_with_reason_only",
 			claim: model.Claim{
 				Facet: "contract",
 			},
-			wantChip: "0 relationships",
+			wantChip: "No relationships",
 		},
 		{
 			// One linked file is enough to disclose something, so the footer
@@ -515,6 +509,7 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 	c := model.Claim{
 		ID: "widget.contract.self", Module: "widget", Facet: "contract",
+		RestsOn: []string{"widget.contract.other"},
 	}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 

@@ -168,19 +168,23 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\n"), 0o644); err != nil {
+	shared := strings.Repeat("x", 20<<20)
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\ntracks:\n  - id: "+shared+"\n    title: capacity\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
-			Status: model.StatusDraft, Layout: model.LayoutCard, Body: shared,
+			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "capacity",
+			// Catalog JSON projects tracks and omits body. A declared track
+			// id this large overflows the catalog bound before render runs
+			// and is not a dangling rests_on error.
+			Tracks: []model.TrackRef{{ID: shared}},
 		}
 	}
 	old := []byte("previous-complete-artifact")
@@ -194,10 +198,10 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	}
 	res, err := Run(claims, cfg)
 	if err == nil || !errors.Is(err, conformance.ErrCapacityExceeded) {
-		t.Fatalf("Run error=%v result=%+v", err, res)
+		t.Fatalf("Run error=%v phase=%q catalogErr=%q renderErr=%q", err, res.ConformanceFailurePhase, res.CatalogError, res.RenderError)
 	}
 	if res.ConformanceError != "" || res.CatalogError == "" || res.RenderError != "" || res.ConformanceFailurePhase != "catalog" || !res.ConformanceCapacityExceeded {
-		t.Fatalf("capacity error domain=%+v", res)
+		t.Fatalf("capacity error domain phase=%q catalogErr=%q renderErr=%q confErr=%q exceeded=%v", res.ConformanceFailurePhase, res.CatalogError, res.RenderError, res.ConformanceError, res.ConformanceCapacityExceeded)
 	}
 	if res.CatalogPath != "" || res.RenderPath != "" {
 		t.Fatalf("capacity refusal reported writes: catalog=%q viewer=%q", res.CatalogPath, res.RenderPath)

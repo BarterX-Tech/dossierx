@@ -184,7 +184,7 @@ func TestCLILintPrecedesConformanceCapacityInEveryMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw = []byte(strings.Replace(string(raw), "rests_on:\n", "rests_on:\n  - widget.contract.missing\n", 1))
+	raw = []byte(strings.Replace(string(raw), "embodiment:\n", "rests_on:\n  - widget.contract.missing\nembodiment:\n", 1))
 	if err := os.WriteFile(claimPath, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
