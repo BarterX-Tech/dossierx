@@ -111,9 +111,9 @@ directions in one section. Never opens by default."
 
 ### R09.4 — Relationships is one section with three directions
 
-**Statement.** Governed by, depends on, depended on by are three directions
-inside **one** expansion, in that fixed order — not three sections and not three
-chips.
+**Statement.** Depends on, depended on by are directions inside **one**
+expansion, in that fixed order — not separate sections and not separate chips.
+(Governed by led the list until that edge retired, NIT-29.)
 
 **Binds.** 05, 06, 07, 13.
 

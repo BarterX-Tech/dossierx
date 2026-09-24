@@ -3467,11 +3467,9 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 // be identified that way (e.g. an empty store) — simply the first declared
 // dependency, since ProposeDiff's stub only uses this for its note text.
 //
-// It walks lock.BaselineDependencyIDs rather than a hand-copied
-// rests_on list: the drift trigger that flips the claim to
-// review_pending includes a claim-valued governed_by.type, so a copy without it
-// answers "dependency "" changed but no proposal was generated" for exactly the
-// claims a governor edit flagged.
+// It walks lock.BaselineDependencyIDs rather than a hand-copied rests_on
+// list, so the dependency it names is always one the drift trigger that
+// flipped the claim to review_pending actually walked.
 func pickChangedDependency(claim model.Claim, claims []model.Claim, store *lock.Store) model.Claim {
 	deps := lock.BaselineDependencyIDs(claim)
 	for _, dep := range deps {

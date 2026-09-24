@@ -1133,7 +1133,7 @@ func TestTheHooksJobDeclaresThePowerShellInstallerSuite(t *testing.T) {
 // commit subjects, with `^docs:`, `^chore:` and `^Merge` filtered out. That
 // presentation cannot distinguish a breaking change from any other feature.
 // v0.5.0's appeared there as the ordinary Features bullet "feat(lint): detect
-// cycles that alternate rests_on and governed_by", with no BREAKING framing, no
+// cycles that alternate the two edge kinds", with no BREAKING framing, no
 // statement that a previously-passing corpus now exits 1, and no pointer to the
 // recovery. The audience most likely to read only the release page got the least
 // warning. This is about REACH, not correctness: the hand-written CHANGELOG entry

@@ -80,14 +80,12 @@ func armDigestsIfCommented(t *testing.T, cfg *config.Config, claims []model.Clai
 
 func draftClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  a draft claim.\n"
 }
 
 func lockedClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  a locked claim.\n"
 }
 
 // lockedCodeClaim is lockedClaim in a code-producing build_role: the shape the
@@ -95,8 +93,7 @@ func lockedClaim(id string) string {
 // is therefore never expected to be linked.
 func lockedCodeClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
-		"body: |\n  a locked claim with code behind it.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  a locked claim with code behind it.\n"
 }
 
 func severities(findings []lint.Finding) map[lint.Severity]int {
@@ -112,8 +109,7 @@ func severities(findings []lint.Finding) map[lint.Severity]int {
 func TestRun_SuccessWritesAndReports(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  start here.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  start here.\n",
 		"claims/one.yaml": draftClaim("widget.contract.one"),
 	})
 
@@ -230,8 +226,7 @@ func TestRun_LintErrorFailsFastNoWrites(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  broken.\n" +
-			"rests_on:\n  - widget.contract.missing\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.missing\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -269,7 +264,6 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
 			"body: |\n  a locked claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -302,8 +296,7 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
-			"body: |\n  a locked claim, review_pending with no active trigger.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a locked claim, review_pending with no active trigger.\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -383,8 +376,7 @@ func TestRun_StepTagScanAndStatus(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
-			"steps:\n  - do the thing\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"steps:\n  - do the thing\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
@@ -477,8 +469,7 @@ func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
-			"steps:\n  - do the thing\n  - do the other thing\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"steps:\n  - do the thing\n  - do the other thing\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
@@ -498,7 +489,7 @@ func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml":  lockedCodeClaim("widget.contract.locked"),
-		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\ngoverned_by:\n  type: none\n  reason: fixture\n",
+		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\n",
 		"src/impl.go":         "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
 	})
 

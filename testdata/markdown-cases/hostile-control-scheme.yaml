@@ -5,6 +5,3 @@ status: draft
 layout: card
 body: |
   This [link](vbscript:msgbox('xss')) has control scheme.
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - tests control scheme rejection

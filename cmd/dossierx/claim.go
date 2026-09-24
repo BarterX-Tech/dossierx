@@ -259,10 +259,8 @@ func claimTrackViews(refs []model.TrackRef) []claimTrackView {
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
 type claimEdgesData struct {
-	RestsOn        []string `json:"rests_on"`
-	GovernedBy     string   `json:"governed_by"`
-	GovernedReason string   `json:"governed_reason,omitempty"`
-	DependedOnBy   []string `json:"depended_on_by"`
+	RestsOn      []string `json:"rests_on"`
+	DependedOnBy []string `json:"depended_on_by"`
 }
 
 // claimCommentCounts is the discussion roll-up. OpenThreadIDs is carried in
@@ -655,10 +653,8 @@ func newClaimShowCmd() *cobra.Command {
 				Trigger:       trigger,
 				Readiness:     assessment,
 				Edges: claimEdgesData{
-					RestsOn:        emptyIfNil(claim.RestsOn),
-					GovernedBy:     claim.Governed.Type,
-					GovernedReason: claim.Governed.Reason,
-					DependedOnBy:   emptyIfNil(dependedOnBy),
+					RestsOn:      emptyIfNil(claim.RestsOn),
+					DependedOnBy: emptyIfNil(dependedOnBy),
 				},
 				ImplementedIn: links,
 				Comments:      counts,
@@ -705,15 +701,6 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 		fmt.Fprintln(out, "  lock ledger:        CONTENT DOES NOT MATCH THE APPROVAL ON RECORD (see dossierx check --validate)")
 	}
 	fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
-	if d.Edges.GovernedBy != "" {
-		fmt.Fprintf(out, "  governed_by:        %s", d.Edges.GovernedBy)
-		if d.Edges.GovernedReason != "" {
-			fmt.Fprintf(out, " (%s)", d.Edges.GovernedReason)
-		}
-		fmt.Fprintln(out)
-	} else {
-		fmt.Fprintln(out, "  governed_by:        (unset)")
-	}
 	fmt.Fprintf(out, "  incoming rests_on:  %v\n", d.Edges.DependedOnBy)
 	if len(d.ImplementedIn) == 0 {
 		fmt.Fprintln(out, "  implemented in:     (nothing linked)")
@@ -1262,7 +1249,7 @@ func claimNewPath(cfg *config.Config, id, override string) (string, error) {
 }
 
 func newClaimNewCmd() *cobra.Command {
-	var body, layout, section, buildRole, governedBy, governedReason, file string
+	var body, layout, section, buildRole, file string
 	var restsOn []string
 	var dryRun bool
 
@@ -1270,9 +1257,8 @@ func newClaimNewCmd() *cobra.Command {
 		Use:   "new <id>",
 		Short: "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
 		Long: "Author a new draft claim at <claims_dir>/<id>.yaml.\n\n" +
-			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
-			"governed_by that satisfies the governed-required rule, and layout: card\n" +
-			"(or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
+			"The claim it writes is shaped to pass the lint suite immediately: a body\n" +
+			"and layout: card (or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
 			"no confirmation — because drafts are the agent's workshop. The gate in this\n" +
 			"release is on LOCKED claims.",
 		Args: cobra.ExactArgs(1),
@@ -1299,9 +1285,6 @@ func newClaimNewCmd() *cobra.Command {
 				if strings.TrimSpace(body) == "" {
 					dr.Lacking("--body")
 				}
-				if governedBy == string(model.GovernedNone) && strings.TrimSpace(governedReason) == "" {
-					dr.Lacking("--governed-reason")
-				}
 				// Both details are written for the verdict they are attached to,
 				// not for the failure. A Detail is emitted verbatim whether OK is
 				// true or false, so "a claim with this id already exists" printed
@@ -1326,10 +1309,6 @@ func newClaimNewCmd() *cobra.Command {
 			if strings.TrimSpace(body) == "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
 					"claim new: --body is required and must be non-empty; a claim with no content states nothing")
-			}
-			if governedBy == string(model.GovernedNone) && strings.TrimSpace(governedReason) == "" {
-				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
-					"claim new: --governed-reason is required when --governed-by is %q; the governed-required lint refuses an unexplained ungoverned claim", model.GovernedNone)
 			}
 
 			// Claim-file write discipline (Phase 0): take the project-wide
@@ -1366,7 +1345,6 @@ func newClaimNewCmd() *cobra.Command {
 				Section:    section,
 				BuildRole:  model.BuildRole(buildRole),
 				RestsOn:    restsOn,
-				Governed:   model.Governed{Type: governedBy, Reason: governedReason},
 				SourcePath: path,
 			}
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -1407,8 +1385,6 @@ func newClaimNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&layout, "layout", string(model.LayoutCard), "render layout: card, list, tree, banner (table/steps/mockup need rows/steps/raw_html, which this command does not author)")
 	cmd.Flags().StringVar(&section, "section", "", "optional in-content section heading this claim sits under")
 	cmd.Flags().StringVar(&buildRole, "build-role", "", "optional build phase: orientation, schema, behavior, api, verification, out-of-scope (required only once the claim locks)")
-	cmd.Flags().StringVar(&governedBy, "governed-by", string(model.GovernedNone), "the doctrine claim id backing this claim, or \"none\"")
-	cmd.Flags().StringVar(&governedReason, "governed-reason", "", "why this claim is deliberately ungoverned (required when --governed-by is \"none\")")
 	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on")
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what creating this claim would do, and write nothing")

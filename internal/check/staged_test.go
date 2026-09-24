@@ -464,8 +464,7 @@ func TestStaged_UntrackedAndStagedDeletionsAreNotInTheRegistry(t *testing.T) {
 	// (it references a claim that does not exist).
 	untracked := "id: widget.contract.untracked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  never added to the index.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(cfg.ClaimsDir, "untracked.yaml"), []byte(untracked), 0o644); err != nil {
 		t.Fatalf("write untracked claim: %v", err)
 	}
@@ -542,13 +541,11 @@ func TestStaged_OutsideAWorkTreeIsErrNoIndex(t *testing.T) {
 func TestStagedDecodeMatchesLoader(t *testing.T) {
 	cases := map[string]string{
 		"ordinary": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a claim.\n",
 		"unknown field": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: hi\nnot_a_real_field: 1\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: hi\nnot_a_real_field: 1\n",
 		"two documents": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: hi\ngoverned_by:\n  type: none\n  reason: fixture\n" +
+			"body: hi\n" +
 			"---\nid: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: hi\n",
 		"malformed yaml": "id: [unterminated\n",
 	}

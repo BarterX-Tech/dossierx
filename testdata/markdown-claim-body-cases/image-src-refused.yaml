@@ -24,6 +24,3 @@ body: |
 
   ![query](assets/x.png?v=1)
 
-governed_by:
-  type: none
-  reason: "markdown renderer test fixture - every refusal shape, rendering as escaped literal text and never as a broken <img> or an anchor"

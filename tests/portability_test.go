@@ -135,26 +135,21 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 		"sprocket-blueprint.yaml": "id: sprocket.blueprint.overview\n" +
 			"facet: blueprint\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
 			"body: sprocket blueprint overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
 			"rests_on:\n  - gizmo.lineage.overview\n",
 		"gizmo-lineage.yaml": "id: gizmo.lineage.overview\n" +
 			"facet: lineage\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
-			"body: gizmo lineage overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n",
+			"body: gizmo lineage overview.\n",
 		"gizmo-risk.yaml": "id: gizmo.risk.overview\n" +
 			"facet: risk\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
 			"body: gizmo risk overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
 			"rests_on:\n  - gizmo.lineage.overview\n",
 		"sprocket-onboarding.yaml": "id: sprocket.onboarding.steps\n" +
 			"facet: onboarding\nmodule: sprocket\nstatus: draft\n" +
 			"steps:\n  - unbox the sprocket\n  - attach to the gizmo\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
 			"rests_on:\n  - sprocket.blueprint.overview\n",
 		"sprocket-retirement.yaml": "id: sprocket.retirement.overview\n" +
 			"facet: retirement\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
 			"body: sprocket retirement overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
 			"rests_on:\n  - sprocket.onboarding.steps\n",
 	}
 	for name, body := range claims {
@@ -847,8 +842,7 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 	}
 	claim := "id: offlinemod.contract.overview\n" +
 		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\n" +
-		"body: offline fixture claim.\n" +
-		"governed_by:\n  type: none\n  reason: offline fixture\n"
+		"body: offline fixture claim.\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -921,8 +915,7 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 	}
 	claim := "id: collidemod.contract.overview\n" +
 		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\n" +
-		"body: fixture claim exercised from a colliding-parent-path build.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: fixture claim exercised from a colliding-parent-path build.\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)
 	}

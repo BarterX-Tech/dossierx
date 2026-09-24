@@ -135,9 +135,8 @@ const canvasRecorderJS = `(function () {
 // the file strokes that colour at that width (a label's halo is strokeText, not
 // stroke). So a paper-coloured width-2 stroke starts a node and everything
 // until the next one decorates it — fill, then the status/cycle ring, then any
-// halo, selection ring and governance wedge, in drawNodes's own order. Ops
-// before the first node belong to drawEdges; two-point strokes are the edge
-// lines and three-point ones its chevrons.
+// halo and selection ring, in drawNodes's own order. Ops before the first
+// node belong to drawEdges; two-point strokes are the edge lines.
 const frameSummaryJS = `(function () {
 	var R = window.__dxgRec;
 	if (!R || R.frames.length === 0) { return null; }
@@ -155,7 +154,7 @@ const frameSummaryJS = `(function () {
 	var pal = {
 		paper: tok('--paper'), ink: tok('--ink'), muted: tok('--muted'), faint: tok('--faint'),
 		accent: tok('--accent'), warn: tok('--warn'), link: tok('--link'),
-		cycle: tok('--dxg-cycle'), halo: tok('--dxg-halo'), governed: tok('--dxg-governed')
+		cycle: tok('--dxg-cycle'), halo: tok('--dxg-halo')
 	};
 
 	function shape(p) {

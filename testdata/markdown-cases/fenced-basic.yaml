@@ -10,6 +10,3 @@ body: |
   first line
   second line
   ```
-governed_by:
-  type: none
-  reason: markdown renderer test fixture

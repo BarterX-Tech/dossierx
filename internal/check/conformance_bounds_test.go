@@ -48,7 +48,7 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	for _, facet := range facets {
 		claims = append(claims, model.Claim{
 			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: heavy, Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			Layout: model.LayoutCard, Body: heavy,
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -92,7 +92,7 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 	for _, facet := range facets {
 		claims = append(claims, model.Claim{
 			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: heavy, Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			Layout: model.LayoutCard, Body: heavy,
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -136,7 +136,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.shared-%03d", i), Facet: "contract", Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "shared target fixture", Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			Layout: model.LayoutCard, Body: "shared target fixture",
 			Embodiment: &model.Embodiment{Mode: model.EmbodimentModeCompare, Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "neutral/v1", Target: "widget://shared", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{fmt.Sprintf("expected-%03d", i)}}}}},
 		}
 	}
@@ -175,13 +175,15 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The payload rides in the id: it is the one free-text field the catalog
+	// entry carries that no lint caps (id-shape checks grammar, not length),
+	// and four of these overflow the projection budget on their own.
 	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {
 		claims[i] = model.Claim{
-			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
+			ID: fmt.Sprintf("widget.contract.capacity-%d-%s", i, shared), Facet: "contract", Module: "widget",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: shared},
 		}
 	}
 	old := []byte("previous-complete-artifact")
@@ -221,13 +223,15 @@ func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The payload rides in the id: it is the one free-text field the catalog
+	// entry carries that no lint caps (id-shape checks grammar, not length),
+	// and four of these overflow the projection budget on their own.
 	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {
 		claims[i] = model.Claim{
-			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
+			ID: fmt.Sprintf("widget.contract.capacity-%d-%s", i, shared), Facet: "contract", Module: "widget",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: shared},
 		}
 	}
 

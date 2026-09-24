@@ -27,9 +27,6 @@ module: widget
 status: draft
 body: |
   soft-mount lock-metric fixture %d.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `, id, facet, i))
 	}
 	return p
@@ -63,9 +60,6 @@ tracks:
     role: owns
 body: |
   the widget orientation claim.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	p.writeClaim("widget-internals.yaml", `id: widget.internals.detail
 facet: internals
@@ -74,9 +68,6 @@ status: draft
 build_role: verification
 body: |
   the widget implementation detail.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	p.writeClaim("gadget-contract.yaml", `id: gadget.contract.orientation
 facet: contract
@@ -84,9 +75,6 @@ module: gadget
 status: draft
 body: |
   the gadget orientation claim.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	p.run("claim", "lock", "widget.contract.orientation", "--reason", "viewer-test fixture")
 	p.run("claim", "lock", "widget.internals.detail", "--reason", "viewer-test fixture")
@@ -465,9 +453,6 @@ status: draft
 emphasis: true
 body: |
   An approved claim can be important without being a warning.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	p.run("claim", "lock", "widget.contract.locked", "--reason", "viewer test lock")
 	p.writeClaim("warning.yaml", `id: widget.contract.warning
@@ -477,9 +462,6 @@ status: draft
 layout: banner
 body: |
   This is an explicit warning callout.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()))

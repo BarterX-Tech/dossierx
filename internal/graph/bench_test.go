@@ -11,9 +11,9 @@ import (
 
 // syntheticCorpus builds an n-claim corpus with a realistic edge density:
 // two rests_on edges per claim after the third, an extra rests_on on every
-// fifth, and a governed_by edge on every seventh pointing at one of five
-// doctrine claims. That is deliberately denser than a typical project — a
-// benchmark that flatters the implementation measures nothing.
+// fifth, and on every seventh a rests_on back to one of the first five
+// claims. That is deliberately denser than a typical project — a benchmark
+// that flatters the implementation measures nothing.
 func syntheticCorpus(n int) []model.Claim {
 	mods := []string{"engine", "viewer", "cli", "lock", "telemetry"}
 	facets := []string{"contract", "schema", "behavior", "verification", "overview"}
@@ -34,8 +34,8 @@ func syntheticCorpus(n int) []model.Claim {
 		if i%5 == 0 && i+1 < n {
 			claims[i].RestsOn = append(claims[i].RestsOn, claims[i+1].ID)
 		}
-		if i%7 == 0 && n > 5 {
-			claims[i].Governed = model.Governed{Type: claims[i%5].ID}
+		if i%7 == 0 && n > 5 && i >= 5 {
+			claims[i].RestsOn = append(claims[i].RestsOn, claims[i%5].ID)
 		}
 	}
 	return claims

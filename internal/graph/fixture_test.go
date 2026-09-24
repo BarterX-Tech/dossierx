@@ -83,14 +83,6 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 		crossIn[to]++
 	}
 
-	// How many claims each governor governs.
-	governs := map[string]int{}
-	for _, e := range p.Edges {
-		if e.Type == EdgeGovernedBy {
-			governs[e.To]++
-		}
-	}
-
 	// Which build phases each module has any claim in, and whether it has an
 	// approved claim at all — the two inputs the missing-phase heuristic
 	// takes.
@@ -215,18 +207,6 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 			},
 		},
 		{
-			class: "a governed node whose governor also governs something else",
-			why:   "a governor with one governed claim proves nothing about the wedge marker or the governance overlay",
-			found: func() (string, bool) {
-				for _, e := range p.Edges {
-					if e.Type == EdgeGovernedBy && governs[e.To] >= 2 {
-						return e.From + " -> " + e.To, true
-					}
-				}
-				return "", false
-			},
-		},
-		{
 			class: "a module with an approved claim and no claim in some build phase",
 			why:   "the missing_build_phase heuristic; verification is the usual absentee",
 			found: func() (string, bool) {
@@ -259,9 +239,8 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 
 	t.Run("no cycle of any shape", func(t *testing.T) {
 		// "dossierx check" returns above the catalog and render stages on the
-		// first error-severity finding, and a rests_on loop, a governed_by
-		// loop and a loop alternating the two are all error severity. So a
-		// fixture that renders at all cannot carry one — and if this fixture
+		// first error-severity finding, and a rests_on loop is error
+		// severity. So a fixture that renders at all cannot carry one — and if this fixture
 		// ever did, it would stop rendering rather than fail here. Asserting
 		// it anyway states the property at the level the PANE cares about,
 		// which is the payload's edge set, and it is what makes the empty
@@ -270,9 +249,7 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 			name  string
 			types map[string]bool
 		}{
-			{"rests_on only", map[string]bool{EdgeRestsOn: true}},
-			{"governed_by only", map[string]bool{EdgeGovernedBy: true}},
-			{"the union of both — the shape neither single-type rule can see", map[string]bool{EdgeRestsOn: true, EdgeGovernedBy: true}},
+			{"rests_on", map[string]bool{EdgeRestsOn: true}},
 		}
 		for _, sh := range shapes {
 			adj := map[string][]string{}

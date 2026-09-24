@@ -6,7 +6,5 @@ layout: card
 build_role: api
 body: |
   Approval takes the human's reason in their own words. An agent may never invent one.
-governed_by:
-  type: engine.decision.single-source-of-truth
 rests_on:
   - lock.behavior.lock-gates

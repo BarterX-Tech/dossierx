@@ -20,7 +20,6 @@ func commentedClaim(id, module, facet string, layout model.Layout, comments []mo
 		Layout:   layout,
 		Body:     "orientation prose",
 		Comments: comments,
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
 	}
 }
 

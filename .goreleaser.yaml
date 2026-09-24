@@ -107,7 +107,7 @@ release:
   # which was true until then — goreleaser composes both into the release BODY, so
   # the topmost block on every page from here on is hand-written literal text.) That presentation cannot distinguish a breaking change from any
   # other feature — v0.5.0's appeared as the ordinary Features bullet
-  # "feat(lint): detect cycles that alternate rests_on and governed_by", with no
+  # "feat(lint): detect cycles that alternate the two edge kinds", with no
   # BREAKING framing, no statement that a previously-passing corpus now exits 1,
   # and no pointer to the recovery. The audience most likely to read only the
   # release page got the least warning.

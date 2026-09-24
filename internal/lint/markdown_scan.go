@@ -774,7 +774,7 @@ type mdDelimRun struct {
 //
 //   - a "_" run sitting between two alphanumerics is intraword and is not a
 //     delimiter at all (CommonMark's own intraword-underscore rule) — this is
-//     what keeps "governed_by" and "rests_on", the two most common tokens in
+//     what keeps "claims_dir" and "rests_on", the two most common tokens in
 //     any DossierX body, silent;
 //   - a run that is both left- and right-flanking ("2*3", "count(*)") is
 //     skipped, because a reader cannot tell which way the author meant it and
@@ -811,7 +811,7 @@ func mdDelimRunAt(text string, start, runLen int, c byte) (mdDelimRun, bool) {
 	nextR, nextSize := utf8.DecodeRuneInString(text[end:])
 
 	// The intraword rule stays byte-exact: it exists for an "_" between two
-	// ASCII alphanumerics ("governed_by"), so the size guards keep it from
+	// ASCII alphanumerics ("claims_dir"), so the size guards keep it from
 	// widening to anything a multi-byte neighbour might be.
 	if c == '_' && prevSize == 1 && mdIsAlnum(byte(prevR)) &&
 		nextSize == 1 && mdIsAlnum(byte(nextR)) {

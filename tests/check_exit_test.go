@@ -41,8 +41,7 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		writeConfig(t, root)
 		writeClaim(t, root, "locked.yaml",
 			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n"+
-				"body: |\n  a locked claim.\n"+
-				"governed_by:\n  type: none\n  reason: fixture\n")
+				"body: |\n  a locked claim.\n")
 		// "Clean" now includes the lock-ledger gate: a hand-written
 		// "status: locked" with no approval record is exactly what it refuses,
 		// so record the approval this fixture always implied.
@@ -59,8 +58,7 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		writeClaim(t, root, "broken.yaml",
 			"id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
 				"body: |\n  broken fixture.\n"+
-				"rests_on:\n  - widget.contract.does-not-exist\n"+
-				"governed_by:\n  type: none\n  reason: fixture\n")
+				"rests_on:\n  - widget.contract.does-not-exist\n")
 		stdout, stderr, code := run(t, root, "check")
 		if code != 1 {
 			t.Fatalf("expected exit 1 on a lint-error check, got %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)

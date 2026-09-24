@@ -52,9 +52,6 @@ status: draft
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -372,10 +369,9 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 	ctx := staticGraphTab(t, p)
 	openGraphPane(t, ctx)
 
-	// Re-pinned for 13 §4.5 (RETRY fix list item 12): "Legend order,
-	// exactly" puts governed by first, then depends on —
-	// not graph-core.js's EDGE_TYPES declaration order.
-	wantEdges := []string{"governed_by", "rests_on"}
+	// 13 §4.5 (RETRY fix list item 12) pinned "Legend order, exactly";
+	// with governed_by retired (NIT-29) one row remains.
+	wantEdges := []string{"rests_on"}
 
 	cases := []struct {
 		name     string
@@ -398,9 +394,9 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 		},
 		{
 			name:     "and it changes again with the overlay",
-			overlay:  "governance",
-			group:    "governance",
-			overlays: []string{"governed", "dim"},
+			overlay:  "cycles",
+			group:    "dependency cycles",
+			overlays: []string{"cycle", "dim"},
 		},
 		{
 			name:     "isolated",
@@ -420,21 +416,19 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setOverlay(t, ctx, tc.overlay)
 
-			// BOTH REMAINING RELATIONS, ALWAYS. The strip used to name
-			// governed_by alone, leaving rests_on to be told apart by an
-			// arrowhead — the part of an edge most often hidden under the node
-			// it points at. An overlay recolours fills and never changes what
-			// a line means, so this block is invariant across the table.
+			// EVERY REMAINING RELATION, ALWAYS. An overlay recolours fills and
+			// never changes what a line means, so this block is invariant
+			// across the table.
 			if got := legendEdgeRows(t, ctx); fmt.Sprint(got) != fmt.Sprint(wantEdges) {
 				t.Fatalf("legend edge rows under overlay %q = %v, want %v", tc.overlay, got, wantEdges)
 			}
-			if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-legend [data-dxg-edge] svg').length`); n != 2 {
-				t.Fatalf("legend edge samples that actually draw a line = %d, want 2", n)
+			if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-legend [data-dxg-edge] svg').length`); n != 1 {
+				t.Fatalf("legend edge samples that actually draw a line = %d, want 1", n)
 			}
 
 			// Re-pinned for screen 13 §4.5 / §6: the legend's second caption
-			// is "MARKS" (board vocabulary — "FACETS ... │ MARKS · governed
-			// by · depends on · has an open comment thread · selected"),
+			// is "MARKS" (board vocabulary — "FACETS ... │ MARKS · depends
+			// on · has an open comment thread · selected"),
 			// covering both the edge samples and the node-state marks the
 			// group now also carries. Source text is lower-cased like every
 			// other group label here; .dxg-legend-group's CSS uppercases it.

@@ -5,6 +5,3 @@ status: draft
 layout: card
 body: |
   ***
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - *** is not a thematic break - one spelling only

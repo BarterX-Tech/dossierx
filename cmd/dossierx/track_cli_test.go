@@ -64,26 +64,22 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"tracks:\n  - id: guest-checkout\n    role: owns\n",
 		// A citation with an EXPLICIT cites role, already locked.
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"tracks:\n  - id: guest-checkout\n    role: cites\n",
 		// A citation with NO role — the default, which must read as cites — in a
 		// different module, and still draft. This is the blocker.
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
 			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
-			"tracks:\n  - id: guest-checkout\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"tracks:\n  - id: guest-checkout\n",
 		// In no track at all: it must not appear in any track's report.
 		"unrelated.yaml": "id: payments.contract.settlement\n" +
 			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
-			"body: |\n  settlement runs nightly.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  settlement runs nightly.\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {

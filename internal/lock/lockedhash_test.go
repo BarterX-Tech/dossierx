@@ -61,7 +61,6 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"steps":             {hashed: true, mutate: func(c *model.Claim) { c.Steps = []string{"step one", "step two"} }},
 	"mirrors":           {hashed: true, mutate: func(c *model.Claim) { c.Mirrors = []string{"widget.contract.elsewhere"} }},
 	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = nil }},
-	"governed_by":       {hashed: true, mutate: func(c *model.Claim) { c.Governed = model.Governed{Type: "none", Reason: "different reason"} }},
 	"migrated_from":     {hashed: true, mutate: func(c *model.Claim) { c.MigratedFrom = "docs/other.html" }},
 
 	// sources: SIGNED, and this field is close to the reason the hash is a
@@ -115,7 +114,6 @@ func fullyPopulatedClaim() model.Claim {
 		Steps:           []string{"step one"},
 		Mirrors:         []string{"widget.internals.mirror"},
 		RestsOn:         []string{"widget.contract.dep"},
-		Governed:        model.Governed{Type: "none", Reason: "a governed reason"},
 		Sources: []model.Source{
 			{Ref: 1, Kind: model.SourceKindExternal, Title: "Vendor API reference", URL: "https://example.invalid/api", AccessedOn: "2026-01-01", Supports: "the approved sentence"},
 			{Ref: 2, Kind: model.SourceKindInternal, Title: "Requirement record", Path: "records/requirements.jsonl", RecordID: "REQ-001", SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
@@ -244,7 +242,7 @@ func TestLockedClaimHashIsIndependentOfStatus(t *testing.T) {
 }
 
 // TestLockedClaimHashSeesWhatContentHashCannot is the audit's headline finding,
-// as a test. model.Claim persists twenty-two fields; ContentHash covers a small
+// as a test. model.Claim persists twenty-four fields; ContentHash covers a small
 // allowlist. A ledger built on ContentHash would certify each of the edits below
 // as unchanged.
 //
@@ -316,10 +314,9 @@ func TestContentHashIsUnchangedByTheLedger(t *testing.T) {
 		ID: "widget.contract.overview", Facet: "contract", Module: "widget",
 		Status: model.StatusLocked, Layout: model.LayoutCard, Body: "the approved body",
 		Steps: []string{"step one"}, Mirrors: []string{"widget.internals.mirror"},
-		RestsOn:  []string{"widget.contract.dep"},
-		Governed: model.Governed{Type: "none", Reason: "a governed reason"},
+		RestsOn: []string{"widget.contract.dep"},
 	}
-	const want = "5c6be2d6bfa41d3bdfb78c7b17dd6c70598999853d110393ccc8e5343b86c502"
+	const want = "14de6c9efe5ce36286ac5961982262a74dcf831a29fc225f57e0aeedac361584"
 
 	if got := ContentHash(c); got != want {
 		t.Fatalf("ContentHash changed.\n got: %s\nwant: %s\n\n"+
@@ -334,7 +331,6 @@ func TestContentHashEmbodimentCompatibilityAndMeaning(t *testing.T) {
 	base := model.Claim{
 		ID: "widget.contract.state", Facet: "contract", Module: "widget",
 		Status: model.StatusDraft, Layout: model.LayoutCard, Body: "A state vocabulary.",
-		Governed: model.Governed{Type: "none", Reason: "standalone fixture"},
 	}
 	without := ContentHash(base)
 	if got := ContentHash(base); got != without {
@@ -592,7 +588,7 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // tracks existed, and TestCommittedFixtureViewersAreNotStale re-validates
 // them through the current hasher on every run. That fixture is the real
 // proof; this constant is the fast, local statement of it.
-const lockedClaimHashNoOptionalFields = "e7657f068e7d88b28f4339d5c3e6db6cd0ba467171e776d661d2fe9ab7750421"
+const lockedClaimHashNoOptionalFields = "af7e9909502ab2f32e38ff8196f3d10fef7c3a286c67629e3bce7228b6f0da3c"
 
 // TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
 // the lockedClaimHashOmitWhenEmpty gate, because each half guards a different
@@ -614,7 +610,7 @@ const lockedClaimHashNoOptionalFields = "e7657f068e7d88b28f4339d5c3e6db6cd0ba467
 func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
 	base := model.Claim{
 		ID: "widget.contract.a", Facet: "contract", Module: "widget",
-		Body: "the claim body", Governed: model.Governed{Type: "none", Reason: "a reason"},
+		Body: "the claim body",
 	}
 
 	if got := LockedClaimHash(base); got != lockedClaimHashNoOptionalFields {

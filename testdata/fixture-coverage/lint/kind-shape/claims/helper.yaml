@@ -6,6 +6,3 @@ layout: card
 body: |
   Helper claim, targeted by the broken claim's rests_on edge so neither
   claim trips the orphan warning.
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

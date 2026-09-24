@@ -35,7 +35,7 @@ func writeFingerprintFixture(t *testing.T) string {
 	root := t.TempDir()
 	claim := func(id string) string {
 		return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\ngoverned_by:\n  type: none\n  reason: fixture\n"
+			"body: |\n  a claim.\n"
 	}
 	files := map[string]string{
 		// Ordinary claims, both extensions, nested.

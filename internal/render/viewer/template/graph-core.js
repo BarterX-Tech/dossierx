@@ -31,13 +31,13 @@
   // suite off these names.
   //
   // Constants (all frozen, all JSON-able):
-  //   EDGE_TYPES           ["rests_on", "governed_by"]
-  //   DIRECTED_EDGE_TYPES  ["rests_on", "governed_by"] — the SCC edge set
+  //   EDGE_TYPES           ["rests_on"]
+  //   DIRECTED_EDGE_TYPES  ["rests_on"] — the SCC edge set
   //   GHOST_PREFIX         "ghost:" — id prefix of an out-of-scope endpoint
   //   FACET_SLOT_COUNT     20 — the categorical palette's slot count
   //   FACT_RULE_IDS        the eight fact rule ids, in emission order
   //   HINT_RULE_IDS        the two heuristic rule ids, in emission order
-  //   OVERLAYS             the closed overlay set — six, plus "none"
+  //   OVERLAYS             the closed overlay set — five, plus "none"
   //   BUILD_PHASES         the build roles missing_build_phase looks for
   //
   // Helpers:
@@ -59,10 +59,8 @@
   //   scc(nodeIds, edges)                 -> [[id, ...]]
   //   selfEdges(nodeIds, edges)           -> [id, ...]
   //
-  // Encoding channels (design sections 4.2 and 4.3):
+  // Encoding channels (design section 4.2):
   //   facetSlot(facets, facet)            -> 0..19, or -1
-  //   governors(edges)                    -> [id, ...]
-  //   governanceScope(edges)              -> {nodeIds, edgeKeys}
   //
   // Verdicts (design section 5):
   //   gapRules(nodes, edges, options)     -> {facts: [...], hints: [...]}
@@ -81,19 +79,21 @@
   // The array form exists so a one-liner harness can call scc() without
   // building objects. An edge with no type is treated as a DIRECTED edge of
   // unnamed type: it participates in scc(), and it is excluded from the
-  // by-type filters (governed_by in particular) that name a type explicitly.
+  // by-type filters that name a type explicitly.
   //
   // Returned edges are always the object form.
 
   // EDGE_TYPES is the closed set of relations model.Claim declares. It is the
-  // canonical ordering used by encodeState and by every by-type sort.
-  var EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
+  // canonical ordering used by encodeState and by every by-type sort. One
+  // entry since the governed_by edge retired (NIT-29); the list stays a list
+  // because the toggles, the hash codec and viewer-tests all key off it.
+  var EDGE_TYPES = Object.freeze(['rests_on']);
 
   // DIRECTED_EDGE_TYPES is the subset scc() walks. Today that is every
   // remaining edge kind; the name is kept because gapRules and the pane
   // still distinguish "types that participate in cycles" from display-only
   // filters if a later kind is added.
-  var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
+  var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on']);
 
   // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
   // representative. aggregateEdges() emits "ghost:<claim id>" for it rather
@@ -224,8 +224,8 @@
     return asString(groupType) + ':' + asString(name);
   }
 
-  // edgeKey is the stable identity of one edge, used by governanceScope's
-  // edgeKeys and by any caller that needs a set of edges as plain strings.
+  // edgeKey is the stable identity of one edge, used by any caller that
+  // needs a set of edges as plain strings.
   // The separator is "|", which no claim id can contain (ids are dotted
   // slugs), so the key is unambiguous.
   function edgeKey(edge) {
@@ -658,7 +658,7 @@
   // ------------------------------------------------------------------
 
   // isDirectedType reports whether an edge type participates in cycle
-  // detection. Both remaining edge types do (`rests_on`, `governed_by`).
+  // detection. The one remaining edge type does (`rests_on`).
   // An untyped edge ("") is treated as directed, which is what makes
   // the [from, to] pair form usable in a one-liner harness.
   function isDirectedType(type) {
@@ -818,8 +818,8 @@
   }
 
   // selfEdges returns the ids in nodeIds that are their own target under ANY
-  // edge type — rests_on or governed_by, plus any retired kind still present
-  // in a payload. It is reported separately
+  // edge type — rests_on, plus any retired kind still present in a
+  // payload. It is reported separately
   // from scc() and never merged into the cycle list, because the engine
   // already has a dedicated error-severity `self-edge` lint distinct from
   // `cycle`, and a pane that folded the two together would be telling a
@@ -875,59 +875,6 @@
     return -1;
   }
 
-  // GOVERNED_TYPE is the one edge type the governance channels key off.
-  var GOVERNED_TYPE = 'governed_by';
-
-  // governors returns the sorted ids that are the TARGET of at least one
-  // governance edge — the claims that govern something.
-  //
-  // This is the wedge-marker set. The wedge sits on the governing node rather
-  // than on the edge because it is the one governance signal a reader can use
-  // without following a line at all: a doctrine claim is findable at a glance
-  // on a 400-node canvas, which is exactly the tracing work this pane exists
-  // to remove.
-  //
-  // Direction matters and is easy to get backwards: a claim declares
-  // `governed_by: {type: X}`, so the edge runs claim -> governor and the
-  // governor is `to`.
-  function governors(edges) {
-    var list = asArray(edges);
-    var hits = [];
-    for (var i = 0; i < list.length; i++) {
-      var e = normalizeEdge(list[i]);
-      if (e && e.type === GOVERNED_TYPE) {
-        hits.push(e.to);
-      }
-    }
-    return sortedUnique(hits);
-  }
-
-  // governanceScope returns everything the governance overlay keeps lit:
-  //
-  //   nodeIds   sorted ids of every governor and every claim they govern
-  //   edgeKeys  sorted edgeKey() of every governance edge
-  //
-  // Only governance edges are in scope. A rests_on edge that happens to join
-  // two governance participants is dimmed with everything else, because the
-  // question this overlay answers is "what does this doctrine actually
-  // reach?", and reach is carried by the governance edges alone — lighting up
-  // an unrelated dependency between two governed claims would answer a
-  // different question badly.
-  function governanceScope(edges) {
-    var list = asArray(edges);
-    var nodes = [];
-    var keys = [];
-    for (var i = 0; i < list.length; i++) {
-      var e = normalizeEdge(list[i]);
-      if (!e || e.type !== GOVERNED_TYPE) {
-        continue;
-      }
-      nodes.push(e.from);
-      nodes.push(e.to);
-      keys.push(e.from + '|' + e.type + '|' + e.to);
-    }
-    return { nodeIds: sortedUnique(nodes), edgeKeys: sortedUnique(keys) };
-  }
 
   // ------------------------------------------------------------------
   // Gap rules (design section 5)
@@ -1466,13 +1413,14 @@
   // string it produced before this axis existed. encodeState remains a
   // function of meaning alone: the same state always yields the same string.
 
-  // OVERLAYS is the closed set: six overlays plus "none". Anything else
-  // decodes to "none" rather than leaving the pane in a state it cannot draw.
+  // OVERLAYS is the closed set: five overlays plus "none". Anything else
+  // decodes to "none" rather than leaving the pane in a state it cannot draw
+  // — including the retired "governance" overlay (NIT-29), which an old hash
+  // may still carry.
   var OVERLAYS = Object.freeze([
     'none',
     'isolated',
     'cycles',
-    'governance',
     'review',
     'comments',
     'status'
@@ -1481,8 +1429,9 @@
   // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
   // entry in the URL. The mapping is positional against EDGE_TYPES, so the
   // two cannot drift. Letter identity is stable across the retired `mirrors`
-  // kind: r = rests_on, g = governed_by. An old hash carrying `m` is ignored.
-  var TYPE_LETTERS = 'rg';
+  // and `governed_by` kinds: r = rests_on. An old hash carrying `m` or `g` is
+  // ignored.
+  var TYPE_LETTERS = 'r';
 
   // defaultState returns a fresh state object — everything on, nothing
   // filtered, nothing selected. Fresh rather than shared: a caller that
@@ -1684,8 +1633,6 @@
     selfEdges: selfEdges,
 
     facetSlot: facetSlot,
-    governors: governors,
-    governanceScope: governanceScope,
 
     gapRules: gapRules,
 

@@ -107,9 +107,9 @@ var assetExtensions = map[string]bool{
 // allowlist.
 //
 // Only Body and Steps are scanned: they are the two image-permitting surfaces
-// (amendment A3's per-surface permission table). A table cell, a comment body
-// and Governed.Reason render no image at all, so an image there is
-// markdown-sanity's business and never becomes an asset reference.
+// (amendment A3's per-surface permission table). A table cell and a comment
+// body render no image at all, so an image there is markdown-sanity's
+// business and never becomes an asset reference.
 func (AssetScope) Check(claims []model.Claim, _ *config.Config) []Finding {
 	var findings []Finding
 	for _, c := range claims {

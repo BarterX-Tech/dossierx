@@ -10,11 +10,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.behavior.dry-run-writes-nothing",
@@ -36,11 +32,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.behavior.exit-codes",
@@ -62,11 +54,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.behavior.format-flag",
@@ -93,11 +81,7 @@
         "rests_on": [
           "engine.contract.check-is-fail-fast",
           "cli.behavior.exit-codes"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.contract.check-noun",
@@ -147,10 +131,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.contract.noun-list-is-fixed",
@@ -172,11 +153,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.contract.serve-noun",
@@ -202,11 +179,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.contract.six-nouns",
@@ -232,10 +205,7 @@
       "edges": {
         "rests_on": [
           "cli.contract.serve-noun"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.decision.agent-operates-human-reviews",
@@ -283,11 +253,7 @@
       "edges": {
         "rests_on": [
           "cli.contract.noun-list-is-fixed"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.decision.no-new-noun-for-the-graph",
@@ -313,11 +279,7 @@
       "edges": {
         "rests_on": [
           "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.schema.error-codes",
@@ -343,11 +305,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "cli.schema.json-envelope",
@@ -369,11 +327,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.catalog-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.behavior.catalog-groups-by-facet",
@@ -395,11 +349,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.edge-kinds"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.behavior.degree-counting",
@@ -425,11 +375,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.edge-kinds"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.behavior.lint-runs-before-catalog",
@@ -475,11 +421,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.behavior.loader-walks-claims-dir",
@@ -501,11 +443,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.catalog-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.contract.build-is-pure",
@@ -527,11 +465,7 @@
       "edges": {
         "rests_on": [
           "engine.behavior.lint-runs-before-catalog"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.contract.check-is-fail-fast",
@@ -579,11 +513,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.contract.start-here",
@@ -606,11 +536,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "engine.decision.facts-not-verdicts",
         "policy_version": 0,
@@ -632,11 +558,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "engine.decision.no-code-nodes",
         "policy_version": 0,
@@ -658,12 +580,7 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "engine.decision.single-source-of-truth",
         "policy_version": 0,
@@ -684,11 +601,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.schema.catalog-shape",
@@ -707,11 +620,7 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "engine.schema.claim-shape",
         "policy_version": 0,
@@ -732,11 +641,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.schema.edge-kinds",
@@ -758,11 +663,7 @@
       "edges": {
         "rests_on": [
           "engine.contract.build-is-pure"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.verification.determinism-suite",
@@ -784,11 +685,7 @@
       "edges": {
         "rests_on": [
           "engine.contract.build-is-pure"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "engine.verification.nil-safety-suite",
@@ -814,11 +711,7 @@
       "edges": {
         "rests_on": [
           "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.behavior.comment-digest",
@@ -844,11 +737,7 @@
       "edges": {
         "rests_on": [
           "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.behavior.lock-gates",
@@ -870,11 +759,7 @@
       "edges": {
         "rests_on": [
           "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.behavior.unlock-keeps-the-record",
@@ -896,11 +781,7 @@
       "edges": {
         "rests_on": [
           "lock.schema.lock-store"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.contract.ledger-first",
@@ -926,10 +807,7 @@
       "edges": {
         "rests_on": [
           "lock.behavior.lock-gates"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.contract.lock-is-human-approved",
@@ -951,11 +829,7 @@
       "edges": {
         "rests_on": [
           "lock.behavior.lock-gates"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.contract.review-pending-is-engine-managed",
@@ -981,11 +855,7 @@
       "edges": {
         "rests_on": [
           "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.decision.no-migration-command",
@@ -1011,11 +881,7 @@
       "edges": {
         "rests_on": [
           "lock.schema.lock-store"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.schema.ledger-record",
@@ -1037,11 +903,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.schema.lock-store",
@@ -1063,11 +925,7 @@
       "edges": {
         "rests_on": [
           "lock.behavior.lock-gates"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "lock.verification.ledger-audit-suite",
@@ -1093,11 +951,7 @@
       "edges": {
         "rests_on": [
           "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.behavior.counter-increment",
@@ -1145,11 +999,7 @@
       "edges": {
         "rests_on": [
           "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.behavior.flush-on-exit",
@@ -1197,11 +1047,7 @@
       "edges": {
         "rests_on": [
           "telemetry.contract.no-egress"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.contract.disabled-by-default",
@@ -1291,10 +1137,7 @@
       "edges": {
         "rests_on": [
           "telemetry.behavior.flush-on-exit"
-        ],
-        "governed_by": {
-          "type": "telemetry.decision.counters-are-local"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.contract.no-egress",
@@ -1362,11 +1205,7 @@
       "edges": {
         "rests_on": [
           "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.contract.what-this-module-is",
@@ -1411,12 +1250,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "telemetry.decision.counters-are-local",
         "policy_version": 0,
@@ -1438,12 +1272,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "telemetry.schema.counter-shape",
         "policy_version": 0,
@@ -1468,11 +1297,7 @@
       "edges": {
         "rests_on": [
           "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.schema.event-names",
@@ -1520,11 +1345,7 @@
       "edges": {
         "rests_on": [
           "telemetry.contract.no-egress"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.verification.offline-suite",
@@ -1614,11 +1435,7 @@
       "edges": {
         "rests_on": [
           "viewer.behavior.representative-node-rule"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.behavior.gap-rules-run-in-the-browser",
@@ -1686,11 +1503,7 @@
       "edges": {
         "rests_on": [
           "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.behavior.pane-is-inert-until-opened",
@@ -1712,11 +1525,7 @@
       "edges": {
         "rests_on": [
           "viewer.behavior.scope-filter"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.behavior.representative-node-rule",
@@ -1764,11 +1573,7 @@
       "edges": {
         "rests_on": [
           "viewer.schema.node-fields"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.behavior.scope-filter",
@@ -1794,11 +1599,7 @@
       "edges": {
         "rests_on": [
           "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.contract.no-network-at-runtime",
@@ -1820,11 +1621,7 @@
       "edges": {
         "rests_on": [
           "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.contract.read-me-first",
@@ -1850,10 +1647,7 @@
       "edges": {
         "rests_on": [
           "engine.contract.build-is-pure"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.contract.render-is-pure",
@@ -1875,11 +1669,7 @@
       "edges": {
         "rests_on": [
           "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.decision.canvas-not-svg",
@@ -1902,12 +1692,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "viewer.decision.colour-is-not-the-only-channel",
         "policy_version": 0,
@@ -1929,11 +1714,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "viewer.decision.facts-not-verdicts",
         "policy_version": 0,
@@ -1958,11 +1739,7 @@
       "edges": {
         "rests_on": [
           "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.schema.node-fields",
@@ -1984,11 +1761,7 @@
       "edges": {
         "rests_on": [
           "engine.schema.catalog-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.schema.payload-shape",
@@ -2010,11 +1783,7 @@
       "edges": {
         "rests_on": [
           "viewer.behavior.pane-is-inert-until-opened"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.verification.browser-suite",

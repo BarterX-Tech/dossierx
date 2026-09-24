@@ -13,8 +13,7 @@
 #
 # THE CORPUS CONTAINS NO CYCLE OF ANY SHAPE, and cannot. "dossierx check"
 # returns above the catalog and render stages on the first error-severity
-# finding, and a rests_on loop, a governed_by loop, a self-edge and a loop
-# that alternates the two are all error severity. So a fixture that must
+# finding, and a rests_on loop and a self-edge are both error severity. So a fixture that must
 # render cannot demonstrate cycle detection; that is proven by unit tests over
 # synthetic edge sets and by a browser test that injects a cycle-carrying
 # payload into the page instead. The gaps rail's cycle block being empty when

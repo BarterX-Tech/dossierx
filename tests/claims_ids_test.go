@@ -50,18 +50,12 @@ facet: contract
 module: widget
 status: draft
 body: first claim with this id
-governed_by:
-  type: none
-  reason: fixture
 `)
 	writeIDsClaim(t, claimsDir, "b.yaml", `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
 body: second claim with the same id
-governed_by:
-  type: none
-  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -86,9 +80,6 @@ facet: contract
 module: widget
 status: draft
 body: id has only one segment, not module.facet.slug
-governed_by:
-  type: none
-  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -111,9 +102,6 @@ facet: doctrine
 module: widget
 status: draft
 body: doctrine is not a configured facet
-governed_by:
-  type: none
-  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -139,9 +127,6 @@ facet: contract
 module: gadget
 status: draft
 body: gadget is not a configured module
-governed_by:
-  type: none
-  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -187,9 +172,6 @@ func TestClaimsIDs_NoContentIsInvalid(t *testing.T) {
 facet: contract
 module: widget
 status: draft
-governed_by:
-  type: none
-  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -223,9 +205,6 @@ rows:
     type: string
   - field: name
     type: string
-governed_by:
-  type: none
-  reason: fixture
 `)
 
 	if stdout, stderr, code := run(t, root, "check"); code != 0 {
@@ -244,10 +223,7 @@ func TestClaimsIDs_UnicodeSlugRejected(t *testing.T) {
 		"facet: contract\n"+
 		"module: widget\n"+
 		"status: draft\n"+
-		"body: slug contains an accented character outside [a-z0-9-]\n"+
-		"governed_by:\n"+
-		"  type: none\n"+
-		"  reason: fixture\n")
+		"body: slug contains an accented character outside [a-z0-9-]\n")
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {

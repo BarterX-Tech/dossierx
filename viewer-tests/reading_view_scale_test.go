@@ -65,9 +65,6 @@ module: mod%02d
 status: draft
 body: |
   scale fixture claim %s — body text for layout cost.
-governed_by:
-  type: none
-  reason: viewer-test scale fixture, not backed by any doctrine claim
 %s`, id, fi, mi, id, trackBlock))
 				totalClaims++
 			}

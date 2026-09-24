@@ -313,8 +313,7 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 	mustRun(repo, "git config user.name", "git", "config", "user.name", "hostile path corpus")
 	mustRun(repo, "git config commit.gpgsign", "git", "config", "commit.gpgsign", "false")
 	mustRun(project, "claim new", binPath, "--format", "text", "claim", "new", hostileClaimID,
-		"--body", "the widget answers within 200ms.",
-		"--governed-reason", "hostile-path fixture, not backed by any doctrine claim")
+		"--body", "the widget answers within 200ms.")
 	mustRun(project, "check", binPath, "--format", "text", "check")
 	previewOut, previewErr, previewCode := hostileExec(t, project, env, binPath, "--format", "json", "claim", "lock", hostileClaimID,
 		"--reason", "approved for the hostile-path corpus", "--dry-run")

@@ -17,11 +17,10 @@ func TestSelfEdgeLint(t *testing.T) {
 		{
 			name: "passing: every edge points at another claim",
 			claims: []model.Claim{
-				{ID: "widget.contract.doctrine", Governed: model.Governed{Type: "none", Reason: "root"}},
+				{ID: "widget.contract.doctrine"},
 				{
-					ID:       "widget.contract.overview",
-					RestsOn:  []string{"widget.contract.doctrine"},
-					Governed: model.Governed{Type: "widget.contract.doctrine"},
+					ID:      "widget.contract.overview",
+					RestsOn: []string{"widget.contract.doctrine"},
 				},
 				{ID: "widget.internals.overview", RestsOn: []string{"widget.contract.overview"}},
 			},
@@ -36,27 +35,6 @@ func TestSelfEdgeLint(t *testing.T) {
 			wantContains: "rests_on names this claim's own id",
 		},
 		{
-			// governed_by: self resolves, so dangling and
-			// validated-on-missing both pass it.
-			name: "failing: governed_by names its own id",
-			claims: []model.Claim{
-				{ID: "widget.contract.self", Governed: model.Governed{Type: "widget.contract.self"}},
-			},
-			wantFindings: 1,
-			wantContains: "governed_by names this claim's own id",
-		},
-		{
-			name: "failing: both edge kinds self-reference at once",
-			claims: []model.Claim{
-				{
-					ID:       "widget.contract.self",
-					RestsOn:  []string{"widget.contract.self"},
-					Governed: model.Governed{Type: "widget.contract.self"},
-				},
-			},
-			wantFindings: 2,
-		},
-		{
 			// One finding per edge kind, not per occurrence.
 			name: "failing: a duplicated self reference in one list is still one finding",
 			claims: []model.Claim{
@@ -65,12 +43,11 @@ func TestSelfEdgeLint(t *testing.T) {
 			wantFindings: 1,
 		},
 		{
-			// governed_by: none is the grounded case, not a self-edge, and an
-			// empty id belongs to id-shape — neither may be reported here.
-			name: "passing: governed_by none and an id-less claim are not self-edges",
+			// An empty id belongs to id-shape and may not be reported here.
+			name: "passing: an edgeless claim and an id-less claim are not self-edges",
 			claims: []model.Claim{
-				{ID: "widget.contract.grounded", Governed: model.Governed{Type: "none", Reason: "no doctrine"}},
-				{ID: "", Governed: model.Governed{Type: ""}},
+				{ID: "widget.contract.grounded"},
+				{ID: ""},
 			},
 			wantFindings: 0,
 		},

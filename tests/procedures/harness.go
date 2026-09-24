@@ -629,8 +629,8 @@ func (f *fixture) Enact(step string, do func()) {
 // scenarios specifically need claims that never adopted build_role.
 func (f *fixture) NewClaim(id, body, buildRole string) {
 	f.t.Helper()
-	tmpl := "dossierx claim new <id> --body <body> --governed-reason <why>"
-	bind := map[string]string{"id": id, "body": body, "why": "procedure-suite fixture, not backed by any doctrine claim"}
+	tmpl := "dossierx claim new <id> --body <body>"
+	bind := map[string]string{"id": id, "body": body}
 	if buildRole != "" {
 		tmpl += " --build-role <role>"
 		bind["role"] = buildRole

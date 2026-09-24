@@ -625,7 +625,6 @@ func TestStaged_ErasedReviewIsUndetected(t *testing.T) {
 func commentedDraftClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-9f21ab\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: not sustainable as written; do not lock this.\n    edited: false\n"

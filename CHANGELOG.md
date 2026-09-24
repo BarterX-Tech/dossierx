@@ -39,6 +39,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   walk `rests_on` and a claim-valued `governed_by` only. The YAML key
   remains on the claim struct so existing lock hashes stay
   byte-identical; the engine does not walk it. (NIT-17)
+- The `governed_by` edge is gone. The field and its `Governed` struct leave
+  `model.Claim` with no alias and no shadow key, so a claim file that still
+  carries a `governed_by:` block fails strict decode and `check` stops at
+  `load`. `claim new --governed-by` / `--governed-reason` are gone; `claim
+  show` no longer reports `governed_by` / `governed_reason`; the catalog,
+  the graph payload (schema 2) and the viewer no longer carry the relation —
+  no GOVERNED BY footer row, no `governed_by` toggle, no governance overlay,
+  no wedge marker (`EDGE_TYPES` is `rests_on` alone). The `governed-cycle`,
+  `governed-required`, `mixed-cycle` and `validated-on-missing` lints are
+  gone (29 rules remain). Hub-gating and dependency drift walk `rests_on`
+  only. **Every lock hash moves:** `governed_by` was in both `ContentHash`
+  and `LockedClaimHash`, so an upgraded corpus reports `lock-content-drift`
+  on every locked claim. There is no migration tooling, by decision. (NIT-29)
+
+  **Migration (client projects), stage A — with this release, before the
+  first `dossierx check`:** (1) delete every `governed_by:` block from every
+  claim file; a file that still has one fails to load. (2) Where
+  `governed_by.type` named a real claim the dependent genuinely relies on,
+  add that id to the claim's `rests_on` so the drift edge survives; where it
+  was `type: none`, nothing replaces it in this release (NIT-24 later adds
+  `rests_on: {none: true, reason}`). (3) Keep `doctrine_facet` and the
+  doctrine claims exactly where they are; hub-gating still walks `rests_on`.
+  (4) Expect `lock-content-drift` on every locked claim and take each one
+  through `unlock → lock` with the human's approval. Restoring the old file
+  from git is not a recovery: it is the file that no longer loads.
+
+  **Stage B — after the constitution and project claims land (NIT-6 /
+  NIT-25), not this release:** each former doctrine claim goes exactly one
+  way — anything rests on it → a project claim (`project.<slug>` under
+  `project-claims/`, `scope: project`, no `module`/`facet`, every
+  `rests_on: <module>.doctrine.<slug>` retargeted to `project.<slug>`);
+  nothing rests on it and it is system law → a constitution entry (never
+  citable); otherwise a project claim, or delete it. Never both. Then
+  `doctrine_facet` and the `doctrine` facet go (NIT-23). NIT-23 / NIT-25
+  carry that stage.
 
 ### Fixed
 

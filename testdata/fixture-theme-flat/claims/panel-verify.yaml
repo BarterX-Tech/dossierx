@@ -9,8 +9,5 @@ body: |
   Every claim above is proven by the browser suite, not by reading the
   source. This claim carries the verification build_role so the module's
   build-order artifact covers every phase.
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine
 rests_on:
   - panel.contract.api

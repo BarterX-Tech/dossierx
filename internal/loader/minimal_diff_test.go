@@ -20,16 +20,13 @@ import (
 // authored key order the struct does not reproduce, and preserve a block
 // scalar's indentation.
 
-// authoredClaimYAML is deliberately NOT in model.Claim field order (governed_by
-// sits between module and status, facet leads), so a whole-file re-emit is
+// authoredClaimYAML is deliberately NOT in model.Claim field order (facet
+// leads, rests_on sits between module and status), so a whole-file re-emit is
 // detectable rather than coincidentally identical, and its body is a 2-space
 // block scalar like the authored corpus under testdata/.
 const authoredClaimYAML = `facet: contract
 id: widget.contract.overview
 module: widget
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine
 status: draft
 layout: card
 body: |

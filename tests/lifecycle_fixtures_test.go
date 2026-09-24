@@ -185,8 +185,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 	// Edit A's body underneath the now-locked B.
 	changedA := "id: lifecycledriftmod.contract.a\n" +
 		"facet: contract\nmodule: lifecycledriftmod\nstatus: locked\nlayout: card\n" +
-		"body: |\n  CHANGED body for A, after B locked against it.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		"body: |\n  CHANGED body for A, after B locked against it.\n"
 	if err := os.WriteFile(aPath, []byte(changedA), 0o644); err != nil {
 		t.Fatalf("rewrite claim a: %v", err)
 	}

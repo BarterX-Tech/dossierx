@@ -57,14 +57,11 @@ import (
 // suffix. Each entry is a fixture whose whole purpose is a shape the emitter
 // cannot reproduce, so normalising it would be a genuine VALUE change rather
 // than a formatting one.
-var excluded = map[string]string{
-	// This fixture omits governed_by entirely, which is the condition the
-	// governed-required lint fires on. model.Claim.Governed has no omitempty,
-	// so a normalising save APPENDS `governed_by:\n  type: ""` and the lint
-	// stops seeing the case it was written to exercise. That is a value
-	// change, not a reformat, so the file stays authored as-is.
-	"testdata/fixture-coverage/lint/governed-required/claims/missing-type.yaml": "omits governed_by on purpose; normalising would append an empty governed_by and defeat the governed-required lint fixture",
-}
+//
+// It is empty today. Its one entry was the governed-required fixture, which
+// retired with the governed_by edge (NIT-29); the seam stays for the next
+// fixture whose authored shape a normalising save would change.
+var excluded = map[string]string{}
 
 func main() {
 	args := os.Args[1:]

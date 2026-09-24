@@ -139,16 +139,9 @@ func inferLayout(c model.Claim) model.Layout {
 	}
 }
 
-// GovernedEdge is the serialized form of a claim's governed_by edge.
-type GovernedEdge struct {
-	Type   string `json:"type"`
-	Reason string `json:"reason,omitempty"`
-}
-
 // Edges is the serialized edge graph for one claim entry.
 type Edges struct {
-	RestsOn    []string      `json:"rests_on,omitempty"`
-	GovernedBy *GovernedEdge `json:"governed_by,omitempty"`
+	RestsOn []string `json:"rests_on,omitempty"`
 }
 
 // Entry is the .catalog.json projection of a single claim: id/facet/module/
@@ -219,13 +212,6 @@ func entryFor(c model.Claim) Entry {
 	if len(c.RestsOn) > 0 {
 		e.Edges.RestsOn = append([]string(nil), c.RestsOn...)
 	}
-	if c.Governed.Type != "" {
-		e.Edges.GovernedBy = &GovernedEdge{
-			Type:   c.Governed.Type,
-			Reason: c.Governed.Reason,
-		}
-	}
-
 	for _, t := range c.Tracks {
 		e.Tracks = append(e.Tracks, TrackMembership{ID: t.ID, Role: t.EffectiveRole()})
 	}
@@ -357,10 +343,6 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 		b.add(catalogEntryStructureBytes)
 		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind())} {
 			add(value)
-		}
-		if claim.Governed.Type != "" {
-			add(claim.Governed.Type)
-			add(claim.Governed.Reason)
 		}
 		addStrings(claim.RestsOn)
 		for _, track := range claim.Tracks {
@@ -504,7 +486,7 @@ func catalogProjectionUpperBound(cat *Catalog, limit uint64) catalogBudget {
 	}
 	for _, claim := range cat.Claims {
 		b.add(2048)
-		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind()), claim.Governed.Type, claim.Governed.Reason} {
+		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind())} {
 			b.addString(value)
 		}
 		for _, value := range claim.RestsOn {

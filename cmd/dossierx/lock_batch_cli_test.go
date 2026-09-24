@@ -38,17 +38,13 @@ func batchDeadlockFixture(t *testing.T) string {
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/anchor.yaml": "id: widget.contract.anchor\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"body: |\n  the anchor, locked, resting on a claim that has since gone draft.\n" +
-			"rests_on:\n  - widget.contract.sibling\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.sibling\n",
 		"claims/sibling.yaml": "id: widget.contract.sibling\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  the sibling, unlocked back to draft for an ordinary edit.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  the sibling, unlocked back to draft for an ordinary edit.\n",
 		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  unrelated draft claim one.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  unrelated draft claim one.\n",
 		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  unrelated draft claim two.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  unrelated draft claim two.\n",
 	})
 }
 
@@ -106,11 +102,9 @@ func batchOpenThreadFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/clean.yaml": "id: widget.contract.clean\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a draft claim with nothing standing in its way.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a draft claim with nothing standing in its way.\n",
 		"claims/flagged.yaml": "id: widget.contract.flagged\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a draft claim carrying an unresolved comment thread.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-open001\n    status: open\n    author: human\n    created: \"2026-01-01T00:00:00Z\"\n    body: an open question.\n    edited: false\n",
 	})
@@ -163,15 +157,12 @@ func batchOutsideDraftDependencyFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/outsider.yaml": "id: widget.contract.outsider\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a draft claim that is never requested by the batch.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a draft claim that is never requested by the batch.\n",
 		"claims/dependent.yaml": "id: widget.contract.dependent\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a requested claim that rests on the outsider, still draft.\n" +
-			"rests_on:\n  - widget.contract.outsider\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.outsider\n",
 		"claims/bystander.yaml": "id: widget.contract.bystander\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a second requested claim with no edges of its own.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  a second requested claim with no edges of its own.\n",
 	})
 }
 

@@ -292,9 +292,6 @@ sources:
     url: https://example.test/short
     accessed_on: 2026-01-02
     supports: "One line."
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	return p
 }

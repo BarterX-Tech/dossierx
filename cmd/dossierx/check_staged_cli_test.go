@@ -53,8 +53,7 @@ func stagedProject(t *testing.T) (cfgPath, root, claimPath string) {
 	}
 	claimPath = filepath.Join(claimsDir, "one.yaml")
 	src := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\n" +
-		"body: |\n  the approved body.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  the approved body.\n"
 	if err := os.WriteFile(claimPath, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -142,8 +141,7 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 
 	second := filepath.Join(root, "claims", "two.yaml")
 	src := "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\n" +
-		"body: |\n  a second claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  a second claim.\n"
 	if err := os.WriteFile(second, []byte(src), 0o644); err != nil {
 		t.Fatalf("write second claim: %v", err)
 	}
@@ -190,8 +188,7 @@ func TestCLI_CheckStaged_OutsideAWorkTreeWarnsAndSucceeds(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(claimsDir, "one.yaml"), []byte(
 		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
-			"body: |\n  a draft.\n"+
-			"governed_by:\n  type: none\n  reason: fixture\n"), 0o644); err != nil {
+			"body: |\n  a draft.\n"), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
 

@@ -81,9 +81,6 @@ module: widget
 status: draft
 body: |
   a claim under review.
-governed_by:
-  type: none
-  reason: e2e walkthrough fixture, not backed by any doctrine claim
 YAML
 
 # --- start serve on a random high port ---------------------------------------

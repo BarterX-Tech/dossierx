@@ -3,12 +3,11 @@
 // graph must be a DAG. Every claim that participates in a rests_on cycle is
 // reported.
 //
-// The graph walk itself lives in this file but is deliberately shared:
-// governed_cycle.go runs the same traversal over the governed_by graph (see
-// findEdgeCycles below), because governed_by is a real directed edge too and
-// must likewise terminate. Keeping one traversal means a fix to the walk —
-// like the recursion removal documented on findEdgeCycles — lands for every
-// graph the engine checks, not just this one.
+// The graph walk itself (findEdgeCycles below) takes the edge function as a
+// parameter rather than reading rests_on directly. It used to be shared with
+// the retired governed-cycle and mixed-cycle lints; keeping the seam means a
+// fix to the walk — like the recursion removal documented on findEdgeCycles
+// — lands for any graph a later edge kind adds, not just this one.
 package lint
 
 import (

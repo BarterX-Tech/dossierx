@@ -148,7 +148,7 @@ claim show / a draft claim
     command       claim show
     data          claim_id:string
                   comments:{open:number,open_thread_ids:[],replies:number,resolved:number,threads:number}
-                  edges:{depended_on_by:[],governed_by:string,governed_reason:string,rests_on:[]}
+                  edges:{depended_on_by:[],rests_on:[]}
                   facet:string
                   implemented_in:[]
                   kind:string
@@ -188,7 +188,7 @@ claim list / every claim
                   total:number
 
 claim new / a fresh draft
-    argv          claim new widget.contract.second --body another fact --governed-reason fixture
+    argv          claim new widget.contract.second --body another fact
     exit          0
     ok            true
     envelope      command data ok warnings

@@ -7,6 +7,3 @@ body: |
   - First item that
     wraps to the next line
   - Second item here
-governed_by:
-  type: none
-  reason: markdown renderer test fixture

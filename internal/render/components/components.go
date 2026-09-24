@@ -312,7 +312,7 @@ func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
 }
 
 // edgesHTML renders the edge/metadata footer shared by every non-banner
-// component: governed_by, rests_on, migrated_from, and a
+// component: rests_on, migrated_from, and a
 // review_pending flag. It is a Go helper rather than template markup so
 // every component gets identical, balanced markup without duplicating it
 // six times; values are HTML-escaped by hand since a FuncMap-returned
@@ -377,8 +377,9 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // EdgesHTMLWithLinks renders the shared evidence-and-relationships footer —
 // docs/design/screens/05-claim-one-expansion-at-a-time.md's "one strip, four
 // doors" redesign (R09.1/R-F.1) — for the two doors this package owns:
-// RELATIONSHIPS (R09.4's three fixed directions, GOVERNED BY / DEPENDS ON /
-// DEPENDED ON BY, plus the migrated_from/review_pending/implemented-in
+// RELATIONSHIPS (R09.4's fixed directions, DEPENDS ON / DEPENDED ON BY —
+// GOVERNED BY retired with the edge, NIT-29 — plus the
+// migrated_from/review_pending/implemented-in
 // facts that ride along after them) and SOURCES, split out into its own peer
 // disclosure per R09.5. The other two doors the board names — readiness and
 // implementation checks — are rendered by sibling components
@@ -463,31 +464,10 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated bool, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
 	links := 0
 
-	// The three R09.4 direction blocks, built independently of the "extra"
-	// facts below so their fixed order — GOVERNED BY, DEPENDS ON, DEPENDED ON
-	// BY — never depends on which of the six edge kinds a given claim happens
-	// to carry.
-	var governedBody strings.Builder
-	governedHas := false
-	if c.Governed.Type != "" {
-		governedHas = true
-		if c.Governed.Type == string(model.GovernedNone) {
-			// "governed_by: none" DOES NOT COUNT AS A LINK — see 05 §8 item 15.
-			// It still renders inside GOVERNED BY, as the stated-absence form
-			// 07's board specifies: the word "none", no dot, no badge.
-			governedBody.WriteString(`<li class="claim-governed governed-none claim-relationship-none">none`)
-			if c.Governed.Reason != "" {
-				governedBody.WriteString(`<span class="claim-governed-reason"> — `)
-				governedBody.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
-				governedBody.WriteString(`</span>`)
-			}
-			governedBody.WriteString(`</li>`)
-		} else {
-			links++
-			writeRelationshipRow(&governedBody, "claim-governed", c.Governed.Type, c.Module, c.Facet, targetStatuses)
-		}
-	}
-
+	// The R09.4 direction blocks, built independently of the "extra" facts
+	// below so their fixed order — DEPENDS ON, DEPENDED ON BY — never depends
+	// on which edge kinds a given claim happens to carry. GOVERNED BY was the
+	// first of the three until the edge retired (NIT-29).
 	var dependsOnBody strings.Builder
 	if len(c.RestsOn) > 0 {
 		links += len(c.RestsOn)
@@ -572,9 +552,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// claim still shows four zeros and the comment count."; fix-list item
 	// 10). The strip now renders UNCONDITIONALLY: the previous all-zero gate
 	// (`links > 0 || len(files) > 0 || len(c.Sources) > 0`) hid the whole
-	// footer — GOVERNED BY row included — on any claim whose only
-	// relationship fact was a stated `governed_by: none`, since that state
-	// deliberately does not count toward `links` (see above). R-F.1 fixes
+	// footer on any claim with no countable relationship. R-F.1 fixes
 	// the strip's four positions; a reader who has learned "this position is
 	// sources" must not find the position itself missing on the next claim,
 	// only its count at zero.
@@ -627,7 +605,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// <details> elements themselves, which still exist, still share
 	// `name="claim-footer-<id>"`, and still carry the real `open` attribute
 	// exactly as before.
-	if links == 0 && !governedHas && extra.Len() == 0 {
+	if links == 0 && extra.Len() == 0 {
 		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--relationships claim-footer-chip--empty"><span class="claim-footer-chip-label">No relationships</span></span>`)
 	} else {
 		b.WriteString(`<details class="claim-links" name="`)
@@ -644,10 +622,8 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		b.WriteString(`</span></div>`)
 
 		// The direction count (2nd param) is 05 §4.10's optional mono count,
-		// omitted for GOVERNED BY (sentinel -1: it always has exactly one
-		// target, so counting it is meaningless) and shown for DEPENDS ON /
-		// DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1", "DEPENDED ON BY · 1").
-		writeRelationshipDirection(&b, "up", "GOVERNED BY", -1, governedBody.String(), governedHas)
+		// shown for DEPENDS ON / DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1",
+		// "DEPENDED ON BY · 1"); a negative count omits the element.
 		writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
 		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
 
@@ -712,20 +688,18 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	return template.HTML(b.String())
 }
 
-// writeRelationshipDirection writes one of R09.4's three fixed-order
-// direction blocks — GOVERNED BY / DEPENDS ON / DEPENDED ON BY — as its own
-// header (arrow + label + optional count) followed by the rows body already
-// built for it. A direction with nothing to show (has is false) is omitted
-// entirely rather than printed empty: GOVERNED BY is the one direction a
-// claim always has an opinion about (a named target or a stated "none"), so
-// its caller always passes has=true.
+// writeRelationshipDirection writes one of R09.4's fixed-order direction
+// blocks — DEPENDS ON / DEPENDED ON BY — as its own header (arrow + label +
+// optional count) followed by the rows body already built for it. A
+// direction with nothing to show (has is false) is omitted entirely rather
+// than printed empty.
 //
 // count is 05 §4.10's "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
 // --color-faint" — omitted (no element at all, not a "0") when count is
-// negative, which is the sentinel every GOVERNED BY call passes: "GOVERNED BY
-// carries no count because it has exactly one target". DEPENDS ON and
-// DEPENDED ON BY always pass their real row count, matching 07a §6's pinned
-// "DEPENDS ON · 1" / "DEPENDED ON BY · 1".
+// negative. DEPENDS ON and DEPENDED ON BY always pass their real row count,
+// matching 07a §6's pinned "DEPENDS ON · 1" / "DEPENDED ON BY · 1"; the
+// negative sentinel was GOVERNED BY's and is kept for a later count-less
+// direction.
 //
 // arrow is a plain glyph rather than an SVG sprite reference — the frozen
 // theme-parity baselines already accept a CSS/glyph chevron for this exact

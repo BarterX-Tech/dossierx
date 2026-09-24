@@ -16,7 +16,7 @@ import (
 )
 
 func lifecycleClaim(id, embodiment string) string {
-	return fmt.Sprintf("id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: lifecycle fixture\ngoverned_by:\n  type: none\n  reason: fixture\n%s", id, embodiment)
+	return fmt.Sprintf("id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: lifecycle fixture\n%s", id, embodiment)
 }
 
 func loadLifecycleClaim(t *testing.T, cfgPath, id string) model.Claim {

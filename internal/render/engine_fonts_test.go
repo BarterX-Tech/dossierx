@@ -138,12 +138,13 @@ func TestGraphDesignColourNamesFeedTheRamp(t *testing.T) {
 	css := stripComments(embeddedCSS(t, graphCSSTemplatePath))
 
 	// slot -> the design name it must read in each of graph.css's two blocks.
-	// Spot-checked on facet-1 per the phase brief, then widened to all nine,
+	// Spot-checked on facet-1 per the phase brief, then widened to all eight,
 	// because a pair that works for slot 1 and was never wired for the other
-	// eight is the failure this would otherwise miss.
+	// seven is the failure this would otherwise miss. (governed left with the
+	// governed_by edge, NIT-29.)
 	for _, slot := range []string{
 		"facet-1", "facet-2", "facet-3", "facet-4", "facet-5",
-		"other", "cycle", "halo", "governed",
+		"other", "cycle", "halo",
 	} {
 		dxg := "--dxg-" + slot
 		if slot == "other" {

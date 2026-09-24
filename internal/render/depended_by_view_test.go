@@ -74,14 +74,12 @@ func TestRender_TargetPill_ActionableRestsOnTargetGetsPill(t *testing.T) {
 			ID: module + ".contract.main", Module: module, Facet: "contract",
 			Status: model.StatusLocked, Layout: model.LayoutCard, Body: "main claim",
 			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
 			RestsOn:   []string{module + ".contract.dep"},
 		},
 		{
 			ID: module + ".contract.dep", Module: module, Facet: "contract",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "dep claim",
 			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
 		},
 	}
 
@@ -110,14 +108,12 @@ func TestRender_TargetPill_HealthyLockedTargetGetsNoPillOnEdge(t *testing.T) {
 			ID: module + ".contract.main", Module: module, Facet: "contract",
 			Status: model.StatusLocked, Layout: model.LayoutCard, Body: "main claim",
 			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
 			RestsOn:   []string{module + ".contract.dep"},
 		},
 		{
 			ID: module + ".contract.dep", Module: module, Facet: "contract",
 			Status: model.StatusLocked, Layout: model.LayoutCard, Body: "dep claim",
 			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
 		},
 	}
 

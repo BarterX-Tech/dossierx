@@ -8,6 +8,3 @@ body: |
   | a | b |
   | --- | --- |
   | 1 | 2 |
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - a table interrupts an open paragraph with no blank line before it

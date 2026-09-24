@@ -209,7 +209,7 @@ func TestEdges_SourceFieldsAreEscaped(t *testing.T) {
 
 // TestEdges_SourceNotesRunThroughTheInlineRenderer pins the ceiling the two
 // authored boundary lines are held to: the same code-span-and-link subset
-// governed.reason gets, and no block constructs.
+// every other footer prose field gets, and no block constructs.
 func TestEdges_SourceNotesRunThroughTheInlineRenderer(t *testing.T) {
 	c := sourcedClaim(model.Source{
 		Ref:      1,

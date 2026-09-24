@@ -151,8 +151,7 @@ func icWriteFixtureProject(t *testing.T, root, module string) (cfgPath, claimPat
 	claimPath = filepath.Join(claimsDir, "overview.yaml")
 	claim := "id: " + module + ".contract.overview\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
-		"body: |\n  fixture claim for in-process CLI tests.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		"body: |\n  fixture claim for in-process CLI tests.\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -225,8 +224,7 @@ func TestCLI_LintFailureFailsBothCheckForms(t *testing.T) {
 	// error-severity lint finding.
 	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  broken fixture.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "broken.yaml"), []byte(broken), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -261,7 +259,7 @@ func TestCLI_ClaimShowReportsBothEdgeDirections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
-	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "governed_by") {
+	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "outgoing rests_on") {
 		t.Fatalf("expected claim show to describe the claim, got: %s", out)
 	}
 	if !strings.Contains(out, "incoming rests_on") {
@@ -299,11 +297,9 @@ func TestCLI_ClaimListMigratedReportsTheRatioAndTheClaims(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 	migrated := "id: widget.contract.migrated\nfacet: contract\nmodule: widget\nstatus: draft\n" +
-		"body: |\n  migrated fixture.\nmigrated_from: docs/tabs/widget.html\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  migrated fixture.\nmigrated_from: docs/tabs/widget.html\n"
 	fresh := "id: widget.contract.fresh\nfacet: contract\nmodule: widget\nstatus: draft\n" +
-		"body: |\n  new fixture, never migrated.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  new fixture, never migrated.\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "migrated.yaml"), []byte(migrated), 0o644); err != nil {
 		t.Fatalf("write migrated claim: %v", err)
 	}
@@ -387,8 +383,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 
 	depPath := filepath.Join(claimsDir, "dep.yaml")
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\n" +
-		"body: |\n  dependency claim, v1.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"body: |\n  dependency claim, v1.\n"
 	if err := os.WriteFile(depPath, []byte(dep), 0o644); err != nil {
 		t.Fatalf("write dep: %v", err)
 	}
@@ -396,8 +391,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 	mainPath := filepath.Join(claimsDir, "main.yaml")
 	mainClaim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  main claim resting on the dependency.\n" +
-		"rests_on:\n  - widget.contract.dep\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.dep\n"
 	if err := os.WriteFile(mainPath, []byte(mainClaim), 0o644); err != nil {
 		t.Fatalf("write main: %v", err)
 	}

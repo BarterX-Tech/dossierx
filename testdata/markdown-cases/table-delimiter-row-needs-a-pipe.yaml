@@ -7,6 +7,3 @@ body: |
   | a |
   ---
   | 1 |
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - a delimiter row must carry a pipe, so a dash rule stays a thematic break

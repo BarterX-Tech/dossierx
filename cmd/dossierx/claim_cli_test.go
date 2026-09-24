@@ -76,16 +76,14 @@ func claimWriteFixture(t *testing.T, root string) string {
 
 	base := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  requests retry three times with backoff.\n" +
-		"migrated_from: docs/tabs/widget.html\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim\n"
+		"migrated_from: docs/tabs/widget.html\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "retry.yaml"), []byte(base), 0o644); err != nil {
 		t.Fatalf("write base claim: %v", err)
 	}
 
 	dependent := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  the total time budget across retries.\n" +
-		"rests_on:\n  - widget.contract.retry-policy\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim\n"
+		"rests_on:\n  - widget.contract.retry-policy\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "timeout.yaml"), []byte(dependent), 0o644); err != nil {
 		t.Fatalf("write dependent claim: %v", err)
 	}
@@ -126,9 +124,6 @@ func TestEnvelope_ClaimShowAnswersEverythingDepsAndImplinkStatusDid(t *testing.T
 	}
 	if len(data.Edges.RestsOn) != 0 {
 		t.Fatalf("this claim has no outgoing edges, got %+v", data.Edges)
-	}
-	if data.Edges.GovernedBy != "none" || data.Edges.GovernedReason == "" {
-		t.Fatalf("expected governed_by reported in both parts, got %+v", data.Edges)
 	}
 	// Empty lists must be arrays, never null: a caller ranges over them.
 	if data.ImplementedIn == nil {
@@ -315,7 +310,6 @@ func TestClaimNewProducesALintCleanClaim(t *testing.T) {
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.circuit-breaker",
 		"--body", "opens the circuit after five consecutive failures.",
-		"--governed-reason", "a fresh fact, not yet backed by doctrine",
 		"--rests-on", "widget.contract.retry-policy")
 	if err != nil {
 		t.Fatalf("claim new: %v", err)
@@ -369,40 +363,32 @@ func TestClaimNewRefusals(t *testing.T) {
 			// claim whose id the project cannot accept, once on disk, breaks
 			// every other command until someone hand-deletes it.
 			name: "id is not three segments",
-			args: []string{"claim", "new", "nope", "--body", "x", "--governed-reason", "y"},
+			args: []string{"claim", "new", "nope", "--body", "x"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "slug is not kebab-case",
-			args: []string{"claim", "new", "widget.contract.NotKebab", "--body", "x", "--governed-reason", "y"},
+			args: []string{"claim", "new", "widget.contract.NotKebab", "--body", "x"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "module is not one the project declares",
-			args: []string{"claim", "new", "gadget.contract.thing", "--body", "x", "--governed-reason", "y"},
+			args: []string{"claim", "new", "gadget.contract.thing", "--body", "x"},
 			code: cliout.CodeUnknownModule,
 		},
 		{
 			name: "facet is not one the project declares",
-			args: []string{"claim", "new", "widget.nosuch.thing", "--body", "x", "--governed-reason", "y"},
+			args: []string{"claim", "new", "widget.nosuch.thing", "--body", "x"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "no body: a claim with no content states nothing",
-			args: []string{"claim", "new", "widget.contract.empty", "--governed-reason", "y"},
-			code: cliout.CodeMissingFlag,
-		},
-		{
-			// The governed-required lint would reject this claim, so the
-			// command refuses to author it rather than writing something it
-			// knows will fail.
-			name: "governed_by none with no reason",
-			args: []string{"claim", "new", "widget.contract.ungoverned", "--body", "x"},
+			args: []string{"claim", "new", "widget.contract.empty"},
 			code: cliout.CodeMissingFlag,
 		},
 		{
 			name: "id already exists",
-			args: []string{"claim", "new", "widget.contract.retry-policy", "--body", "x", "--governed-reason", "y"},
+			args: []string{"claim", "new", "widget.contract.retry-policy", "--body", "x"},
 			code: cliout.CodeBadRequest,
 		},
 		{
@@ -410,12 +396,12 @@ func TestClaimNewRefusals(t *testing.T) {
 			// would report a cheerful success for a file the project can never
 			// see — worse than a refusal.
 			name: "--file escapes claims_dir",
-			args: []string{"claim", "new", "widget.contract.escapee", "--body", "x", "--governed-reason", "y", "--file", "../escapee.yaml"},
+			args: []string{"claim", "new", "widget.contract.escapee", "--body", "x", "--file", "../escapee.yaml"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "--file is absolute",
-			args: []string{"claim", "new", "widget.contract.absolute", "--body", "x", "--governed-reason", "y", "--file", filepath.Join(root, "elsewhere.yaml")},
+			args: []string{"claim", "new", "widget.contract.absolute", "--body", "x", "--file", filepath.Join(root, "elsewhere.yaml")},
 			code: cliout.CodeBadRequest,
 		},
 	}
@@ -448,9 +434,9 @@ func TestClaimNewDryRunWritesNothing(t *testing.T) {
 	// An incomplete invocation is REPORTED, not refused: the preview still
 	// succeeds (exit 0, ok:true) and names what is missing, because previewing
 	// before you have every field is the point of previewing.
-	dr := dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.new-thing", "--body", "a fact")
-	if !containsStr(dr.Missing, "--governed-reason") {
-		t.Fatalf("expected --governed-reason in missing[], got %+v", dr.Missing)
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.new-thing")
+	if !containsStr(dr.Missing, "--body") {
+		t.Fatalf("expected --body in missing[], got %+v", dr.Missing)
 	}
 	if !dr.Blocked {
 		t.Fatalf("a missing required input blocks the real run, and the preview must say so: %+v", dr)
@@ -459,7 +445,7 @@ func TestClaimNewDryRunWritesNothing(t *testing.T) {
 	// Complete, and now unblocked: the two preconditions that matter (the id
 	// and the file are both free) hold.
 	dr = dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.new-thing",
-		"--body", "a fact", "--governed-reason", "fixture")
+		"--body", "a fact")
 	if dr.Blocked {
 		t.Fatalf("a complete invocation for a fresh id must not be blocked, got %+v", dr)
 	}
@@ -559,7 +545,6 @@ func TestCommentInboxSinceIsInclusiveAndNeverMissesAThread(t *testing.T) {
 	)
 	threaded := "id: widget.contract.threaded\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a claim under discussion.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim\n" +
 		"comments:\n" +
 		"  - id: c-old001\n    status: open\n    author: human\n    created: \"" + oldAt + "\"\n    body: the older question\n    edited: false\n" +
 		"  - id: c-new001\n    status: open\n    author: human\n    created: \"" + oldAt + "\"\n    body: the newer question\n    edited: false\n" +
@@ -729,8 +714,7 @@ func TestCheckValidateAndCheckAgreeOnTheLintVerdict(t *testing.T) {
 
 	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  broken.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "broken.yaml"), []byte(broken), 0o644); err != nil {
 		t.Fatalf("write broken claim: %v", err)
 	}
@@ -802,12 +786,10 @@ func restOnUnlockedFixture(t *testing.T) string {
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/banner.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: banner\n" +
 			"build_role: orientation\n" +
-			"body: |\n  read the contract claims below in order.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  read the contract claims below in order.\n",
 		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  the first draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"body: |\n  the first draft claim.\n",
 	})
 }
 

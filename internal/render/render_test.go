@@ -56,10 +56,6 @@ func claimFor(layout model.Layout) model.Claim {
 		Module: "widget",
 		Status: model.StatusDraft,
 		Layout: layout,
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
 	}
 	switch layout {
 	case model.LayoutCard, model.LayoutTree:
@@ -150,10 +146,6 @@ func TestRender_TableExplicitEmptyRows(t *testing.T) {
 		Status: model.StatusDraft,
 		Layout: model.LayoutTable,
 		Rows:   []model.Row{}, // explicit empty array, not nil/omitted
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
 	}
 
 	cat, err := catalog.Build([]model.Claim{claim}, nil)
@@ -274,10 +266,6 @@ func groupedClaim(id, module, facet string, status model.Status) model.Claim {
 		Status: status,
 		Layout: model.LayoutBanner,
 		Body:   "x",
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
 	}
 }
 
@@ -1012,10 +1000,6 @@ func TestRender_ClaimBodyAppearsOncePerClaim(t *testing.T) {
 		Status: model.StatusDraft,
 		Layout: model.LayoutCard,
 		Body:   "CONTRACT-BODY",
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
 	}
 	claims := []model.Claim{
 		note,

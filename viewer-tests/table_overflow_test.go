@@ -60,9 +60,6 @@ rows:
     d: "2"
     e: "2"
     f: "2"
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // tableNarrowClaim is the control: two columns of ordinary prose-length values.
@@ -77,9 +74,6 @@ rows:
     note: a short ordinary value
   - name: beta
     note: another ordinary value
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // bodyMDTableClaim is an ordinary card claim whose BODY holds a GFM pipe table.
@@ -99,9 +93,6 @@ body: |
   | col | value |
   | --- | --- |
   | one | ` + wideIdent + ` |
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // tableFixtureTab writes the three fixture claims into a throwaway project,

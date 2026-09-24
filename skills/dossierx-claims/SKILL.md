@@ -24,7 +24,7 @@ the five rules are there and are not repeated here.
 
 | you want to | run |
 |---|---|
-| author a claim | `dossierx claim new <id> --body "..." --governed-reason "..."` |
+| author a claim | `dossierx claim new <id> --body "..."` |
 | check your work, writing nothing | `dossierx check --validate` |
 | build everything (catalog, viewer, code-link scan, ledger gate) | `dossierx check` |
 | know everything about one claim | `dossierx claim show <id>` |
@@ -60,14 +60,11 @@ it out.
   before a claim can lock** once a module uses the feature. It classifies a claim for
   implementation reading (schema before behavior, and so on) and has nothing to do with `section`/`order`, which are the
   human's reading order in the viewer.
-- Edges: `rests_on` (semantic dependency; the target must exist), `governed_by: {type, reason}` —
-  `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
-  changing under a locked claim flags `review_pending`) but never a gating one, so it cannot block
-  a   lock.
-- **Loops are refused in all three shapes**, at ERROR: `rests_on` → `cycle`, `governed_by` →
-  `governed-cycle`, and as of v0.5.0 one *alternating* the two → `mixed-cycle`. "B is governed by A"
-  buys no free back edge when A already rests on B. The router's `mixed-cycle`
-  section covers why an untouched corpus can start failing this.
+- Edges: `rests_on` (semantic dependency; the target must exist) is the one claim-to-claim edge.
+  It is a **drift** edge (a target's content changing under a locked claim flags `review_pending`)
+  and the edge hub-gating walks. `governed_by` is gone as of v0.7.21 — a claim file that still
+  carries it fails to load; the router's "governed_by is gone" section says what to do.
+- **A `rests_on` loop is refused** at ERROR (`cycle`).
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
   **Citing your evidence** below.
@@ -77,11 +74,11 @@ it out.
 ## Authoring — `dossierx claim new`, not a text editor
 
 Hand-writing claim YAML is the thing this design gates. Author through the command: it enforces
-the id grammar, the body requirement and the governed-reason rule **before** it writes, then lints
+the id grammar and the body requirement **before** it writes, then lints
 the project with the new claim in it — an `orphan` warning on a claim with no edges yet is a
 warning, not a refusal.
 
-`--rests-on` / `--governed-by` / `--build-role` / `--section` / `--layout` are all
+`--rests-on` / `--build-role` / `--section` / `--layout` are all
 available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks
 nothing else, so a claim written outside it reports success and is then invisible). After creation
 the claim is a **draft** — edit its file freely.
@@ -212,7 +209,7 @@ three independent triggers stands:
 
 | trigger | set by | cleared by |
 |---|---|---|
-| a baselined dependency's content changed underneath it — `rests_on`, or a claim-valued `governed_by.type` | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
+| a baselined `rests_on` dependency's content changed underneath it | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
 | shipped code no longer matches the claim | `dossierx claim flag` — body-only claims; one that renders from `rows`/`steps`/`raw_html`/`mockup` is refused (`structured_layout`) and goes through unlock → fix → lock instead (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**) | the same confirmed reaudit |
 | an open comment thread on the claim | anyone commenting (see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**) | the **human** resolving it in the viewer |
 
