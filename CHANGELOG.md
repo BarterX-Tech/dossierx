@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   content hash and the human's words in `build/ledger/lock-store.json`
   (`constitution`), re-locks a roof edited after its lock, and refuses
   `already_locked` only when locked and unchanged. **The roof gate:** `claim
-  lock` (single, batch and policy-v1 paths) and plain `check` refuse
-  `CONSTITUTION_NOT_LOCKED` while the constitution is missing, `status:
+  lock` (single, batch and policy-v1 paths), `claim reaudit --confirm` (a
+  confirmed reaudit is a ledger write; the preview stays open) and plain
+  `check` refuse `CONSTITUTION_NOT_LOCKED` while the constitution is missing, `status:
   draft`, unrecorded, or edited after its lock; plain `check` regenerates the
   catalog and viewer first and refuses at `stopped_at: constitution`, like the
   ledger gate; `check --validate` / `--staged` report `constitution-not-locked`

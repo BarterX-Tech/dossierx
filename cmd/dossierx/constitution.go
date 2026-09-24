@@ -68,7 +68,8 @@ func constitutionVerdictWith(cfg *config.Config, store *lock.Store) constitution
 }
 
 // constitutionGate is the refusal `claim lock` (single, batch and policy
-// paths alike) and plain `check` share (NIT-26). It returns nil when the
+// paths alike), `claim reaudit --confirm` and plain `check` share (NIT-26):
+// every path that writes an approval to the lock ledger. It returns nil when the
 // roof is locked and its hash matches the record; otherwise a
 // CONSTITUTION_NOT_LOCKED error — or CONSTITUTION_OVER_CAP when the file is
 // over the word cap, since trimming it is the first thing to do either way —

@@ -3171,6 +3171,19 @@ func newReauditCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "reaudit: %w", err)
 			}
+			// THE ROOF GATE (NIT-26), on the WRITING path only and before any
+			// store write: a confirmed reaudit records an approval in the lock
+			// ledger, which is module work, and no module work happens while
+			// the constitution is missing, draft, unrecorded or edited after
+			// its lock. It is the same refusal `claim lock` makes, from the
+			// same helper, so the envelope an agent recovers from is one
+			// shape. A bare reaudit is a preview and stays open: the agent
+			// can still show the human what a confirm would write.
+			if confirm {
+				if err := constitutionGate("reaudit", constitutionVerdictWith(cfg, store)); err != nil {
+					return cmdResult{}, err
+				}
+			}
 			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
 			// from current content — see lock.MigrateLegacyStore. Persisted here
 			// (not only on the --confirm path below) so a mere propose still
@@ -3420,6 +3433,11 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeInternal, "reaudit: %w", err)
 	}
+	// The roof gate, previewed the way the confirm asks it (NIT-26): a
+	// preview that did not name the roof would send an agent to its human for
+	// a yes the real run then refuses.
+	constitutionPrecondition(dr, constitutionVerdictWith(cfg, store))
+
 	flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeInternal, "reaudit: %w", err)
