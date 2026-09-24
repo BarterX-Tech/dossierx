@@ -28,9 +28,12 @@ import (
 	"strings"
 	"time"
 
+	"html"
+
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
@@ -195,6 +198,20 @@ type shellData struct {
 	// every byte of track markup on that — a corpus with no tracks must render
 	// exactly as it did before the axis existed. See track_view.go.
 	Tracks []TrackSection
+
+	// Constitution is the project roof, pinned above Modules. Always present
+	// as a nav target; Present is false when the file is absent (NIT-11).
+	Constitution ConstitutionView
+}
+
+// ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.
+type ConstitutionView struct {
+	Present       bool
+	Status        string
+	Words         int
+	WordCap       int
+	FileHTML      template.HTML
+	ProjectClaims []template.HTML
 }
 
 // Group is one module/facet section of the sidebar nav + content area, as
@@ -785,8 +802,61 @@ func buildShellStaticData(in shellInputs) shellData {
 		// Built from the SAME renderedByID the module groups read, so a claim
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.
-		Tracks: nil,
+		Tracks:       nil,
+		Constitution: buildConstitutionView(in.cat, cfg),
 	}
+}
+
+func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config) ConstitutionView {
+	view := ConstitutionView{WordCap: constitution.WordCap}
+	if cfg == nil {
+		return view
+	}
+	f, err := constitution.LoadOptional(cfg.ConstitutionPath())
+	if err != nil || f == nil {
+		return view
+	}
+	d := constitution.NewDigest(cfg.ConstitutionPath(), f)
+	view.Present = true
+	view.Status = d.Status
+	view.Words = d.Words
+	view.WordCap = d.WordCap
+	var b strings.Builder
+	writeSection := func(title string, entries []constitution.Entry, section string) {
+		if len(entries) == 0 {
+			return
+		}
+		b.WriteString("<h3>")
+		b.WriteString(html.EscapeString(title))
+		b.WriteString("</h3>")
+		for _, e := range entries {
+			b.WriteString(`<article class="constitution-entry" id="`)
+			b.WriteString(html.EscapeString("constitution-" + section + "-" + e.Slug))
+			b.WriteString(`"><h4>`)
+			if e.Title != "" {
+				b.WriteString(html.EscapeString(e.Title))
+			} else {
+				b.WriteString(html.EscapeString(e.Slug))
+			}
+			b.WriteString(`</h4><p>`)
+			b.WriteString(html.EscapeString(e.Body))
+			b.WriteString(`</p></article>`)
+		}
+	}
+	writeSection("Invariants", f.Invariants, constitution.SectionInvariants)
+	writeSection("Glossary", f.Glossary, constitution.SectionGlossary)
+	writeSection("Decisions", f.Decisions, constitution.SectionDecisions)
+	view.FileHTML = template.HTML(b.String())
+	if cat != nil {
+		for _, c := range cat.Claims {
+			if !c.IsProjectClaim() {
+				continue
+			}
+			view.ProjectClaims = append(view.ProjectClaims, template.HTML(
+				`<article class="project-claim"><h4>`+html.EscapeString(c.ID)+`</h4><p>`+html.EscapeString(c.Body)+`</p></article>`))
+		}
+	}
+	return view
 }
 
 // softMountClaimThreshold is the corpus size at which shell.html starts

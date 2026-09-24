@@ -57,7 +57,17 @@
             if (i === 0) { moduleDefaultFacet[sec.id] = g.id; }
           });
         });
-        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
+        firstModuleID = '';
+        for (var mi = 0; mi < moduleSections.length; mi++) {
+          var candidate = moduleSections[mi];
+          if (candidate.classList.contains('constitution-section') ||
+              candidate.classList.contains('track-section') ||
+              candidate.classList.contains('build-order-section')) {
+            continue;
+          }
+          firstModuleID = candidate.id;
+          break;
+        }
 
         // claimToFacet maps every individual claim card's own id (the full claim
         // id, e.g. "widget.doctrine.foo") to its owning .claim-group (facet) id,

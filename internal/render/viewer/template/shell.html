@@ -77,6 +77,12 @@
       <nav id="nav">
         <div class="sidebar-nav-scroll">
           <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg><input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules"></div>
+<!-- The Constitution pin (NIT-27): the project roof, above every module and
+             outside the module/track groups on purpose — it is not a module, so it
+             is not a group member, and .system-nav-group:first-child stays Modules. -->
+          <div class="constitution-pin">
+            <button class="sec-tab constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><span class="sec-tab__label">Constitution</span><span class="sec-tab__meta">PROJECT — NOT A MODULE</span></button>
+          </div>
           <div class="system-nav-groups">
           <details class="system-nav-group" open>
             <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
@@ -189,7 +195,31 @@
 {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
           </section>
         </section>
-{{end}}{{end}}
+{{end}}{{end}}<!-- The Constitution section (NIT-27): The file | Project claims. It sits
+     LAST in the content area, after every module and track, so the first
+     .module-section — the default reading view, and what the measurement tests
+     read — is always the first module. Its two canvases start hidden like every
+     facet canvas. The comment hugs the track guard's closing action on purpose:
+     html/template strips it but keeps a newline of its own, and the no-tracks
+     byte contract (track_view_test.go) counts those newlines. -->
+        <section class="module-section constitution-section" id="constitution" hidden>
+          <header class="constitution-head">
+            <p class="constitution-kicker">PROJECT — NOT A MODULE</p>
+            <h2>Constitution</h2>
+            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Constitution.Status}} · {{.Constitution.Status}}{{end}}</p>
+          </header>
+          <div class="sub-nav">
+            <button class="subtab" data-target="#constitution-file">The file</button>
+            <button class="subtab" data-target="#constitution-project-claims">Project claims</button>
+          </div>
+          <section class="claim-group reading-canvas" id="constitution-file" hidden>
+{{if .Constitution.Present}}{{.Constitution.FileHTML}}{{else}}<p class="claims-empty">No constitution.yaml yet.</p>{{end}}
+          </section>
+          <section class="claim-group reading-canvas" id="constitution-project-claims" hidden>
+{{if .Constitution.ProjectClaims}}{{range .Constitution.ProjectClaims}}{{.}}
+{{end}}{{else}}<p class="claims-empty">No project claims.</p>{{end}}
+          </section>
+        </section>
     </main>
 
 <!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own
