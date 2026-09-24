@@ -106,27 +106,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `LockedClaimHash`, so an upgraded corpus reports `lock-content-drift`
   on every locked claim. There is no migration tooling, by decision. (NIT-29)
 
-  **Migration (client projects), stage A — with this release, before the
-  first `dossierx check`:** (1) delete every `governed_by:` block from every
-  claim file; a file that still has one fails to load. (2) Where
-  `governed_by.type` named a real claim the dependent genuinely relies on,
-  add that id to the claim's `rests_on` so the drift edge survives; where it
-  was `type: none`, nothing replaces it in this release (NIT-24 later adds
-  `rests_on: {none: true, reason}`). (3) Keep `doctrine_facet` and the
-  doctrine claims exactly where they are; hub-gating still walks `rests_on`.
-  (4) Expect `lock-content-drift` on every locked claim and take each one
-  through `unlock → lock` with the human's approval. Restoring the old file
-  from git is not a recovery: it is the file that no longer loads.
-
-  **Stage B — with the constitution and project claims, in this same
-  release (NIT-6 / NIT-25 / NIT-23):** each former doctrine claim goes exactly one
-  way — anything rests on it → a project claim (`project.<slug>` under
-  `project-claims/`, `scope: project`, no `module`/`facet`, every
-  `rests_on: <module>.doctrine.<slug>` retargeted to `project.<slug>`);
-  nothing rests on it and it is system law → a constitution entry (never
-  citable); otherwise a project claim, or delete it. Never both. Then
-  `doctrine_facet` and the `doctrine` facet go (NIT-23). NIT-23 / NIT-25
-  carry that stage.
+  **Migration (client projects) — by hand, one pass, in this order** (the
+  full recipe, with the target rule, is in the shipped `dossierx` and
+  `dossierx-claims` skills): (1) write `constitution.yaml` beside
+  `project.config.yaml` from the critical former doctrine claims (invariants /
+  glossary / decisions, plain text, under 800 words) and have the human run
+  `dossierx constitution lock --reason "…"` — nothing else locks until then
+  (`CONSTITUTION_NOT_LOCKED`). (2) Move every other doctrine claim to
+  `project-claims/<slug>.yaml` as `project.<slug>` (`scope: project`, no
+  `module`, no `facet`); delete the hub module and its `doctrine` facet — a
+  config still setting `doctrine_facet:` fails to load, exactly like a claim
+  still carrying `governed_by:`. (3) In every remaining claim delete the
+  `governed_by:` block and write `rests_on`: `project.<slug>` where the
+  governor became a project claim, nothing where it became a constitution
+  entry (the constitution is never cited), `{none: true, reason}` where
+  nothing is left; targets are `project.*`, any module's `*.contract.*` and
+  own-module `*.internals.*`, never foreign internals. (4) `dossierx check
+  --validate`, fix every `rests-on-required` / `rests-on-target` finding, then
+  re-lock per module through `unlock → lock --dry-run → lock --reason
+  --proposal` with the human's approval. Every locked claim that carried
+  `governed_by` re-locks (its hash moved); the list form of `rests_on`
+  hashes exactly as before, so a claim that only gained list targets does
+  not move, and only one that gained `{none: true, reason}` is a real edit.
+  Restoring the old file from git is not a recovery: it is the file that no
+  longer loads. (NIT-23 / NIT-25 / NIT-30)
 
 ### Fixed
 

@@ -520,7 +520,7 @@
     "internal/serve": "sha256:0ad4bd18550a8d50d5a55b39293549398a62c78379c20b97b9c4969305ea6867",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:338fee81d6d761e21be22922a58e57e458e0b0e1713bedf4deb721151c9c4e0a"
+    "skills": "sha256:0a3c9d51f8ae350595906944ccc593198aba35534f4592c2b2c92dfc2bc2e7e7"
   },
   "envelope": {
     "keys": [
