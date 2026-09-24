@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains on the claim struct so existing lock hashes stay
   byte-identical; the engine does not walk it. (NIT-17)
 
+### Fixed
+
+- Windows `go test -race` no longer dies at Go's 10-minute package deadline
+  inside `internal/render/markdown` after the claim-body image cost sweep.
+  The growth guards still cover every shape at every size; under `-race`
+  they take one measurement per size instead of three-to-five, and CI's
+  race job uses `-timeout=20m`.
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed
