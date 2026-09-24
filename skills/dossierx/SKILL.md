@@ -6,7 +6,7 @@ description: >-
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
   any DossierX command. It is short on purpose: the eight nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, which command (flag vs unlock vs reaudit,
-  track vs module depends_on), the governed_by-is-gone migration, and companion skill routing. Load a companion skill only when this one sends you there.
+  track vs module depends_on), the v0.7.21 upgrade fold (governed_by and the doctrine hub are gone), and companion skill routing. Load a companion skill only when this one sends you there.
 ---
 
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
@@ -171,24 +171,24 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
 | a user feature, across modules | `dossierx track status <id>` | read-only: COMPLETE when every claim it owns or cites is locked. It gates nothing and orders nothing. |
 | what to implement next | locked claims, module depends_on, and claim rests_on / build_role | follow those edges; there is no sequencer |
 
-## `governed_by` is gone — what v0.7.21 changed under you
+## `governed_by` is gone, and so is the doctrine hub — upgrading a corpus to v0.7.21
 
 **A corpus that passed `dossierx check` before v0.7.21 can refuse to LOAD after it with no edit on
-your side.** `governed_by`, its four lints, its graph edge and its drift baseline are gone (NIT-29):
-the constitution replaces the roof and is never cited, with no alias and no migrate command. (1) A claim file
-still carrying `governed_by:` **fails strict decode** — `check` stops at `stopped_at: load`, and
-"restore from git" is no recovery: that file is the one that no longer loads. (2) **Every locked
-claim's hash moved** (the field left `ContentHash` and `LockedClaimHash`), so `check` then reports
-`lock-content-drift` on every locked claim; recover by `unlock → lock`, never by editing the store.
+your side.** `governed_by` with its lints, edge and drift baseline (NIT-29) and `doctrine_facet` with
+hub-gating (NIT-23) are gone; the constitution is the roof and is never cited; no alias, no migrate
+command. A claim still carrying `governed_by:` or a config still setting `doctrine_facet:` **fails strict
+decode** (`stopped_at: load`), and "restore from git" restores the file that no longer loads. **Fold by
+hand, one pass, in this order** (file shapes, the target rule and the reading order: `dossierx-claims`):
 
-**Stage A, this release, before the first `check`:** delete every `governed_by:` block; where its
-`type` named a claim the dependent relies on, add that id to `rests_on` (`type: none` gets nothing
-until NIT-24); leave `doctrine_facet` and the doctrine claims alone; then `check --validate` and
-re-lock each listed claim: `claim unlock` → `claim lock --dry-run` → `claim lock --reason --proposal`.
-
-**Stage B, same release (NIT-6 / NIT-25 / NIT-23):** each former doctrine claim goes one way — rested
-on → a project claim (`project.<slug>`, `rests_on` retargeted); system law → a constitution entry; else
-delete. `doctrine_facet` is gone (a config that sets it fails to load). Then the human locks the roof.
+1. Write `constitution.yaml` beside `project.config.yaml` from the critical former doctrine claims
+   (invariants / glossary / decisions, plain text, under 800 words); the **human** locks it —
+   `dossierx constitution lock --reason "…"` — and nothing else locks until then (`CONSTITUTION_NOT_LOCKED`).
+2. Move every other doctrine claim to `project-claims/<slug>.yaml` as `project.<slug>`; delete the hub module and its `doctrine` facet.
+3. In every remaining claim delete `governed_by:` and write `rests_on`: `project.<slug>` where the governor
+   became a project claim, nothing where it became a constitution entry, `{none: true, reason: "…"}` otherwise.
+4. `dossierx check --validate`; fix every `rests-on-required` / `rests-on-target` finding; re-lock per module —
+   `claim unlock` → `claim lock --dry-run` → `claim lock --reason --proposal`. Every locked claim that
+   carried `governed_by` re-locks (its hash moved); a list-form `rests_on` alone moves no hash.
 
 ## The pre-ledger crossing and the staged gate — what v0.4.0 changed under you
 

@@ -110,8 +110,22 @@ Three classes of thing, and you author two of them:
   --body "..." --rests-on ...` writes `project-claims/<slug>.yaml` with `scope: project`, no `module`
   and no `facet`. No cap, no manifest: `manifest show` carries a generated index (id + summary) of the
   whole store. Their `rests_on` may name other `project.*` ids and any module's `*.contract.*`, never
-  `*.internals.*`.
+  `*.internals.*`. Until the `summary` field lands (NIT-8) the index line is the first non-blank line
+  of `body`, so write the gist first.
 - **Module claims** — everything under `claims/`, as below.
+
+**Read in this order and stop as early as you can:** the constitution → the project-claims index →
+the catalog's module blurbs → a module's `provides` → the summaries of the claims it provides →
+`dossierx claim show <id>` only when a summary is not enough. Never a claim body on a first pass, and
+never a foreign module's `*.internals.*` — the one `rests_on` target the lint refuses.
+
+**Upgrading a doctrine-hub corpus** (the router's "`governed_by` is gone" section has the four steps):
+a former doctrine claim goes exactly one way. Critical system law becomes a constitution entry — never
+cited, so every `rests_on` that named it is simply dropped. Anything else becomes a project claim:
+`dossierx claim new project.<slug> --body "..."` with `--rests-on` or `--rests-on-none-reason`, then
+carry the old body across; its `rests_on` may name `project.*` and `*.contract.*` ids only. Every
+`<hub>.doctrine.<slug>` reference elsewhere becomes `project.<slug>` or goes. The hub module, its
+`doctrine` facet and its claim files are deleted; a module left over is a normal module, never the roof.
 
 ## Citing your evidence — `sources`
 
@@ -274,5 +288,5 @@ so**, do not confirm.
 
 ## Portability
 
-Facets, modules, claims dir, source dirs, doctrine facet and template overrides all come from
+Facets, modules, claims dir, source dirs and template overrides all come from
 `project.config.yaml` — never patch the engine.
