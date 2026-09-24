@@ -150,17 +150,11 @@ policy v1. An existing store without explicit policy adoption remains on the
 legacy policy; loading a newer binary does not reinterpret its old approvals,
 refresh baselines, or clear review causes.
 
-Adopt v1 explicitly after reviewing the migration:
-
-```text
-dossierx claim migrate-lock-policy --dry-run
-dossierx claim migrate-lock-policy \
-  --reason "Reviewed the local approval and dependency readiness policy"
-```
-
-Migration preserves existing approvals, dependency baselines, receipts and
-review causes. It does not lock or unlock claims, refresh a baseline, or make a
-historical approval mean that an unseen draft dependency was approved.
+There is no everyday command that adopts policy v1 on an existing store.
+Existing approvals, dependency baselines, receipts and review causes stay as
+recorded. Loading a newer binary does not lock or unlock claims, refresh a
+baseline, or make a historical approval mean that an unseen draft dependency
+was approved.
 
 ## What was approved, and what is written now
 

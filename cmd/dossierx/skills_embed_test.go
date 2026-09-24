@@ -289,7 +289,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The seven nouns, twenty-one leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The seven nouns, twenty leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}

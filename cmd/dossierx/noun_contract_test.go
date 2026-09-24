@@ -503,9 +503,38 @@ func TestRetiredVerbsAreNotSurface(t *testing.T) {
 			t.Fatalf("the comment group's leaf list must not advertise the removed verb %q: %q", gone, env.Error.Hint)
 		}
 	}
+	claimEnv, _, claimErr := execReviewedCLIJSON(t, "claim")
+	if claimErr == nil {
+		t.Fatal("a bare noun must fail")
+	}
+	if claimEnv.Error == nil {
+		t.Fatalf("expected an error envelope, got %+v", claimEnv)
+	}
+	if strings.Contains(claimEnv.Error.Hint, "migrate-lock-policy") {
+		t.Fatalf("the claim group's leaf list must not advertise the removed verb %q: %q", "migrate-lock-policy", claimEnv.Error.Hint)
+	}
 	for _, cmd := range newRootCmd().Commands() {
 		if retired(cmd) && !cmd.Hidden {
 			t.Fatalf("a removal stub must be hidden: %q", cmd.Name())
 		}
+	}
+}
+
+// TestDeletedLockPolicyLeafIsUnknownSubcommand pins the kill: the leaf is gone,
+// so the claim group's existing unknown-subcommand path answers it. There is
+// no retired stub and no replacement command.
+func TestDeletedLockPolicyLeafIsUnknownSubcommand(t *testing.T) {
+	env, _, err := execReviewedCLIJSON(t, "claim", "migrate-lock-policy")
+	if err == nil || env.OK {
+		t.Fatalf("a deleted leaf must fail, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
+		t.Fatalf("expected usage, got %+v", env.Error)
+	}
+	if !strings.Contains(env.Error.Message, "unknown subcommand") {
+		t.Fatalf("expected the claim group's unknown-subcommand path, got %+v", env.Error)
+	}
+	if strings.Contains(env.Error.Hint, "migrate-lock-policy") {
+		t.Fatalf("the recovery must not name the deleted leaf: %+v", env.Error)
 	}
 }

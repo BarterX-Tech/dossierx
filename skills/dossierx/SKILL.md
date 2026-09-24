@@ -4,7 +4,7 @@ description: >-
   Router and machine contract for DossierX — the CLI that turns a project's atomic YAML "claims"
   into a reviewable HTML viewer, and that an agent OPERATES while a human REVIEWS. Load this FIRST
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
-  any DossierX command. It is short on purpose: the eight nouns, JSON envelope, exit codes, error.code
+  any DossierX command. It is short on purpose: the seven nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, which command (flag vs unlock vs reaudit,
   track vs module depends_on), mixed-cycle guidance, and companion skill routing. Load a companion skill only when this one sends you there.
 ---
@@ -17,14 +17,14 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 21 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
+| Surface | the CLI — all 20 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The seven nouns, twenty-one leaves
+## The seven nouns, twenty leaves
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing — neither proves code links
-dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy recover-approved-content
+dossierx claim  show list new lock unlock flag reaudit link recover-approved-content
 dossierx comment inbox list add reply
 dossierx track list show status            # read-only: the cross-cutting feature axis
 dossierx serve                             # the human's one command
@@ -82,7 +82,7 @@ synced" in chat is neither and is never a certificate; when the evidence is miss
 | `not_review_pending` | 2 | you reached for `claim reaudit` on a claim that is not drifting. The general edit path is unlock → fix → lock. |
 | `review_pending` | 2 | the claim IS pending, and that is what blocks you. `dossierx claim show <id>` names the trigger. |
 | `already_locked` | 1 | the claim is **already** locked, and `lock` refuses rather than re-signing it — a second lock would stamp a fresh approval over content nobody approved and clear `review_pending` with no diff. To change it: `unlock` → fix → `lock`. If a gate reported drift on it, restore the file from git instead. |
-| `pre_ledger_unadopted` | 1 | an approval-recording command — `claim lock`, `claim reaudit --confirm` — refused because this project's lock store predates the lock ledger and it still holds locked claims. It is the write-path twin of the `lock-ledger-pre-ledger` finding. Legacy ledger adoption has no automatic `dossierx migrate`; the explicit policy-v1 command is `dossierx claim migrate-lock-policy --reason "…"`. Unlock every locked claim (`dossierx claim unlock <id> --reason "…"`); then preview and write each lock with its matching token (`dossierx claim lock <id> --dry-run`, then `dossierx claim lock <id> --reason "…" --proposal "<snapshot>"`). The crossing is stamped by that first **lock**, not by the unlock. It discards every standing approval, so it is the human's call — show them and wait. |
+| `pre_ledger_unadopted` | 1 | an approval-recording command — `claim lock`, `claim reaudit --confirm` — refused because this project's lock store predates the lock ledger and it still holds locked claims. It is the write-path twin of the `lock-ledger-pre-ledger` finding. Legacy ledger adoption has no automatic `dossierx migrate`. Unlock every locked claim (`dossierx claim unlock <id> --reason "…"`); then preview and write each lock with its matching token (`dossierx claim lock <id> --dry-run`, then `dossierx claim lock <id> --reason "…" --proposal "<snapshot>"`). The crossing is stamped by that first **lock**, not by the unlock. It discards every standing approval, so it is the human's call — show them and wait. |
 | `comment_digest_drift` | 1 | the claim's `comments:` block and `build/ledger/comment-digest.json` disagree, so this write is refused rather than silently re-recording the block as the truth. **No command clears it** — the recovery is version control, and which file you restore depends on which side moved: the claim file if its block was hand-edited, the digest store if a commit carried the claim file without it, both from the same commit if you cannot tell. The engine writes the two as a pair and they only agree as a pair. **Never delete the digest store to clear this** — that is the laundering the store exists to catch, and `check` then reports `comment-digest-absent`. Tell the human; do not loop on it. |
 | `comment_digest_unavailable` | 1 | the comment digest store could not be opened, so the write was refused **before anything changed**. Nothing was written, so a retry is safe — but it will keep failing identically until `build/ledger/comment-digest.json` is restored from version control (or a stale `build/ledger/comment-digest.json.lock` left by a crash is removed). Tell the human; do not loop on it. |
 | `untracked_config` | 1 | `check --staged` was asked to judge a commit whose `project.config.yaml` is not tracked. It reads the claims, the ledger and the digest store from the **index**, and an untracked config can be edited without staging anything — so honouring the worktree copy would let a one-line `claims_dir:` edit point the gate at a clean decoy while the commit carries a tampered locked claim. Run `git add project.config.yaml` (or the path you passed to `--config`) and commit again. Nothing was judged, so this is not a verdict on your claims. |
@@ -112,8 +112,8 @@ New projects use one set evaluator for single/group lock preview and write.
 `--dry-run` returns verdicts, conditions and a `snapshot`; `--proposal` is
 required on every lock write, rejecting missing, invalid, stale and wrong-set review. Draft dependencies yield visible
 `dependency_unapproved`, never readiness. Read `claim show` or API `readiness`
-for causes/paths. Existing stores stay legacy until `claim migrate-lock-policy
---reason "<their words>"`; migration preserves approvals and baselines.
+for causes/paths. Existing stores stay on their recorded policy; a newer
+binary does not reinterpret old approvals.
 
 Every mutating verb takes `--dry-run`. It writes nothing and **always exits 0 with `ok: true`**,
 even when the real run would refuse — including when you forgot a required flag.
@@ -287,4 +287,4 @@ confirmed `claim reaudit` clears the human's flag having changed nothing — sil
 | gone | now |
 |---|---|
 | `lint`, `catalog`, `render` → `dossierx check` · `deps`, `implink status` → `dossierx claim show <id>` · `stale`, `coverage` → `dossierx claim list --review-pending` / `--migrated` · `implink set` → `dossierx claim link` · bare `lock`/`unlock`/`flag`/`reaudit` → `dossierx claim lock` / `unlock` / `flag` / `reaudit` · `comment resolve|reopen|edit|delete` → viewer only, the human does these | |
-| `migrate --adopt` | legacy ledger adoption has no `dossierx migrate`; use `dossierx claim migrate-lock-policy --reason "…"` for explicit policy-v1 adoption. For an unadopted project, unlock every locked claim (`dossierx claim unlock <id> --reason "…"`), then preview and write each lock with its matching token — `dossierx claim lock <id> --dry-run`, then `dossierx claim lock <id> --reason "…" --proposal "<snapshot>"` — so the first lock in a project with nothing locked crosses the store onto the ledger |
+| `migrate --adopt` | legacy ledger adoption has no `dossierx migrate`. For an unadopted project, unlock every locked claim (`dossierx claim unlock <id> --reason "…"`), then preview and write each lock with its matching token — `dossierx claim lock <id> --dry-run`, then `dossierx claim lock <id> --reason "…" --proposal "<snapshot>"` — so the first lock in a project with nothing locked crosses the store onto the ledger |

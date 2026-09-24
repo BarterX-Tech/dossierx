@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The viewer has no Build order tab and no Mermaid bundle. The consumer
   skill `dossierx-build-order` is not embedded. `build_role` remains a
   claim field. Mirrors are unchanged.
+- The lock-policy adoption CLI leaf is deleted. Existing lock stores stay on
+  their recorded policy; a new project still starts on lock policy v1. Policy
+  evaluation, approvals, and baselines are unchanged. The surface is now
+  twenty leaves under seven nouns.
 
 ## [0.7.20] - 2026-09-22
 

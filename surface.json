@@ -62,16 +62,6 @@
       ]
     },
     {
-      "path": "claim migrate-lock-policy",
-      "short": "Adopt the local-approval lock policy without rewriting existing approvals",
-      "flags": [
-        "--config",
-        "--dry-run",
-        "--format",
-        "--reason"
-      ]
-    },
-    {
       "path": "claim new",
       "short": "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
       "flags": [
@@ -488,7 +478,7 @@
   ],
   "render_fingerprint": "sha256:3938ee8926f415cdaea922de68bb6041b5d3a38a217a7a2765b87ca15838d092",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:6b04d23bbf3efe470bc097921bc2f98ff77a6680c99f1c53d8de2480d90257ac",
+    "cmd/dossierx": "sha256:9292b3e79ed8ec2efa97105841eee8b0fbe64ebf8985cbbe01716a2a6453dcd5",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -505,7 +495,7 @@
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
     "internal/lint": "sha256:725fc4604b48205055bbf5b763353b5c70fcc5dfe9a476d83f7ffddee183e76c",
     "internal/loader": "sha256:9c4b09df826f49a25f225ca959c5be3ef497f831e8ddb4167ea0e42485017849",
-    "internal/lock": "sha256:f3f3669e994210cd73aee056c6318b45b38549984c9274c848b1e831aaf6950e",
+    "internal/lock": "sha256:9e95bf3ad3e9f45ae4525ba9f209b16cf11755c7a6492fc40e86cb98b6f19ed7",
     "internal/model": "sha256:604cd3dfa6de63d2bd483425d859508e1c95b3fa77a475dfbb65b3c9ac2f2bfe",
     "internal/readiness": "sha256:705cd7a1c00c60e1ffec82a557cd13389ce49ac4b76f9ff4a3927559e353b033",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
@@ -517,7 +507,7 @@
     "internal/serve": "sha256:19894bc28d505af1ae22d835a2f9ad397dd8afe77a9a738516e28393e86ca7a3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:be82027f8c3abe7b4325c24c044b14170ae4a240055e5da016fb152fd38379e7"
+    "skills": "sha256:4497db0dbfce9d480cb092dd46db2f647be62bf8ddb0ab71041b9396d6929075"
   },
   "envelope": {
     "keys": [
@@ -771,12 +761,6 @@
         "to",
         "would"
       ],
-      "policyMigrationData": [
-        "from",
-        "migrated_at",
-        "reason",
-        "to"
-      ],
       "reauditData": [
         "applied",
         "body_diff_html",
@@ -886,7 +870,7 @@
     }
   ],
   "counts": {
-    "commands": 21,
+    "commands": 20,
     "error_codes": 48,
     "http_routes": 14,
     "lint_rules": 37,

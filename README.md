@@ -27,7 +27,7 @@ What it does not do is also stated: a code link proves a pointer exists, not tha
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 21 commands under 7 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Surface** | the CLI: 20 commands under 7 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
 | **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
@@ -118,7 +118,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Twenty-one leaf commands under seven nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty leaf commands under seven nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, bounded projections, code-link scan and the ledger gate
@@ -127,7 +127,7 @@ check                    lint, bounded projections, code-link scan and the ledge
                          --staged    judge the git index — what the commit will actually
                                      contain — instead of the worktree, writes nothing
 
-claim        show · list · new · lock · unlock · flag · reaudit · link · migrate-lock-policy
+claim        show · list · new · lock · unlock · flag · reaudit · link · recover-approved-content
 comment      inbox · list · add · reply
 track        list · show · status
 
@@ -348,7 +348,7 @@ Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`
 
 **The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`, `mirrors` or is `governed_by` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `governed_by` joined the drift set in v0.4.0 as a **drift** edge only: a claim-valued governor whose content changes flags its dependants `review_pending`, but hub gating still walks `rests_on`/`mirrors` alone, so an unlocked governor named only by `governed_by` still never refuses a lock. There is no backfill — a claim locked before v0.4.0 carries no governance baseline until its next `claim lock` or confirmed `claim reaudit`, so the first governor edit after upgrading does not flag it. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
 
-**Local approval and dependency readiness.** A new project uses lock policy v1. An existing project stays on its recorded policy until a human explicitly runs `dossierx claim migrate-lock-policy --reason "..."`; that migration preserves its approval records, dependency baselines and pending review state. Under v1, `claim lock` evaluates one requested set whether it contains one claim or many. `--dry-run` returns every member's local verdict, dependency conditions and a request-bound `snapshot`; the matching `--proposal` is mandatory on the write, and an omitted, invalid, stale, or wrong-set token refuses before approval storage changes. A locally approved claim may depend on a readable draft, but it reports `dependency_unapproved` and is not dependency-ready. A missing, retired, unreadable, cyclic, or doctrine-gated required dependency refuses approval before any claim or approval storage changes. Local approval, dependency readiness and integrated evidence are different statements. The lock store retains the reviewed dependency content and comparable hash for each new local approval; a hash detects a difference and never proves semantic compatibility.
+**Local approval and dependency readiness.** A new project uses lock policy v1. An existing project stays on its recorded policy; loading a newer binary does not reinterpret old approvals, refresh baselines, or clear review causes. Under v1, `claim lock` evaluates one requested set whether it contains one claim or many. `--dry-run` returns every member's local verdict, dependency conditions and a request-bound `snapshot`; the matching `--proposal` is mandatory on the write, and an omitted, invalid, stale, or wrong-set token refuses before approval storage changes. A locally approved claim may depend on a readable draft, but it reports `dependency_unapproved` and is not dependency-ready. A missing, retired, unreadable, cyclic, or doctrine-gated required dependency refuses approval before any claim or approval storage changes. Local approval, dependency readiness and integrated evidence are different statements. The lock store retains the reviewed dependency content and comparable hash for each new local approval; a hash detects a difference and never proves semantic compatibility.
 
 **`reaudit` is the drift tool, not the general edit tool.** It refuses a claim that is not already `review_pending`, it rewrites only `body`, and it refuses a claim whose only trigger is an open thread (there is no diff to confirm — resolve the thread instead). To change anything else about a locked claim, the path is `unlock → fix → lock`.
 
