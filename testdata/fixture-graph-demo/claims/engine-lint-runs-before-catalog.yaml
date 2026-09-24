@@ -6,9 +6,6 @@ layout: card
 build_role: behavior
 body: |
   A single error-severity finding stops the pipeline above the catalog and render stages. No corpus that fails review ever produces a rendered artifact.
-governed_by:
-  type: none
-  reason: a demo corpus claim, not backed by any real doctrine
 rests_on:
   - engine.schema.edge-kinds
 review_pending: true

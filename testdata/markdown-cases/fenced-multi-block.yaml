@@ -17,6 +17,3 @@ body: |
   ```
 
   After.
-governed_by:
-  type: none
-  reason: markdown renderer test fixture

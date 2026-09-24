@@ -8,6 +8,3 @@ body: |
   rest-on-locked exists to catch.
 rests_on:
   - restonlockmod.contract.target
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

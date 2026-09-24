@@ -10,11 +10,7 @@
       "edges": {
         "rests_on": [
           "panel.contract.behavior"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "panel.contract.api",
@@ -36,11 +32,7 @@
       "edges": {
         "rests_on": [
           "panel.internals.state"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "panel.contract.behavior",
@@ -59,12 +51,7 @@
       "status": "locked",
       "layout": "mockup",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "panel.decision.mockup",
         "policy_version": 0,
@@ -85,11 +72,7 @@
       "edges": {
         "rests_on": [
           "panel.decision.mockup"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "panel.internals.state",
@@ -111,11 +94,7 @@
       "edges": {
         "rests_on": [
           "panel.contract.api"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "panel.internals.verification",
@@ -134,12 +113,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
+      "edges": {},
       "tracks": [
         {
           "id": "checkout",
@@ -170,11 +144,7 @@
       "edges": {
         "rests_on": [
           "panel.contract.api"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "tracks": [
         {
@@ -226,11 +196,7 @@
       "edges": {
         "rests_on": [
           "widget.internals.fields"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "tracks": [
         {
@@ -304,11 +270,7 @@
       "edges": {
         "rests_on": [
           "widget.contract.overview"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "widget.decision.boundary",
@@ -356,11 +318,7 @@
       "edges": {
         "rests_on": [
           "widget.contract.overview"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "widget.internals.fields",

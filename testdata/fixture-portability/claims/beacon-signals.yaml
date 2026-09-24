@@ -7,6 +7,3 @@ body: |
   A beacon emits a small, fixed set of signal kinds.
 rests_on:
   - beacon.spec.overview
-governed_by:
-  type: none
-  reason: portability fixture claim, not backed by any real doctrine

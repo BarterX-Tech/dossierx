@@ -11,6 +11,3 @@ body: |
      ```
 
   2. Then run it.
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - the loose-list rule, and the shape essentially all real documentation uses; a blank line before an indented fence must not end the list, eject the code to top level or restart the numbering

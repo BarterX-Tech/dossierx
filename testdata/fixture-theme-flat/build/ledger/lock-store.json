@@ -2,25 +2,25 @@
   "version": 2,
   "hashes": {
     "panel.contract.api": {
-      "panel.contract.behavior": "8799c05e90f414682aa59283cd5c88fd7657abd0e8a4ff36eaeb88fb0a0d0278"
+      "panel.contract.behavior": "82e90d03174f72e7bf2da59a11b85595679669b998b9c5b3c2ab3ddbd53579b2"
     },
     "panel.contract.behavior": {
       "panel.contract.api": "e31add305ed1da5759f323d37aec9c2d47cf8e29a76b7dcc05ca969d0c7c3446",
-      "panel.internals.state": "eb9e5ece4506258aa04cfb2b21d71696af4051bcf718fd0038ab71a52e7e7b95"
+      "panel.internals.state": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79"
     },
     "panel.decision.mockup": {
       "panel.contract.api": "e31add305ed1da5759f323d37aec9c2d47cf8e29a76b7dcc05ca969d0c7c3446"
     },
     "panel.internals.state": {
       "panel.contract.api": "e31add305ed1da5759f323d37aec9c2d47cf8e29a76b7dcc05ca969d0c7c3446",
-      "panel.decision.mockup": "4ee4abab4f1c655a0fe5f9a8865dc9b3cd99f3121572299ce61afe0ac26a0e21"
+      "panel.decision.mockup": "e83d962a685513d2da280a6f1f190c99f74a55c81cbbce229d0c17cd070c9f8e"
     },
     "panel.internals.verification": {
-      "panel.contract.api": "ffe2363d8d6524b8f2a2c9c4fce540c1e391a6ac847bab2bba192e4241db4854",
+      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
       "panel.internals.state": "46456be1fece0d673583f071910369d09b4246b60a3d8499e75dd92bff700069"
     },
     "widget.contract.reviewed": {
-      "panel.contract.api": "ffe2363d8d6524b8f2a2c9c4fce540c1e391a6ac847bab2bba192e4241db4854"
+      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582"
     }
   },
   "locked_at": {
@@ -41,42 +41,42 @@
     },
     "panel.contract.api": {
       "subject": "claim",
-      "hash": "ffe20844194e75a6c7dfa050ad6aafc35d1bc8ba3488f7f4f15a24c2ef300f33",
+      "hash": "29839377bd0b2e49b61ad33ce8a5329be2e98d44ef8f222192e5d06a251a5073",
       "at": "2026-09-02T10:22:20.172291Z",
       "actor": "nitinkhanna",
       "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
     },
     "panel.contract.behavior": {
       "subject": "claim",
-      "hash": "70804eb054472775d442e181031ed72a85392b32ff219e6b5efd572a74b71c7d",
+      "hash": "48f09b2a8723d7e4c83892986c14b31fdc1124e28dee39d94a46a4ea95f85f27",
       "at": "2026-09-02T10:22:20.171156Z",
       "actor": "nitinkhanna",
       "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
     },
     "panel.decision.mockup": {
       "subject": "claim",
-      "hash": "752dbce9ef6d3739aadaedea9fc44858d257041133e5e55fe86a8135daeff0c3",
+      "hash": "60c4ad16747e826ee9fc3f889a8ebc0869b5c462db01c010a4f24d1b50d3e4fc",
       "at": "2026-09-02T13:54:05.924378Z",
       "actor": "nitinkhanna",
       "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact"
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "ca331beeb59d9422115b2ca37b11dc7d5516e4d6f65dd74fc49d63a72b9a614a",
+      "hash": "658adb1ca779c6c0485d093360f9c7365f8cc6a6132875f0a01f30d8f7d6292c",
       "at": "2026-09-02T13:54:13.800106Z",
       "actor": "nitinkhanna",
       "reason": "fixture build: the dependency's body changed (a token name lost its CSS double-dash prefix in prose); this claim's own content is unaffected"
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "ac5035627b094d6ad9b6a5ccfadd828361885d1ec255e2fbdce03e57fffcf0fb",
+      "hash": "38a4007135191195459c681a73eab48c8e141bcc8a23a910a02ae2e639d56517",
       "at": "2026-09-02T10:22:20.173469Z",
       "actor": "nitinkhanna",
       "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
     },
     "widget.contract.reviewed": {
       "subject": "claim",
-      "hash": "e91b8b77f729981d34b688af53b51b3dc67c8145c1faa69de614dc69721c0e8f",
+      "hash": "5afd98982f31219c75ec118a0d3ff5a97032baa19c588320a57f78716636bec8",
       "at": "2026-09-02T10:22:20.174653Z",
       "actor": "nitinkhanna",
       "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"

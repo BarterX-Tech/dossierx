@@ -15,6 +15,3 @@ tracks:
     role: cites
 rests_on:
   - trackmod.contract.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

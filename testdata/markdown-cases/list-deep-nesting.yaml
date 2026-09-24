@@ -9,6 +9,3 @@ body: |
       - L3
         - L4
   - Back to L1
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - unbounded list nesting via the indent-keyed depth stack

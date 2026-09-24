@@ -18,6 +18,3 @@ body: |
   emphasis, and it is not ASCII whitespace, so the line is not a list either:
 
   * a *
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - a non-ASCII neighbour is classified as a character, not as a byte

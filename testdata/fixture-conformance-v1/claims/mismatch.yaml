@@ -4,9 +4,6 @@ module: widget
 status: draft
 layout: card
 body: Set and scalar observations differ from their authored expectations.
-governed_by:
-  type: none
-  reason: neutral fixture
 embodiment:
   mode: compare
   checks:

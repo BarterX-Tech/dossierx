@@ -5,6 +5,3 @@ status: draft
 layout: card
 body: |
   This has <angle> and <brackets> in text.
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - tests angle bracket escaping

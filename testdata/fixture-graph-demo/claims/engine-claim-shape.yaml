@@ -6,5 +6,3 @@ layout: card
 build_role: schema
 body: |
   A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.
-governed_by:
-  type: engine.decision.single-source-of-truth

@@ -10,6 +10,3 @@ body: |
 
   ![**not bold** `not code`](assets/c.png)
 
-governed_by:
-  type: none
-  reason: "markdown renderer test fixture - alt is author bytes in ATTRIBUTE context: escaped, never parsed as markdown, never able to close the attribute"

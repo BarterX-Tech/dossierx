@@ -7,6 +7,3 @@ body: |
   | a\ | b |
   | --- | --- |
   | c\ | d |
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - a cell is single-line, so a trailing backslash is a literal, never a hard break

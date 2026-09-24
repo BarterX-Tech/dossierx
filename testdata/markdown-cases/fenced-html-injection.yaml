@@ -9,6 +9,3 @@ body: |
   ```
   <script>alert(1)</script> & "quoted" & 'val'
   ```
-governed_by:
-  type: none
-  reason: markdown renderer test fixture

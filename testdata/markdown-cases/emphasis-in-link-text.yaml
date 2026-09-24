@@ -12,6 +12,3 @@ body: |
 
   Composition is unaffected: [**text**](https://example.com/c) and
   [a *b* c](https://example.com/d) and [~~gone~~](https://example.com/e).
-governed_by:
-  type: none
-  reason: markdown renderer test fixture - emphasis inside link text flanks against the link's brackets
