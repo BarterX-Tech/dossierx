@@ -1137,7 +1137,7 @@ type checkData struct {
 	// the run. A --validate or --staged run carries scanned:false and
 	// gated:false with the same counts, so a consumer can never read a
 	// read-only green as a linked one. See check.Result.CodeLinks.
-	CodeLinks        *codeLinksData `json:"code_links,omitempty"`
+	CodeLinks    *codeLinksData `json:"code_links,omitempty"`
 	OpenComments map[string]int `json:"open_comments,omitempty"`
 	NextSteps    []string       `json:"next_steps,omitempty"`
 }
