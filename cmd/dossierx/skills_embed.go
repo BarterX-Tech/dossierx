@@ -45,6 +45,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -158,7 +159,7 @@ func newSkillsExportCmd() *cobra.Command {
 				}
 				if n := data.differing(); n > 0 {
 					return out, cliout.Errorf(cliout.CodeSkillsDrift, "skills export --check: %d skill file(s) differ from this binary's bundle", n).
-						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release, data.missing was never exported and data.unverified sits in a tree with no dossierx-skills.lock — re-run dossierx skills export for those three")
+						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release, data.missing was never exported and data.unverified sits in a tree with no dossierx-skills.lock — re-run dossierx skills export for those three; data.forbidden is whole-corpus wording (pack, full corpus) no skill may teach")
 				}
 				return out, nil
 			}
@@ -208,6 +209,42 @@ type skillsCheckData struct {
 	Missing    []string `json:"missing"`
 	Unverified []string `json:"unverified"`
 	NoLock     []string `json:"no_lock"`
+	// Forbidden is every line of an exported skill that teaches a
+	// whole-corpus read (NIT-12). The router teaches one module at a time
+	// through manifest show; a skill that says "pack" or "full corpus"
+	// sends an agent back to reading everything, whoever wrote it.
+	Forbidden []skillsForbiddenData `json:"forbidden"`
+}
+
+// skillsForbiddenData is one forbidden phrase in one exported file.
+type skillsForbiddenData struct {
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	Wording string `json:"wording"`
+}
+
+// forbiddenSkillWording is the vocabulary no exported skill may use. "pack"
+// was the invented second name for manifest show's bounded view; "full
+// corpus" is the habit the manifest harness exists to stop.
+var forbiddenSkillWording = []struct {
+	name string
+	re   *regexp.Regexp
+}{
+	{"pack", regexp.MustCompile(`(?i)\bpacks?\b`)},
+	{"full corpus", regexp.MustCompile(`(?i)\bfull[- ]corpus\b`)},
+}
+
+// scanForbiddenSkillWording reports each forbidden phrase in text, by line.
+func scanForbiddenSkillWording(file string, text []byte) []skillsForbiddenData {
+	var out []skillsForbiddenData
+	for i, line := range strings.Split(string(text), "\n") {
+		for _, w := range forbiddenSkillWording {
+			if w.re.MatchString(line) {
+				out = append(out, skillsForbiddenData{File: file, Line: i + 1, Wording: w.name})
+			}
+		}
+	}
+	return out
 }
 
 // skillsExportRoot is the directory the AGENTS.md section and the generic guide
@@ -437,7 +474,7 @@ func sha256Hex(data []byte) string {
 
 // differing is the number of files the check refuses on.
 func (d skillsCheckData) differing() int {
-	return len(d.HandEdited) + len(d.Stale) + len(d.Missing) + len(d.Unverified)
+	return len(d.HandEdited) + len(d.Stale) + len(d.Missing) + len(d.Unverified) + len(d.Forbidden)
 }
 
 // checkSkillTrees compares every tree skillTreeTargets would write against the
@@ -446,7 +483,7 @@ func (d skillsCheckData) differing() int {
 // as unverified and the tree is named in NoLock. No tree at all is reported
 // as every file missing, which is the honest answer to "is the skill installed".
 func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData, error) {
-	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, Unverified: []string{}, NoLock: []string{}}
+	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, Unverified: []string{}, NoLock: []string{}, Forbidden: []skillsForbiddenData{}}
 	trees := skillTreeTargets(explicitDir, root)
 	if len(trees) == 0 {
 		if explicitDir == "" && root == "" {
@@ -484,6 +521,7 @@ func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData,
 				data.Missing = append(data.Missing, onDisk)
 				return nil
 			}
+			data.Forbidden = append(data.Forbidden, scanForbiddenSkillWording(onDisk, got)...)
 			gotHash := sha256Hex(got)
 			if gotHash == sha256Hex(want) {
 				return nil
@@ -529,6 +567,9 @@ func writeSkillsCheckText(out io.Writer, data skillsCheckData) {
 	}
 	for _, t := range data.NoLock {
 		fmt.Fprintf(out, "skills check: no %s in %s — re-export to write one\n", skillsLockFile, t)
+	}
+	for _, f := range data.Forbidden {
+		fmt.Fprintf(out, "skills check: forbidden wording %q at %s:%d (teach manifest show, one module at a time)\n", f.Wording, f.File, f.Line)
 	}
 	n := data.differing()
 	if n == 0 {

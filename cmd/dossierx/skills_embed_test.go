@@ -806,3 +806,59 @@ func TestCLI_SkillsExportCheck_WithoutALockEveryDifferenceIsUnverified(t *testin
 		t.Fatalf("without a lock the difference is unverified and the tree is named in no_lock, got %+v", data)
 	}
 }
+
+// NIT-12: no skill may teach a whole-corpus read. The bundle this binary
+// ships says neither word, and --check refuses an exported tree that does,
+// naming the file, the line and the phrase.
+func TestSkills_NeverTeachAWholeCorpusRead(t *testing.T) {
+	err := fs.WalkDir(dxskills.FS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		raw, readErr := fs.ReadFile(dxskills.FS, path)
+		if readErr != nil {
+			return readErr
+		}
+		for _, f := range scanForbiddenSkillWording(path, raw) {
+			t.Errorf("%s:%d says %q; teach manifest show, one module at a time", f.File, f.Line, f.Wording)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, line := range []string{"Load the context pack first.", "Read the full corpus.", "a full-corpus audit", "PACKS of claims"} {
+		if len(scanForbiddenSkillWording("x", []byte(line))) != 1 {
+			t.Errorf("%q must be forbidden", line)
+		}
+	}
+	for _, line := range []string{"package main", "packed", "backpack", "the corpus", "full tree"} {
+		if got := scanForbiddenSkillWording("x", []byte(line)); len(got) != 0 {
+			t.Errorf("%q is not forbidden wording: %+v", line, got)
+		}
+	}
+
+	targetDir := filepath.Join(t.TempDir(), "skills")
+	if _, _, err := execCLI(t, "skills", "export", targetDir); err != nil {
+		t.Fatalf("skills export: %v", err)
+	}
+	routerPath := filepath.Join(targetDir, "dossierx", "SKILL.md")
+	original, readErr := os.ReadFile(routerPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if err := os.WriteFile(routerPath, append(original, []byte("Start from the module pack.\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := execCLIJSON(t, "skills", "export", targetDir, "--check")
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeSkillsDrift {
+		t.Fatalf("expected skills_drift, got err=%v env=%+v", err, env)
+	}
+	var data skillsCheckData
+	envData(t, env, &data)
+	wantLine := strings.Count(string(original), "\n") + 1
+	if len(data.Forbidden) != 1 || data.Forbidden[0].File != routerPath || data.Forbidden[0].Line != wantLine || data.Forbidden[0].Wording != "pack" {
+		t.Fatalf("forbidden = %+v, want pack at %s:%d", data.Forbidden, routerPath, wantLine)
+	}
+}

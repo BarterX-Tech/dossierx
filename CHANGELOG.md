@@ -106,6 +106,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   project claim that crosses it, and 6144 bytes owned by the module, whose
   overflow refuses with `view_too_large` naming the module. The retired `deps` /
   `catalog` nouns stay retired. Decisions recorded on Linear NIT-7 (2026-09-24).
+- **Skills teach the manifest harness (NIT-12).** The router and the claims
+  skill teach one module at a time: `manifest show <module> --isolation`
+  (constitution, project claims index, manifest, claim summaries), then
+  `--integration` for neighbors, then `claim show <id>` only when a summary is
+  not enough, never a walk of the claims tree. The claims skill adds a
+  claim-worthiness rubric (surprising to a competent reader, load-bearing for
+  another module or a locked promise, invisible from any single file) and
+  states `internals` visibility as hard law. `skills export --check` now also
+  refuses (`skills_drift`, `data.forbidden[]`) an exported skill that says
+  "pack" or "full corpus".
 
 ### Changed
 
