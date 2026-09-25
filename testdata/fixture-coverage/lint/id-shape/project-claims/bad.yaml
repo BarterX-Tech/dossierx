@@ -1,0 +1,8 @@
+id: project.bad.shape
+scope: project
+status: draft
+layout: card
+body: |
+  A project claim whose id has three segments; the grammar is project.<slug>.
+rests_on:
+  - idshapemod.contract.helper
