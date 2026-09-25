@@ -1,0 +1,9 @@
+id: project.roof
+scope: project
+status: draft
+layout: card
+body: |
+  A project claim is a valid rests_on target for any module claim.
+rests_on:
+  none: true
+  reason: helper; the roof above it is the constitution
