@@ -322,6 +322,11 @@ const (
 	// completed report and, in write mode, its generated projections remain the
 	// evidence for recovery; this code never describes claim approval/readiness.
 	CodeConformanceFailed Code = "conformance_failed"
+	// CodeViewTooLarge is a read-only assembly (today: manifest show
+	// --isolation) refusing because the emitted view exceeds its hard byte
+	// cap. Nothing was written. Distinct from CodeConformanceCapacityExceeded,
+	// which is the catalog/viewer projection budget.
+	CodeViewTooLarge Code = "view_too_large"
 )
 
 // ExitCode is the DEFAULT process exit status for a code.

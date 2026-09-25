@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/BarterX-Tech/dossierx/internal/loader"
 )
 
 const (
@@ -152,8 +154,7 @@ func scanFingerprint(root string) (map[string]fileStamp, error) {
 }
 
 // scanLoadedClaimFingerprint stamps EXACTLY the files loader.LoadClaims reads:
-// every *.yaml/*.yml anywhere under root, with no directory and no filename
-// excluded. It is the freshness signal for anything derived from the loaded
+// every claim *.yaml/*.yml anywhere under root (module manifests excluded). It is the freshness signal for anything derived from the loaded
 // claims, because "the set of claims changed" and "this scan changed" have to be
 // the same event — a scan that enumerates fewer files than the loader does
 // cannot notice an edit to, or the deletion of, a claim it does not look at, and
@@ -207,8 +208,7 @@ func fingerprintTree(root string, skipDotDirs bool, ignore func(name string) boo
 // at all: anything whose extension is not .yaml/.yml. It is the loader's rule
 // and nothing more.
 func notAClaimFile(name string) bool {
-	ext := strings.ToLower(filepath.Ext(name))
-	return ext != ".yaml" && ext != ".yml"
+	return !loader.IsClaimFile(name)
 }
 
 // ignoredClaimFile is notAClaimFile plus the watcher's own ".tmp-" exclusion.

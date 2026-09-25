@@ -245,9 +245,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - cwmod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	writeClaim := func(name, id string) {

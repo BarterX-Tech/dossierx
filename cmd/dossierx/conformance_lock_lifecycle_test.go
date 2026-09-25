@@ -86,9 +86,7 @@ func TestConformanceRealSingletonAndBatchLockLifecycle(t *testing.T) {
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
 	cfgText := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
-	if err := os.WriteFile(cfgPath, []byte(cfgText), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfgText)
 	lockFixtureConstitution(t, cfgPath)
 	ids := []string{"widget.contract.one", "widget.contract.two", "widget.contract.three"}
 	for i, id := range ids {

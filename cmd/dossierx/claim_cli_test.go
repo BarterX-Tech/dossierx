@@ -70,9 +70,7 @@ func claimWriteFixture(t *testing.T, root string) string {
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
 	lockFixtureConstitution(t, cfgPath)
 
 	base := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
@@ -442,13 +440,21 @@ func TestClaimNewRefusals(t *testing.T) {
 		})
 	}
 
-	// Nothing was written by any of them.
+	// Nothing was written by any of them. The fixture already has two claim
+	// files plus the required module manifest directory.
 	entries, err := os.ReadDir(filepath.Join(root, "claims"))
 	if err != nil {
 		t.Fatalf("read claims dir: %v", err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("a refused claim new must write nothing; claims dir now holds %d files", len(entries))
+	n := 0
+	for _, e := range entries {
+		if e.Name() == "widget" && e.IsDir() {
+			continue
+		}
+		n++
+	}
+	if n != 2 {
+		t.Fatalf("a refused claim new must write nothing; claims dir now holds %d claim files", n)
 	}
 }
 

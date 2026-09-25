@@ -3,5 +3,5 @@ facets:
   - contract
   - internals
 modules:
-  - dgatemod
+  - missmod
 claims_dir: claims

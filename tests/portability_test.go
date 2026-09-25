@@ -126,9 +126,7 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - sprocket\n  - gizmo\n" +
 		"claims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	claims := map[string]string{
@@ -839,9 +837,7 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - offlinemod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 	claim := "id: offlinemod.contract.overview\n" +
 		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
@@ -914,9 +910,7 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - collidemod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(projectRoot, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, filepath.Join(projectRoot, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, projectRoot)
 	claim := "id: collidemod.contract.overview\n" +
 		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +

@@ -152,7 +152,62 @@ func newProjectRaw(t *testing.T, configYAML string) *project {
 	}
 	p := &project{t: t, bin: bin, dir: dir, config: cfg, claimsDir: claimsDir}
 	p.lockConstitution()
+	p.seedManifests(configYAML)
 	return p
+}
+
+// modulesYAMLLine matches one "  - name" entry under a config's top-level
+// "modules:" key — indented exactly like every configYAML constant in this
+// package writes it (see defaultConfigYAML).
+var modulesYAMLLine = regexp.MustCompile(`(?m)^ {2}- (\S+)\s*$`)
+
+// modulesFromConfigYAML extracts the module list from a project.config.yaml
+// body without a YAML dependency (this module deliberately imports none of
+// the engine's Go packages — see this file's own header comment). It reads
+// only the indented "- name" lines between "modules:" and the next
+// unindented key, which is the one shape every configYAML constant here
+// uses.
+func modulesFromConfigYAML(configYAML string) []string {
+	lines := strings.Split(configYAML, "\n")
+	var modules []string
+	inModules := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "modules:") {
+			inModules = true
+			continue
+		}
+		if !inModules {
+			continue
+		}
+		if m := modulesYAMLLine.FindStringSubmatch(line); m != nil {
+			modules = append(modules, m[1])
+			continue
+		}
+		// Any other line ends the modules: block (either another top-level
+		// key or a blank/differently-indented line).
+		inModules = false
+	}
+	return modules
+}
+
+// seedManifests writes a valid claims_dir/<module>/manifest.yaml for every
+// module the project's config declares (NIT-7: the module-manifest harness
+// refuses "check" and "claim lock" until one exists). "claim new" itself only
+// writes an empty-summary STUB, which is deliberately refused until an agent
+// drafts it — this fixture equivalent drafts one directly, the way every
+// other suite's manifest-seeding helper does.
+func (p *project) seedManifests(configYAML string) {
+	p.t.Helper()
+	for _, module := range modulesFromConfigYAML(configYAML) {
+		dir := filepath.Join(p.claimsDir, module)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			p.t.Fatalf("mkdir manifest dir for %s: %v", module, err)
+		}
+		body := "summary: module " + module + " — viewer-test fixture module context.\nprovides: []\ndepends_on: []\n"
+		if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(body), 0o644); err != nil {
+			p.t.Fatalf("write manifest for %s: %v", module, err)
+		}
+	}
 }
 
 // fixtureConstitutionYAML is the smallest roof a fixture can carry.

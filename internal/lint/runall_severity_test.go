@@ -16,10 +16,10 @@ import (
 // with SeverityError before returning — without each of those ~dozen lint
 // files having to set it.
 func TestRunAll_NormalizesEmptySeverityToError(t *testing.T) {
-	cfg := &config.Config{
+	cfg := withManifests(&config.Config{
 		Facets:  []string{"contract"},
 		Modules: []string{"widget"},
-	}
+	})
 
 	claims := []model.Claim{
 		// dangling: rests_on an id nothing defines — historically left

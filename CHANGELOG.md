@@ -79,6 +79,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Values below 1 are refused when the config loads. Project claims carry no
   module and never count toward a module's cap.
 
+- **Module manifest (NIT-7).** Every configured module now requires exactly one
+  `claims_dir/<module>/manifest.yaml`
+  (YAML only; not a claim). The file is the durable module context: a short
+  `summary` (why / start here plus neighbor/product usage, at most 280
+  characters), `provides` (this module's export list of `contract`-facet claim
+  ids) and `depends_on` (other modules' contract ids, each of which must be in
+  its provider's `provides`). File size is capped at 4096 bytes. `dossierx
+  check`, `claim lock` and `manifest show` refuse a missing, oversize,
+  malformed, misplaced or invalid manifest (`module-manifest`, `lint_failed`);
+  the finding names the module and blocks locking every claim of that module,
+  never a claim of another. `claim new` writes an empty-summary stub that fails
+  until an agent drafts it from `dossierx manifest show <module> --isolation`
+  (exit 1 with `draft_hints` while the file is missing). Do not paste claim
+  bodies. `provides`/`depends_on` are not graph edges and cycles are legal.
+  `dossierx manifest show` prints one file (and always a `constitution_digest`
+  seam for NIT-6). `--isolation` adds claim summaries and draft hints;
+  `--integration` adds neighbor blurbs and `depends_on` membership edges.
+  `manifest list` is the summaries-only module catalog. Isolation over the
+  16384-byte view cap refuses with `view_too_large`. The retired `deps` /
+  `catalog` nouns stay retired. Decisions recorded on Linear NIT-7 (2026-09-24).
+
 ### Changed
 
 - **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list

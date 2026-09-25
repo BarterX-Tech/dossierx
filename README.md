@@ -28,7 +28,7 @@ What it does not do is also stated: a code link proves a pointer exists, not tha
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 22 commands under 8 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Surface** | the CLI: 24 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
 | **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
@@ -120,7 +120,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Twenty-two leaf commands under eight nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty-four leaf commands under nine nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, bounded projections, code-link scan and the ledger gate
@@ -132,6 +132,7 @@ check                    lint, bounded projections, code-link scan and the ledge
 claim        show · list · new · lock · unlock · flag · reaudit · link · recover-approved-content
 comment      inbox · list · add · reply
 track        list · show · status
+manifest     show · list             module harness file; --isolation / --integration
 
 serve                    the human's viewer + comment API
 skills export [dir]      write the embedded agent skills into a project
@@ -314,6 +315,19 @@ dossierx claim lock <id> --reason "<your words>" --proposal "<snapshot>"
 
 ## Concepts
 
+**Module manifests.** Each configured module must have exactly one
+`claims_dir/<module>/manifest.yaml` — YAML only, not a claim. It is the
+durable "why / start here": a short `summary` (at most 280 characters), a
+`provides` export list of this module's `contract`-facet claim ids, and a
+`depends_on` list of other modules' contract ids, each of which must be in its
+provider's `provides`. The file is capped at 4096 bytes. `check` and
+`claim lock` refuse a missing, oversize or invalid file (`module-manifest`),
+and a module with no valid manifest has no lockable claims. `claim new` writes
+an empty stub that fails until an agent drafts it from
+`dossierx manifest show <module> --isolation`; do not paste claim bodies, and
+do not write overview or orientation-note claims as the module start-here.
+See [FORMAT.md](FORMAT.md).
+
 **Claims.** A claim is one atomic, YAML-authored fact about a system: a field table, a sequence of steps, a paragraph of prose, a piece of hand-authored mockup HTML. One claim per file, under the project's `claims_dir`.
 
 ```yaml
@@ -374,7 +388,7 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
 ## The skills
 
-DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the eight nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-comments` (run review threads, and when to comment versus `flag`), and `dossierx-code-links` (ground finished code in the claims it implements). See [`skills/`](skills/) for what each covers.
+DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the nine nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-comments` (run review threads, and when to comment versus `flag`), and `dossierx-code-links` (ground finished code in the claims it implements). See [`skills/`](skills/) for what each covers.
 
 `dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md` under the root, while a rootless one exits 0 having written the bundles and dropped the guide beside them instead, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 

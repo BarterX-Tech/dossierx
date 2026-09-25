@@ -14,6 +14,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -98,6 +99,9 @@ func monorepoFixture(t *testing.T) *config.Config {
 	body := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: ../claims\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
+	}
+	if err := manifest.SeedMinimalFromConfigYAML(docs, []byte(body)); err != nil {
+		t.Fatalf("seed module manifests: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(claims, "locked.yaml"), []byte(lockedClaim("widget.contract.locked")), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)

@@ -27,9 +27,7 @@ func writeRestOnLockedFixture(t *testing.T, root, module string) (aPath, bPath s
 	}
 
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	aPath = filepath.Join(claimsDir, "a.yaml")
@@ -185,9 +183,7 @@ func TestLockSucceedsWithOnlyWarningSeverityFinding(t *testing.T) {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - orphanmod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 	claimPath := filepath.Join(claimsDir, "lonely.yaml")
 	claim := "id: orphanmod.contract.lonely\n" +

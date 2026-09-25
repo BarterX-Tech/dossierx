@@ -288,7 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFourLeavesUnderEightNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
+// TestSurfaceIsTwentyFourLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
@@ -316,8 +316,11 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // the corpus and no new way to change it, which is why the addition does not
 // touch any lifecycle guarantee the other nineteen make.
 //
-// Custom viewer themes and their CLI noun were removed; the current surface
-// contains twenty-four leaves under eight nouns.
+// Custom viewer themes and their CLI noun were removed; the surface at that
+// point contained twenty-four leaves under eight nouns. It has since grown
+// to nine nouns (constitution, NIT-6; manifest, NIT-7) while holding at
+// twenty-four leaves — build-order's own noun and leaves came and went in
+// between (NIT-15).
 //
 // THE FIFTH MOVE IS "build-order show", and it is a LEAF rather than a noun:
 // twenty-four-under-nine became twenty-five-under-nine, with the noun count
@@ -350,7 +353,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // left alone), and has nothing to do on a corpus it has already swept. It is a
 // LEAF and not a `check` side effect precisely so the lock store is written
 // only by a verb a human asked for.
-func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
+func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -372,6 +375,9 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 		"track list":   true,
 		"track show":   true,
 		"track status": true,
+
+		"manifest show": true,
+		"manifest list": true,
 
 		"serve":         true,
 		"skills export": true,
@@ -424,8 +430,8 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 22 {
-		t.Errorf("the surface is 22 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 24 {
+		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -522,7 +528,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderEightNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

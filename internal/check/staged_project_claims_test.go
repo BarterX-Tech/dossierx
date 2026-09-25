@@ -27,6 +27,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -75,6 +76,9 @@ func writeProjectFiles(t *testing.T, root, cfgBody string, files map[string]stri
 		t.Fatalf("mkdir %s: %v", root, err)
 	}
 	writeFixtureFile(t, filepath.Join(root, config.FileName), cfgBody)
+	if err := manifest.SeedMinimalFromConfigYAML(root, []byte(cfgBody)); err != nil {
+		t.Fatalf("seed module manifests: %v", err)
+	}
 	for rel, body := range files {
 		abs := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {

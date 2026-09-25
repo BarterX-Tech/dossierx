@@ -154,9 +154,7 @@ func writeFixtureProject(t *testing.T, root, module string) {
 	cfg := "schema_version: 1\n" +
 		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - " + module + "\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 
 	claim := "id: " + module + ".contract.overview\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
@@ -396,9 +394,7 @@ func TestLintFailureExitsNonZeroInBothFormats(t *testing.T) {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - brokenmod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 	// A claim with a dangling rests_on reference: guaranteed error-severity
 	// "dangling" lint finding.

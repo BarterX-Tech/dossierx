@@ -119,7 +119,15 @@ type batchLockData struct {
 // still names every other member of the same cycle in its Message, including
 // a requested one, and that cycle is exactly as real a problem for the
 // requested claim as one rest-on-locked finding would be.
-func findingBlocksBatch(f lint.Finding, requested map[string]bool) bool {
+func findingBlocksBatch(f lint.Finding, requested, requestedModules map[string]bool) bool {
+	if f.LintName == lint.ModuleManifestLintName {
+		// The module's harness file, not a claim: ClaimID is the module
+		// ("" = project-wide, a misplaced file or a walk error). It blocks
+		// every requested claim of that module — a locked claim in a module
+		// with no valid manifest is exactly what NIT-22 forbids — and never
+		// a claim of another module, which cannot fix it by locking.
+		return f.ClaimID == "" || requestedModules[f.ClaimID]
+	}
 	if f.Severity == lint.SeverityWarning {
 		// The one warning this codebase escalates back to a blocker — see
 		// evaluateLockGates and isOwnRollUp. At batch scope it blocks only the
@@ -334,9 +342,13 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 			lintClaims[i].ReviewPending = false
 		}
 	}
+	requestedModules := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		requestedModules[requestedClaims[id].Module] = true
+	}
 	var lintFindings []lint.Finding
 	for _, f := range lint.RunAll(lintClaims, cfg) {
-		if findingBlocksBatch(f, requested) {
+		if findingBlocksBatch(f, requested, requestedModules) {
 			lintFindings = append(lintFindings, f)
 		}
 	}

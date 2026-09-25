@@ -45,6 +45,9 @@ func blWrite(t *testing.T, path, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if filepath.Base(path) == "project.config.yaml" {
+		seedManifestsFromConfigBody(t, filepath.Dir(path), body)
+	}
 }
 
 // blLegacyProject is icWriteFixtureProject plus the legacy root files.

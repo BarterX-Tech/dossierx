@@ -176,6 +176,25 @@
       ]
     },
     {
+      "path": "manifest list",
+      "short": "Catalog every configured module from its manifest.yaml blurb (summaries only)",
+      "flags": [
+        "--config",
+        "--format"
+      ]
+    },
+    {
+      "path": "manifest show",
+      "short": "Print one module's manifest.yaml; --isolation adds constitution digest + claim summaries, --integration adds neighbor blurbs",
+      "flags": [
+        "--bodies",
+        "--config",
+        "--format",
+        "--integration",
+        "--isolation"
+      ]
+    },
+    {
       "path": "serve",
       "short": "Serve the claims viewer with a localhost comment API",
       "flags": [
@@ -263,6 +282,7 @@
     "layout-shape-mismatch",
     "markdown-sanity",
     "module-claim-cap",
+    "module-manifest",
     "orphan",
     "raw-html-scope",
     "rest-on-locked",
@@ -333,6 +353,7 @@
     "unsupported_format",
     "untracked_config",
     "usage",
+    "view_too_large",
     "write_conflict",
     "write_failed",
     "wrong_state"
@@ -494,15 +515,15 @@
   ],
   "render_fingerprint": "sha256:f557eac88402c773b567ceaf5620f51bd0e48e4337356b03cab01565a28b6a06",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:e734b393679062a16e3d690f08a9a8bc709a7716df350cd1ac86ab0d6260e432",
+    "cmd/dossierx": "sha256:fc0b35f3c686de145e5a6e839c8dcc34d2381fbf0823f65d42d3549c5ab28ff6",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/catalog": "sha256:6018468c8dc0b7b6f4592a797997ac3f6e83bffa7c3060c3a43875b935d5c1e7",
-    "internal/check": "sha256:749aeec0926d50f277ea8477572f266d566dfe3526a89f11d0742d50fc76f9bd",
-    "internal/cliout": "sha256:bbd11a5f3a2b24aee4d557280f470f971f2124402dbabb5d1a8cac678bce1bfe",
+    "internal/check": "sha256:8d6c2089eb0be941947fd1819f1c9a037461f8dd2cfc32d62247c94d766d2d38",
+    "internal/cliout": "sha256:24d4839db1a73eee2a8c476d3e61a7c2578f43e022cb61886855ddb38d84c3f6",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:dfc41cb97ca084a5b50beea099f679ca4585d426fb0c6353d12953c33f592870",
+    "internal/config": "sha256:5369199d34d2b566f569b1cbd3ad61c647eb55b4d11d6fec4c70ecbd7e5bd691",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:d40d8ae4bb547e32a9c04fbae73cd887f290bab08e669f1355fbe196af8ccc31",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
@@ -510,9 +531,10 @@
     "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:c036c63fc52e053b0657ed649879f407b15ff7b0c65018fe8942a9ef421c1097",
-    "internal/loader": "sha256:3f016bec4118c24d48427e7ed085288b5df5ae8f4040dafabcfda907becda39a",
-    "internal/lock": "sha256:2973abcfb2bdfada822dde9afeae59ff4e0dd6084de8f86d551df5f8b130d2e2",
+    "internal/lint": "sha256:085f1e32e92dd210f903a552b4645be76d29d9dad39df6f066644e51c528f465",
+    "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
+    "internal/lock": "sha256:9c8cc7d212cde4a538fcaa17b44c1d1d99719fd7fa54b998dfbc0f5b5793d115",
+    "internal/manifest": "sha256:e0a77643ef233ce5e800428b2b2d74fbf43db2fca684d2c62ead9f31742db67b",
     "internal/model": "sha256:1b248b01289a60091b67cd5336761319981e6f681dabe2b959adb78a23277029",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
@@ -522,11 +544,11 @@
     "internal/render/components": "sha256:e4170bcb14adef2b15d4d19a8995850800013e21ef9a30a577e8171afb91b11e",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:0ad4bd18550a8d50d5a55b39293549398a62c78379c20b97b9c4969305ea6867",
+    "internal/serve": "sha256:5ca43b6a775bdf0193f4c6bf8d1477bbbc10fdb68dc092357d1a9699697d3b0c",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
-    "skills": "sha256:b0c655704077f758ea7d4200a6b0ffac307e1c1f920a8a88c2df9000876cd8c8"
+    "skills": "sha256:e51378cbbff9ee716600258743d85d697061d02612b30489402009a75523d3ca"
   },
   "envelope": {
     "keys": [
@@ -584,6 +606,7 @@
       "unsupported_format": 1,
       "untracked_config": 1,
       "usage": 1,
+      "view_too_large": 1,
       "write_conflict": 1,
       "write_failed": 1,
       "wrong_state": 2
@@ -765,6 +788,26 @@
         "open_threads",
         "unlocked_dependency"
       ],
+      "manifestFindingData": [
+        "lint",
+        "message",
+        "module"
+      ],
+      "manifestListData": [
+        "count",
+        "modules"
+      ],
+      "manifestShowData": [
+        "constitution_digest",
+        "depends_on",
+        "findings",
+        "integration",
+        "isolation",
+        "module",
+        "path",
+        "provides",
+        "summary"
+      ],
       "moduleCodeLinksData": [
         "drifted",
         "linked",
@@ -903,10 +946,10 @@
     }
   ],
   "counts": {
-    "commands": 22,
-    "error_codes": 49,
+    "commands": 24,
+    "error_codes": 50,
     "http_routes": 14,
-    "lint_rules": 35,
-    "nouns": 8
+    "lint_rules": 36,
+    "nouns": 9
   }
 }

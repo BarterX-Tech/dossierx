@@ -41,6 +41,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
@@ -1293,9 +1294,13 @@ func newClaimNewCmd() *cobra.Command {
 			"<project_claims_dir>/<slug>.yaml.\n\n" +
 			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
 			"required --summary, a required rests_on (targets or --rests-on-none-reason),\n" +
-			"and layout: card (or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
-			"no confirmation — because drafts are the agent's workshop. The gate in this\n" +
-			"release is on LOCKED claims.",
+			"and layout: card (or --layout). If claims_dir/<module>/manifest.yaml is\n" +
+			"missing, the command writes a STUB with an empty summary that check and\n" +
+			"claim lock refuse until an agent drafts it from\n" +
+			"`dossierx manifest show <module> --isolation`.\n" +
+			"Draft authoring is deliberately unfrictioned — no --reason, no confirmation —\n" +
+			"because drafts are the agent's workshop. The gate in this release is on\n" +
+			"LOCKED claims.",
 		Args: cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			id := args[0]
@@ -1413,6 +1418,9 @@ func newClaimNewCmd() *cobra.Command {
 			if err := loader.SaveClaim(claim); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: %w", err)
 			}
+			if err := ensureModuleManifest(cfg, module); err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: write module manifest: %w", err)
+			}
 
 			// Lint the project WITH the new claim in it and report the verdict.
 			// This is the command's promise being kept out loud: the numbers
@@ -1480,4 +1488,15 @@ func normalizeClaimBody(body string) string {
 		b += "\n"
 	}
 	return b
+}
+
+func ensureModuleManifest(cfg *config.Config, module string) error {
+	if cfg == nil || module == "" {
+		return nil
+	}
+	dest := filepath.Join(cfg.ClaimsDir, filepath.FromSlash(manifest.RequiredRelPath(module)))
+	if fileExists(dest) {
+		return nil
+	}
+	return manifest.WriteStub(cfg.ClaimsDir, module)
 }

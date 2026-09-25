@@ -62,9 +62,7 @@ func recoverFixtureIn(t *testing.T, useGit bool) (cfgPath, approvedBody string) 
 		"body: |\n  " + strings.TrimSuffix(approvedBody, "\n") + "\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, cfgPath, parityConfig)
 	lockFixtureConstitution(t, cfgPath)
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)

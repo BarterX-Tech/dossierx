@@ -26,9 +26,7 @@ func writeSourcedClaimFixture(t *testing.T) string {
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
 	lockFixtureConstitution(t, cfgPath)
 
 	sourced := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
