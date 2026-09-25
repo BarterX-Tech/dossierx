@@ -1,4 +1,5 @@
 id: selfmod.contract.self-rest
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: selfmod
 status: draft

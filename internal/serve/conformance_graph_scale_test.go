@@ -84,7 +84,7 @@ func liveGraphScaleFiles(layers, width int) (files map[string]string, claimCount
 			index := layer*width + column
 			id := fmt.Sprintf("widget.contract.live-%03d", index)
 			var claim strings.Builder
-			fmt.Fprintf(&claim, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: bounded live graph fixture\n", id)
+			fmt.Fprintf(&claim, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: bounded live graph fixture\n", id)
 			if layer > 0 {
 				claim.WriteString("rests_on:\n")
 				for previous := 0; previous < width; previous++ {

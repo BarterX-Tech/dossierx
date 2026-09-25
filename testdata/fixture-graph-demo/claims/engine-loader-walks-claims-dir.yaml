@@ -1,4 +1,5 @@
 id: engine.internals.loader-walks-claims-dir
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: engine
 status: locked

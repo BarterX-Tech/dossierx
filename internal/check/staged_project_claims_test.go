@@ -38,28 +38,28 @@ func projectClaimsConfig(dir string) string {
 
 // lockedProjectClaim is a locked scope: project claim resting on nothing.
 func lockedProjectClaim(id string) string {
-	return "id: " + id + "\nscope: project\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nsummary: A locked project claim.\nscope: project\nstatus: locked\nlayout: card\n" +
 		"body: |\n  a locked project claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 // draftProjectClaimOn is a draft scope: project claim resting on target.
 func draftProjectClaimOn(id, target string) string {
-	return "id: " + id + "\nscope: project\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nsummary: A draft project claim.\nscope: project\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a draft project claim.\n" +
 		"rests_on:\n  - " + target + "\n"
 }
 
 // lockedClaimOn is lockedClaim resting on target instead of on nothing.
 func lockedClaimOn(id, target string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nsummary: A locked claim.\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  - " + target + "\n"
 }
 
 // draftClaimOn is draftClaim resting on target instead of on nothing.
 func draftClaimOn(id, target string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nsummary: A draft claim.\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a draft claim.\n" +
 		"rests_on:\n  - " + target + "\n"
 }
@@ -140,7 +140,7 @@ func projectClaimsParityFixture(t *testing.T) *config.Config {
 
 // lockedProjectClaimOn is lockedProjectClaim resting on target.
 func lockedProjectClaimOn(id, target string) string {
-	return "id: " + id + "\nscope: project\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nsummary: A locked project claim.\nscope: project\nstatus: locked\nlayout: card\n" +
 		"body: |\n  a locked project claim.\n" +
 		"rests_on:\n  - " + target + "\n"
 }

@@ -60,6 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   absence. The claim card's row is **RESTS ON**. The lock hash of a claim that
   names targets does not move; a claim that gains `none: true` is a real edit
   and re-locks through `unlock → lock`. 31 lint rules.
+- **Required claim `summary` and a hard size cap (NIT-8).** Required claim
+  `summary` (one-line plain text, no markdown) and project-config caps
+  `max_claim_body_chars` (omit → **2000**) and `max_claim_summary_chars`
+  (omit → **200**), counted as Unicode code points. `check` reports
+  `summary-required`, `summary-oversize`, and `body-oversize` as ERROR on
+  every status; `claim lock` refuses the same findings. `body-oversize`
+  sums `body` + `steps` + `rows` cells; `raw_html` is exempt. `dossierx
+  claim new` requires `--summary` alongside `--body`. `claim list` prints
+  the summary. A non-empty `summary` is part of `lock.ContentHash`. Zero
+  and negatives are refused at config load. No migration tooling and no
+  grandfathering.
 
 ### Changed
 

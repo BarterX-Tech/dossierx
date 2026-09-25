@@ -41,7 +41,7 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		root := t.TempDir()
 		writeConfig(t, root)
 		writeClaim(t, root, "locked.yaml",
-			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n"+
+			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
 				"body: |\n  a locked claim.\n"+
 				"rests_on:\n  none: true\n  reason: fixture\n")
 		// "Clean" now includes the lock-ledger gate: a hand-written
@@ -58,7 +58,7 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		root := t.TempDir()
 		writeConfig(t, root)
 		writeClaim(t, root, "broken.yaml",
-			"id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
+			"id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
 				"body: |\n  broken fixture.\n"+
 				"rests_on:\n  - widget.contract.does-not-exist\n")
 		stdout, stderr, code := run(t, root, "check")

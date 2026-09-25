@@ -25,6 +25,7 @@ func softMountFitProject(t *testing.T) *project {
 facet: %s
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   soft-mount lock-metric fixture %d.
 rests_on:
@@ -48,6 +49,7 @@ tracks:
   - id: review
     title: Review track
 claims_dir: claims
+max_claim_body_chars: 20000
 `
 
 func group02NavigationProject(t *testing.T) *project {
@@ -57,6 +59,7 @@ func group02NavigationProject(t *testing.T) *project {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the viewer test suite.
 build_role: orientation
 tracks:
   - id: review
@@ -71,6 +74,7 @@ rests_on:
 facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the viewer test suite.
 build_role: verification
 body: |
   the widget implementation detail.
@@ -82,6 +86,7 @@ rests_on:
 facet: contract
 module: gadget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the gadget orientation claim.
 rests_on:
@@ -462,6 +467,7 @@ func TestEmphasisDoesNotTurnLockedCardIntoWarning(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: An approved claim can be important without being a warning.
 emphasis: true
 body: |
   An approved claim can be important without being a warning.
@@ -474,6 +480,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: An explicit warning callout.
 layout: banner
 body: |
   This is an explicit warning callout.

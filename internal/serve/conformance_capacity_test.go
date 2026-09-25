@@ -13,7 +13,7 @@ import (
 func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
 	files := make(map[string]string)
 	for i := 0; i < 64; i++ {
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
@@ -66,7 +66,7 @@ func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
 func TestServeConformanceCapacityReportsFailure(t *testing.T) {
 	files := make(map[string]string)
 	for i := 0; i < 64; i++ {
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
@@ -94,7 +94,7 @@ func TestServeLintPrecedesConformanceCapacityLikeEveryCheckMode(t *testing.T) {
 		if i == 0 {
 			restsBlock = "rests_on:\n  - widget.contract.missing\n"
 		}
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\n%vembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i, restsBlock)
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\n%vembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i, restsBlock)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
@@ -125,7 +125,7 @@ func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecove
 	// on a legal contract claim, not from a retired overview injection.
 	capacityPath := "claims/capacity.yaml"
 	capacity := func(reason string) string {
-		return "id: widget.contract.capacity\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
+		return "id: widget.contract.capacity\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: facet fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
 	}
 	files := map[string]string{capacityPath: capacity(strings.Repeat("x", 70<<20))}
 	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"

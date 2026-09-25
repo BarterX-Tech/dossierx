@@ -23,9 +23,9 @@ import (
 // engine, not something a test can assert into being.
 func TestDocumentProjectsAProjectClaimWithNoModuleAndItsEdges(t *testing.T) {
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}
-	scope := model.Claim{ID: "project.scope", Scope: model.ScopeProject, Status: model.StatusLocked, Body: "Every widget is kept under one roof.", RestsOn: model.RestsNone("the roof above it is the constitution")}
-	overview := model.Claim{ID: "widget.contract.overview", Module: "widget", Facet: "contract", Status: model.StatusLocked, Body: "A widget is the smallest unit.", RestsOn: model.RestsOnIDs(scope.ID)}
-	retention := model.Claim{ID: "project.retention", Scope: model.ScopeProject, Status: model.StatusDraft, Body: "Kept for thirty days.\nLonger on request.", RestsOn: model.RestsOnIDs(overview.ID)}
+	scope := model.Claim{ID: "project.scope", Scope: model.ScopeProject, Status: model.StatusLocked, Summary: "Every widget is kept under one roof.", Body: "Every widget is kept under one roof.", RestsOn: model.RestsNone("the roof above it is the constitution")}
+	overview := model.Claim{ID: "widget.contract.overview", Module: "widget", Facet: "contract", Status: model.StatusLocked, Summary: "A widget is the smallest unit.", Body: "A widget is the smallest unit.", RestsOn: model.RestsOnIDs(scope.ID)}
+	retention := model.Claim{ID: "project.retention", Scope: model.ScopeProject, Status: model.StatusDraft, Summary: "Kept for thirty days.", Body: "Kept for thirty days.\nLonger on request.", RestsOn: model.RestsOnIDs(overview.ID)}
 
 	cat, err := Build([]model.Claim{retention, overview, scope}, cfg)
 	if err != nil {

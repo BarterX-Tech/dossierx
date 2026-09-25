@@ -27,7 +27,7 @@ import (
 
 // orderedClaimIn is orderedClaim for a module other than widget.
 func orderedClaimIn(module, id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"build_role: behavior\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"

@@ -66,6 +66,7 @@ func trackClaimYAML(id, facet, module, memberships string) string {
 facet: ` + facet + `
 module: ` + module + `
 status: draft
+summary: Fixture claim used by the engine test corpus.
 `
 	if memberships != "" {
 		body += "tracks:\n" + memberships

@@ -23,6 +23,7 @@ func writeLayoutClaim(t *testing.T, claimsDir, id, layout, extra string) string 
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
 	src := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: " + layout + "\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a " + layout + " claim.\n" + extra +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
@@ -50,6 +51,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 
 	depPath := filepath.Join(claimsDir, "dep.yaml")
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  dependency claim, v1.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(depPath, []byte(dep), 0o644); err != nil {
@@ -57,6 +59,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	}
 	mainPath := filepath.Join(claimsDir, "main.yaml")
 	mainClaim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the real, correct main body.\n" +
 		"rests_on:\n  - widget.contract.dep\n"
 	if err := os.WriteFile(mainPath, []byte(mainClaim), 0o644); err != nil {

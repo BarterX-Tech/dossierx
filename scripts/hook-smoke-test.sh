@@ -224,6 +224,7 @@ YAML
 		git config commit.gpgsign false
 		arm_roof "$dir"
 		"$BIN" claim new "$CLAIM_ID" \
+			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
 			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
@@ -251,6 +252,7 @@ YAML
 		cd "$repo/$sub"
 		arm_roof "$repo/$sub"
 		"$BIN" claim new "$CLAIM_ID" \
+			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
 			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
@@ -709,6 +711,7 @@ YAML
 	cd "$SPLIT/docs"
 	arm_roof "$SPLIT/docs"
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
 		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
@@ -838,6 +841,7 @@ YAML
 	git config commit.gpgsign false
 	arm_roof "$SKIPPED/repo"
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
 		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
@@ -1092,10 +1096,12 @@ YAML
 	git config commit.gpgsign false
 	arm_roof "$PROJCLAIMS"
 	"$BIN" claim new "$PROJECT_CLAIM_ID" \
+		--summary "Every widget this project documents is kept under one roof." \
 		--body "every widget this project documents is kept under one roof." \
 		--rests-on-none-reason "the roof above this claim is the constitution, which is not a claim" \
 		--format text >/dev/null
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
 		--rests-on "$PROJECT_CLAIM_ID" \
 		--format text >/dev/null

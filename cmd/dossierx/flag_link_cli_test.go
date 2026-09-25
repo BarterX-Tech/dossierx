@@ -19,7 +19,7 @@ import (
 func writeLockedFixtureClaim(t *testing.T, claimsDir, id, module, body string) string {
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
-	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
+	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: behavior\n" +
 		"body: |\n  " + body + "\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
@@ -406,7 +406,7 @@ func TestCLI_Check_ScansSourceDirs_UnknownClaimIsHardFailure(t *testing.T) {
 func writeLockedStepsFixtureClaim(t *testing.T, claimsDir, id, module string, steps []string) {
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
-	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: steps\nbuild_role: behavior\nsteps:\n"
+	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: behavior\nsteps:\n"
 	for _, s := range steps {
 		src += "  - " + s + "\n"
 	}

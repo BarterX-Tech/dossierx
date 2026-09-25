@@ -369,6 +369,7 @@ func twoModuleClaim(id, module string) string {
 facet: contract
 module: ` + module + `
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim in module ` + module + `.
 rests_on:

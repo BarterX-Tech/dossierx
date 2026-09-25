@@ -4190,6 +4190,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+648 -659)
 
 testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
     inputs changed  testdata/fixture-graph-demo/build/ledger/comment-digest.json
+                    testdata/fixture-graph-demo/build/ledger/flag-store.json
                     testdata/fixture-graph-demo/build/ledger/lock-store.json
                     testdata/fixture-graph-demo/claims/cli-agent-operates-human-reviews.yaml
                     testdata/fixture-graph-demo/claims/cli-check-noun.yaml
@@ -6856,6 +6857,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
 
 testdata/fixture-graph-demo/build/viewer/index.html  (+862 -1063)
     inputs changed  testdata/fixture-graph-demo/build/ledger/comment-digest.json
+                    testdata/fixture-graph-demo/build/ledger/flag-store.json
                     testdata/fixture-graph-demo/build/ledger/lock-store.json
                     testdata/fixture-graph-demo/claims/cli-agent-operates-human-reviews.yaml
                     testdata/fixture-graph-demo/claims/cli-check-noun.yaml

@@ -77,6 +77,7 @@ func writeBannerClaim(t *testing.T, root, id, module string) string {
 	t.Helper()
 	body := "id: " + id + "\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: banner\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  Section divider.\n" +
 		"rests_on:\n  none: true\n  reason: fixture banner claim\n"
 	path := filepath.Join(root, "claims", lastSegment(id)+".yaml")
@@ -646,7 +647,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 func writePoisonStoredBodyClaim(t *testing.T, root, id, module string) string {
 	t.Helper()
 	body := "id: " + id + "\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: \"\\tstored prose yaml cannot round-trip\\nsecond line\"\n" +
 		"rests_on:\n  none: true\n  reason: fixture poison claim\n" +
 		"comments:\n" +

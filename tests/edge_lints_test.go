@@ -34,7 +34,7 @@ func writeRestOnLockedFixture(t *testing.T, root, module string) (aPath, bPath s
 
 	aPath = filepath.Join(claimsDir, "a.yaml")
 	aClaim := "id: " + module + ".contract.a\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  original body for A.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(aPath, []byte(aClaim), 0o644); err != nil {
@@ -43,7 +43,7 @@ func writeRestOnLockedFixture(t *testing.T, root, module string) (aPath, bPath s
 
 	bPath = filepath.Join(claimsDir, "b.yaml")
 	bClaim := "id: " + module + ".contract.b\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  B rests on A.\n" +
 		"rests_on:\n  - " + module + ".contract.a\n"
 	if err := os.WriteFile(bPath, []byte(bClaim), 0o644); err != nil {
@@ -97,7 +97,7 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 
 	// Step 3: change A's content underneath the now-locked B.
 	changedA := "id: restlockmod.contract.a\n" +
-		"facet: contract\nmodule: restlockmod\nstatus: locked\nlayout: card\n" +
+		"facet: contract\nmodule: restlockmod\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  CHANGED body for A, after B was locked against it.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(aPath, []byte(changedA), 0o644); err != nil {
@@ -191,7 +191,7 @@ func TestLockSucceedsWithOnlyWarningSeverityFinding(t *testing.T) {
 	lockFixtureConstitution(t, root)
 	claimPath := filepath.Join(claimsDir, "lonely.yaml")
 	claim := "id: orphanmod.contract.lonely\n" +
-		"facet: contract\nmodule: orphanmod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: orphanmod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a claim with no edges at all, so only the warning-severity orphan lint fires.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {

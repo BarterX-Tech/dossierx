@@ -144,6 +144,7 @@ const navigationGroupsClaimYAML = `id: %[1]s.contract.overview
 facet: contract
 module: %[1]s
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim under review.
 rests_on:

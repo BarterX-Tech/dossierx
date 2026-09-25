@@ -16,7 +16,7 @@ import (
 // verb has a valid target, and the poison lives in the CLAIM body so even a
 // whole-thread delete still re-saves the bad bytes.
 func poisonStoredBodyClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: \"\\tstored prose yaml cannot round-trip\\nsecond line\"\n" +
 		"rests_on:\n  none: true\n  reason: fixture poison claim\n" +
 		"comments:\n" +

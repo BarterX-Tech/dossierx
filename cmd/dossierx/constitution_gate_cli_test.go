@@ -90,7 +90,7 @@ func TestClaimLockRefusesEveryPathWhileTheRoofIsNotLocked(t *testing.T) {
 	for _, args := range [][]string{
 		{"claim", "show", "widget.contract.overview"},
 		{"claim", "list"},
-		{"claim", "new", "widget.contract.third", "--body", "drafted under an unlocked roof", "--rests-on", "widget.contract.overview"},
+		{"claim", "new", "widget.contract.third", "--summary", "Fixture claim used by the engine test corpus.", "--body", "drafted under an unlocked roof", "--rests-on", "widget.contract.overview"},
 		{"constitution", "show"},
 	} {
 		if env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil || !env.OK {
@@ -280,13 +280,13 @@ func TestOverCapRefusesLockAndCheckAndNearCapWarns(t *testing.T) {
 func TestProjectClaimsLiveInTheirOwnStoreAndNeverRestOnInternals(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
-	internals := "id: widget.internals.detail\nfacet: internals\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	internals := "id: widget.internals.detail\nsummary: An internal fact.\nfacet: internals\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  an internal fact.\n" +
 		"rests_on:\n  - widget.contract.overview\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "detail.yaml"), []byte(internals), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "new", "project.retention", "--body", "Data is kept for thirty days.\nLonger on request.", "--rests-on", "widget.contract.overview")
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "new", "project.retention", "--summary", "Fixture claim used by the engine test corpus.", "--body", "Data is kept for thirty days.\nLonger on request.", "--rests-on", "widget.contract.overview")
 	if err != nil || !env.OK {
 		t.Fatalf("claim new project.<slug>: %v %+v", err, env.Error)
 	}

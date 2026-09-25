@@ -2,80 +2,80 @@
   "version": 2,
   "hashes": {
     "cli.contract.check-noun": {
-      "cli.internals.exit-codes": "faf047e148b666ea2a45616158247b705b98e9d5f95b85cea10b2a822cb7c2d4",
-      "engine.contract.check-is-fail-fast": "0359f940396e0042b28f957f6482992a150d1bfa831f401e2cf95302b711936f"
+      "cli.internals.exit-codes": "9963e969b9667ae62309a8a9dae7b74ddc3aaa685c91ab4b756fd07c7537e0f7",
+      "engine.contract.check-is-fail-fast": "d25fab282878c8a1aa161484299ad8ae0a0bbd60affbb3395a2d28d2abf1c704"
     },
     "cli.contract.noun-list-is-fixed": {
-      "cli.internals.json-envelope": "b3405763d4b88738e01c69d0ea78cfa6e362e7b14ae5c1d880f4dce60a6e1b28",
+      "cli.internals.json-envelope": "f905ead4b60bfc20a1b806e4abc7b5455e2169cd4bd0e401034bf49509353a7c",
       "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9"
     },
     "cli.internals.dry-run-writes-nothing": {
-      "cli.internals.json-envelope": "b3405763d4b88738e01c69d0ea78cfa6e362e7b14ae5c1d880f4dce60a6e1b28"
+      "cli.internals.json-envelope": "f905ead4b60bfc20a1b806e4abc7b5455e2169cd4bd0e401034bf49509353a7c"
     },
     "cli.internals.exit-codes": {
-      "cli.internals.json-envelope": "b3405763d4b88738e01c69d0ea78cfa6e362e7b14ae5c1d880f4dce60a6e1b28"
+      "cli.internals.json-envelope": "f905ead4b60bfc20a1b806e4abc7b5455e2169cd4bd0e401034bf49509353a7c"
     },
     "cli.internals.json-envelope": {
       "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "engine.contract.build-is-pure": {
-      "engine.contract.catalog-shape": "af276d1e06a3872b89831ec4877bf18887107a7af748f127f879d0dee73aba68"
+      "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
     },
     "engine.contract.catalog-shape": {
       "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "engine.contract.check-is-fail-fast": {
-      "engine.internals.lint-runs-before-catalog": "4bab82f7b3619e61634af1d64fa6066835811e49b23522671b257f6c7765f0c0"
+      "engine.internals.lint-runs-before-catalog": "17ab9fafc69e45ef82c43f5ec649d66f7e774530fb05cbdec8feb1d9a271d064"
     },
     "engine.contract.claim-shape": {
       "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9"
     },
     "engine.internals.catalog-groups-by-facet": {
-      "engine.contract.catalog-shape": "af276d1e06a3872b89831ec4877bf18887107a7af748f127f879d0dee73aba68"
+      "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
     },
     "engine.internals.determinism-suite": {
-      "engine.contract.build-is-pure": "8a7b41fbec5f5abe7046dcafffc7238762b0de2418afe8f9ce7d2d9a901e988f"
+      "engine.contract.build-is-pure": "9d807bce57bcbdffe047d4d641fe3f5dd996c2a7881c71021cfca71e02e17074"
     },
     "engine.internals.edge-kinds": {
       "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "engine.internals.lint-runs-before-catalog": {
-      "engine.internals.edge-kinds": "809a4b61fc4f5d1fe5143c86bf2cdd0d5b77984144a3c3044588e03cc4d282b5"
+      "engine.internals.edge-kinds": "90b3707affe0eab22f9fca4d3d4082d469c3ba6d98b09af1794497d2978f0e08"
     },
     "engine.internals.loader-walks-claims-dir": {
       "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "lock.contract.lock-is-human-approved": {
       "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9",
-      "lock.internals.lock-gates": "f08a81793c5f00ee5f3304a1af7997ed3b5eba544cc10da448da02ceaa8f915c"
+      "lock.internals.lock-gates": "de73ce50129ba4363dbe53299b6ec801164fd125cda9d0b8ee8caa72cb54d2a6"
     },
     "lock.internals.ledger-record": {
-      "lock.internals.lock-store": "04a7c193ee2e2192ac2709eafaf3b95fe301be3f2cb26ea04f82ec4dacc05d8d"
+      "lock.internals.lock-store": "6413f679218b582f0d5e4dc489ab83ce63ac1d420f2546cd4194228b94f36965"
     },
     "lock.internals.lock-gates": {
-      "lock.internals.ledger-record": "5b43f4daf36ffc75d8b2dce63de07f405b4b0eb1c4cad58bf240cfdd4ff04d55"
+      "lock.internals.ledger-record": "d8cace006489c2f15ea8e54ac1a2e284bea07a5706419eabaa411c1b5468f1a0"
     },
     "lock.internals.lock-store": {
       "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "lock.internals.unlock-keeps-the-record": {
-      "lock.internals.ledger-record": "5b43f4daf36ffc75d8b2dce63de07f405b4b0eb1c4cad58bf240cfdd4ff04d55"
+      "lock.internals.ledger-record": "d8cace006489c2f15ea8e54ac1a2e284bea07a5706419eabaa411c1b5468f1a0"
     },
     "viewer.contract.no-network-at-runtime": {
-      "viewer.internals.payload-shape": "0dcbf515cb35c23eb78528867bd08f94ee79fac8a40466b972cf89bdabe53c3c"
+      "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
     },
     "viewer.contract.render-is-pure": {
-      "engine.contract.build-is-pure": "8a7b41fbec5f5abe7046dcafffc7238762b0de2418afe8f9ce7d2d9a901e988f",
+      "engine.contract.build-is-pure": "9d807bce57bcbdffe047d4d641fe3f5dd996c2a7881c71021cfca71e02e17074",
       "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9"
     },
     "viewer.internals.node-fields": {
-      "viewer.internals.payload-shape": "0dcbf515cb35c23eb78528867bd08f94ee79fac8a40466b972cf89bdabe53c3c"
+      "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
     },
     "viewer.internals.pane-is-inert-until-opened": {
-      "viewer.internals.payload-shape": "0dcbf515cb35c23eb78528867bd08f94ee79fac8a40466b972cf89bdabe53c3c"
+      "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
     },
     "viewer.internals.payload-shape": {
-      "engine.contract.catalog-shape": "af276d1e06a3872b89831ec4877bf18887107a7af748f127f879d0dee73aba68"
+      "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
     }
   },
   "locked_at": {
@@ -108,63 +108,63 @@
   "ledger": {
     "cli.contract.check-noun": {
       "subject": "claim",
-      "hash": "5654f745df1c9aac2701dd3660eaf35a6333dd554b332fc12f02eec85d68c1a3",
+      "hash": "1f07fc139af829cf3d892f7525905f59883d828e1243e482503ca706de178f1f",
       "at": "2026-08-05T15:19:19.043119Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "cli.contract.noun-list-is-fixed": {
       "subject": "claim",
-      "hash": "b9345a815277a0270a5d040b2bfb5854620ae73f011953b4703b85dd8cf1f473",
+      "hash": "e66f4c9f79951931c9f6eea1b475bed560966eed060a0236b7a2aeb199b9df69",
       "at": "2026-08-05T15:19:19.057276Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "cli.internals.dry-run-writes-nothing": {
       "subject": "claim",
-      "hash": "185f2b9c074fb1af044aae36ae2325d74126c4cdf03dc2bdb977baf9284926de",
+      "hash": "0ee76dd0d8bcc066e71eae0cd0e5032371ecd5944e50bdbe043a6d6d120e67e9",
       "at": "2026-08-05T15:19:18.973846Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "cli.internals.exit-codes": {
       "subject": "claim",
-      "hash": "4fb7f2a8d67a9157d4b82efae22a0ba9761086d6bc7403202cd279e29ca69f02",
+      "hash": "93c6e7d5e3be99d29cdcf921f15c6feb3db9d4a1b48c9fd7a953a173f252fbf2",
       "at": "2026-08-05T15:19:18.988819Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "cli.internals.json-envelope": {
       "subject": "claim",
-      "hash": "f2689ffd15fa7adfedb2fe1744c3f81957dffd2503508dcc7620118e64377567",
+      "hash": "f84e65bf68f354a4b0b268f91441e398f810e5343ccd82b421fb16cdfb00ead5",
       "at": "2026-08-05T15:19:18.958411Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.contract.build-is-pure": {
       "subject": "claim",
-      "hash": "76f9bfafd1bfd657bd650cdd23ef22b36530e5e5384d1f33f3ebbb4c0a7c7bd3",
+      "hash": "38f0ae83292a0083a2b3e143366e47fc9e1eceba0034509d673de818d44ad0f5",
       "at": "2026-08-05T15:19:19.111127Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.contract.catalog-shape": {
       "subject": "claim",
-      "hash": "a68d92dd632ca36951bb3c005743830193ba9bef0970ed83e4d21b4a538a3d97",
+      "hash": "d5430aa235a64ab4e6a43fa3cf45f53f0ae470f6d47857453d22827c39d82933",
       "at": "2026-08-05T15:19:19.071206Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.contract.check-is-fail-fast": {
       "subject": "claim",
-      "hash": "de8742dd76d225f693df6909900aaa507eea6eab6b14f3aa98e621b917cc890b",
+      "hash": "bd66cadca2f7448fe666b767a0d37668134caac707570a89848472a2f6026706",
       "at": "2026-08-05T15:19:19.02963Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.contract.claim-shape": {
       "subject": "claim",
-      "hash": "0842dcc8cb1cbd082b4aeda1863a605f6d54151318357d7c5c81065574c875db",
+      "hash": "6a852c142dcc664e419ae192615939208534e94d3b9225d827ed7814d70c0414",
       "at": "2026-09-24T15:48:39.59623Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock: rests_on is required",
@@ -178,6 +178,7 @@
         "Kind": "",
         "BuildRole": "schema",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.\n",
         "Rows": null,
         "Section": "",
@@ -203,7 +204,7 @@
     },
     "engine.contract.single-source-of-truth": {
       "subject": "claim",
-      "hash": "b00e7477bcfbaf9e6924e956bf757def7fb2fde4341c7ba1f73b86c8c2ee03e0",
+      "hash": "db6f688dabbe31982fa9f65fba80b31bff95d5a3c0664c781b99ff5d5535d8e3",
       "at": "2026-09-24T15:48:39.475276Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock: rests_on is required",
@@ -217,6 +218,7 @@
         "Kind": "",
         "BuildRole": "orientation",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "Every fact in this project has exactly one home. A second place that states the same thing is a second place to keep correct, and the two will disagree.\n",
         "Rows": null,
         "Section": "",
@@ -242,105 +244,105 @@
     },
     "engine.internals.catalog-groups-by-facet": {
       "subject": "claim",
-      "hash": "52d897354b0f700d515cff30b9ac8c14fdbdb590f34400e31f607231aa32e43d",
+      "hash": "1af11af1646859cdbcba4646860d6409f95de47e918a645cdfc616a7935f7e39",
       "at": "2026-08-05T15:19:19.084761Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.internals.determinism-suite": {
       "subject": "claim",
-      "hash": "c4ea2ac35553cde26ce6dfaa837fad5d24eff9841c869cd9e89794767f7aba0e",
+      "hash": "72a7c3e1e136723798d3ab163db0f77f6c12dbed57106b1599bf8d535e1d2af5",
       "at": "2026-08-05T15:19:19.138857Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.internals.edge-kinds": {
       "subject": "claim",
-      "hash": "9f592b1397aadf8fd3b62d291f33faeaf2756e39be79c1638ac39f62eb7001a7",
+      "hash": "5725e45b9e1dc4632bd606016e1601196588f1a9cdbbf3b4f03bb22668716306",
       "at": "2026-08-05T15:19:19.002949Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.internals.lint-runs-before-catalog": {
       "subject": "claim",
-      "hash": "fec253ca5e1449a90767a6827749aa6cbee1a48f6aa9e1afb8d83be93b5fdfa0",
+      "hash": "aa501a4a761520129c6740f86a6cae63b5ebd4a007ec8dc5021da26f03c54d89",
       "at": "2026-08-05T15:19:19.016663Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.internals.loader-walks-claims-dir": {
       "subject": "claim",
-      "hash": "fb360b5041fae080abdb8b55bdd9862689d6bf946632e7170d5ab85313c22094",
+      "hash": "ff2536b33f1a9553dc66a945e4f47a5b20dbb19a706ef6729e8ad7bf980db31a",
       "at": "2026-08-05T15:19:19.099129Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "lock.contract.lock-is-human-approved": {
       "subject": "claim",
-      "hash": "616a40209ec4169cce294713eddcfcc9e6da2d39d66b774be7ca7aa0652c2838",
+      "hash": "35a8b3a39898964d412f15e04f53f1e762db14baaad6d8d429f0b18f90aafed9",
       "at": "2026-08-05T15:19:19.206362Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "lock.internals.ledger-record": {
       "subject": "claim",
-      "hash": "b6acf257363cc4494dd828a311528e273c0346f28d77e50f255b049bc6402e97",
+      "hash": "0c7e478de3cc2cf01a9f7c59adb06af54c4a56235995c92139f82337386a5366",
       "at": "2026-08-05T15:19:19.165631Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "lock.internals.lock-gates": {
       "subject": "claim",
-      "hash": "16cc1252cec664718e00f2044c5e2395ba1d2964c2a4f9732f0a34b0ea79dd41",
+      "hash": "0d8a98b061e2a11677b0ad79017c6b372d3cd4ac1dc76e3456f4a5c064db093a",
       "at": "2026-08-05T15:19:19.177742Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "lock.internals.lock-store": {
       "subject": "claim",
-      "hash": "e416b3be6e3469a26cfac355765254002d50efddbc11f0fb76b04dcd890bead1",
+      "hash": "45b7372c4cc09dd3e6eb1fc29a106ac7f0730d100d67103fa68e02ae697f6f22",
       "at": "2026-08-05T15:19:19.151985Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "lock.internals.unlock-keeps-the-record": {
       "subject": "claim",
-      "hash": "f5882b129c59833f28bdb1822ab7aef94c5e6b4cbdc9aba42222fffb36ff01d9",
+      "hash": "6b87ca34e0b372a08e18b6f9aa214df0942ec9a479bb4c800cb61433229a61b4",
       "at": "2026-08-05T15:19:19.192708Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.contract.no-network-at-runtime": {
       "subject": "claim",
-      "hash": "f8746ad15a79d8352db642df7c76c813b64311e52acf704ab15c697f3e6e6e41",
+      "hash": "d9b483c8ffa396614b4188e12a43558a655187855615648209da71a1ea75681a",
       "at": "2026-08-05T15:19:19.246495Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.contract.render-is-pure": {
       "subject": "claim",
-      "hash": "0fc03af6d335cd0a1059b6b2265a7edd40af0543623b8db1990095e064db372b",
+      "hash": "70a321984a002bfe7c124179f00e21f2cf08e459ed2ff66f71fcbe24da5a6e18",
       "at": "2026-08-05T15:19:19.260161Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.internals.node-fields": {
       "subject": "claim",
-      "hash": "aadb2b7d144c11e2b7401d1c951a95064880864fb78e796517d5905c0f2454cf",
+      "hash": "54b1ba057c0a6f0b337f2fd6b66abd46967edb4207de8f22ac42d590276c07e9",
       "at": "2026-08-05T15:19:19.274614Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.internals.pane-is-inert-until-opened": {
       "subject": "claim",
-      "hash": "dd5691092aefb4caa0234bc049a722fc143e9f5e789ac4693168929b92eee5ac",
+      "hash": "31cf899b1f24d76d842a98b27bb784ee30fbf360ddd9d0baefab0507871e8d96",
       "at": "2026-08-05T15:19:19.234754Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.internals.payload-shape": {
       "subject": "claim",
-      "hash": "2a69af31723d7017421e53528ece34df5d0ceafa0eb529558061453a30744fbd",
+      "hash": "8cb9ae68610324b648d3a9b8b784421c88eb7c4620dd59d9a5dd22daf2676fef",
       "at": "2026-08-05T15:19:19.220152Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"

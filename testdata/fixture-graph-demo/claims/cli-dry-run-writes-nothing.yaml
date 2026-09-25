@@ -1,4 +1,5 @@
 id: cli.internals.dry-run-writes-nothing
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: cli
 status: locked

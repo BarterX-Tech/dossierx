@@ -1,0 +1,11 @@
+id: summarymod.contract.helper
+summary: Helper claim that already has a one-line summary.
+facet: contract
+module: summarymod
+status: draft
+layout: card
+body: |
+  Helper so the missing-summary claim is not also an orphan.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -222,6 +223,83 @@ modules: [ledger]
 	}
 	if !strings.Contains(err.Error(), "claims_dir") {
 		t.Errorf("expected error to name the missing field claims_dir, got: %v", err)
+	}
+}
+
+func TestLoadConfig_ClaimCharCapsDefaultAndOverride(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	omitted := writeConfig(t, dir, "omit.yaml", `
+schema_version: 1
+facets: [contract, internals]
+modules: [ledger]
+claims_dir: claims
+`)
+	cfg, err := LoadConfig(omitted)
+	if err != nil {
+		t.Fatalf("LoadConfig omit: %v", err)
+	}
+	if cfg.MaxClaimBodyChars != nil || cfg.MaxClaimSummaryChars != nil {
+		t.Fatalf("omitted caps must stay nil, body=%v summary=%v", cfg.MaxClaimBodyChars, cfg.MaxClaimSummaryChars)
+	}
+	if got := cfg.ClaimBodyCharLimit(); got != DefaultMaxClaimBodyChars {
+		t.Fatalf("ClaimBodyCharLimit = %d, want %d", got, DefaultMaxClaimBodyChars)
+	}
+	if got := cfg.ClaimSummaryCharLimit(); got != DefaultMaxClaimSummaryChars {
+		t.Fatalf("ClaimSummaryCharLimit = %d, want %d", got, DefaultMaxClaimSummaryChars)
+	}
+
+	raised := writeConfig(t, dir, "raised.yaml", `
+schema_version: 1
+facets: [contract, internals]
+modules: [ledger]
+claims_dir: claims
+max_claim_body_chars: 4000
+max_claim_summary_chars: 80
+`)
+	cfg, err = LoadConfig(raised)
+	if err != nil {
+		t.Fatalf("LoadConfig raised: %v", err)
+	}
+	if cfg.MaxClaimBodyChars == nil || *cfg.MaxClaimBodyChars != 4000 {
+		t.Fatalf("MaxClaimBodyChars = %v, want 4000", cfg.MaxClaimBodyChars)
+	}
+	if cfg.MaxClaimSummaryChars == nil || *cfg.MaxClaimSummaryChars != 80 {
+		t.Fatalf("MaxClaimSummaryChars = %v, want 80", cfg.MaxClaimSummaryChars)
+	}
+	if got := cfg.ClaimBodyCharLimit(); got != 4000 {
+		t.Fatalf("ClaimBodyCharLimit = %d, want 4000", got)
+	}
+	if got := cfg.ClaimSummaryCharLimit(); got != 80 {
+		t.Fatalf("ClaimSummaryCharLimit = %d, want 80", got)
+	}
+}
+
+func TestLoadConfig_ClaimCharCapsRejectZeroAndNegative(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"max_claim_body_chars", "max_claim_summary_chars"} {
+		for _, n := range []int{0, -3} {
+			p := writeConfig(t, dir, "bad.yaml", `
+schema_version: 1
+facets: [contract, internals]
+modules: [ledger]
+claims_dir: claims
+`+field+`: `+strconv.Itoa(n)+`
+`)
+			_, err := LoadConfig(p)
+			if err == nil {
+				t.Fatalf("expected error for %s %d", field, n)
+			}
+			if !strings.Contains(err.Error(), field) {
+				t.Fatalf("error must name %s, got: %v", field, err)
+			}
+		}
 	}
 }
 

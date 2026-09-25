@@ -1,4 +1,5 @@
 id: local.contract.main
+summary: Rests on a project claim (allowed) and a foreign internals claim (refused).
 facet: contract
 module: local
 status: draft

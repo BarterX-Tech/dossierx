@@ -93,6 +93,7 @@ facets:
 modules:
   - widget
 claims_dir: claims
+max_claim_body_chars: 20000
 `
 
 // draftClaimYAML is a single lockable draft claim with a governed_by: none
@@ -101,6 +102,7 @@ const draftClaimYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim under review.
 rests_on:

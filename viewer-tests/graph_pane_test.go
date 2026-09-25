@@ -58,6 +58,7 @@ func graphClaim(id, facet, restsOn string) string {
 facet: ` + facet + `
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 `
 	if restsOn != "" {
 		body += "rests_on:\n  - " + restsOn + "\n"
@@ -433,6 +434,7 @@ func TestGraphPayloadSurvivesScriptClose(t *testing.T) {
 facet: "</script><img src=x>"
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim whose facet is a script-closing breakout attempt.
 rests_on:
@@ -649,6 +651,7 @@ claims_dir: claims
 facet: contract
 module: `+module+`
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   one of many claims.
 rests_on:

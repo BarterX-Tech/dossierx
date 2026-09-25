@@ -1,4 +1,5 @@
 id: rawhtmlmod.contract.mockup
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: rawhtmlmod
 status: draft

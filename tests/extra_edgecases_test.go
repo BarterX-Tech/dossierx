@@ -44,7 +44,7 @@ func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
 		id := "concmod.contract.c" + strconv.Itoa(i)
 		ids[i] = id
 		claim := "id: " + id + "\n" +
-			"facet: contract\nmodule: concmod\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: concmod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  concurrently-locked claim number " + strconv.Itoa(i) + ".\n" +
 			"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 		if err := os.WriteFile(filepath.Join(claimsDir, "c"+strconv.Itoa(i)+".yaml"), []byte(claim), 0o644); err != nil {
@@ -136,7 +136,7 @@ func TestVeryLongClaimIDHandledEndToEnd(t *testing.T) {
 	}
 
 	claim := "id: " + id + "\n" +
-		"facet: contract\nmodule: longidmod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: longidmod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  claim with a very long id.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "long.yaml"), []byte(claim), 0o644); err != nil {

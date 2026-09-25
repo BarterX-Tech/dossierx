@@ -217,6 +217,7 @@ facet: internals
 module: widget
 status: draft
 layout: table
+summary: Fixture claim used by the engine test corpus.
 body: |
   Prose context alongside the structured field table below.
 rows:

@@ -49,7 +49,7 @@ func adoptableCommentFixture(t *testing.T) string {
 	// lock ledger, and its own comment thread is what makes armLedgerFixture
 	// create the digest store (it skips a project with no comments anywhere).
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: schema\n" +
 			"body: |\n  a locked claim, present so the project is ledger- and digest-covered.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
@@ -63,7 +63,7 @@ func adoptableCommentFixture(t *testing.T) string {
 	// seen. It has to be written afterwards — the fixture helper adopts every
 	// claim it can see when it arms the store, so a claim present at that moment
 	// would already have an entry and there would be nothing left to adopt.
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim the comment digest store has never seen.\n" +
 		"rests_on:\n  - widget.contract.main\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "a.yaml"), []byte(claim), 0o644); err != nil {
@@ -169,7 +169,7 @@ func TestFirstCheckOfANewProjectDoesNotWarnAboutAdoption(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatalf("mkdir claims: %v", err)
 	}
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a brand new claim that already carries a thread.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +

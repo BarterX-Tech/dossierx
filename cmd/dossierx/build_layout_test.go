@@ -286,7 +286,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 
 	t.Run("lint red still reports the finding", func(t *testing.T) {
 		root, cfgPath := blIgnoredRepo(t)
-		blWrite(t, filepath.Join(root, "claims", "dangling.yaml"), "id: widget.contract.dangling\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  rests on nothing that exists.\nrests_on:\n  - widget.contract.nowhere\n")
+		blWrite(t, filepath.Join(root, "claims", "dangling.yaml"), "id: widget.contract.dangling\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  rests on nothing that exists.\nrests_on:\n  - widget.contract.nowhere\n")
 		env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
 		if err == nil || env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
 			t.Fatalf("expected lint_failed, got err=%v env=%+v", err, env)
@@ -343,7 +343,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 			}
 		}
 		// And claim lock succeeds with the warning in its envelope.
-		blWrite(t, filepath.Join(root, "claims", "two.yaml"), "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  a second claim.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "two.yaml"), "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  a second claim.\nrests_on:\n  none: true\n  reason: fixture\n")
 		env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved")
 		if err != nil || !env.OK {
 			t.Fatalf("claim lock over a force-added ledger must succeed, got err=%v env=%+v", err, env)
@@ -371,8 +371,8 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		t.Helper()
 		root = t.TempDir()
 		cfgPath, _ = icWriteFixtureProject(t, root, "widget")
-		blWrite(t, filepath.Join(root, "claims", "one.yaml"), "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  one.\nrests_on:\n  none: true\n  reason: fixture\n")
-		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: orientation\nbody: |\n  fixture claim.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "one.yaml"), "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: schema\nbody: |\n  one.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: orientation\nbody: |\n  fixture claim.\nrests_on:\n  none: true\n  reason: fixture\n")
 		blGitInit(t, root)
 		for _, id := range []string{"widget.contract.one", "widget.contract.overview"} {
 			if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
@@ -398,7 +398,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	}
 	t.Run("claim lock", func(t *testing.T) {
 		root, cfgPath := seed(t)
-		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  three.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: schema\nbody: |\n  three.\nrests_on:\n  none: true\n  reason: fixture\n")
 		refusedAndBlocked(t, cfgPath,
 			[]string{"claim", "lock", "widget.contract.three", "--dry-run", "--reason", "ok"},
 			[]string{"claim", "lock", "widget.contract.three", "--reason", "ok"})
@@ -418,7 +418,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	t.Run("batch claim lock preview and refusal before the sentinel", func(t *testing.T) {
 		root, cfgPath := seed(t)
 		for _, id := range []string{"a", "b"} {
-			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  "+id+".\nrests_on:\n  none: true\n  reason: fixture\n")
+			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: schema\nbody: |\n  "+id+".\nrests_on:\n  none: true\n  reason: fixture\n")
 		}
 		dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--dry-run", "--reason", "ok")
 		if !dr.Blocked || !hasPrecondition(dr, "stores_are_tracked", false) {
@@ -459,7 +459,7 @@ func TestCLI_CheckReportsGitignoreCheckWhenTheGuardCannotApply(t *testing.T) {
 			t.Fatal(err)
 		}
 		blWrite(t, filepath.Join(repo, "project.config.yaml"), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
-		blWrite(t, filepath.Join(repo, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  fixture.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(repo, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  fixture.\nrests_on:\n  none: true\n  reason: fixture\n")
 		blGitInit(t, repo)
 		lockFixtureConstitution(t, filepath.Join(repo, "project.config.yaml"))
 		env, _, err := execCLIJSON(t, "--config", filepath.Join(repo, "project.config.yaml"), "check", "--validate")

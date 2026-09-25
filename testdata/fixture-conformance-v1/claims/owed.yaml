@@ -1,4 +1,5 @@
 id: widget.contract.owed
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: widget
 status: draft

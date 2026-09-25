@@ -21,6 +21,17 @@ import (
 // understands. LoadConfig refuses to run against any other value.
 const CurrentSchemaVersion = 1
 
+// DefaultMaxClaimBodyChars is the omitted-field default for
+// Config.MaxClaimBodyChars: body + steps + rows cells, counted as
+// Unicode code points. Derived with the module cap (NIT-14): ten claims of
+// 2,000 characters is a 20,000-character full-module read, one OpenClaw
+// bootstrap file.
+const DefaultMaxClaimBodyChars = 2000
+
+// DefaultMaxClaimSummaryChars is the omitted-field default for
+// Config.MaxClaimSummaryChars. One line, counted as Unicode code points.
+const DefaultMaxClaimSummaryChars = 200
+
 // removedOverviewFacet is the retired reserved facet name. Listing it in
 // facets[] is refused; leftover claims with facet: overview fail id-shape
 // like any other undeclared facet.
@@ -235,6 +246,18 @@ type Config struct {
 	// allowlisted module that isn't even a project module can never gate
 	// anything, which almost certainly indicates a typo.
 	MockupModules []string `yaml:"mockup_modules,omitempty"`
+
+	// MaxClaimBodyChars is the project-wide ceiling on one claim's
+	// body+steps+rows cells, counted as Unicode code points. Omit the
+	// field to take DefaultMaxClaimBodyChars (2000). Zero and negatives
+	// are refused at load time — they are not a "no cap" sentinel.
+	MaxClaimBodyChars *int `yaml:"max_claim_body_chars,omitempty"`
+
+	// MaxClaimSummaryChars is the project-wide ceiling on summary,
+	// counted as Unicode code points. Omit the field to take
+	// DefaultMaxClaimSummaryChars (200). Zero and negatives are refused
+	// at load time.
+	MaxClaimSummaryChars *int `yaml:"max_claim_summary_chars,omitempty"`
 
 	// dir is the absolute directory containing the config file itself;
 	// ClaimsDir and Viewer.TemplateOverrides are resolved against it, never
@@ -480,7 +503,34 @@ func (c *Config) validate() error {
 		return fmt.Errorf("viewer.theme is no longer supported; remove viewer.theme from project.config.yaml to use the built-in Light and Dark viewer themes")
 	}
 
+	if c.MaxClaimBodyChars != nil && *c.MaxClaimBodyChars < 1 {
+		return fmt.Errorf("max_claim_body_chars must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimBodyChars, DefaultMaxClaimBodyChars)
+	}
+	if c.MaxClaimSummaryChars != nil && *c.MaxClaimSummaryChars < 1 {
+		return fmt.Errorf("max_claim_summary_chars must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimSummaryChars, DefaultMaxClaimSummaryChars)
+	}
+
 	return nil
+}
+
+// ClaimBodyCharLimit is the effective body+steps+rows cap: the configured
+// value when set, otherwise DefaultMaxClaimBodyChars. A nil Config still
+// returns the default so a lint called without a config does not silently
+// drop the ceiling.
+func (c *Config) ClaimBodyCharLimit() int {
+	if c == nil || c.MaxClaimBodyChars == nil {
+		return DefaultMaxClaimBodyChars
+	}
+	return *c.MaxClaimBodyChars
+}
+
+// ClaimSummaryCharLimit is the effective summary cap. A nil Config still
+// returns DefaultMaxClaimSummaryChars.
+func (c *Config) ClaimSummaryCharLimit() int {
+	if c == nil || c.MaxClaimSummaryChars == nil {
+		return DefaultMaxClaimSummaryChars
+	}
+	return *c.MaxClaimSummaryChars
 }
 
 // TrackIDs returns every declared track id, in declaration order. Callers

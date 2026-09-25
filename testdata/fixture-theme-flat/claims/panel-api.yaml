@@ -1,4 +1,5 @@
 id: panel.contract.api
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: panel
 status: locked

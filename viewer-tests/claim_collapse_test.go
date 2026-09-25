@@ -10,6 +10,7 @@ const secondClaimYAML = `id: widget.contract.secondary
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   another claim under review.
 rests_on:
@@ -31,6 +32,7 @@ const contractIssueClaimYAML = `id: widget.contract.issue
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the contract facet has one review issue.
 rests_on:
@@ -41,6 +43,7 @@ const behaviorIssueClaimYAML = `id: widget.internals.issue
 facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the internals facet has a different review issue.
 rests_on:
@@ -51,6 +54,7 @@ const cleanOtherModuleClaimYAML = `id: other.contract.clean
 facet: contract
 module: other
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the other module has no review issue.
 rests_on:
@@ -62,6 +66,7 @@ const cleanWidgetFacetClaimYAML = `id: widget.internals.clean
 facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the widget internals facet has no review issue.
 rests_on:
@@ -73,6 +78,7 @@ const longClaimYAML = `id: widget.contract.long-body
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   This deliberately long claim body needs more than four rendered lines at desktop width. It preserves complete structured HTML while the reading view initially shows a calm four-line preview. The control must reveal every word without replacing the body node.
 

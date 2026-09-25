@@ -762,6 +762,37 @@ func TestContentHash_RawHTMLIsHashedOnlyWhenPresent(t *testing.T) {
 	}
 }
 
+// TestContentHash_SummaryIsHashedOnlyWhenPresent pins NIT-8's summary
+// stanza the same way raw_html is pinned: empty keeps the historical
+// digest; a present summary is content a dependent must notice.
+func TestContentHash_SummaryIsHashedOnlyWhenPresent(t *testing.T) {
+	base := model.Claim{
+		ID:     "widget.contract.a",
+		Facet:  "contract",
+		Module: "widget",
+		Body:   "the claim body",
+	}
+	if got := ContentHash(base); got != contentHashNoRawHTML {
+		t.Fatalf("empty summary must keep the historical ContentHash:\n got %s\nwant %s", got, contentHashNoRawHTML)
+	}
+	explicitlyEmpty := base
+	explicitlyEmpty.Summary = ""
+	if got := ContentHash(explicitlyEmpty); got != contentHashNoRawHTML {
+		t.Fatalf("empty summary = %s, want %s", got, contentHashNoRawHTML)
+	}
+	with := base
+	with.Summary = "one line about the claim"
+	first := ContentHash(with)
+	if first == contentHashNoRawHTML {
+		t.Fatalf("gaining a summary must move ContentHash")
+	}
+	edited := with
+	edited.Summary = "a different one line"
+	if ContentHash(edited) == first {
+		t.Fatalf("editing summary must move ContentHash")
+	}
+}
+
 // TestDetectStale_RawHTMLEditOnDependencyFlipsTheDependent is the reason FIX 1
 // exists, stated end to end rather than at the hash: a locked claim that rests
 // on another claim must be flipped to review_pending when that dependency's

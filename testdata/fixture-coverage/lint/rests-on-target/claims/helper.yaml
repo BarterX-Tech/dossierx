@@ -1,4 +1,5 @@
 id: other.internals.secret
+summary: Foreign internals a local claim must not rest on.
 facet: internals
 module: other
 status: draft

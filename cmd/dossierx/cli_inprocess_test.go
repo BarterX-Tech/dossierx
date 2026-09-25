@@ -150,7 +150,7 @@ func icWriteFixtureProject(t *testing.T, root, module string) (cfgPath, claimPat
 
 	claimPath = filepath.Join(claimsDir, "overview.yaml")
 	claim := "id: " + module + ".contract.overview\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  fixture claim for in-process CLI tests.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
@@ -394,6 +394,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 
 	depPath := filepath.Join(claimsDir, "dep.yaml")
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  dependency claim, v1.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(depPath, []byte(dep), 0o644); err != nil {
@@ -402,6 +403,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 
 	mainPath := filepath.Join(claimsDir, "main.yaml")
 	mainClaim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  main claim resting on the dependency.\n" +
 		"rests_on:\n  - widget.contract.dep\n"
 	if err := os.WriteFile(mainPath, []byte(mainClaim), 0o644); err != nil {

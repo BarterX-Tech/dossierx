@@ -75,7 +75,7 @@ func lockBuildOrder(t *testing.T, cfg *config.Config, _ []model.Claim, module st
 
 // orderedClaim is a locked claim carrying the build_role a build order needs.
 func orderedClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"build_role: behavior\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"

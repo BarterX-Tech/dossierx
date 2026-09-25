@@ -1,4 +1,5 @@
 id: codeorphanmod.contract.helper
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: codeorphanmod
 status: draft

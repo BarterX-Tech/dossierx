@@ -1,4 +1,5 @@
 id: viewer.contract.no-network-at-runtime
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: viewer
 status: locked

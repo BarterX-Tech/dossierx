@@ -1,4 +1,5 @@
 id: engine.contract.start-here
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: engine
 status: draft

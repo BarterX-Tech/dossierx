@@ -72,7 +72,7 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	for i := range modules {
 		modules[i] = fmt.Sprintf("mod%02d", i)
 	}
-	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\n"
+	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	for _, mod := range modules {
 		claims = append(claims, model.Claim{
 			ID: mod + ".contract.one", Facet: "contract", Module: mod, Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: heavy, RestsOn: model.RestsNone("fixture"),
+			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: heavy, RestsOn: model.RestsNone("fixture"),
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -121,7 +121,7 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 		modules[i] = fmt.Sprintf("mod%02d", i)
 	}
 	root := t.TempDir()
-	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\n"
+	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"
 	configPath := filepath.Join(root, "project.config.yaml")
 	if err := os.WriteFile(configPath, []byte(cfgBody), 0o644); err != nil {
 		t.Fatal(err)
@@ -136,7 +136,7 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 	for _, mod := range modules {
 		claims = append(claims, model.Claim{
 			ID: mod + ".contract.one", Facet: "contract", Module: mod, Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: heavy, RestsOn: model.RestsNone("fixture"),
+			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: heavy, RestsOn: model.RestsNone("fixture"),
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -169,7 +169,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
@@ -181,7 +181,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.shared-%03d", i), Facet: "contract", Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "shared target fixture", RestsOn: model.RestsNone("fixture"),
+			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "shared target fixture", RestsOn: model.RestsNone("fixture"),
 			Embodiment: &model.Embodiment{Mode: model.EmbodimentModeCompare, Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "neutral/v1", Target: "widget://shared", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{fmt.Sprintf("expected-%03d", i)}}}}},
 		}
 	}
@@ -213,7 +213,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
@@ -226,7 +226,7 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
-			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
+			Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "plain capacity fixture",
 			RestsOn: model.RestsNone(shared),
 		}
 	}
@@ -260,7 +260,7 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
@@ -273,7 +273,7 @@ func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
-			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
+			Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "plain capacity fixture",
 			RestsOn: model.RestsNone(shared),
 		}
 	}

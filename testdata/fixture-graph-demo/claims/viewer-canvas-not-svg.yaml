@@ -1,4 +1,5 @@
 id: viewer.internals.canvas-not-svg
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: viewer
 status: draft

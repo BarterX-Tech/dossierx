@@ -28,6 +28,7 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   An inline ` + "`code`" + ` span, a fenced block:
 

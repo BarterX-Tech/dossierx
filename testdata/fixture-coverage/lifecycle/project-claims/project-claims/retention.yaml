@@ -1,4 +1,5 @@
 id: project.retention
+summary: A widget is kept for thirty days after its last use.
 scope: project
 status: draft
 layout: card

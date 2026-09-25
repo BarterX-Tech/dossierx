@@ -39,7 +39,7 @@ func TestMutate_OutOfBandEdit_YieldsClaimFileChanged(t *testing.T) {
 
 	// While our op holds the sentinel — after it captured the file token, before
 	// it saves — a different writer rewrites the claim file out of band.
-	outOfBand := []byte("id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: someone else got here first\nrests_on:\n  none: true\n  reason: fixture\n")
+	outOfBand := []byte("id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: someone else got here first\nrests_on:\n  none: true\n  reason: fixture\n")
 	withInterlude(t, func() {
 		if err := os.WriteFile(claimPath, outOfBand, 0o644); err != nil {
 			t.Fatalf("out-of-band write: %v", err)

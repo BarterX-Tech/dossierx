@@ -98,6 +98,7 @@ const revealBaseClaim = `id: widget.contract.base
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the claim the deep-linked one rests on; its own footer must stay collapsed.
 rests_on:
@@ -117,6 +118,7 @@ const revealDeepClaim = `id: widget.contract.deep
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the deep-link target: landing on its id must reveal the footer below.
 rests_on:
@@ -428,6 +430,7 @@ const printFacetInterfaceBase = `id: widget.internals.base
 facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the inactive facet's base claim.
 rests_on:
@@ -445,6 +448,7 @@ const printFacetInterfaceDeep = `id: widget.internals.deep
 facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim in the facet the reader is NOT looking at; its footer never reaches paper.
 rests_on:

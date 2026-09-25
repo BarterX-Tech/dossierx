@@ -1,4 +1,5 @@
 id: telemetry.contract.what-this-module-is
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: telemetry
 status: draft
