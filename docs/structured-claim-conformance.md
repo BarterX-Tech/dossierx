@@ -287,7 +287,7 @@ Claim-result record count is exactly `C`, with exactly `K` nested check records;
 no result depends on claim graph paths. Serialized status and catalog growth is
 `O(C + K + M + S)`. Ordering work is `O(C log C + K log K + M log M)` and does
 not depend on possible graph paths. Viewer growth is the
-same data rendered once per existing claim-card copy; existing overview
+same data rendered once per existing claim-card copy; existing claim-card
 duplication rules remain the only multiplier. The complete serialized status,
 catalog, and viewer artifacts are each capped at 64 MiB. Status uses a
 mandatory-byte lower bound, a conservative fit proof, and exact measurement
@@ -295,7 +295,7 @@ when those bounds do not decide the result. Catalog likewise refuses only from
 provably mandatory encoded bytes and measures ambiguous output, so padding in
 an estimate cannot produce a false size claim. For the embedded viewer shell,
 whose projection contract is fixed, the bounded path shares one output-derived
-budget across claim fragments, graph and build-order JSON, repeated track
+budget across claim fragments, the graph JSON, repeated track
 content, and the final shell writer. A project shell override receives those
 expensive fields lazily: an omitted field or an unexecuted template branch is
 not computed or charged as output. Its separate 128 MiB retained-intermediate

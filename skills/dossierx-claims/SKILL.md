@@ -99,7 +99,7 @@ it out.
   `*.internals.*`; a foreign module's `*.internals.*` is refused (`rests-on-target`). Never the
   constitution — it is not a target, not a node, not a ref grammar. Targets are **drift** edges (a
   target's content changing under a locked claim flags `review_pending`). A claim file carrying a
-  retired key (`governed_by`) fails to load — **[`dossierx-upgrading`](../dossierx-upgrading/SKILL.md)**. **A `rests_on` loop is refused** at ERROR (`cycle`), and so is naming yourself (`self-edge`).
+  retired key (`governed_by`, `build_role`, `mirrors`) fails to load — **[`dossierx-upgrading`](../dossierx-upgrading/SKILL.md)**. **A `rests_on` loop is refused** at ERROR (`cycle`), and so is naming yourself (`self-edge`).
 - **Facets are hard law:** exactly `contract` and `internals`. Another module may cite only `contract`;
   foreign `internals` is refused (`rests-on-target`) and never exported (catalog, integration).
 - **Module context is `claims/<module>/manifest.yaml`** — required YAML, not a claim, which **you

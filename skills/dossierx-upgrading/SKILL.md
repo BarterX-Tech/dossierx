@@ -3,14 +3,17 @@ name: dossierx-upgrading
 description: >-
   Carrying a DossierX project across a binary upgrade. Use this WHENEVER you
   have upgraded the DossierX binary, WHENEVER a corpus you did not touch
-  refuses — a claim file carrying governed_by or build_role fails to load, a
-  config setting doctrine_facet fails, every verb refuses layout_legacy, or
-  check reports lock-ledger-pre-ledger / pre_ledger_unadopted — and whenever
+  refuses — a claim file carrying governed_by, build_role or mirrors fails to
+  load, a config setting doctrine_facet fails, every verb refuses
+  layout_legacy, check reports lock-ledger-pre-ledger / pre_ledger_unadopted,
+  or an old corpus lacks summaries, manifests or code links — and whenever
   you run dossierx claim recover-approved-content or re-export the skills.
-  Covers re-exporting skills (retired bundles are pruned), the layout_legacy
-  moves, the pre-ledger crossing, recovering approved wording from git, the
-  lock-store diff when lock policy 0 is carried over to v1, and the hand
-  folds for governed_by, the doctrine hub and build_role. Every fold that
+  Covers the v0.7.20 → v0.7.21 pass in order, re-exporting skills (retired
+  bundles are pruned), the layout_legacy moves, the pre-ledger crossing,
+  recovering approved wording from git, the lock-store diff when lock policy
+  0 is carried over to v1, the hand folds for governed_by, the doctrine hub,
+  build_role and mirrors, and the new requirements (summary, manifest.yaml,
+  facets, caps, code links). Every fold that
   re-locks is the human's approval, claim by claim. Load the DossierX router
   skill first.
 ---
@@ -34,6 +37,27 @@ another one), then `dossierx skills export --check`. The export **removes retire
 ships, such as `dossierx-build-order`. `--check` refuses `skills_drift` with `data.retired[]` for
 any `dossierx-*` directory still there that the lock never listed: ask the human, then delete it. It
 never touches a directory whose name does not start with `dossierx`.
+
+## Coming from v0.7.20: one pass, in this order
+
+v0.7.21 retired three claim fields and made five things required. Plan the whole pass with the
+human before the first unlock, so each locked claim is unlocked and re-locked **once**:
+
+1. Re-export the skills (above).
+2. Make the corpus load: delete `build_role:`, `governed_by:` and `mirrors:` from every claim file,
+   set `facets: [contract, internals]`, and drop `doctrine_facet:` by folding the doctrine hub
+   (sections below). Every locked claim's hash moved, so each now reports `lock-content-drift`.
+3. Write `claims/<module>/manifest.yaml` for every module, and `constitution.yaml` beside the config
+   if the project has none; the human locks the constitution before any claim can lock.
+4. With the human's yes, `claim unlock <id> --reason "…"` each locked claim. It is re-locked once,
+   at step 7, whatever else changes.
+5. Give every claim a `summary`, move claims off any other facet, and fit the caps.
+6. `dossierx check --validate` until it is clean.
+7. Re-lock what the human still stands behind: `claim lock --dry-run` →
+   `claim lock --reason "…" --proposal "<snapshot>"`, their approval claim by claim.
+8. Plain `dossierx check`: link code for every locked module claim.
+
+Steps 3, 5 and 8 are under "New requirements" below.
 
 ## `layout_legacy` — generated files at the project root
 
@@ -126,3 +150,34 @@ through `manifest show`, its `depends_on`, and its claims' `rests_on`
    A locked claim that genuinely has no code behind it is the human's call, not a file to tag
    around: on their yes it declares `embodiment: {mode: none, reason: "…"}` — best folded into the
    same re-lock as step 3 — or it becomes a project claim.
+
+## `mirrors` is gone
+
+A claim file still carrying `mirrors:` fails strict decode at load (`invalid_claim`,
+`stopped_at: load`), and `claim new --mirrors` no longer exists. The engine never drew the edge in
+this release; now the key itself is refused. Delete the `mirrors:` block from every claim file,
+draft and locked alike. If the mirrored fact is one this claim depends on, say so with `rests_on`
+instead. A locked claim that carried the key re-locks after the edit, and that re-lock is the
+human's approval, in the same pass as the other folds.
+
+## New requirements a v0.7.20 corpus does not meet
+
+None of these is a key to delete; each is content to write, and each is loud until it is written.
+
+- **`summary` on every claim** (`summary-required`, ERROR on every status). One plain line that
+  stands alone in `manifest show --isolation`; `dossierx-claims` says how to write one. A locked
+  claim gains its summary between unlock and lock: the summary is signed content.
+- **One `claims/<module>/manifest.yaml` per module** (`module-manifest`). Draft it from
+  `dossierx manifest show <module> --isolation` — **[`dossierx-modules`](../dossierx-modules/SKILL.md)**.
+- **Facets are exactly `contract` and `internals`** (`invalid_config` at load for any other list).
+  A claim on another facet no longer fits the id grammar: re-author it under a `contract` or
+  `internals` id, update every `rests_on` naming the old id, and delete the old file. A locked one
+  is unlocked first.
+- **The caps** — ten claims per module, 200-character summaries, 2000-character bodies, the
+  module's 6144-byte isolation budget. Split or trim per `dossierx-modules`; raising a cap is the
+  human's call.
+- **Code links for every locked module claim.** With `source_dirs` set, plain `check` refuses
+  `unlinked_claims` for any locked module claim with no link, whatever it used to be; project
+  claims are exempt. Tag the real code (**[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**).
+  A locked claim with genuinely no code behind it is the human's call: on their yes it declares
+  `embodiment: {mode: none, reason: "…"}` in the same re-lock, or becomes a project claim.
