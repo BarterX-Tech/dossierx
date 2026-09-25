@@ -1,4 +1,5 @@
 id: cli.contract.serve-noun
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: cli
 status: draft
@@ -7,4 +8,4 @@ build_role: api
 body: |
   Serving binds the loopback interface only and never lints, so a live session can carry shapes a reviewed corpus cannot.
 rests_on:
-  - cli.schema.json-envelope
+  - cli.internals.json-envelope

@@ -101,7 +101,7 @@ rests_on:
 	}
 }
 
-// Row 3: claim's facet is not in the project's configured facets ->
+// Row 3: claim's facet is not engine-fixed ->
 // id-shape lint error naming the unknown facet.
 func TestClaimsIDs_UnknownFacet(t *testing.T) {
 	root := t.TempDir()
@@ -111,7 +111,7 @@ func TestClaimsIDs_UnknownFacet(t *testing.T) {
 facet: doctrine
 module: widget
 status: draft
-body: doctrine is not a configured facet
+body: doctrine is not an engine-fixed facet
 rests_on:
   none: true
   reason: fixture
@@ -217,6 +217,7 @@ facet: internals
 module: widget
 status: draft
 layout: table
+summary: Fixture claim used by the engine test corpus.
 body: |
   Prose context alongside the structured field table below.
 rows:

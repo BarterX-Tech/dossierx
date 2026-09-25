@@ -1,5 +1,6 @@
-id: cli.behavior.format-flag
-facet: behavior
+id: cli.internals.format-flag
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: cli
 status: draft
 layout: card
@@ -7,4 +8,4 @@ build_role: behavior
 body: |
   Machine output is the default and prose is opt-in, because the primary caller is an agent.
 rests_on:
-  - cli.schema.json-envelope
+  - cli.internals.json-envelope

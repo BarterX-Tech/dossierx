@@ -23,6 +23,7 @@ func writeLayoutClaim(t *testing.T, claimsDir, id, layout, extra string) string 
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
 	src := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: " + layout + "\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a " + layout + " claim.\n" + extra +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
@@ -43,13 +44,14 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
 
 	depPath := filepath.Join(claimsDir, "dep.yaml")
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  dependency claim, v1.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(depPath, []byte(dep), 0o644); err != nil {
@@ -57,6 +59,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	}
 	mainPath := filepath.Join(claimsDir, "main.yaml")
 	mainClaim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the real, correct main body.\n" +
 		"rests_on:\n  - widget.contract.dep\n"
 	if err := os.WriteFile(mainPath, []byte(mainClaim), 0o644); err != nil {
@@ -157,7 +160,7 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 			t.Fatalf("mkdir claims: %v", err)
 		}
 		cfgPath = filepath.Join(root, "project.config.yaml")
-		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
 		lockFixtureConstitution(t, cfgPath)
@@ -259,7 +262,7 @@ func TestCLI_Flag_RefusesStructuredLayouts(t *testing.T) {
 				t.Fatalf("mkdir claims: %v", err)
 			}
 			cfgPath := filepath.Join(root, "project.config.yaml")
-			if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+			if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 				t.Fatalf("write config: %v", err)
 			}
 			lockFixtureConstitution(t, cfgPath)
@@ -291,7 +294,7 @@ func TestCLI_Flag_RefusesStructuredLayouts(t *testing.T) {
 			t.Fatalf("mkdir claims: %v", err)
 		}
 		cfgPath := filepath.Join(root, "project.config.yaml")
-		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
 		lockFixtureConstitution(t, cfgPath)

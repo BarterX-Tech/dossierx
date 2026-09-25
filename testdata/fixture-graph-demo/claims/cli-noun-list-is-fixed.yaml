@@ -1,4 +1,5 @@
 id: cli.contract.noun-list-is-fixed
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: cli
 status: locked
@@ -7,4 +8,4 @@ build_role: api
 body: |
   A new capability rides inside an existing command's output rather than becoming a new command. A command surface that grows with every feature stops being learnable.
 rests_on:
-  - cli.schema.json-envelope
+  - cli.internals.json-envelope

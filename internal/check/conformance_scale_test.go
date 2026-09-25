@@ -119,7 +119,7 @@ func graphScaleFiles(layers, width int) (files map[string]string, declared, chec
 			index := layer*width + column
 			id := fmt.Sprintf("widget.contract.c%03d", index)
 			var b strings.Builder
-			fmt.Fprintf(&b, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: bounded scale fixture\n", id)
+			fmt.Fprintf(&b, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: bounded scale fixture\n", id)
 			if layer > 0 {
 				b.WriteString("rests_on:\n")
 				for previous := 0; previous < width; previous++ {

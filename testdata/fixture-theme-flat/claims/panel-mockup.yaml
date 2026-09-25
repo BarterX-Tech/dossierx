@@ -1,5 +1,6 @@
-id: panel.decision.mockup
-facet: decision
+id: panel.internals.mockup
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: panel
 status: locked
 build_role: orientation

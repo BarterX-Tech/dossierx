@@ -69,13 +69,14 @@ func claimWriteFixture(t *testing.T, root string) string {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets:\n  - contract\n  - doctrine\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
 
 	base := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"summary: Retry three times with backoff.\n" +
 		"body: |\n  requests retry three times with backoff.\n" +
 		"migrated_from: docs/tabs/widget.html\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim\n"
@@ -84,6 +85,7 @@ func claimWriteFixture(t *testing.T, root string) string {
 	}
 
 	dependent := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"summary: Total time budget across retries.\n" +
 		"body: |\n  the total time budget across retries.\n" +
 		"rests_on:\n  - widget.contract.retry-policy\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "timeout.yaml"), []byte(dependent), 0o644); err != nil {
@@ -250,8 +252,8 @@ func TestEnvelope_ClaimListFilters(t *testing.T) {
 	}
 
 	// --facet / --module.
-	if byFacet := listData("--facet", "doctrine"); byFacet.Count != 0 {
-		t.Fatalf("no claim is in the doctrine facet, got %+v", byFacet)
+	if byFacet := listData("--facet", "internals"); byFacet.Count != 0 {
+		t.Fatalf("no claim is in the internals facet, got %+v", byFacet)
 	}
 	if byModule := listData("--module", "widget"); byModule.Count != 2 {
 		t.Fatalf("both claims are in widget, got %+v", byModule)
@@ -280,6 +282,9 @@ func TestClaimListMatchResolvesWhatAHumanWouldSay(t *testing.T) {
 	}
 	if data.Claims[0].ClaimID != "widget.contract.retry-policy" {
 		t.Fatalf("expected the retry claim ranked first, got %+v", data.Claims)
+	}
+	if data.Claims[0].Summary == "" {
+		t.Fatalf("claim list must carry summary, got %+v", data.Claims[0])
 	}
 	// The score is exposed so an agent can tell a confident hit from a tie it
 	// should hand back to the human.
@@ -314,6 +319,7 @@ func TestClaimNewProducesALintCleanClaim(t *testing.T) {
 	cfgPath := claimWriteFixture(t, root)
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.circuit-breaker",
+		"--summary", "Open the circuit after five consecutive failures.",
 		"--body", "opens the circuit after five consecutive failures.",
 		"--rests-on-none-reason", "a fresh fact, not yet backed by doctrine",
 		"--rests-on", "widget.contract.retry-policy")
@@ -369,40 +375,45 @@ func TestClaimNewRefusals(t *testing.T) {
 			// claim whose id the project cannot accept, once on disk, breaks
 			// every other command until someone hand-deletes it.
 			name: "id is not three segments",
-			args: []string{"claim", "new", "nope", "--body", "x", "--rests-on-none-reason", "y"},
+			args: []string{"claim", "new", "nope", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "slug is not kebab-case",
-			args: []string{"claim", "new", "widget.contract.NotKebab", "--body", "x", "--rests-on-none-reason", "y"},
+			args: []string{"claim", "new", "widget.contract.NotKebab", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "module is not one the project declares",
-			args: []string{"claim", "new", "gadget.contract.thing", "--body", "x", "--rests-on-none-reason", "y"},
+			args: []string{"claim", "new", "gadget.contract.thing", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y"},
 			code: cliout.CodeUnknownModule,
 		},
 		{
-			name: "facet is not one the project declares",
-			args: []string{"claim", "new", "widget.nosuch.thing", "--body", "x", "--rests-on-none-reason", "y"},
+			name: "facet is not engine-fixed",
+			args: []string{"claim", "new", "widget.nosuch.thing", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "no body: a claim with no content states nothing",
-			args: []string{"claim", "new", "widget.contract.empty", "--rests-on-none-reason", "y"},
+			args: []string{"claim", "new", "widget.contract.empty", "--summary", "s", "--rests-on-none-reason", "y"},
 			code: cliout.CodeMissingFlag,
 		},
 		{
-			// The governed-required lint would reject this claim, so the
+			name: "no summary: claim list cannot describe the card",
+			args: []string{"claim", "new", "widget.contract.nosummary", "--body", "x", "--rests-on-none-reason", "y"},
+			code: cliout.CodeMissingFlag,
+		},
+		{
+			// The rests-on-required lint would reject this claim, so the
 			// command refuses to author it rather than writing something it
 			// knows will fail.
 			name: "rests_on none with no reason",
-			args: []string{"claim", "new", "widget.contract.ungoverned", "--body", "x"},
+			args: []string{"claim", "new", "widget.contract.ungoverned", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x"},
 			code: cliout.CodeMissingFlag,
 		},
 		{
 			name: "id already exists",
-			args: []string{"claim", "new", "widget.contract.retry-policy", "--body", "x", "--rests-on-none-reason", "y"},
+			args: []string{"claim", "new", "widget.contract.retry-policy", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y"},
 			code: cliout.CodeBadRequest,
 		},
 		{
@@ -410,12 +421,12 @@ func TestClaimNewRefusals(t *testing.T) {
 			// would report a cheerful success for a file the project can never
 			// see — worse than a refusal.
 			name: "--file escapes claims_dir",
-			args: []string{"claim", "new", "widget.contract.escapee", "--body", "x", "--rests-on-none-reason", "y", "--file", "../escapee.yaml"},
+			args: []string{"claim", "new", "widget.contract.escapee", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y", "--file", "../escapee.yaml"},
 			code: cliout.CodeBadRequest,
 		},
 		{
 			name: "--file is absolute",
-			args: []string{"claim", "new", "widget.contract.absolute", "--body", "x", "--rests-on-none-reason", "y", "--file", filepath.Join(root, "elsewhere.yaml")},
+			args: []string{"claim", "new", "widget.contract.absolute", "--summary", "Fixture claim used by the engine test corpus.", "--body", "x", "--rests-on-none-reason", "y", "--file", filepath.Join(root, "elsewhere.yaml")},
 			code: cliout.CodeBadRequest,
 		},
 	}
@@ -452,6 +463,9 @@ func TestClaimNewDryRunWritesNothing(t *testing.T) {
 	if !containsStr(dr.Missing, "--rests-on-none-reason") {
 		t.Fatalf("expected --rests-on-none-reason in missing[], got %+v", dr.Missing)
 	}
+	if !containsStr(dr.Missing, "--summary") {
+		t.Fatalf("expected --summary in missing[], got %+v", dr.Missing)
+	}
 	if !dr.Blocked {
 		t.Fatalf("a missing required input blocks the real run, and the preview must say so: %+v", dr)
 	}
@@ -459,7 +473,7 @@ func TestClaimNewDryRunWritesNothing(t *testing.T) {
 	// Complete, and now unblocked: the two preconditions that matter (the id
 	// and the file are both free) hold.
 	dr = dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.new-thing",
-		"--body", "a fact", "--rests-on-none-reason", "fixture")
+		"--summary", "A new fact.", "--body", "a fact", "--rests-on-none-reason", "fixture")
 	if dr.Blocked {
 		t.Fatalf("a complete invocation for a fresh id must not be blocked, got %+v", dr)
 	}
@@ -557,7 +571,7 @@ func TestCommentInboxSinceIsInclusiveAndNeverMissesAThread(t *testing.T) {
 		newAt   = "2026-06-01T00:00:00Z"
 		between = "2026-03-01T00:00:00Z"
 	)
-	threaded := "id: widget.contract.threaded\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	threaded := "id: widget.contract.threaded\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a claim under discussion.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim\n" +
 		"comments:\n" +
@@ -727,7 +741,7 @@ func TestCheckValidateAndCheckAgreeOnTheLintVerdict(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 
-	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  broken.\n" +
 		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "broken.yaml"), []byte(broken), 0o644); err != nil {
@@ -799,11 +813,11 @@ func envelopeOf(t *testing.T, args ...string) (cliout.Envelope, error) {
 func restOnUnlockedFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/banner.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: banner\n" +
+		"claims/banner.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: banner\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: orientation\n" +
 			"body: |\n  read the contract claims below in order.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: schema\n" +
 			"body: |\n  the first draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",

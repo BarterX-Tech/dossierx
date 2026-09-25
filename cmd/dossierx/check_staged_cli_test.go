@@ -48,12 +48,12 @@ func stagedProject(t *testing.T) (cfgPath, root, claimPath string) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "one.yaml")
-	src := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\n" +
+	src := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: schema\n" +
 		"body: |\n  the approved body.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(src), 0o644); err != nil {
@@ -142,7 +142,7 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 	cfgPath, root, _ := stagedProject(t)
 
 	second := filepath.Join(root, "claims", "two.yaml")
-	src := "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\n" +
+	src := "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: schema\n" +
 		"body: |\n  a second claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(second, []byte(src), 0o644); err != nil {
@@ -186,12 +186,12 @@ func TestCLI_CheckStaged_OutsideAWorkTreeWarnsAndSucceeds(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
 	if err := os.WriteFile(filepath.Join(claimsDir, "one.yaml"), []byte(
-		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
+		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
 			"body: |\n  a draft.\n"+
 			"rests_on:\n  none: true\n  reason: fixture\n"), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)

@@ -1,5 +1,6 @@
-id: telemetry.decision.counters-are-local
-facet: decision
+id: telemetry.internals.counters-are-local
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: telemetry
 status: draft
 layout: card

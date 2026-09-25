@@ -40,6 +40,7 @@ const roofWithMarkupWords = 17
 const projectClaimScopeYAML = `id: project.scope
 scope: project
 status: draft
+summary: Every widget is kept under one roof.
 layout: card
 body: |
   Every widget is kept under <b>one</b> roof.
@@ -52,6 +53,7 @@ const overviewRestingOnScopeYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: A claim under review.
 body: |
   a claim under review.
 rests_on:

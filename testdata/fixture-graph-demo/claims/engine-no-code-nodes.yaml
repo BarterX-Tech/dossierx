@@ -1,5 +1,6 @@
-id: engine.decision.no-code-nodes
-facet: decision
+id: engine.internals.no-code-nodes
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: engine
 status: draft
 layout: card

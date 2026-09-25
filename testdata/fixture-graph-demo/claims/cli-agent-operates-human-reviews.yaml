@@ -1,5 +1,6 @@
-id: cli.decision.agent-operates-human-reviews
-facet: decision
+id: cli.internals.agent-operates-human-reviews
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: cli
 status: draft
 layout: card

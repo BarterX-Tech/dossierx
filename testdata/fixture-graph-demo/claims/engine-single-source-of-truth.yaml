@@ -1,5 +1,6 @@
-id: engine.decision.single-source-of-truth
-facet: decision
+id: engine.contract.single-source-of-truth
+summary: Fixture claim used by the engine test corpus.
+facet: contract
 module: engine
 status: locked
 layout: card

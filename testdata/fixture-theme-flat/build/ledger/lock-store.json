@@ -2,31 +2,31 @@
   "version": 2,
   "hashes": {
     "panel.contract.api": {
-      "panel.contract.behavior": "82e90d03174f72e7bf2da59a11b85595679669b998b9c5b3c2ab3ddbd53579b2"
+      "panel.contract.behavior": "db7259ed5a63c2fcb49787d8b548e5f4a7823a9553ff1a2b008ef1c0ee4a1686"
     },
     "panel.contract.behavior": {
-      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
-      "panel.internals.state": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+      "panel.internals.state": "8c0ea825059c90bc7feb545f0cff710e656aa9fe1ddd239569744a9a442d46b0"
     },
-    "panel.decision.mockup": {
-      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582"
+    "panel.internals.mockup": {
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210"
     },
     "panel.internals.state": {
-      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
-      "panel.decision.mockup": "2105c525ec87a13818cf725de6f2339bf27ece09149aa11644117808255577fa"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+      "panel.internals.mockup": "9f0c79a3fb2b9d06db3120b1576668edf701032dba73fa563315789e564484df"
     },
     "panel.internals.verification": {
-      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
-      "panel.internals.state": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+      "panel.internals.state": "8c0ea825059c90bc7feb545f0cff710e656aa9fe1ddd239569744a9a442d46b0"
     },
     "widget.contract.reviewed": {
-      "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210"
     }
   },
   "receipts": {
     "panel.contract.api": {
       "panel.contract.behavior": {
-        "hash": "82e90d03174f72e7bf2da59a11b85595679669b998b9c5b3c2ab3ddbd53579b2",
+        "hash": "db7259ed5a63c2fcb49787d8b548e5f4a7823a9553ff1a2b008ef1c0ee4a1686",
         "content": {
           "ID": "panel.contract.behavior",
           "Facet": "contract",
@@ -37,6 +37,7 @@
           "Kind": "",
           "BuildRole": "behavior",
           "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "The panel opens on the claim named in the URL fragment and does nothing\nelse until a reader asks it to.\n",
           "Rows": null,
           "Section": "What the panel does",
@@ -65,7 +66,7 @@
     },
     "panel.contract.behavior": {
       "panel.internals.state": {
-        "hash": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79",
+        "hash": "8c0ea825059c90bc7feb545f0cff710e656aa9fe1ddd239569744a9a442d46b0",
         "content": {
           "ID": "panel.internals.state",
           "Facet": "internals",
@@ -76,6 +77,7 @@
           "Kind": "",
           "BuildRole": "schema",
           "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "- the claim currently open\n- the scroll position of the reading pane\n- nothing else\n",
           "Rows": null,
           "Section": "What the panel holds",
@@ -87,7 +89,7 @@
             "None": false,
             "Reason": "",
             "IDs": [
-              "panel.decision.mockup"
+              "panel.internals.mockup"
             ]
           },
           "Sources": null,
@@ -105,11 +107,11 @@
       }
     },
     "panel.internals.state": {
-      "panel.decision.mockup": {
-        "hash": "2105c525ec87a13818cf725de6f2339bf27ece09149aa11644117808255577fa",
+      "panel.internals.mockup": {
+        "hash": "9f0c79a3fb2b9d06db3120b1576668edf701032dba73fa563315789e564484df",
         "content": {
-          "ID": "panel.decision.mockup",
-          "Facet": "decision",
+          "ID": "panel.internals.mockup",
+          "Facet": "internals",
           "Module": "panel",
           "Scope": "",
           "Status": "locked",
@@ -117,6 +119,7 @@
           "Kind": "",
           "BuildRole": "orientation",
           "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
           "Rows": null,
           "Section": "What the panel looks like",
@@ -143,7 +146,7 @@
     },
     "panel.internals.verification": {
       "panel.contract.api": {
-        "hash": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
+        "hash": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
         "content": {
           "ID": "panel.contract.api",
           "Facet": "contract",
@@ -154,6 +157,7 @@
           "Kind": "",
           "BuildRole": "api",
           "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "The panel exposes one call, `render()`, and nothing else. This claim is\nlocked so the corpus has a locked claim beside its drafts.\n",
           "Rows": null,
           "Section": "The panel's surface",
@@ -184,7 +188,7 @@
   "locked_at": {
     "panel.contract.api": "2026-09-24T15:43:17.811037Z",
     "panel.contract.behavior": "2026-09-24T15:43:17.968334Z",
-    "panel.decision.mockup": "2026-09-24T15:43:18.126896Z",
+    "panel.internals.mockup": "2026-09-24T15:43:18.126896Z",
     "panel.internals.state": "2026-09-24T15:43:18.284302Z",
     "panel.internals.verification": "2026-09-24T15:43:18.445742Z",
     "widget.contract.reviewed": "2026-09-02T10:22:20.174643Z"
@@ -199,7 +203,7 @@
     },
     "panel.contract.api": {
       "subject": "claim",
-      "hash": "29839377bd0b2e49b61ad33ce8a5329be2e98d44ef8f222192e5d06a251a5073",
+      "hash": "cc38c1207f303908c0df378ece29ed4731b82c99b8b541c48b68c3e90dab08ab",
       "at": "2026-09-24T15:43:17.811047Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -213,6 +217,7 @@
         "Kind": "",
         "BuildRole": "api",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "The panel exposes one call, `render()`, and nothing else. This claim is\nlocked so the corpus has a locked claim beside its drafts.\n",
         "Rows": null,
         "Section": "The panel's surface",
@@ -240,7 +245,7 @@
     },
     "panel.contract.behavior": {
       "subject": "claim",
-      "hash": "48f09b2a8723d7e4c83892986c14b31fdc1124e28dee39d94a46a4ea95f85f27",
+      "hash": "aa8e7ecef1e9fab58434cfe002e7805db1d7e7e68d272abe7fcbc969628198f1",
       "at": "2026-09-24T15:43:17.968345Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -254,6 +259,7 @@
         "Kind": "",
         "BuildRole": "behavior",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "The panel opens on the claim named in the URL fragment and does nothing\nelse until a reader asks it to.\n",
         "Rows": null,
         "Section": "What the panel does",
@@ -279,15 +285,15 @@
         "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-behavior.yaml"
       }
     },
-    "panel.decision.mockup": {
+    "panel.internals.mockup": {
       "subject": "claim",
-      "hash": "d593d73cd380b945d90c2d4fe902542ea46e464d31de056488a30e10d0dbe630",
+      "hash": "83af35f707a51b29bc8dce18dd1f4545de7487bf5aceaf96c11cf284408e80f7",
       "at": "2026-09-24T15:43:18.126907Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
       "content": {
-        "ID": "panel.decision.mockup",
-        "Facet": "decision",
+        "ID": "panel.internals.mockup",
+        "Facet": "internals",
         "Module": "panel",
         "Scope": "",
         "Status": "locked",
@@ -295,6 +301,7 @@
         "Kind": "",
         "BuildRole": "orientation",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
         "Rows": null,
         "Section": "What the panel looks like",
@@ -320,7 +327,7 @@
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "658adb1ca779c6c0485d093360f9c7365f8cc6a6132875f0a01f30d8f7d6292c",
+      "hash": "fac3a5b463a230ca20cf9c27073d61a5ef907b15d9863c2ead320259f3a2b826",
       "at": "2026-09-24T15:43:18.284312Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -334,6 +341,7 @@
         "Kind": "",
         "BuildRole": "schema",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "- the claim currently open\n- the scroll position of the reading pane\n- nothing else\n",
         "Rows": null,
         "Section": "What the panel holds",
@@ -345,7 +353,7 @@
           "None": false,
           "Reason": "",
           "IDs": [
-            "panel.decision.mockup"
+            "panel.internals.mockup"
           ]
         },
         "Sources": null,
@@ -363,7 +371,7 @@
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "38a4007135191195459c681a73eab48c8e141bcc8a23a910a02ae2e639d56517",
+      "hash": "1eb40e0eef92a533cd82db1730e69016d099ec650bbc3344c45fb0273cbf51c9",
       "at": "2026-09-24T15:43:18.445753Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -377,6 +385,7 @@
         "Kind": "",
         "BuildRole": "verification",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "Every claim above is proven by the browser suite, not by reading the\nsource. This claim carries the verification build_role so the module's\nbuild-order artifact covers every phase.\n",
         "Rows": null,
         "Section": "How the panel is proven",
@@ -421,6 +430,7 @@
         "Kind": "",
         "BuildRole": "",
         "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "This claim is locked and carries an open comment thread, which is what puts\nit in `review_pending` and renders the `.claim-review-pending` marker the\nparity probe reads.\n",
         "Rows": null,
         "Section": "A claim under standing review",

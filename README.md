@@ -45,7 +45,8 @@ Set up DossierX in this repository.
    `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.20`,
    then run `dossierx version` and show me the output.
 2. If `project.config.yaml` and the claims directory do not exist yet,
-   propose a title, the facets, and the modules, and WAIT for me to confirm
+   propose a title and the modules, write `facets: [contract, internals]`
+   (engine-fixed; do not offer other facet names), and WAIT for me to confirm
    before writing anything.
 3. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Run it AFTER
@@ -320,6 +321,7 @@ id: widget.contract.overview     # module.facet.slug
 facet: contract                  # the tab it renders under
 module: widget
 status: draft                    # draft | locked
+summary: A widget is the smallest documented unit.
 layout: card
 body: |
   A widget is the smallest unit this project documents [1].
@@ -336,7 +338,7 @@ tracks:                          # optional: cross-cutting membership
     role: cites                  # owns | cites
 ```
 
-Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project claim), a `status`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) and a required `rests_on` — a list of claim ids, or `{none: true, reason}` for a claim that rests on nothing. Module claims also carry a `facet` and a `module`; project claims carry neither. Claims name other claims they `rests_on`, forming a graph the engine walks and validates; the constitution is never a target. The full schema is in [FORMAT.md](FORMAT.md). (The `governed_by` block is gone as of v0.7.21; a claim file that still carries one fails to load — see the CHANGELOG for the migration.)
+Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project claim), a `status`, a required one-line plain-text `summary`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) and a required `rests_on` — a list of claim ids, or `{none: true, reason}` for a claim that rests on nothing. Module claims also carry a `facet` and a `module`; project claims carry neither. Claims name other claims they `rests_on`, forming a graph the engine walks and validates; the constitution is never a target. The full schema is in [FORMAT.md](FORMAT.md). (The `governed_by` block is gone as of v0.7.21; a claim file that still carries one fails to load — see the CHANGELOG for the migration.)
 
 **Sources and tracks** are the two optional axes, both added in v0.6.0 and both no-ops for a project that does not use them. `sources` carries a claim's evidence *inside* the claim — cited from the body with `[n]` markers, anchored by an access date when the source is a page that can change under you and by a content hash when it is a file the engine can read, and signed by the lock ledger so a citation cannot be rewritten after approval. `tracks` is a second ownership axis: `module` answers "who guarantees this?", and a track answers "what does the user get, and is it finished?" — a feature assembled from claims across many modules, with `dossierx track status <id>` reporting whether every claim it owns and cites is locked.
 
@@ -355,7 +357,7 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `schema_version` | int | yes | Must equal the version this DossierX build understands (currently `1`). |
-| `facets` | []string | yes | The non-empty, deduplicated list of facet names (tabs) this project uses, e.g. `[contract, internals]`. |
+| `facets` | []string | yes | Engine-fixed: must be exactly `[contract, internals]`. No other facet names are legal. Other modules may cite only `contract`. |
 | `modules` | []string | yes | The non-empty, deduplicated list of module names this project documents. |
 | `claims_dir` | string | yes | Directory of claim YAML files, resolved relative to `project.config.yaml`'s own directory (never the process's current working directory). |
 | `conformance.observations` | string | no | One literal, project-owned normalized observation JSON file, resolved relative to the config and required to stay outside `build_dir`. DossierX reads it only when a claim declares `embodiment`; it never runs an adapter. |
@@ -366,6 +368,9 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | `project_claims_dir` | string | no | The project-claims store (default `project-claims`, a sibling of `claims_dir`): `project.<slug>` claims with `scope: project`, no module, no facet, no cap and no manifest. They do not count toward a per-module cap. |
 | `source_dirs` | []string | no | Directories (relative to the config file) scanned for `dossierx-claim: <id>` and `dossierx-step: <id> #<n> <sha256-hex>` source comments — the code side of claim-to-code linking. Unset means "do not scan" and no code-link gate; set, plain `check` refuses on a locked code-producing claim with no link (`unlinked_claims`). |
 | `mockup_modules` | []string | no | The allowlist of modules permitted to author `raw_html` (on any layout, including `layout: mockup`). Every entry must also appear in `modules`. Unset/empty means no module may. |
+| `max_claim_body_chars` | int | no | Project-wide ceiling on `body` + `steps` + `rows` cells, counted as Unicode code points. Omitted, the default is **2000**. `check` fails with `body-oversize` when a claim is over, and `claim lock` refuses. `raw_html` is exempt. Values below 1 are refused at config load. |
+| `max_claim_summary_chars` | int | no | Project-wide ceiling on `summary`, counted as Unicode code points. Omitted, the default is **200**. `check` fails with `summary-oversize` when over. Values below 1 are refused at config load. |
+| `max_claims_per_module` | int | no | Project-wide ceiling on how many claims one module may hold. Omitted, the default is **10**. `check` fails with `module-claim-cap` when a module is over, and `claim lock` refuses any claim in that module. Raise this number to override; there is no per-module override. Values below 1 are refused at config load. |
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
 ## The skills
 

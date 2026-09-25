@@ -805,6 +805,9 @@ type claimListEntry struct {
 	// and a filter nothing acts on is surface that has to be maintained forever.
 	// The count is on every row, so a caller that wants that set has it already.
 	Sources int `json:"sources"`
+	// Summary is the claim's required one-line description. A list that
+	// cannot print it cannot describe the card (NIT-8).
+	Summary string `json:"summary,omitempty"`
 	// Score is populated only under --match: the fuzzy relevance the row was
 	// ranked by. It is exposed rather than hidden so an agent resolving "the
 	// retry card" can tell a confident single hit from a three-way tie it
@@ -858,15 +861,15 @@ func newClaimListCmd() *cobra.Command {
 			// --facet gets the same membership test --module has, and for the
 			// reason cliout.CodeUnknownModule already states about modules: "an
 			// empty report for a typo'd module looks exactly like success". A
-			// human says "show me the contracts facet", the project declares
+			// human says "show me the contracts facet", the engine has
 			// `contract`, and an unchecked filter answers ok:true / count 0 /
 			// exit 0 — indistinguishable from the truth, and every decision after
-			// it is made against an empty set. The config declares facets: the
-			// same way it declares modules:, and "claim new" already refuses an
-			// undeclared facet with this exact shape (see parseClaimID).
-			if facet != "" && !containsStr(cfg.Facets, facet) {
+			// it is made against an empty set. Facets are engine-fixed
+			// (contract | internals); "claim new" already refuses any other
+			// name (see parseClaimID).
+			if facet != "" && !config.IsEngineFacet(facet) {
 				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
-					"claim list: unknown facet %q; this project declares: %s", facet, strings.Join(cfg.Facets, ", ")).
+					"claim list: unknown facet %q; engine-fixed facets are %s", facet, strings.Join(config.EngineFacets(), ", ")).
 					WithHint("run: dossierx claim list (unfiltered) to see what is there")
 			}
 			store, storeErr := lock.LoadStore(storePath(cfg))
@@ -938,6 +941,7 @@ func newClaimListCmd() *cobra.Command {
 					Drifted:       driftedIDs[c.ID],
 					OpenThreads:   len(c.OpenThreadIDs()),
 					Sources:       len(c.Sources),
+					Summary:       c.Summary,
 					Score:         score,
 				})
 			}
@@ -983,7 +987,7 @@ func newClaimListCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&drifted, "drifted", false, "only claims with at least one implementation link whose file changed since it was linked")
 	cmd.Flags().StringVar(&facet, "facet", "", "only claims in this facet")
 	cmd.Flags().StringVar(&module, "module", "", "only claims in this module")
-	cmd.Flags().StringVar(&match, "match", "", "fuzzy-match against each claim's id and derived title, ranked by relevance")
+	cmd.Flags().StringVar(&match, "match", "", "fuzzy-match against each claim's id, derived title, and summary, ranked by relevance")
 	return cmd
 }
 
@@ -1016,7 +1020,11 @@ func writeClaimListText(cmd *cobra.Command, d claimListData) {
 		if len(flags) > 0 {
 			suffix = " " + strings.Join(flags, " ")
 		}
-		fmt.Fprintf(out, "%s %s%s\n", e.Status, e.ClaimID, suffix)
+		if e.Summary != "" {
+			fmt.Fprintf(out, "%s %s  %s%s\n", e.Status, e.ClaimID, e.Summary, suffix)
+		} else {
+			fmt.Fprintf(out, "%s %s%s\n", e.Status, e.ClaimID, suffix)
+		}
 	}
 	fmt.Fprintf(out, "claim list: %d of %d claim(s) (%.1f%%)\n", d.Count, d.Total, d.PercentOfTotal)
 }
@@ -1036,7 +1044,7 @@ func writeClaimListText(cmd *cobra.Command, d claimListData) {
 // find widget.contract.retry-policy even though neither word alone is the slug.
 func claimMatchScore(query string, c model.Claim) int {
 	title := claimTitle(c.ID)
-	haystack := strings.Join([]string{c.ID, title, c.Facet, c.Module, c.Section}, " ")
+	haystack := strings.Join([]string{c.ID, title, c.Facet, c.Module, c.Section, c.Summary}, " ")
 	best := fuzzyScore(query, c.ID)
 	if s := fuzzyScore(query, title); s > best {
 		best = s
@@ -1201,7 +1209,7 @@ func parseClaimID(cfg *config.Config, id string) (module, facet, slug string, er
 	}
 	if !containsStr(cfg.Facets, facet) {
 		return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
-			"claim new: id facet segment %q is not one of this project's facets: %s", facet, strings.Join(cfg.Facets, ", "))
+			"claim new: id facet segment %q is not an engine-fixed facet (contract or internals)", facet)
 	}
 	return module, facet, slug, nil
 }
@@ -1274,7 +1282,7 @@ func claimNewPath(cfg *config.Config, id, override string) (string, error) {
 }
 
 func newClaimNewCmd() *cobra.Command {
-	var body, layout, section, buildRole, restsOnNoneReason, file string
+	var body, summary, layout, section, buildRole, restsOnNoneReason, file string
 	var restsOn []string
 	var dryRun bool
 
@@ -1284,8 +1292,8 @@ func newClaimNewCmd() *cobra.Command {
 		Long: "Author a new draft claim at <claims_dir>/<id>.yaml or, for project.<slug>,\n" +
 			"<project_claims_dir>/<slug>.yaml.\n\n" +
 			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
-			"required rests_on (targets or --rests-on-none-reason), and layout: card\n" +
-			"(or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
+			"required --summary, a required rests_on (targets or --rests-on-none-reason),\n" +
+			"and layout: card (or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
 			"no confirmation — because drafts are the agent's workshop. The gate in this\n" +
 			"release is on LOCKED claims.",
 		Args: cobra.ExactArgs(1),
@@ -1312,6 +1320,9 @@ func newClaimNewCmd() *cobra.Command {
 				if strings.TrimSpace(body) == "" {
 					dr.Lacking("--body")
 				}
+				if strings.TrimSpace(summary) == "" {
+					dr.Lacking("--summary")
+				}
 				if len(restsOn) == 0 && strings.TrimSpace(restsOnNoneReason) == "" {
 					dr.Lacking("--rests-on-none-reason")
 				}
@@ -1332,13 +1343,18 @@ func newClaimNewCmd() *cobra.Command {
 					Propose("facet", facet).
 					Propose("module", module).
 					Propose("layout", layout).
-					Propose("body", body)
+					Propose("body", body).
+					Propose("summary", summary)
 				return dryRunResult(cmd, "claim new", dr), nil
 			}
 
 			if strings.TrimSpace(body) == "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
 					"claim new: --body is required and must be non-empty; a claim with no content states nothing")
+			}
+			if strings.TrimSpace(summary) == "" {
+				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
+					"claim new: --summary is required and must be non-empty; claim list cannot describe a card without one")
 			}
 			if len(restsOn) == 0 && strings.TrimSpace(restsOnNoneReason) == "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
@@ -1375,6 +1391,7 @@ func newClaimNewCmd() *cobra.Command {
 				Module:     module,
 				Status:     model.StatusDraft,
 				Layout:     model.Layout(layout),
+				Summary:    strings.TrimSpace(summary),
 				Body:       normalizeClaimBody(body),
 				Section:    section,
 				BuildRole:  model.BuildRole(buildRole),
@@ -1425,6 +1442,7 @@ func newClaimNewCmd() *cobra.Command {
 		}),
 	}
 	cmd.Flags().StringVar(&body, "body", "", "the claim's markdown body — what it asserts (required)")
+	cmd.Flags().StringVar(&summary, "summary", "", "one-line plain-text description printed by claim list (required)")
 	cmd.Flags().StringVar(&layout, "layout", string(model.LayoutCard), "render layout: card, list, tree, banner (table/steps/mockup need rows/steps/raw_html, which this command does not author)")
 	cmd.Flags().StringVar(&section, "section", "", "optional in-content section heading this claim sits under")
 	cmd.Flags().StringVar(&buildRole, "build-role", "", "optional build phase: orientation, schema, behavior, api, verification, out-of-scope (required only once the claim locks)")

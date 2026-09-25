@@ -29,8 +29,8 @@ func writeFile(t *testing.T, dir, name, contents string) string {
 
 func TestLoadClaims_Basic(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
-	writeFile(t, dir, "b.yml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "b.yml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 	// Non-YAML files must be ignored.
 	writeFile(t, dir, "README.md", "not a claim")
 
@@ -59,7 +59,7 @@ func TestLoadClaims_RecursesSubdirectories(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, sub, "c.yaml", "id: widget.contract.c\nfacet: contract\nmodule: widget\nstatus: draft\nbody: nested claim\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, sub, "c.yaml", "id: widget.contract.c\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: nested claim\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestLoadClaims_DirIsAFile(t *testing.T) {
 
 func TestLoadClaims_UnknownFieldIsStrictError(t *testing.T) {
 	dir := t.TempDir()
-	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: x\nsome_typo_field: true\nrests_on:\n  none: true\n  reason: fixture\n")
+	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: x\nsome_typo_field: true\nrests_on:\n  none: true\n  reason: fixture\n")
 	_, err := LoadClaims(dir)
 	if err == nil {
 		t.Fatal("expected strict-decode error for an unknown claim field, got nil")
@@ -158,9 +158,9 @@ func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
 	t.Run("two documents in one file is an error naming the file", func(t *testing.T) {
 		dir := t.TempDir()
 		p := writeFile(t, dir, "two.yaml",
-			"id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n"+
+			"id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n"+
 				"---\n"+
-				"id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
+				"id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 		_, err := LoadClaims(dir)
 		if err == nil {
 			t.Fatal("expected an error for a file with two YAML documents, got nil")
@@ -173,7 +173,7 @@ func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
 	t.Run("a single document still loads exactly as before", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "one.yaml",
-			"---\nid: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
+			"---\nid: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
 		claims, err := LoadClaims(dir)
 		if err != nil {
 			t.Fatalf("LoadClaims on a single-document file: unexpected error: %v", err)
@@ -186,7 +186,7 @@ func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
 
 func TestSaveClaim_RoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: original\nrests_on:\n  none: true\n  reason: fixture\n")
+	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: original\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -218,10 +218,10 @@ func TestSaveClaim_RoundTrips(t *testing.T) {
 
 func TestLoadClaims_OrderFieldRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\norder: 5\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\norder: 5\nrests_on:\n  none: true\n  reason: fixture\n")
 	// A claim that omits order entirely must decode with the zero value
 	// (unset), not error — order is optional.
-	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -286,10 +286,10 @@ func TestFindByID(t *testing.T) {
 
 func TestLoadClaims_SectionFieldRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nbody: claim a\nsection: 5 - workflows / lifecycle\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nsection: 5 - workflows / lifecycle\nrests_on:\n  none: true\n  reason: fixture\n")
 	// A claim that omits section entirely must decode with the zero value
 	// (unset), not error — section is optional and project-agnostic.
-	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -333,7 +333,7 @@ func TestLoadClaims_RawHTMLFieldsAndMockupLayoutRoundTrip(t *testing.T) {
 	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\nraw_html: \"<div>mock</div>\"\nraw_html_reviewed: true\nrests_on:\n  none: true\n  reason: fixture\n")
 	// A claim that omits raw_html/raw_html_reviewed entirely must decode
 	// with the zero value (unset/false), not error — both are optional.
-	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -523,7 +523,7 @@ rests_on:
 // comment-free form (so adding the feature never rewrites an uncommented claim).
 func TestSaveClaim_CommentFreeStaysByteIdentical(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
 	claims, err := LoadClaims(dir)
 	if err != nil {
 		t.Fatalf("LoadClaims: %v", err)

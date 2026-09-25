@@ -1,4 +1,5 @@
 id: trackmod.contract.b
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: trackmod
 status: draft

@@ -28,7 +28,7 @@ func testConfig(t *testing.T, modules ...string) *config.Config {
 	for _, m := range modules {
 		modYAML += "  - " + m + "\n"
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n" + modYAML + "claims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n" + modYAML + "claims_dir: claims\n"
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

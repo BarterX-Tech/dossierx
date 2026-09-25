@@ -1,4 +1,5 @@
 id: cli.contract.check-noun
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: cli
 status: locked
@@ -8,4 +9,4 @@ body: |
   One command runs review, grouping, rendering and the integrity gate, stopping at the first failure.
 rests_on:
   - engine.contract.check-is-fail-fast
-  - cli.behavior.exit-codes
+  - cli.internals.exit-codes

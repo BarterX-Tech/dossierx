@@ -1,5 +1,6 @@
-id: viewer.decision.colour-is-not-the-only-channel
-facet: decision
+id: viewer.internals.colour-is-not-the-only-channel
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: viewer
 status: draft
 layout: card

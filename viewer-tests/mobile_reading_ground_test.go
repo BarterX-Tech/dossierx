@@ -43,7 +43,7 @@ func TestMobileCardGroundStartsAtTheHeadBand(t *testing.T) {
 			}
 			ctx := browserContext(t)
 			runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()),
-				chromedp.WaitVisible(".reading-canvas", chromedp.ByQuery))
+				chromedp.WaitVisible(".reading-canvas:not([hidden])", chromedp.ByQuery))
 			pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
 
 			if !evalBool(t, ctx, `(function(){

@@ -10,8 +10,8 @@ import (
 func TestIndexIsOneLinePerProjectClaimSortedById(t *testing.T) {
 	claims := []model.Claim{
 		{ID: "widget.contract.a", Module: "widget", Facet: "contract", Status: model.StatusLocked, Body: "a module claim"},
-		{ID: "project.retention", Scope: model.ScopeProject, Status: model.StatusDraft, Body: "\n\n  Data is kept for 30 days.  \nMore detail below.\n"},
-		{ID: "project.audience", Scope: model.ScopeProject, Status: model.StatusLocked, Body: "Built for operators, not end users."},
+		{ID: "project.retention", Scope: model.ScopeProject, Status: model.StatusDraft, Summary: "Data is kept for 30 days.", Body: "\n\n  Data is kept for 30 days.  \nMore detail below.\n"},
+		{ID: "project.audience", Scope: model.ScopeProject, Status: model.StatusLocked, Summary: "Built for operators, not end users.", Body: "Built for operators, not end users."},
 		{ID: "project.empty", Scope: model.ScopeProject, Status: model.StatusDraft, Body: ""},
 	}
 	got := Index(claims)
@@ -28,12 +28,12 @@ func TestIndexIsOneLinePerProjectClaimSortedById(t *testing.T) {
 	}
 }
 
-func TestSummaryIsTheFirstNonBlankBodyLine(t *testing.T) {
-	if got := Summary(model.Claim{Body: "\n \nfirst line\nsecond"}); got != "first line" {
+func TestSummaryIsTheClaimsOwnSummaryField(t *testing.T) {
+	if got := Summary(model.Claim{Summary: "  the gist  "}); got != "the gist" {
 		t.Fatalf("Summary = %q", got)
 	}
-	if got := Summary(model.Claim{Body: "   "}); got != "" {
-		t.Fatalf("blank body summarises to nothing, got %q", got)
+	if got := Summary(model.Claim{Summary: "   "}); got != "" {
+		t.Fatalf("blank summary summarises to nothing, got %q", got)
 	}
 }
 

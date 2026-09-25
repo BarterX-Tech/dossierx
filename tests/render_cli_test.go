@@ -23,7 +23,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - internals\nmodules:\n  - emptyrowsmod\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - emptyrowsmod\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
@@ -34,6 +34,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	// data, not a shape error.
 	claim := "id: emptyrowsmod.internals.empty-table\n" +
 		"facet: internals\nmodule: emptyrowsmod\nstatus: draft\nlayout: table\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"rows: []\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "empty-table.yaml"), []byte(claim), 0o644); err != nil {
@@ -146,7 +147,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 
-	cfg := "schema_version: 1\nfacets:\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if allowlisted {
 		cfg += "mockup_modules:\n  - widget\n"
 	}
@@ -161,6 +162,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 	}
 	claim := "id: widget.internals.console-mockup\n" +
 		"facet: internals\nmodule: widget\nstatus: " + status + "\nlayout: mockup\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: A console mockup.\n" +
 		"raw_html: '" + rawHTML + "'\n" +
 		"raw_html_reviewed: " + boolStr(reviewed) + "\n" +

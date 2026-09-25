@@ -15,6 +15,7 @@ const unthemedConfigYAML = `schema_version: 1
 title: Theme Modes Project
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -27,6 +28,7 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   An inline ` + "`code`" + ` span, a fenced block:
 

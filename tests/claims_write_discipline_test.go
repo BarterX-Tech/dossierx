@@ -244,7 +244,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - cwmod\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - cwmod\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 
 	writeClaim := func(name, id string) {
 		claim := "id: " + id + "\n" +
-			"facet: contract\nmodule: cwmod\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: cwmod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  concurrent-writer fixture claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 		if err := os.WriteFile(filepath.Join(claimsDir, name+".yaml"), []byte(claim), 0o644); err != nil {

@@ -1,5 +1,6 @@
-id: lock.behavior.unlock-keeps-the-record
-facet: behavior
+id: lock.internals.unlock-keeps-the-record
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: lock
 status: locked
 layout: card
@@ -7,4 +8,4 @@ build_role: behavior
 body: |
   Releasing an approval stamps the record rather than deleting it, precisely so the evidence outlives the release.
 rests_on:
-  - lock.schema.ledger-record
+  - lock.internals.ledger-record

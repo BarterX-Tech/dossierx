@@ -1,5 +1,6 @@
-id: lock.schema.ledger-record
-facet: schema
+id: lock.internals.ledger-record
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: lock
 status: locked
 layout: card
@@ -7,4 +8,4 @@ build_role: schema
 body: |
   A record carries the subject, the content hash, the moment, the actor and the human's stated reason.
 rests_on:
-  - lock.schema.lock-store
+  - lock.internals.lock-store

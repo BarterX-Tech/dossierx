@@ -1,4 +1,5 @@
 id: engine.contract.start-here
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: engine
 status: draft
@@ -7,4 +8,4 @@ build_role: orientation
 body: |
   Read this module before any other. It carries the shapes and the guarantees every other module in this project is written against.
 rests_on:
-  - engine.schema.claim-shape
+  - engine.contract.claim-shape

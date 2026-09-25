@@ -182,14 +182,14 @@ claim list / every claim
     ok            true
     envelope      command data ok
     command       claim list
-    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,readiness:{claim_id:string,dependency_ready:bool,local_approval_issue:string,local_approved:bool,local_reasons:[string],locally_approved:bool,policy_version:number,ready:bool,review_pending:bool},review_pending:bool,sources:number,status:string,title:string}]
+    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,readiness:{claim_id:string,dependency_ready:bool,local_approval_issue:string,local_approved:bool,local_reasons:[string],locally_approved:bool,policy_version:number,ready:bool,review_pending:bool},review_pending:bool,sources:number,status:string,summary:string,title:string}]
                   count:number
                   filters:{drifted:bool,migrated:bool,review_pending:bool}
                   percent_of_total:number
                   total:number
 
 claim new / a fresh draft
-    argv          claim new widget.contract.second --body another fact --rests-on-none-reason fixture
+    argv          claim new widget.contract.second --summary Fixture claim used by the engine test corpus. --body another fact --rests-on-none-reason fixture
     exit          0
     ok            true
     envelope      command data ok warnings

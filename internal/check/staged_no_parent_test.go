@@ -73,7 +73,7 @@ func singleTreeFixture(t *testing.T) *config.Config {
 // than substituted so a fixture can point claims_dir anywhere, including at a
 // nested directory a substitution would have mangled.
 func claimsDirConfig(dir string) string {
-	return "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: " + dir + "\n"
+	return "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: " + dir + "\n"
 }
 
 // repointClaimsDir rewrites claims_dir in the working tree's
@@ -623,7 +623,7 @@ func TestStaged_ErasedReviewIsUndetected(t *testing.T) {
 // commentedDraftClaim is a DRAFT claim carrying a human's OPEN thread — the
 // state that blocks `claim lock`, and therefore the state worth erasing.
 func commentedDraftClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +

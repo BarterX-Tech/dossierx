@@ -120,11 +120,10 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Five facets (fixture-basic has two), two modules (fixture-basic has
-	// one), names sharing nothing with fixture-basic's "contract"/
-	// "internals"/"widget" vocabulary.
+	// Engine-fixed facets, two modules (fixture-basic has one), names
+	// sharing nothing with fixture-basic's "widget" vocabulary.
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - blueprint\n  - lineage\n  - risk\n  - onboarding\n  - retirement\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - sprocket\n  - gizmo\n" +
 		"claims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
@@ -133,26 +132,27 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 	lockFixtureConstitution(t, root)
 
 	claims := map[string]string{
-		"sprocket-blueprint.yaml": "id: sprocket.blueprint.overview\n" +
-			"facet: blueprint\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
-			"body: sprocket blueprint overview.\n" +
-			"rests_on:\n  - gizmo.lineage.overview\n",
-		"gizmo-lineage.yaml": "id: gizmo.lineage.overview\n" +
-			"facet: lineage\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
-			"body: gizmo lineage overview.\n" +
+		"sprocket-contract.yaml": "id: sprocket.contract.overview\n" +
+			"facet: contract\nmodule: sprocket\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: sprocket contract overview.\n" +
+			"rests_on:\n  - gizmo.contract.overview\n",
+		"gizmo-contract.yaml": "id: gizmo.contract.overview\n" +
+			"facet: contract\nmodule: gizmo\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: gizmo contract overview.\n" +
 			"rests_on:\n  none: true\n  reason: toy project fixture\n",
-		"gizmo-risk.yaml": "id: gizmo.risk.overview\n" +
-			"facet: risk\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
-			"body: gizmo risk overview.\n" +
-			"rests_on:\n  - gizmo.lineage.overview\n",
-		"sprocket-onboarding.yaml": "id: sprocket.onboarding.steps\n" +
-			"facet: onboarding\nmodule: sprocket\nstatus: draft\n" +
+		"gizmo-internals.yaml": "id: gizmo.internals.overview\n" +
+			"facet: internals\nmodule: gizmo\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: gizmo internals overview.\n" +
+			"rests_on:\n  - gizmo.contract.overview\n",
+		"sprocket-steps.yaml": "id: sprocket.internals.steps\n" +
+			"facet: internals\nmodule: sprocket\nstatus: draft\n" +
+			"summary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - unbox the sprocket\n  - attach to the gizmo\n" +
-			"rests_on:\n  - sprocket.blueprint.overview\n",
-		"sprocket-retirement.yaml": "id: sprocket.retirement.overview\n" +
-			"facet: retirement\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
+			"rests_on:\n  - sprocket.contract.overview\n",
+		"sprocket-retire.yaml": "id: sprocket.internals.retire\n" +
+			"facet: internals\nmodule: sprocket\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: sprocket retirement overview.\n" +
-			"rests_on:\n  - sprocket.onboarding.steps\n",
+			"rests_on:\n  - sprocket.internals.steps\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
@@ -162,7 +162,7 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 
 	stdout, stderr, code := run(t, root, "check")
 	if code != 0 {
-		t.Fatalf("check on second toy project (different facets/modules): expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("check on second toy project (different modules): expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "check: OK") {
 		t.Fatalf("expected check to report OK, got: %s", stdout)
@@ -838,13 +838,13 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - offlinemod\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - offlinemod\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	lockFixtureConstitution(t, root)
 	claim := "id: offlinemod.contract.overview\n" +
-		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: offline fixture claim.\n" +
 		"rests_on:\n  none: true\n  reason: offline fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
@@ -913,13 +913,13 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - collidemod\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - collidemod\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(projectRoot, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	lockFixtureConstitution(t, projectRoot)
 	claim := "id: collidemod.contract.overview\n" +
-		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: fixture claim exercised from a colliding-parent-path build.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {

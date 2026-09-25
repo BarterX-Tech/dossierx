@@ -1,4 +1,5 @@
 id: telemetry.contract.what-this-module-is
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: telemetry
 status: draft
@@ -7,4 +8,4 @@ build_role: orientation
 body: |
   Counters that never leave the machine. This module exists to be the part of the project nothing else depends on.
 rests_on:
-  - telemetry.schema.counter-shape
+  - telemetry.internals.counter-shape

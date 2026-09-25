@@ -36,16 +36,16 @@ import (
 func batchDeadlockFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/anchor.yaml": "id: widget.contract.anchor\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/anchor.yaml": "id: widget.contract.anchor\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  the anchor, locked, resting on a claim that has since gone draft.\n" +
 			"rests_on:\n  - widget.contract.sibling\n",
-		"claims/sibling.yaml": "id: widget.contract.sibling\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/sibling.yaml": "id: widget.contract.sibling\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  the sibling, unlocked back to draft for an ordinary edit.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  unrelated draft claim one.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  unrelated draft claim two.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -104,10 +104,10 @@ func TestLocalApprovalDoesNotLetUnrelatedLintBlockACandidate(t *testing.T) {
 func batchOpenThreadFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/clean.yaml": "id: widget.contract.clean\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/clean.yaml": "id: widget.contract.clean\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim with nothing standing in its way.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/flagged.yaml": "id: widget.contract.flagged\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/flagged.yaml": "id: widget.contract.flagged\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  a draft claim carrying an unresolved comment thread.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
@@ -161,13 +161,13 @@ func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T
 func batchOutsideDraftDependencyFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/outsider.yaml": "id: widget.contract.outsider\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/outsider.yaml": "id: widget.contract.outsider\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim that is never requested by the batch.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/dependent.yaml": "id: widget.contract.dependent\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/dependent.yaml": "id: widget.contract.dependent\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  a requested claim that rests on the outsider, still draft.\n" +
 			"rests_on:\n  - widget.contract.outsider\n",
-		"claims/bystander.yaml": "id: widget.contract.bystander\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/bystander.yaml": "id: widget.contract.bystander\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  a second requested claim with no edges of its own.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})

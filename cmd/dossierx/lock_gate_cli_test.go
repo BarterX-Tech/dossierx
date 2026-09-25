@@ -111,15 +111,15 @@ func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
 func rollUpDeadlockFixture(t *testing.T, bannerStatus string) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/banner.yaml": "id: widget.contract.banner\nfacet: contract\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\n" +
+		"claims/banner.yaml": "id: widget.contract.banner\nfacet: contract\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: orientation\n" +
 			"body: |\n  read the contract claims below in order.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"build_role: schema\n" +
 			"body: |\n  the first draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"build_role: behavior\n" +
 			"body: |\n  the second draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
@@ -233,5 +233,139 @@ func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 	actions := strings.Join(show.NextActions, "\n")
 	if !strings.Contains(actions, "roll-up") || !strings.Contains(actions, "widget.contract.one") {
 		t.Fatalf("claim show must name the rule and the blocking sibling, got %v", show.NextActions)
+	}
+}
+
+func TestLockRefusesMissingSummaryAndOversizeBody(t *testing.T) {
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claim_body_chars: 20\n"
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, map[string]string{
+		"claims/dep.yaml": "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Dependency under both caps.\n" +
+			"body: short dep body\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+		"claims/missing.yaml": "id: widget.contract.missing\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"rests_on:\n  - widget.contract.dep\n" +
+			"body: short missing body\n",
+		"claims/long.yaml": "id: widget.contract.long\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Has a summary but an oversize body.\n" +
+			"rests_on:\n  - widget.contract.dep\n" +
+			"body: abcdefghijklmnopqrstu\n",
+	})
+	lockFixtureConstitution(t, cfgPath)
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	if err == nil || env.OK {
+		t.Fatalf("check --validate must fail missing summary and oversize body, got %+v", env)
+	}
+
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.missing", "--reason", "go")
+	if err == nil || env.OK {
+		t.Fatalf("lock must refuse a missing summary, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
+		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
+	}
+	var data lockRefusedData
+	envData(t, env, &data)
+	named := false
+	for _, f := range data.LintFindings {
+		if f.Lint == "summary-required" && f.ClaimID == "widget.contract.missing" {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatalf("data.lint_findings must name summary-required on the candidate, got %+v", data.LintFindings)
+	}
+
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.long", "--reason", "go")
+	if err == nil || env.OK {
+		t.Fatalf("lock must refuse an oversize body, got %+v", env)
+	}
+	envData(t, env, &data)
+	named = false
+	for _, f := range data.LintFindings {
+		if f.Lint == "body-oversize" && f.ClaimID == "widget.contract.long" {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatalf("data.lint_findings must name body-oversize on the candidate, got %+v", data.LintFindings)
+	}
+
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.missing")
+	if !dr.Blocked {
+		t.Fatalf("dry-run must be blocked without a summary: %+v", dr)
+	}
+}
+
+func moduleCapOverFixture(t *testing.T) string {
+	t.Helper()
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 1\n"
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the module cap.\n" +
+			"rests_on:\n  - widget.contract.b\n" +
+			"body: |\n  first card over a configured cap of one.\n",
+		"claims/b.yaml": "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the module cap.\n" +
+			"body: |\n  second card that puts the module over the cap.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+	})
+	lockFixtureConstitution(t, cfgPath)
+	return cfgPath
+}
+
+func TestLockRefusesWhenModuleExceedsClaimCap(t *testing.T) {
+	cfgPath := moduleCapOverFixture(t)
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	if err == nil || env.OK {
+		t.Fatalf("check --validate must fail an over-cap module, got %+v", env)
+	}
+
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	if err == nil || env.OK {
+		t.Fatalf("lock must refuse while the module is over the cap, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
+		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
+	}
+	var data lockRefusedData
+	envData(t, env, &data)
+	named := false
+	for _, f := range data.LintFindings {
+		if f.Lint == "module-claim-cap" && f.ClaimID == "widget.contract.b" {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatalf("data.lint_findings must name module-claim-cap on the candidate, got %+v", data.LintFindings)
+	}
+
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.b")
+	if !dr.Blocked {
+		t.Fatalf("dry-run must be blocked on an over-cap module: %+v", dr)
+	}
+}
+
+func TestLockSucceedsAtConfiguredModuleCap(t *testing.T) {
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 2\n"
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the module cap.\n" +
+			"rests_on:\n  - widget.contract.b\n" +
+			"body: |\n  first card at a configured cap of two.\n",
+		"claims/b.yaml": "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the module cap.\n" +
+			"body: |\n  second card sitting on the cap.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+	})
+	lockFixtureConstitution(t, cfgPath)
+
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+		t.Fatalf("check --validate must be clean at the cap: %v", err)
+	}
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "approved"); err != nil {
+		t.Fatalf("locking a claim at the module cap must succeed: %v", err)
 	}
 }

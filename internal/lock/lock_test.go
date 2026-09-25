@@ -61,6 +61,31 @@ func testApproval() Approval {
 	return Approval{Actor: "test-actor", Reason: "test approval"}
 }
 
+func TestLockRefusesForeignInternals(t *testing.T) {
+	withRegistry(t, lint.RestsOnTargetLint{})
+
+	from := model.Claim{
+		ID: "widget.contract.from", Facet: "contract", Module: "widget",
+		Status: model.StatusDraft, Body: "cites foreign internals",
+		RestsOn: model.RestsOnIDs("gadget.internals.secret"),
+	}
+	secret := model.Claim{
+		ID: "gadget.internals.secret", Facet: "internals", Module: "gadget",
+		Status: model.StatusDraft, Body: "secret", RestsOn: model.RestsNone("fixture"),
+	}
+	store, err := LoadStore(t.TempDir() + "/store.json")
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	_, err = Lock(from, []model.Claim{from, secret}, testConfig(), store, testApproval())
+	if err == nil {
+		t.Fatal("expected lock to refuse a foreign module's internals (rests-on-target)")
+	}
+	if !strings.Contains(err.Error(), "lint finding") {
+		t.Fatalf("lock error should refuse via the lint gate, got: %v", err)
+	}
+}
+
 func TestLockFailsOnLintError(t *testing.T) {
 	withRegistry(t, failingLint{})
 
@@ -737,6 +762,37 @@ func TestContentHash_RawHTMLIsHashedOnlyWhenPresent(t *testing.T) {
 	}
 }
 
+// TestContentHash_SummaryIsHashedOnlyWhenPresent pins NIT-8's summary
+// stanza the same way raw_html is pinned: empty keeps the historical
+// digest; a present summary is content a dependent must notice.
+func TestContentHash_SummaryIsHashedOnlyWhenPresent(t *testing.T) {
+	base := model.Claim{
+		ID:     "widget.contract.a",
+		Facet:  "contract",
+		Module: "widget",
+		Body:   "the claim body",
+	}
+	if got := ContentHash(base); got != contentHashNoRawHTML {
+		t.Fatalf("empty summary must keep the historical ContentHash:\n got %s\nwant %s", got, contentHashNoRawHTML)
+	}
+	explicitlyEmpty := base
+	explicitlyEmpty.Summary = ""
+	if got := ContentHash(explicitlyEmpty); got != contentHashNoRawHTML {
+		t.Fatalf("empty summary = %s, want %s", got, contentHashNoRawHTML)
+	}
+	with := base
+	with.Summary = "one line about the claim"
+	first := ContentHash(with)
+	if first == contentHashNoRawHTML {
+		t.Fatalf("gaining a summary must move ContentHash")
+	}
+	edited := with
+	edited.Summary = "a different one line"
+	if ContentHash(edited) == first {
+		t.Fatalf("editing summary must move ContentHash")
+	}
+}
+
 // TestDetectStale_RawHTMLEditOnDependencyFlipsTheDependent is the reason FIX 1
 // exists, stated end to end rather than at the hash: a locked claim that rests
 // on another claim must be flipped to review_pending when that dependency's
@@ -806,7 +862,7 @@ func TestClaimsSentinelPath_OutsideClaimsDir(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if err := os.WriteFile(root+"/project.config.yaml", []byte(cfgYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -444,7 +444,7 @@ func (f *fixture) WriteProjectConfig() {
 	if err := os.MkdirAll(filepath.Join(f.root, "claims"), 0o755); err != nil {
 		f.t.Fatalf("mkdir claims: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(f.root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		f.t.Fatalf("write project.config.yaml: %v", err)
 	}
@@ -643,8 +643,8 @@ func (f *fixture) Enact(step string, do func()) {
 // scenarios specifically need claims that never adopted build_role.
 func (f *fixture) NewClaim(id, body, buildRole string) {
 	f.t.Helper()
-	tmpl := "dossierx claim new <id> --body <body> --rests-on-none-reason <why>"
-	bind := map[string]string{"id": id, "body": body, "why": "procedure-suite fixture, not backed by any doctrine claim"}
+	tmpl := "dossierx claim new <id> --summary <summary> --body <body> --rests-on-none-reason <why>"
+	bind := map[string]string{"id": id, "summary": "Fixture claim used by the procedure test suite.", "body": body, "why": "procedure-suite fixture, not backed by any doctrine claim"}
 	if buildRole != "" {
 		tmpl += " --build-role <role>"
 		bind["role"] = buildRole

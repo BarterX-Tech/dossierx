@@ -67,7 +67,7 @@ func (r *repo) write(rel, body string, extra ...string) model.Claim {
 // fixture change two things at once and prove neither.
 func (r *repo) writeID(rel, id, body string, extra ...string) model.Claim {
 	r.t.Helper()
-	raw := "id: " + id + "\nfacet: contract\nstatus: draft\nbody: |\n"
+	raw := "id: " + id + "\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n"
 	for _, line := range strings.Split(body, "\n") {
 		raw += "  " + line + "\n"
 	}
@@ -324,7 +324,7 @@ func TestRecoverRefusesOutsideAWorkTree(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw := "id: widget.contract.alpha\nfacet: contract\nstatus: draft\nbody: |\n  Current.\n"
+	raw := "id: widget.contract.alpha\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  Current.\n"
 	if err := os.WriteFile(filepath.Join(dir, "claims", "alpha.yaml"), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}

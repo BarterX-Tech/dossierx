@@ -212,6 +212,7 @@ new_project() {
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -224,6 +225,7 @@ YAML
 		git config commit.gpgsign false
 		arm_roof "$dir"
 		"$BIN" claim new "$CLAIM_ID" \
+			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
 			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
@@ -243,6 +245,7 @@ add_project() {
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -251,6 +254,7 @@ YAML
 		cd "$repo/$sub"
 		arm_roof "$repo/$sub"
 		"$BIN" claim new "$CLAIM_ID" \
+			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
 			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
@@ -694,6 +698,7 @@ cat >"$SPLIT/docs/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: ../claims
@@ -709,6 +714,7 @@ YAML
 	cd "$SPLIT/docs"
 	arm_roof "$SPLIT/docs"
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
 		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
@@ -826,6 +832,7 @@ cat >"$SKIPPED/repo/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: ../outside-claims
@@ -838,6 +845,7 @@ YAML
 	git config commit.gpgsign false
 	arm_roof "$SKIPPED/repo"
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
 		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
@@ -1080,6 +1088,7 @@ cat >"$PROJCLAIMS/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -1092,10 +1101,12 @@ YAML
 	git config commit.gpgsign false
 	arm_roof "$PROJCLAIMS"
 	"$BIN" claim new "$PROJECT_CLAIM_ID" \
+		--summary "Every widget this project documents is kept under one roof." \
 		--body "every widget this project documents is kept under one roof." \
 		--rests-on-none-reason "the roof above this claim is the constitution, which is not a claim" \
 		--format text >/dev/null
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
 		--rests-on "$PROJECT_CLAIM_ID" \
 		--format text >/dev/null

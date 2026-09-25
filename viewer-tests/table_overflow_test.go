@@ -47,6 +47,7 @@ facet: contract
 module: widget
 status: draft
 layout: table
+summary: Fixture claim used by the engine test corpus.
 rows:
   - a: ` + wideIdent + `
     b: "1"
@@ -72,6 +73,7 @@ facet: contract
 module: widget
 status: draft
 layout: table
+summary: Fixture claim used by the engine test corpus.
 rows:
   - name: alpha
     note: a short ordinary value
@@ -92,6 +94,7 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   A pipe table written in a claim body is prose furniture, not a record
   listing, and it stays contained by scrolling rather than by wrapping.

@@ -26,7 +26,7 @@ func viewerHTML(t *testing.T, base string) string {
 	return string(raw)
 }
 
-const mockupConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
+const mockupConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n" +
 	"mockup_modules:\n  - widget\n"
 
 // hostileMockup is a claim typed by hand into the repo: status: locked and

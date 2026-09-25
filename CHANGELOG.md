@@ -60,6 +60,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   absence. The claim card's row is **RESTS ON**. The lock hash of a claim that
   names targets does not move; a claim that gains `none: true` is a real edit
   and re-locks through `unlock → lock`. 31 lint rules.
+- **Required claim `summary` and a hard size cap (NIT-8).** Required claim
+  `summary` (one-line plain text, no markdown) and project-config caps
+  `max_claim_body_chars` (omit → **2000**) and `max_claim_summary_chars`
+  (omit → **200**), counted as Unicode code points. `check` reports
+  `summary-required`, `summary-oversize`, and `body-oversize` as ERROR on
+  every status; `claim lock` refuses the same findings. `body-oversize`
+  sums `body` + `steps` + `rows` cells; `raw_html` is exempt. `dossierx
+  claim new` requires `--summary` alongside `--body`. `claim list` prints
+  the summary. A non-empty `summary` is part of `lock.ContentHash`. Zero
+  and negatives are refused at config load. No migration tooling and no
+  grandfathering.
+
+- **Max claims per module (NIT-14).** `max_claims_per_module` on `project.config.yaml` (omit → **10**). `dossierx
+  check` reports `module-claim-cap` when any module holds more claims than
+  that ceiling, and `claim lock` refuses every claim in an over-cap module.
+  Raise the project-level key to override; there is no per-module override.
+  Values below 1 are refused when the config loads. Project claims carry no
+  module and never count toward a module's cap.
+
+### Changed
+
+- **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list
+  exactly `contract` and `internals`; any other name, a missing one or a
+  duplicate is refused at config load. `contract` is the only surface another
+  module may read or cite. `internals` may be cited only from the owning
+  module, and `rests-on-target` (NIT-24) is the one rule that refuses a
+  foreign module's internals on `check` and `claim lock`. Isolation may
+  include a module's own internals; `catalog.json` (integration) omits
+  internals and internals-targeting edges. Viewer module tabs are
+  Manifest | Contract | Internals as peers; Manifest is not a banner and not
+  a claim facet. A module always opens on its Contract tab, even when
+  Contract is empty.
 
 ### Removed
 

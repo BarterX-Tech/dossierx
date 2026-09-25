@@ -1,10 +1,10 @@
 # DossierX claim format
 
 This document describes the on-disk claim schema and project config schema
-this engine reads. It is generic by design — nothing here names any
-specific project, module, or facet. All project-specific vocabulary
-(which facets exist, which modules exist, where claims live) comes from
-`project.config.yaml`, never from the engine itself.
+this engine reads. Modules and paths come from `project.config.yaml`. Claim
+facets are engine-fixed: exactly `contract` and `internals`. No other facet
+name is legal. Other modules may read and cite only `contract`. Internals
+are never readable or citable from outside the owning module.
 
 ## Lock policy v1
 
@@ -41,10 +41,11 @@ would be silently clobbered). Split multiple claims into separate files.
 
 ```yaml
 id: module.facet.slug          # e.g. widget.contract.overview
-facet: string                  # must be in project.config.yaml's facets[]
+facet: contract | internals    # engine-fixed; module claims only. Any other name is refused at config load
 scope: project                 # project claims only (id project.<slug>, no module, no facet); module claims omit it
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
+summary: string                # REQUIRED; one-line plain text, no markdown
 layout: card | table | list | steps | tree | banner | mockup  # optional
 kind: fact                     # optional, default fact; any other value is refused
 build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
@@ -146,9 +147,35 @@ envelope are in
 `id` is three dot-separated segments: `module.facet.slug`.
 
 - `module` — one of the project's configured `modules[]`.
-- `facet` — one of the project's configured `facets[]`.
+- `facet` — exactly `contract` or `internals` (engine-fixed). `overview` is
+  not a facet.
 - `slug` — a free-form, kebab-case identifier unique within that
   `module.facet` pair.
+
+**Visibility (hard law).** `contract` is the only claim surface another
+module may read, cite (`rests_on`), or pin from a module manifest.
+`internals` may be cited only from the owning module; `rests-on-target` is
+the ERROR that refuses a foreign module's internals on check and lock (see
+*rests_on* below). Isolation of a module may include that module's own
+internals. Integration (including `catalog.json`) never includes internals.
+The viewer strip is three peer tabs — Manifest | Contract | Internals — in
+that order. Manifest is not a banner and not a claim facet.
+
+### `summary`
+
+`summary` is required on every claim: one line of plain text, no markdown,
+with its own ceiling `max_claim_summary_chars` (omit → 200 Unicode code
+points). Missing, whitespace-only, multiline, or markdown-shaped values are
+`summary-required`. A present summary over the ceiling is `summary-oversize`.
+Both are ERROR on draft and locked claims alike; `claim lock` refuses.
+`dossierx claim list` prints the summary. A non-empty summary is part of
+the dependency-drift `ContentHash`. There is no exemption: mockup claims
+and project claims need one too.
+
+`body` + `steps` + `rows` cells share `max_claim_body_chars` (omit → 2000
+Unicode code points). Over is `body-oversize` (ERROR). `raw_html` is exempt.
+The engine refuses; it does not truncate. Zero and negatives on either
+config key are config-load errors.
 
 ### Content is required
 
@@ -588,7 +615,7 @@ joins no cycle walk.
 | Lint | Severity | What it catches |
 |---|---|---|
 | `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` and `build_role` are: a third value invented by a typo would be a membership nothing reads. |
-| `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary, exactly as it is for `modules[]` and `facets[]`; a typo that created a track would put a claim in a feature nobody is looking at. |
+| `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary for tracks, exactly as it is for `modules[]` (facets are engine-fixed: `contract` \| `internals`); a typo that created a track would put a claim in a feature nobody is looking at. |
 | `track-multi-owner` | ERROR | two claims claiming `role: owns` on the same track. The one-owner-per-axis invariant, enforced. |
 | `track-empty` | WARNING | a track declared in config that no claim references. Nothing a reader is told is wrong; the track page is empty, and the human decides whether the track is premature or the claims are missing. |
 | `track-unowned` | WARNING | a track with citations but no owner. The assembled document renders as references with no statement of what the feature *is* — incomplete, not false. |
@@ -878,9 +905,9 @@ node — with three differences:
 - **No cap and no manifest.** Every module may rest on every project claim, so
   there is no export boundary to curate; project claims do not count toward a
   per-module cap. The tier-1 read is the system-generated **project claims
-  index** — one line per claim, id plus summary (the first non-blank body line
-  until NIT-8's `summary` field lands) — that `manifest show --isolation` and
-  `--integration` carry; `claim show project.<slug>` is the body on demand.
+  index** — one line per claim, id plus its own required `summary` — that
+  `manifest show --isolation` and `--integration` carry; `claim show
+  project.<slug>` is the body on demand.
 
 A project claim's `rests_on` may name other `project.*` ids and any module's
 `*.contract.*`; never any module's `*.internals.*` (`rests-on-target`). The
@@ -1406,7 +1433,7 @@ eyebrow: string                  # optional one-line subtitle rendered under
                                    # the sidebar heading (e.g. "user-intelligence
                                    # service"). No fallback — unset renders no
                                    # eyebrow element at all.
-facets: [string, ...]           # non-empty, no duplicates
+facets: [contract, internals]   # engine-fixed; both required, no other names
 modules: [string, ...]          # non-empty, no duplicates
 tracks:                          # optional; the whole vocabulary of cross-cutting
   - id: checkout                 # feature tracks a claim may name. Unset/empty
@@ -1441,6 +1468,22 @@ mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
                                   # entry must also appear in modules[]. An
                                   # unset/empty list means NO module may author
                                   # one; it is not a vacuous pass.
+max_claim_body_chars: int        # optional; omit → 2000. Unicode code-point
+                                  # ceiling on body + steps + rows cells.
+                                  # check reports body-oversize (ERROR) when
+                                  # over, and claim lock refuses. raw_html is
+                                  # exempt. Values below 1 are a config-load
+                                  # error.
+max_claim_summary_chars: int     # optional; omit → 200. Unicode code-point
+                                  # ceiling on summary. check reports
+                                  # summary-oversize (ERROR) when over.
+max_claims_per_module: int       # optional; omit → 10. Project-wide ceiling
+                                  # on claim files per module. check reports
+                                  # module-claim-cap (ERROR) when a module is
+                                  # over, and claim lock refuses every claim
+                                  # in that module. Raise this number to
+                                  # override; there is no per-module key.
+                                  # Values below 1 are a config-load error.
 viewer:
   template_overrides: path        # optional override dir; resolved relative
                                     # to this file's own directory. Eligible
@@ -1464,7 +1507,8 @@ lets the same engine binary be pointed at a config file from anywhere.
 ### Tracks
 
 `tracks[]` declares the whole vocabulary of cross-cutting feature tracks, the
-same way `modules[]` and `facets[]` declare theirs. Each entry is:
+same way `modules[]` declares modules. Facets are not a project vocabulary —
+they are engine-fixed (`contract`, `internals`). Each track entry is:
 
 - `id` — required, the value a claim's `tracks[].id` names. Kebab-case, unique
   within the list.
@@ -1476,7 +1520,7 @@ The field is optional as a whole: a project that declares no tracks behaves
 exactly as it did before the field existed, and the five `track-*` lints have
 nothing to report. A claim naming a track this list does not declare is
 `track-unknown` at error severity, which is deliberately the same treatment an
-unknown `module` or `facet` gets — a typo that silently created a track would
+unknown `module` gets — a typo that silently created a track would
 put a claim in a feature nobody is looking at, and the human would find out by
 noticing an absence.
 

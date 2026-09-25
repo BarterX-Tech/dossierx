@@ -27,7 +27,7 @@ import (
 
 // orderedClaimIn is orderedClaim for a module other than widget.
 func orderedClaimIn(module, id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"build_role: behavior\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
@@ -164,7 +164,7 @@ func TestStaged_BuildOrderUnderBuildDirIsJudgedByBothModes(t *testing.T) {
 // --staged as in --validate. A base-name copy would overwrite one with the
 // other and one of the two rows would go quiet.
 func TestStaged_ModuleNamedLockStoreSurvivesMaterialisation(t *testing.T) {
-	cfgBody := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - lock-store\nclaims_dir: claims\n"
+	cfgBody := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - lock-store\nclaims_dir: claims\n"
 	files := map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 		"claims/b.yaml": orderedClaimIn("lock-store", "lock-store.contract.b"),

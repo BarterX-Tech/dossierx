@@ -1,4 +1,5 @@
 id: lock.contract.lock-is-human-approved
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: lock
 status: locked
@@ -7,4 +8,4 @@ build_role: api
 body: |
   Approval takes the human's reason in their own words. An agent may never invent one.
 rests_on:
-  - lock.behavior.lock-gates
+  - lock.internals.lock-gates

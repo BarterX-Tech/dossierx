@@ -1,5 +1,6 @@
-id: widget.decision.boundary
-facet: decision
+id: widget.internals.boundary
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: widget
 status: draft
 layout: banner

@@ -11,6 +11,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/visibility"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -340,10 +341,10 @@ func TestBuildGroups_ModuleOrderFollowsConfigThenFallsBackSorted(t *testing.T) {
 	rendered := map[string]template.HTML{"z.a": "Z", "a.a": "A", "m.a": "M"}
 	groups := buildGroups(cat, cfg, rendered)
 
-	if len(groups) != 3 {
-		t.Fatalf("got %d groups, want 3: %#v", len(groups), groups)
+	if len(groups) != 9 {
+		t.Fatalf("got %d groups, want 9 (3 peer tabs × 3 modules): %#v", len(groups), groups)
 	}
-	gotOrder := []string{groups[0].Module, groups[1].Module, groups[2].Module}
+	gotOrder := []string{groups[0].Module, groups[3].Module, groups[6].Module}
 	wantOrder := []string{"middle", "alpha", "zeta"}
 	for i := range wantOrder {
 		if gotOrder[i] != wantOrder[i] {
@@ -353,14 +354,12 @@ func TestBuildGroups_ModuleOrderFollowsConfigThenFallsBackSorted(t *testing.T) {
 	}
 }
 
-func TestBuildGroups_FacetOrderFallsBackAlphabeticalWhenUndeclared(t *testing.T) {
+func TestBuildGroups_UnknownFacetsLandInUngrouped(t *testing.T) {
 	claims := []model.Claim{
 		groupedClaim("w.z", "widget", "zeta-facet", model.StatusDraft),
 		groupedClaim("w.a", "widget", "alpha-facet", model.StatusDraft),
 	}
-	// No cfg.Facets at all (nil cfg) -> both facets are "recognized" and
-	// must fall back to alphabetical order.
-	cfg := &config.Config{Modules: []string{"widget"}}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
 	cat, err := catalog.Build(claims, nil)
 	if err != nil {
 		t.Fatalf("catalog.Build: %v", err)
@@ -368,11 +367,8 @@ func TestBuildGroups_FacetOrderFallsBackAlphabeticalWhenUndeclared(t *testing.T)
 	rendered := map[string]template.HTML{"w.z": "Z", "w.a": "A"}
 	groups := buildGroups(cat, cfg, rendered)
 
-	if len(groups) != 2 {
-		t.Fatalf("got %d groups, want 2: %#v", len(groups), groups)
-	}
-	if groups[0].Facet != "alpha-facet" || groups[1].Facet != "zeta-facet" {
-		t.Errorf("facet order = [%s, %s], want [alpha-facet, zeta-facet]", groups[0].Facet, groups[1].Facet)
+	if len(groups) != 1 || groups[0].Module != ungroupedModuleName {
+		t.Fatalf("unknown facets must land in ungrouped, got %#v", groups)
 	}
 }
 
@@ -645,19 +641,19 @@ func TestBuildModuleGroups_TwoLevelShape(t *testing.T) {
 	if widget.Module != "widget" || widget.ID != "widget" {
 		t.Errorf("widget module group = %#v, want Module/ID == widget", widget)
 	}
-	if len(widget.Facets) != 2 {
-		t.Fatalf("widget module group has %d facets, want 2: %#v", len(widget.Facets), widget.Facets)
+	if len(widget.Facets) != 3 {
+		t.Fatalf("widget module group has %d tabs, want 3: %#v", len(widget.Facets), widget.Facets)
 	}
-	if widget.Facets[0].Facet != "contract" || widget.Facets[1].Facet != "internals" {
-		t.Errorf("widget facets = [%s, %s], want [contract, internals]", widget.Facets[0].Facet, widget.Facets[1].Facet)
+	if widget.Facets[0].Facet != "manifest" || widget.Facets[1].Facet != "contract" || widget.Facets[2].Facet != "internals" {
+		t.Errorf("widget tabs = [%s, %s, %s], want [manifest, contract, internals]", widget.Facets[0].Facet, widget.Facets[1].Facet, widget.Facets[2].Facet)
 	}
-	if widget.FirstFacetID != widget.Facets[0].ID {
-		t.Errorf("FirstFacetID = %q, want %q (Facets[0].ID)", widget.FirstFacetID, widget.Facets[0].ID)
+	if widget.FirstFacetID != "widget-contract" {
+		t.Errorf("FirstFacetID = %q, want widget-contract when Manifest is empty", widget.FirstFacetID)
 	}
 
 	gadget := moduleGroups[1]
-	if gadget.Module != "gadget" || len(gadget.Facets) != 1 {
-		t.Fatalf("gadget module group = %#v, want exactly 1 facet", gadget)
+	if gadget.Module != "gadget" || len(gadget.Facets) != 3 {
+		t.Fatalf("gadget module group = %#v, want 3 peer tabs", gadget)
 	}
 }
 
@@ -681,39 +677,27 @@ func TestBuildModuleGroups_SingleFacetModuleSkipsSubNav(t *testing.T) {
 	}
 
 	if !byModule["widget"].HasSubNav {
-		t.Errorf("widget has 2 facets, want HasSubNav=true: %#v", byModule["widget"])
+		t.Errorf("widget has peer tabs, want HasSubNav=true: %#v", byModule["widget"])
 	}
-	if byModule["gadget"].HasSubNav {
-		t.Errorf("gadget has 1 facet, want HasSubNav=false (no sub-nav rendered): %#v", byModule["gadget"])
+	if !byModule["gadget"].HasSubNav {
+		t.Errorf("gadget must still show Manifest | Contract | Internals peers: %#v", byModule["gadget"])
 	}
 }
 
-func TestBuildModuleGroups_ThreePlusFacetsOrderingAndSubNav(t *testing.T) {
-	// Facets are declared and claimed out of alphabetical order (diagrams
-	// before contract, extras before internals) so a passing assertion on
-	// declared-config order can't be a coincidental match with alphabetical
-	// order. This exercises buildGroups/orderedNames/buildModuleGroups with
-	// 4 facets, beyond the 2-facet case covered by
-	// TestBuildModuleGroups_TwoLevelShape (knownFacet only admits facets
-	// that appear in cfg.Facets when cfg.Facets is non-empty, so a facet
-	// declared out of order is the realistic stand-in for orderedNames'
-	// preferred-then-alphabetical-fallback path here; the fallback path
-	// itself is already covered directly by TestOrderedNames_* below).
+func TestBuildModuleGroups_PeerTabsManifestContractInternals(t *testing.T) {
 	claims := []model.Claim{
-		groupedClaim("w.d", "widget", "diagrams", model.StatusDraft),
 		groupedClaim("w.c", "widget", "contract", model.StatusDraft),
-		groupedClaim("w.e", "widget", "extras", model.StatusDraft),
 		groupedClaim("w.i", "widget", "internals", model.StatusDraft),
 	}
 	cfg := &config.Config{
 		Modules: []string{"widget"},
-		Facets:  []string{"contract", "internals", "diagrams", "extras"},
+		Facets:  []string{"contract", "internals"},
 	}
 	cat, err := catalog.Build(claims, nil)
 	if err != nil {
 		t.Fatalf("catalog.Build: %v", err)
 	}
-	rendered := map[string]template.HTML{"w.d": "D", "w.c": "C", "w.e": "E", "w.i": "I"}
+	rendered := map[string]template.HTML{"w.c": "C", "w.i": "I"}
 	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, rendered))
 
 	if len(moduleGroups) != 1 {
@@ -721,22 +705,22 @@ func TestBuildModuleGroups_ThreePlusFacetsOrderingAndSubNav(t *testing.T) {
 	}
 
 	widget := moduleGroups[0]
-	if len(widget.Facets) != 4 {
-		t.Fatalf("widget module group has %d facets, want 4: %#v", len(widget.Facets), widget.Facets)
+	if len(widget.Facets) != 3 {
+		t.Fatalf("widget module group has %d tabs, want 3: %#v", len(widget.Facets), widget.Facets)
 	}
-	wantOrder := []string{"contract", "internals", "diagrams", "extras"}
+	wantOrder := []string{"manifest", "contract", "internals"}
 	gotOrder := make([]string, len(widget.Facets))
 	for i, f := range widget.Facets {
 		gotOrder[i] = f.Facet
 	}
 	if !slices.Equal(gotOrder, wantOrder) {
-		t.Errorf("widget facet order = %v, want %v (declared config order)", gotOrder, wantOrder)
+		t.Errorf("widget tab order = %v, want %v", gotOrder, wantOrder)
 	}
-	if widget.FirstFacetID != widget.Facets[0].ID {
-		t.Errorf("FirstFacetID = %q, want %q (Facets[0].ID)", widget.FirstFacetID, widget.Facets[0].ID)
+	if widget.FirstFacetID != "widget-contract" {
+		t.Errorf("FirstFacetID = %q, want widget-contract when Manifest is empty", widget.FirstFacetID)
 	}
 	if !widget.HasSubNav {
-		t.Errorf("widget has 4 facets, want HasSubNav=true: %#v", widget)
+		t.Errorf("peer tabs require HasSubNav=true: %#v", widget)
 	}
 }
 
@@ -785,8 +769,8 @@ func TestBuildModuleGroups_LockCountsOnTwoFacetLockedModule(t *testing.T) {
 		t.Fatalf("module groups = %d, want 1", len(moduleGroups))
 	}
 	got := moduleGroups[0]
-	if got.ClaimCount != 3 || got.LockedCount != 3 || got.FacetCount != 2 {
-		t.Fatalf("widget counts = claims %d locked %d facets %d, want 3/3/2", got.ClaimCount, got.LockedCount, got.FacetCount)
+	if got.ClaimCount != 3 || got.LockedCount != 3 || got.FacetCount != 3 {
+		t.Fatalf("widget counts = claims %d locked %d facets %d, want 3/3/3", got.ClaimCount, got.LockedCount, got.FacetCount)
 	}
 }
 
@@ -807,7 +791,7 @@ func TestRender_ModuleSectionLockMetricAttrs(t *testing.T) {
 	for _, want := range []string{
 		`data-claim-count="2"`,
 		`data-locked-count="2"`,
-		`data-facet-count="2"`,
+		`data-facet-count="3"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rendered module section missing %q", want)
@@ -979,6 +963,9 @@ func TestBuildGroups_UndeclaredFacetIsUngroupedNotInjected(t *testing.T) {
 	}
 	groups := buildGroups(cat, cfg, rendered)
 
+	if len(groups) != 4 {
+		t.Fatalf("got %d groups, want 3 peer tabs plus ungrouped leftover: %#v", len(groups), groups)
+	}
 	var leftoverCount int
 	for _, g := range groups {
 		if g.Facet == "overview" {
@@ -992,6 +979,28 @@ func TestBuildGroups_UndeclaredFacetIsUngroupedNotInjected(t *testing.T) {
 	}
 	if leftoverCount != 1 {
 		t.Fatalf("undeclared leftover claim copies = %d, want 1 (ungrouped, not injected): %#v", leftoverCount, groups)
+	}
+}
+
+func TestBuildGroups_PeerTabsAreManifestContractInternals(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.a", "widget", "contract", model.StatusDraft),
+		groupedClaim("w.b", "widget", "internals", model.StatusDraft),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	groups := buildGroups(cat, cfg, map[string]template.HTML{"w.a": "A", "w.b": "B"})
+	if len(groups) != 3 {
+		t.Fatalf("got %d groups, want 3 peer tabs: %#v", len(groups), groups)
+	}
+	want := []string{visibility.ViewerTabManifest, "contract", "internals"}
+	for i, g := range groups {
+		if g.Facet != want[i] {
+			t.Fatalf("group %d facet = %q, want %q: %#v", i, g.Facet, want[i], groups)
+		}
 	}
 }
 
@@ -1023,5 +1032,26 @@ func TestRender_ClaimBodyAppearsOncePerClaim(t *testing.T) {
 	}
 	if got := strings.Count(out, "CONTRACT-BODY"); got != 1 {
 		t.Fatalf("claim body appears %d times, want 1 (no facet-tab injection):\n%s", got, out)
+	}
+}
+
+func TestBuildModuleGroups_OpensOnContractEvenWhenEmpty(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.i", "widget", "internals", model.StatusDraft),
+	}
+	cfg := &config.Config{
+		Modules: []string{"widget"},
+		Facets:  []string{"contract", "internals"},
+	}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, map[string]template.HTML{"w.i": "I"}))
+	if len(moduleGroups) != 1 {
+		t.Fatalf("got %d module groups, want 1: %#v", len(moduleGroups), moduleGroups)
+	}
+	if got := moduleGroups[0].FirstFacetID; got != "widget-contract" {
+		t.Errorf("FirstFacetID = %q, want widget-contract: a module always opens on Contract, even with only internals claims", got)
 	}
 }

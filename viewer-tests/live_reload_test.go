@@ -35,7 +35,7 @@ import (
 const twoFacetConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -46,6 +46,7 @@ claims_dir: claims
 const readOnlyOverrideConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -59,6 +60,7 @@ func facetClaim(id, facet string) string {
 facet: ` + facet + `
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim in the ` + facet + ` facet.
 rests_on:
@@ -72,7 +74,7 @@ rests_on:
 // so one of these cards is NOT by itself taller than a desktop viewport.
 func longBodyClaim(id, facet string, paragraphs int) string {
 	var b strings.Builder
-	b.WriteString("id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: draft\nbody: |\n")
+	b.WriteString("id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n")
 	for i := 0; i < paragraphs; i++ {
 		b.WriteString("  Paragraph " + strconv.Itoa(i) + " lorem ipsum dolor sit amet consectetur adipiscing.\n\n")
 	}
@@ -117,13 +119,13 @@ func facetVisibleExpr(id string) string {
 func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
-	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
+	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
 	ctx := serveAndOpenLive(t, p)
 
 	// Switch to the SECOND facet (design). Its subtab click records the facet in
 	// the hash, which is what the restore-view path re-derives after a reload.
-	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-design"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, facetVisibleExpr("widget-design"))
+	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-internals"]`, chromedp.ByQuery))
+	pollTrue(t, ctx, facetVisibleExpr("widget-internals"))
 	if !evalBool(t, ctx, `document.getElementById('widget-contract').hidden`) {
 		t.Fatal("contract facet should be hidden after switching to design")
 	}
@@ -141,7 +143,7 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 	if evalBool(t, ctx, `document.querySelector('.module-section:not(.constitution-section)').hidden`) {
 		t.Fatal("active module-section must not be hidden after a reload")
 	}
-	if !evalBool(t, ctx, facetVisibleExpr("widget-design")) {
+	if !evalBool(t, ctx, facetVisibleExpr("widget-internals")) {
 		t.Fatal("the active facet (design) must remain visible across a reload")
 	}
 	if !evalBool(t, ctx, `document.getElementById('widget-contract').hidden`) {
@@ -156,7 +158,7 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 	// slow headless runner, which tests hit-testing rather than delegation.
 	evalVoid(t, ctx, `document.querySelector('.subtab[data-target="#widget-contract"]').click()`)
 	pollTrue(t, ctx, facetVisibleExpr("widget-contract"))
-	if !evalBool(t, ctx, `document.getElementById('widget-design').hidden`) {
+	if !evalBool(t, ctx, `document.getElementById('widget-internals').hidden`) {
 		t.Fatal("a post-reload subtab click must switch the visible facet")
 	}
 }
@@ -287,29 +289,29 @@ const readingScrollerRangeJS = `(function(){
 func TestReloadNewClaimResolvesViaClaimToFacet(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
-	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
+	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
 	ctx := serveAndOpenLive(t, p)
 
 	// Default view: contract facet visible, design hidden.
 	pollTrue(t, ctx, facetVisibleExpr("widget-contract"))
-	if !evalBool(t, ctx, `document.getElementById('widget-design').hidden`) {
+	if !evalBool(t, ctx, `document.getElementById('widget-internals').hidden`) {
 		t.Fatal("design facet should start hidden")
 	}
 
 	// External process adds a NEW claim to the DESIGN facet -> reload. initViewer
 	// must rebuild claimToFacet to include it.
-	p.writeClaim("des2.yaml", facetClaim("widget.design.added", "design"))
-	pollTrue(t, ctx, `!!document.getElementById('widget.design.added')`)
+	p.writeClaim("des2.yaml", facetClaim("widget.internals.added", "internals"))
+	pollTrue(t, ctx, `!!document.getElementById('widget.internals.added')`)
 
 	// Navigate to the new claim by hash. resolve() consults the freshly rebuilt
 	// claimToFacet to map it into the design facet and switch there — if the map
 	// were stale, the hash would fall through to the first-module default.
-	runCDP(t, ctx, chromedp.Evaluate(`window.location.hash = '#widget.design.added';`, nil))
-	pollTrue(t, ctx, facetVisibleExpr("widget-design"))
+	runCDP(t, ctx, chromedp.Evaluate(`window.location.hash = '#widget.internals.added';`, nil))
+	pollTrue(t, ctx, facetVisibleExpr("widget-internals"))
 	if !evalBool(t, ctx, `document.getElementById('widget-contract').hidden`) {
 		t.Fatal("navigating to the new claim must switch away from the contract facet")
 	}
-	if !evalBool(t, ctx, `document.getElementById('widget.design.added').closest('.claim-group').id === 'widget-design'`) {
+	if !evalBool(t, ctx, `document.getElementById('widget.internals.added').closest('.claim-group').id === 'widget-internals'`) {
 		t.Fatal("the new claim card did not resolve into the design facet group")
 	}
 }
@@ -317,18 +319,18 @@ func TestReloadNewClaimResolvesViaClaimToFacet(t *testing.T) {
 func TestReloadSecondFacetChipOpensThread(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
-	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
-	p.run("comment", "add", "widget.design.thing", "--as", "human", "--body", "design discussion")
+	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
+	p.run("comment", "add", "widget.internals.thing", "--as", "human", "--body", "design discussion")
 	ctx := serveAndOpenLive(t, p)
 
-	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-design"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, facetVisibleExpr("widget-design"))
+	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-internals"]`, chromedp.ByQuery))
+	pollTrue(t, ctx, facetVisibleExpr("widget-internals"))
 
 	p.run("comment", "add", "widget.contract.base", "--as", "human", "--body", "ping")
 	pollTrue(t, ctx, `!!document.querySelector('#widget-contract [data-claim-id="widget.contract.base"]')`)
-	pollTrue(t, ctx, facetVisibleExpr("widget-design"))
+	pollTrue(t, ctx, facetVisibleExpr("widget-internals"))
 
-	runCDP(t, ctx, chromedp.Click(`#widget-design [data-claim-id="widget.design.thing"].comment-chip`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Click(`#widget-internals [data-claim-id="widget.internals.thing"].comment-chip`, chromedp.ByQuery))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)
 	pollTrue(t, ctx, `Array.from(document.querySelectorAll('#commentsPanel .comment-body')).some(function(b){return b.textContent.indexOf('design discussion') >= 0;})`)
 }

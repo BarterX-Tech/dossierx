@@ -1,5 +1,6 @@
-id: engine.verification.determinism-suite
-facet: verification
+id: engine.internals.determinism-suite
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: engine
 status: locked
 layout: card

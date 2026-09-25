@@ -1,4 +1,5 @@
 id: project.bad.shape
+summary: A project claim whose id is malformed for id-shape.
 scope: project
 status: draft
 layout: card

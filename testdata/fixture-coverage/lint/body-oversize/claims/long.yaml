@@ -1,0 +1,9 @@
+id: bodymod.contract.long
+summary: Oversize body plus a step.
+facet: contract
+module: bodymod
+status: draft
+layout: card
+rests_on:
+  - bodymod.contract.helper
+body: abcdefghijklmnopqrstu

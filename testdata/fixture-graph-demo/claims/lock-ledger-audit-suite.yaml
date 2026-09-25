@@ -1,5 +1,6 @@
-id: lock.verification.ledger-audit-suite
-facet: verification
+id: lock.internals.ledger-audit-suite
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: lock
 status: draft
 layout: card
@@ -7,4 +8,4 @@ build_role: verification
 body: |
   Every laundering path is reproduced as a test: delete the store, empty it, and edit one record, and assert each is reported.
 rests_on:
-  - lock.behavior.lock-gates
+  - lock.internals.lock-gates

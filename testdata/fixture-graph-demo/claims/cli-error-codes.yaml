@@ -1,5 +1,6 @@
-id: cli.schema.error-codes
-facet: schema
+id: cli.internals.error-codes
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: cli
 status: draft
 layout: card
@@ -7,4 +8,4 @@ build_role: schema
 body: |
   Each code maps to one documented recovery. A code without a recovery is a message with extra steps.
 rests_on:
-  - cli.schema.json-envelope
+  - cli.internals.json-envelope

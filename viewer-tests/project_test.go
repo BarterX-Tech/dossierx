@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -89,9 +90,11 @@ func requireBin(t *testing.T) string {
 const defaultConfigYAML = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
+max_claim_body_chars: 20000
 `
 
 // draftClaimYAML is a single lockable draft claim with a governed_by: none
@@ -100,6 +103,7 @@ const draftClaimYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim under review.
 rests_on:
@@ -125,6 +129,12 @@ type project struct {
 
 // newProjectRaw creates a project dir + config with an empty claims/ dir; the
 // caller writes the claim files it needs via writeClaim.
+//
+// Generated viewer-test projects often put more than the research default of
+// 10 claims in one module (readiness scale, reading scale, wide diagrams).
+// When the caller does not set max_claims_per_module, raise the cap so
+// check/lock stay about the fixture under test rather than the module-size
+// lint. An explicit cap in configYAML is left alone.
 func newProjectRaw(t *testing.T, configYAML string) *project {
 	t.Helper()
 	bin := requireBin(t)
@@ -132,6 +142,9 @@ func newProjectRaw(t *testing.T, configYAML string) *project {
 	claimsDir := filepath.Join(dir, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims: %v", err)
+	}
+	if !strings.Contains(configYAML, "max_claims_per_module:") {
+		configYAML = strings.TrimRight(configYAML, "\n") + "\nmax_claims_per_module: 10000\n"
 	}
 	cfg := filepath.Join(dir, "project.config.yaml")
 	if err := os.WriteFile(cfg, []byte(configYAML), 0o644); err != nil {

@@ -1,6 +1,7 @@
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - rawhtmlmod
 claims_dir: claims

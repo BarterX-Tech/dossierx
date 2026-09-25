@@ -1,0 +1,9 @@
+id: caps.contract.no-summary
+facet: contract
+module: caps
+status: draft
+layout: card
+body: |
+  A claim with no summary line.
+rests_on:
+  - caps.contract.control

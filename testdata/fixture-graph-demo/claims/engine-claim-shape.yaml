@@ -1,5 +1,6 @@
-id: engine.schema.claim-shape
-facet: schema
+id: engine.contract.claim-shape
+summary: Fixture claim used by the engine test corpus.
+facet: contract
 module: engine
 status: locked
 layout: card

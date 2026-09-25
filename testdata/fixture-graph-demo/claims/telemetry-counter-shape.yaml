@@ -1,5 +1,6 @@
-id: telemetry.schema.counter-shape
-facet: schema
+id: telemetry.internals.counter-shape
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: telemetry
 status: draft
 layout: card

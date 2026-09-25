@@ -1,5 +1,6 @@
-id: telemetry.schema.event-names
-facet: schema
+id: telemetry.internals.event-names
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: telemetry
 status: draft
 layout: card
@@ -7,4 +8,4 @@ build_role: schema
 body: |
   Names are drawn from a fixed list checked at build time, so a typo is a compile failure rather than a silently lost count.
 rests_on:
-  - telemetry.schema.counter-shape
+  - telemetry.internals.counter-shape

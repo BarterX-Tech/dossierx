@@ -181,7 +181,7 @@ func TestClaimAsset_APartialWriteKeepsThePreviousIndex(t *testing.T) {
 	// And it must still SELF-HEAL: once the write completes with the reference
 	// gone, the entry goes away like any other edit.
 	writeFile(t, claim,
-		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
+		"id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
 			"body: |\n  the diagram was removed from this claim.\n"+
 			"rests_on:\n  none: true\n  reason: fixture\n")
 	assertNotFoundWithin(t, base, p, stalenessBound)
@@ -274,7 +274,7 @@ const keepGraceBound = 8 * time.Second
 
 // twoImageClaim is a card whose body references each src on its own line.
 func twoImageClaim(id string, srcs ...string) string {
-	s := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n"
+	s := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n"
 	for _, src := range srcs {
 		s += "  ![d](" + src + ")\n\n"
 	}

@@ -97,7 +97,7 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"check", "--validate"},
 		{"claim", "show", "widget.contract.overview"},
 		{"claim", "list"},
-		{"claim", "new", "widget.contract.second", "--body", "another claim", "--dry-run"},
+		{"claim", "new", "widget.contract.second", "--summary", "Fixture claim used by the engine test corpus.", "--body", "another claim", "--dry-run"},
 		{"claim", "lock", "widget.contract.overview", "--reason", "r", "--dry-run"},
 		{"claim", "unlock", "widget.contract.overview", "--reason", "r", "--dry-run"},
 		{"claim", "flag", "widget.contract.overview", "--claim-says", "a", "--now-does", "b", "--reason", "c", "--dry-run"},
@@ -139,7 +139,7 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 func icWriteRoledClaim(t *testing.T, claimPath, module string) {
 	t.Helper()
 	claim := "id: " + module + ".contract.overview\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"build_role: schema\n" +
 		"body: |\n  fixture claim for in-process CLI tests.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
@@ -380,7 +380,7 @@ func TestClaimLinkDryRunAgreesWithTheWritePath(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	// Two modules, so "the claim is in a different module" is expressible.
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("rewrite config: %v", err)
 	}
@@ -463,12 +463,12 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
 	claimPath := filepath.Join(claimsDir, "a.yaml")
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"build_role: schema\nbody: |\n  claim a.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
@@ -508,7 +508,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
@@ -518,7 +518,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 		{"a", "widget.contract.a", "schema"},
 		{"b", "widget.contract.b", "behavior"},
 	} {
-		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: " + c.role + "\nbody: |\n  claim " + c.name + ".\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n"
 		if err := os.WriteFile(filepath.Join(claimsDir, c.name+".yaml"), []byte(claim), 0o644); err != nil {

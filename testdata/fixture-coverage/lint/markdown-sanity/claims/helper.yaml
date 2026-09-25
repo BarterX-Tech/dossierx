@@ -1,4 +1,5 @@
 id: mdmod.contract.helper
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: mdmod
 status: draft

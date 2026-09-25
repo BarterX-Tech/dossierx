@@ -41,20 +41,9 @@ func Index(claims []model.Claim) []Entry {
 	return out
 }
 
-// Summary is the one line the index carries for a claim.
-//
-// NIT-8 (PR #105) adds a required `summary` field to every claim; until that
-// lands on the release branch this reads the FIRST NON-BLANK LINE of the
-// body instead, trimmed, which is the same thing an agent skimming the file
-// would take as the gist. When `summary` exists this function is where the
-// switch happens, and nothing else in the index changes shape.
+// Summary is the one line the index carries for a claim: the claim's own
+// required `summary` field (NIT-8), trimmed. Every claim carries one — there
+// is no exemption for project claims — so this is never a reconstruction.
 func Summary(c model.Claim) string {
-	for _, line := range strings.Split(c.Body, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		return line
-	}
-	return ""
+	return strings.TrimSpace(c.Summary)
 }

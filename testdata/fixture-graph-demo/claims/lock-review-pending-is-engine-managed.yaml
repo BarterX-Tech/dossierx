@@ -1,4 +1,5 @@
 id: lock.contract.review-pending-is-engine-managed
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: lock
 status: draft
@@ -7,4 +8,4 @@ build_role: api
 body: |
   The review flag is set by the engine when something underneath an approved claim changed, and is cleared only by a confirmed re-review.
 rests_on:
-  - lock.behavior.lock-gates
+  - lock.internals.lock-gates

@@ -58,7 +58,7 @@ func recoverFixtureIn(t *testing.T, useGit bool) (cfgPath, approvedBody string) 
 	git("config", "user.name", "Fixture")
 
 	approvedBody = "The approved wording.\n"
-	claim := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  " + strings.TrimSuffix(approvedBody, "\n") + "\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
@@ -358,7 +358,7 @@ func TestClaimRecoverRefusesWithoutAWorkTree(t *testing.T) {
 func TestClaimRecoverNeedsNoWorkTreeWhenNothingIsEligible(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  fixture.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})

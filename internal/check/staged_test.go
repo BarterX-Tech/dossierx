@@ -95,7 +95,7 @@ func monorepoFixture(t *testing.T) *config.Config {
 		}
 	}
 	cfgPath := filepath.Join(docs, "project.config.yaml")
-	body := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: ../claims\n"
+	body := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: ../claims\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestStaged_UntrackedAndStagedDeletionsAreNotInTheRegistry(t *testing.T) {
 
 	// An untracked claim, deliberately one that would fail lint if judged
 	// (it references a claim that does not exist).
-	untracked := "id: widget.contract.untracked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	untracked := "id: widget.contract.untracked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  never added to the index.\n" +
 		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(cfg.ClaimsDir, "untracked.yaml"), []byte(untracked), 0o644); err != nil {
@@ -540,15 +540,15 @@ func TestStaged_OutsideAWorkTreeIsErrNoIndex(t *testing.T) {
 // check rejects, which is the worst possible way for these two to disagree.
 func TestStagedDecodeMatchesLoader(t *testing.T) {
 	cases := map[string]string{
-		"ordinary": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"ordinary": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"unknown field": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"unknown field": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: hi\nnot_a_real_field: 1\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"two documents": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"two documents": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: hi\nrests_on:\n  none: true\n  reason: fixture\n" +
-			"---\nid: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: hi\n",
+			"---\nid: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: hi\n",
 		"malformed yaml": "id: [unterminated\n",
 	}
 

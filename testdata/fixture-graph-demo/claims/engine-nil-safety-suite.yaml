@@ -1,5 +1,6 @@
-id: engine.verification.nil-safety-suite
-facet: verification
+id: engine.internals.nil-safety-suite
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: engine
 status: draft
 layout: card

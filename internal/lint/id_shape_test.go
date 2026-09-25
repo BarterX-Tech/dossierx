@@ -42,9 +42,8 @@ func TestIDShapeLint(t *testing.T) {
 			wantFindings: 6,
 		},
 		{
-			// Row: claim's facet segment is not in the project's configured
-			// facets, in isolation (no other defect on the id).
-			name: "failing: facet not in configured facets, reported alone",
+			// Row: claim's facet segment is not engine-fixed, in isolation.
+			name: "failing: facet is not engine-fixed, reported alone",
 			claims: []model.Claim{
 				{ID: "widget.doctrine.overview", Module: "widget", Facet: "doctrine"},
 			},

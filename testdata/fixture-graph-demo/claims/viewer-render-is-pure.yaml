@@ -1,4 +1,5 @@
 id: viewer.contract.render-is-pure
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: viewer
 status: locked

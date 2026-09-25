@@ -208,7 +208,7 @@ func TestRun_LedgerContentDrift(t *testing.T) {
 // payload has to mark it stale). So the precondition is now that the hash DOES
 // move; the assertion that matters, the ledger finding, is unchanged.
 func TestRun_LedgerCatchesSwappedRawHTML(t *testing.T) {
-	cfgBody := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
+	cfgBody := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n" +
 		"mockup_modules:\n  - widget\n"
 	cfg, claims := project(t, cfgBody, map[string]string{
 		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: mockup\n" +
@@ -257,7 +257,7 @@ func TestRun_LedgerOrphan(t *testing.T) {
 // just as much.
 func TestRun_CommentLedgerDrift(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
@@ -284,7 +284,7 @@ func TestRun_NoDigestStoreMeansUnknownNotDrifted(t *testing.T) {
 	// creates the digest store beside it — after that, a missing digest
 	// store is a DELETION. "Never had one" is only reachable before the roof.
 	cfg, claims := projectUnroofed(t, baseConfig, map[string]string{
-		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  a draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
@@ -499,7 +499,7 @@ func runResult(t *testing.T, claims []model.Claim, cfg *config.Config) check.Res
 func TestRun_DeletingTheDigestStoreIsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
-		"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
@@ -685,7 +685,7 @@ func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
 // unreported. Deleting more had to stop buying more silence: the partial launder
 // was caught and the total one was free.
 func TestRun_DeletingTheOnlyThreadAndTheDigestStoreIsStillReported(t *testing.T) {
-	const commented = "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	const commented = "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
@@ -733,7 +733,7 @@ func TestRun_DeletingTheOnlyThreadAndTheDigestStoreIsStillReported(t *testing.T)
 func TestRun_DigestStoreAbsenceIsSilentWithoutLedgerCoverage(t *testing.T) {
 	t.Run("not yet ledger-covered", func(t *testing.T) {
 		cfg, claims := projectUnroofed(t, baseConfig, map[string]string{
-			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 				"body: |\n  a draft claim.\n" +
 				"rests_on:\n  none: true\n  reason: fixture\n" +
 				"comments:\n" +

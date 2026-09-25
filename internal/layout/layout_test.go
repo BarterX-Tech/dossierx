@@ -23,7 +23,7 @@ func legacyProject(t *testing.T, files map[string]string, extraConfig string) *c
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n" + extraConfig
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n" + extraConfig
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

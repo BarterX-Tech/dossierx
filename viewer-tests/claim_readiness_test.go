@@ -66,6 +66,7 @@ func readinessScaleProject(t *testing.T, layers, width int) *project {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   browser scale fixture at layer %d, node %d.
 %s`, id, layer, node, restsBlock))
@@ -239,6 +240,7 @@ const readinessRootYAML = `id: widget.contract.root
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the claim whose readiness a reviewer is deciding.
 rests_on:
@@ -250,6 +252,7 @@ const readinessAlphaYAML = `id: widget.contract.alpha
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a direct prerequisite awaiting approval.
 rests_on:
@@ -261,6 +264,7 @@ const readinessBetaYAML = `id: widget.contract.beta
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a direct prerequisite with an upstream prerequisite.
 rests_on:
@@ -271,6 +275,7 @@ const readinessGammaYAML = `id: widget.contract.gamma
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   an upstream prerequisite awaiting approval.
 rests_on:
@@ -307,6 +312,7 @@ func TestReadinessShowMoreRevealsTheAuthoritativeList(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   an upstream prerequisite awaiting approval.
 rests_on:
@@ -318,6 +324,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the single first-hop route to many upstream blockers.
 rests_on:
@@ -326,6 +333,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a root with one grouped module.
 rests_on:

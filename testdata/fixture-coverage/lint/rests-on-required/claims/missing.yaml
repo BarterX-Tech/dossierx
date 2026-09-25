@@ -1,4 +1,5 @@
 id: restreq.contract.missing
+summary: A claim that omits rests_on entirely.
 facet: contract
 module: restreq
 status: draft

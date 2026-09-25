@@ -17,7 +17,7 @@ func buildDirConfig(t *testing.T) *config.Config {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(dir, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(cfgPath)

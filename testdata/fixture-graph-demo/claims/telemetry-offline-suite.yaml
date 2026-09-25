@@ -1,5 +1,6 @@
-id: telemetry.verification.offline-suite
-facet: verification
+id: telemetry.internals.offline-suite
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: telemetry
 status: draft
 layout: card

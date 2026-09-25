@@ -1,5 +1,6 @@
-id: viewer.decision.facts-not-verdicts
-facet: decision
+id: viewer.contract.facts-not-verdicts
+summary: Fixture claim used by the engine test corpus.
+facet: contract
 module: viewer
 status: draft
 layout: card

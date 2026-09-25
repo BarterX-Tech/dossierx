@@ -19,6 +19,7 @@ const approvedBodyYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
@@ -32,6 +33,7 @@ const editedBodyYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
@@ -200,6 +202,7 @@ func TestEditedClaimIsARowOnThePhoneBannerCard(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim that rests on something nobody approved.
 rests_on:
@@ -313,6 +316,7 @@ const rewrappedApprovedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   **The field is outward, not internal.** A claim in the support authority already depends on it.
   An observer revision changing is enumerated there among the material changes that revoke a
@@ -326,6 +330,7 @@ const rewrappedEditedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   **The field is outward, not private.** A claim in the support authority already depends on
   it. An observer revision changing is enumerated there among the material changes that
@@ -438,6 +443,7 @@ func blockedDependentYAML() string {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim that rests on something nobody approved.
 rests_on:
@@ -879,6 +885,7 @@ const longEditedApprovedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents, and every part of it is
   written down here rather than inferred from the code that implements it.
@@ -900,6 +907,7 @@ const longEditedCurrentYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents, and every part of it is
   written down here rather than inferred from the code that implements it.
@@ -930,6 +938,7 @@ const metadataOnlyApprovedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
@@ -947,6 +956,7 @@ const metadataOnlyEditedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
@@ -1099,6 +1109,7 @@ func TestEditedFieldsShowFileTextAndNotRenderedMarkup(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
 audit_notes:
@@ -1111,6 +1122,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
 audit_notes:
@@ -1157,6 +1169,7 @@ func TestEditedBodyAndFieldsShowBothInTheChangesView(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   A widget without an id is not a widget.
@@ -1170,6 +1183,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   An object with no identifier is not a widget and is not stored.

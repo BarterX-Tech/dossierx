@@ -16,7 +16,7 @@ import (
 )
 
 func lifecycleClaim(id, embodiment string) string {
-	return fmt.Sprintf("id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: lifecycle fixture\nrests_on:\n  none: true\n  reason: fixture\n%s", id, embodiment)
+	return fmt.Sprintf("id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: lifecycle fixture\nrests_on:\n  none: true\n  reason: fixture\n%s", id, embodiment)
 }
 
 func loadLifecycleClaim(t *testing.T, cfgPath, id string) model.Claim {
@@ -85,7 +85,7 @@ func TestConformanceRealSingletonAndBatchLockLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	cfgText := "schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
+	cfgText := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
 	if err := os.WriteFile(cfgPath, []byte(cfgText), 0o644); err != nil {
 		t.Fatal(err)
 	}

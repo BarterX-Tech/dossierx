@@ -35,6 +35,7 @@ import (
 const parityConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -55,6 +56,7 @@ var parityClaims = map[string]string{
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim with no edges in either direction.
 rests_on:
@@ -65,6 +67,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim other claims rest on.
 rests_on:
@@ -75,6 +78,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim that rests on the root.
 rests_on:
@@ -84,6 +88,7 @@ rests_on:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a second orphan; RESTS ON NONE is not a graph edge.
 rests_on:

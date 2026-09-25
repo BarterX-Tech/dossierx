@@ -1,0 +1,8 @@
+schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - summarymod
+claims_dir: claims
+max_claim_summary_chars: 20

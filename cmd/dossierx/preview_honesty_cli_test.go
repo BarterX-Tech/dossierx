@@ -79,6 +79,7 @@ func TestClaimNewHonoursAnExplicitLayout(t *testing.T) {
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.explicit",
 		"--layout", "banner",
+		"--summary", "Deliberately a banner.",
 		"--body", "deliberately a banner.",
 		"--rests-on-none-reason", "fixture")
 	if err != nil {
@@ -103,7 +104,7 @@ func TestClaimNewHonoursAnExplicitLayout(t *testing.T) {
 func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: schema\n" +
 			"body: |\n  the approved body.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
@@ -113,7 +114,7 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	claimsDir := filepath.Join(root, "claims")
 	tamper(t, filepath.Join(claimsDir, "locked.yaml"), "the approved body.", "a body nobody approved.")
 	// And, entirely separately, a draft claim that does not lint.
-	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  rests on nothing that exists.\n" +
 		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "broken.yaml"), []byte(broken), 0o644); err != nil {
@@ -150,7 +151,7 @@ func TestDryRunDetailsDescribeTheVerdictTheyStandNextTo(t *testing.T) {
 
 	// claim new, on an id nothing has taken.
 	dr := dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.fresh",
-		"--body", "a new claim.", "--rests-on-none-reason", "fixture")
+		"--summary", "A new claim.", "--body", "a new claim.", "--rests-on-none-reason", "fixture")
 	assertPassingDetailsDoNotContradict(t, "claim new", dr.Preconditions, map[string]string{
 		"id_is_unused":   "already exists",
 		"file_is_unused": "already exists",

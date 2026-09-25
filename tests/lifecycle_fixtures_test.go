@@ -3,7 +3,7 @@
 //
 //  1. rest-on-locked: a draft rests_on target blocks locking a
 //     dependent, via testdata/fixture-coverage/lifecycle/doctrine-gate.
-//  2. undeclared-facet: a claim whose facet isn't in config.facets fails
+//  2. undeclared-facet: a claim whose facet is not engine-fixed fails
 //     lint, via testdata/fixture-coverage/lifecycle/undeclared-facet.
 //  3. empty-claims: a valid config with an empty claims_dir lints clean,
 //     exit 0, via testdata/fixture-coverage/lifecycle/empty-claims.
@@ -48,7 +48,7 @@ func lifecycleFixturesRoot(t *testing.T) string {
 // ---------------------------------------------------------------------
 
 // ---------------------------------------------------------------------
-// 2. undeclared-facet: a claim's facet isn't in config.facets -> lint
+// 2. undeclared-facet: a claim's facet is not engine-fixed -> lint
 //    fails (id-shape), never silently accepted.
 // ---------------------------------------------------------------------
 
@@ -58,7 +58,7 @@ func TestLifecycle_UndeclaredFacetFixture(t *testing.T) {
 
 	stdout, stderr, code := reviewedRun(t, dir, "--config", cfgPath, "check", "--validate")
 	if code == 0 {
-		t.Fatalf("expected non-zero exit for a claim whose facet is not declared in config.facets, got 0 (stdout: %s)", stdout)
+		t.Fatalf("expected non-zero exit for a claim whose facet is not engine-fixed, got 0 (stdout: %s)", stdout)
 	}
 	combined := stdout + stderr
 	if !strings.Contains(combined, "facet") {
@@ -105,7 +105,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 
 	// Edit A's body underneath the now-locked B.
 	changedA := "id: lifecycledriftmod.contract.a\n" +
-		"facet: contract\nmodule: lifecycledriftmod\nstatus: locked\nlayout: card\n" +
+		"facet: contract\nmodule: lifecycledriftmod\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  CHANGED body for A, after B locked against it.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(aPath, []byte(changedA), 0o644); err != nil {
@@ -140,7 +140,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 
 func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 	root := t.TempDir()
-	llWriteConfig(t, root, []string{"contract"}, []string{"flagmod"})
+	llWriteConfig(t, root, []string{"contract", "internals"}, []string{"flagmod"})
 	claimPath := llWriteClaim(t, root, llClaimSpec{
 		id: "flagmod.contract.a", facet: "contract", module: "flagmod", status: "draft",
 		body: "the claim's original, soon-to-be-flagged assertion.",

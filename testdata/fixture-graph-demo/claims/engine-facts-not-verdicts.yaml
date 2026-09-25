@@ -1,5 +1,6 @@
-id: engine.decision.facts-not-verdicts
-facet: decision
+id: engine.contract.facts-not-verdicts
+summary: Fixture claim used by the engine test corpus.
+facet: contract
 module: engine
 status: draft
 layout: card

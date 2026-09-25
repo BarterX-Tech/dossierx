@@ -1,4 +1,5 @@
 id: commentsmod.contract.commented
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: commentsmod
 status: draft

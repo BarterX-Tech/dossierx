@@ -27,7 +27,7 @@ func writeProjectConfig(t *testing.T, root, extra string) (*config.Config, error
 	}
 	writeFile(t, claimsDir, "a.yaml", moduleClaimYAML)
 	cfgPath := writeFile(t, root, "project.config.yaml",
-		"schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"+extra)
+		"schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"+extra)
 	return config.LoadConfig(cfgPath)
 }
 

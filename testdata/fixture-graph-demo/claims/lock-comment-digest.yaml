@@ -1,5 +1,6 @@
-id: lock.behavior.comment-digest
-facet: behavior
+id: lock.internals.comment-digest
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: lock
 status: draft
 layout: card
@@ -7,4 +8,4 @@ build_role: behavior
 body: |
   Review discussion is hashed into a sibling store, so a thread edited away in a file is reported rather than forgotten.
 rests_on:
-  - lock.schema.ledger-record
+  - lock.internals.ledger-record

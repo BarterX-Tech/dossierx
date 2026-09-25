@@ -821,6 +821,11 @@ func ContentHash(c model.Claim) string {
 	// byte-identically to before.
 	legacy := sha256.New()
 	fmt.Fprintf(legacy, "id=%s\nfacet=%s\nmodule=%s\nlayout=%s\nbody=%s\n", c.ID, c.Facet, c.Module, c.Layout, c.Body)
+	// summary is in the allowlist, but ONLY WHEN NON-EMPTY, same gating as
+	// raw_html: an omitted field must keep hashing byte-identically to the
+	// claim that never had the key. Editing a present summary is still an
+	// unapproved content change (NIT-8). Missing summaries fail
+	// summary-required; they are not grandfathered by this gate.
 	for _, r := range c.Rows {
 		fmt.Fprintf(legacy, "row=%v\n", r)
 	}
@@ -872,6 +877,9 @@ func ContentHash(c model.Claim) string {
 	// halves of that against a hash constant captured before the change.
 	if c.RawHTML != "" {
 		fmt.Fprintf(legacy, "raw_html=%s\n", c.RawHTML)
+	}
+	if c.Summary != "" {
+		fmt.Fprintf(legacy, "summary=%s\n", c.Summary)
 	}
 	legacyDigest := legacy.Sum(nil)
 

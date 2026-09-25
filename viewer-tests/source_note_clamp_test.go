@@ -45,6 +45,7 @@ import (
 const clampConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -273,6 +274,7 @@ func newClampProject(t *testing.T) *project {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 tracks:
   - id: checkout
     role: owns

@@ -1,6 +1,7 @@
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - assetmod
 claims_dir: claims

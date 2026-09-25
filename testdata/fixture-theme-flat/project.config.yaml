@@ -7,7 +7,6 @@ eyebrow: shared reader structures on one page
 facets:
   - contract
   - internals
-  - decision
 modules:
   - widget
   - panel

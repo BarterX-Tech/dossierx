@@ -1,0 +1,10 @@
+id: other.contract.surface
+summary: Public surface of the other module.
+facet: contract
+module: other
+status: draft
+layout: card
+body: |
+  The contract the other module exposes.
+rests_on:
+  - other.internals.secret

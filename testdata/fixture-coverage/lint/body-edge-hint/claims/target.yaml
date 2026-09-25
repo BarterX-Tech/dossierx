@@ -1,4 +1,5 @@
 id: bodyhintmod.contract.target
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: bodyhintmod
 status: draft

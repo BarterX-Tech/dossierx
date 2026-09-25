@@ -32,6 +32,7 @@ facet: contract
 module: widget
 status: draft
 layout: steps
+summary: Fixture claim used by the engine test corpus.
 body: |
   a short lede that on its own would not need a disclosure at all.
 rests_on:

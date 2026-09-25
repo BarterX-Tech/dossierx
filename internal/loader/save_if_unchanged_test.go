@@ -19,7 +19,7 @@ import (
 func TestSaveClaimIfUnchanged_WritesWhenFileUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "c.yaml")
-	if err := os.WriteFile(path, []byte("id: m.f.x\nfacet: f\nstatus: draft\nbody: |\n  original.\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("id: m.f.x\nfacet: f\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  original.\n"), 0o644); err != nil {
 		t.Fatalf("seed claim file: %v", err)
 	}
 
@@ -45,7 +45,7 @@ func TestSaveClaimIfUnchanged_WritesWhenFileUnchanged(t *testing.T) {
 func TestSaveClaimIfUnchanged_RefusesWhenFileChangedUnderneath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "c.yaml")
-	if err := os.WriteFile(path, []byte("id: m.f.x\nstatus: draft\nbody: |\n  original.\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("id: m.f.x\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  original.\n"), 0o644); err != nil {
 		t.Fatalf("seed claim file: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestSaveClaimIfUnchanged_RefusesWhenFileChangedUnderneath(t *testing.T) {
 
 	// Another writer changes the file after we captured the token but before
 	// we save — exactly the out-of-band edit the backstop exists to catch.
-	outOfBand := []byte("id: m.f.x\nstatus: locked\nbody: |\n  someone else got here first.\n")
+	outOfBand := []byte("id: m.f.x\nstatus: locked\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  someone else got here first.\n")
 	if err := os.WriteFile(path, outOfBand, 0o644); err != nil {
 		t.Fatalf("out-of-band write: %v", err)
 	}
