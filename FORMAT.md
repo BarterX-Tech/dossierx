@@ -270,8 +270,16 @@ The **module** budget (6144 bytes) is everything else in the view. Over it,
 `manifest show --isolation` refuses with `view_too_large`, naming the module,
 its bytes and claim count. Ten claims with 200-character summaries fit; a
 `max_claims_per_module` override well above 10, or a manifest near its
-4096-byte file cap, can outgrow it. ``--integration` adds neighbor blurbs and `depends_on` membership edges —
-not catalog graph walks. `dossierx manifest list` is the summaries-only module
+4096-byte file cap, can outgrow it.
+
+`--integration` reads one hop. For each module this module's `depends_on`
+names, it adds that module's manifest `summary`, its `provides` ids and the
+authored `summary` of each provided contract claim (never internals, never
+bodies), so an agent can pick a `rests_on` target without opening the
+neighbor's own view. It also adds the `depends_on` membership edges and the
+same project claims index `--isolation` carries. It never follows a
+neighbor's own `depends_on` and is not a catalog graph walk. It has no byte cap
+in this release: the module's `depends_on` bounds it. `dossierx manifest list` is the summaries-only module
 catalog. The retired `deps` and `catalog` nouns stay retired. No lock exists for
 the manifest itself in this release: the human reviews it in the viewer's
 Manifest tab and approves the module through its claim locks.

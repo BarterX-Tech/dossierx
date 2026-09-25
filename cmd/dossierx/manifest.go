@@ -51,7 +51,7 @@ func newManifestShowCmd() *cobra.Command {
 	var isolation, integration bool
 	cmd := &cobra.Command{
 		Use:   "show <module>",
-		Short: "Print one module's manifest.yaml; --isolation adds the constitution, project claims index and claim summaries, --integration adds neighbors",
+		Short: "Print one module's manifest.yaml; --isolation adds the constitution, project claims index and claim summaries, --integration adds neighbors and what they provide",
 		Args:  cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			module := args[0]
@@ -101,7 +101,7 @@ func newManifestShowCmd() *cobra.Command {
 		}),
 	}
 	cmd.Flags().BoolVar(&isolation, "isolation", false, "emit constitution text + project claims index + this manifest + claim summaries (no bodies; read one with claim show <id>)")
-	cmd.Flags().BoolVar(&integration, "integration", false, "add neighbor module catalog rows and depends_on membership edges")
+	cmd.Flags().BoolVar(&integration, "integration", false, "add each depended-on module's summary, provides and provided-claim summaries, depends_on edges and the project claims index")
 	return cmd
 }
 
@@ -183,6 +183,15 @@ func writeManifestShowText(cmd *cobra.Command, d manifestShowData, isolation, in
 		fmt.Fprintf(out, "  neighbors:         %d\n", len(d.Integration.Neighbors))
 		for _, n := range d.Integration.Neighbors {
 			fmt.Fprintf(out, "    %s via %s — %s\n", n.Module, n.Via, n.Summary)
+			for _, p := range n.Provides {
+				fmt.Fprintf(out, "      %s — %s\n", p.ID, p.Summary)
+			}
+		}
+		if !isolation {
+			fmt.Fprintf(out, "  project claims:    %d\n", len(d.Integration.ProjectClaims))
+			for _, e := range d.Integration.ProjectClaims {
+				fmt.Fprintf(out, "    %s — %s\n", e.ID, e.Summary)
+			}
 		}
 	}
 }

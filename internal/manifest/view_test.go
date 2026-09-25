@@ -229,7 +229,8 @@ func TestListAndIntegration(t *testing.T) {
 	write(t, dir, "lock/manifest.yaml", "summary: lock store.\nprovides:\n  - lock.contract.store\ndepends_on: []\n")
 	claims := []model.Claim{
 		{ID: "widget.contract.bound", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "bound"},
-		{ID: "lock.contract.store", Facet: "contract", Module: "lock", Status: model.StatusDraft, Body: "store"},
+		{ID: "lock.contract.store", Facet: "contract", Module: "lock", Status: model.StatusDraft, Summary: "Append-only store.\n", Body: "store body"},
+		projectClaim(1, "One project rule."),
 	}
 	view, err := Show(claims, cfg, "widget", ShowOptions{Integration: true})
 	if err != nil {
@@ -244,8 +245,71 @@ func TestListAndIntegration(t *testing.T) {
 	if len(view.Integration.Edges) != 1 || view.Integration.Edges[0].ToModule != "lock" {
 		t.Fatalf("edges must be membership, not a graph walk: %+v", view.Integration.Edges)
 	}
+	if got := view.Integration.Neighbors[0].Provides; len(got) != 1 || got[0] != (ProvidedClaim{ID: "lock.contract.store", Summary: "Append-only store."}) {
+		t.Fatalf("provided claims = %+v", got)
+	}
+	if got := view.Integration.ProjectClaims; len(got) != 1 || got[0].ID != "project.p001" || got[0].Summary != "One project rule." {
+		t.Fatalf("project claims index = %+v", got)
+	}
 	cat := List(claims, cfg)
 	if len(cat) != 2 {
 		t.Fatalf("catalog: %+v", cat)
+	}
+}
+
+// A neighbor's provides never surfaces its internals or a body, even when its
+// manifest (wrongly) lists an internals id: module-manifest reports that, and
+// the integration view skips it.
+func TestIntegrationNeverShowsInternals(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{Modules: []string{"widget", "lock"}, ClaimsDir: dir}
+	write(t, dir, "widget/manifest.yaml", "summary: widget.\nprovides: []\ndepends_on:\n  - lock.contract.store\n")
+	write(t, dir, "lock/manifest.yaml", "summary: lock.\nprovides:\n  - lock.contract.store\n  - lock.internals.wal\ndepends_on: []\n")
+	claims := []model.Claim{
+		{ID: "lock.contract.store", Facet: "contract", Module: "lock", Summary: "Store.", Body: "STORE-BODY"},
+		{ID: "lock.internals.wal", Facet: "internals", Module: "lock", Summary: "WAL-SUMMARY", Body: "WAL-BODY"},
+	}
+	view, err := Show(claims, cfg, "widget", ShowOptions{Integration: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob := string(mustJSON(t, view.Integration))
+	for _, leak := range []string{"lock.internals.wal", "WAL-SUMMARY", "WAL-BODY", "STORE-BODY"} {
+		if strings.Contains(blob, leak) {
+			t.Fatalf("integration view leaked %q: %s", leak, blob)
+		}
+	}
+}
+
+// --integration reads one hop. On a 200-module chain, module 0 sees only
+// module 1, and the view's size does not grow with the chain behind it.
+func TestIntegrationIsOneHop(t *testing.T) {
+	sizeFor := func(n int) (int, []Neighbor) {
+		dir := t.TempDir()
+		cfg := &config.Config{ClaimsDir: dir}
+		var claims []model.Claim
+		for i := 0; i < n; i++ {
+			mod := fmt.Sprintf("m%03d", i)
+			cfg.Modules = append(cfg.Modules, mod)
+			claims = append(claims, model.Claim{ID: mod + ".contract.api", Facet: "contract", Module: mod, Summary: summary200})
+			deps := "[]"
+			if i+1 < n {
+				deps = fmt.Sprintf("\n  - m%03d.contract.api", i+1)
+			}
+			write(t, dir, mod+"/manifest.yaml", fmt.Sprintf("summary: module %d.\nprovides:\n  - %s.contract.api\ndepends_on: %s\n", i, mod, deps))
+		}
+		view, err := Show(claims, cfg, "m000", ShowOptions{Integration: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(mustJSON(t, view.Integration)), view.Integration.Neighbors
+	}
+	small, _ := sizeFor(3)
+	big, neighbors := sizeFor(200)
+	if len(neighbors) != 1 || neighbors[0].Module != "m001" {
+		t.Fatalf("neighbors = %+v, want only m001", neighbors)
+	}
+	if small != big {
+		t.Fatalf("integration view grew with the chain behind the neighbor: %d bytes at 3 modules, %d at 200", small, big)
 	}
 }
