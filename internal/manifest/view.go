@@ -106,11 +106,22 @@ type IsolationBudget struct {
 	ModuleBudget int `json:"module_budget"`
 }
 
-// Neighbor is a summaries-only catalog row for a module this one depends on.
-type Neighbor struct {
-	Module  string `json:"module"`
+// ProvidedClaim is one id a neighbor exports, with that claim's authored
+// summary: what an agent reads to pick a rests_on target without opening
+// the neighbor's own view. Only contract claims are ever listed.
+type ProvidedClaim struct {
+	ID      string `json:"id"`
 	Summary string `json:"summary"`
-	Via     string `json:"via"`
+}
+
+// Neighbor is a summaries-only catalog row for a module this one depends on:
+// its manifest summary and everything it provides, never its internals and
+// never a body.
+type Neighbor struct {
+	Module   string          `json:"module"`
+	Summary  string          `json:"summary"`
+	Via      string          `json:"via"`
+	Provides []ProvidedClaim `json:"provides"`
 }
 
 // ModuleEdge is a declared depends_on membership, not a catalog graph walk.
@@ -120,10 +131,13 @@ type ModuleEdge struct {
 	ViaClaim   string `json:"via_claim"`
 }
 
-// IntegrationView is the neighbor catalog and the module membership graph.
+// IntegrationView is the neighbor catalog, the module membership graph and
+// the project claims index (the same index --isolation carries). It has no
+// byte cap in v0.7.21 (NIT-7 Q4): depends_on bounds the fan-out.
 type IntegrationView struct {
-	Neighbors []Neighbor   `json:"neighbors"`
-	Edges     []ModuleEdge `json:"edges"`
+	Neighbors     []Neighbor            `json:"neighbors"`
+	Edges         []ModuleEdge          `json:"edges"`
+	ProjectClaims []projectclaims.Entry `json:"project_claims"`
 }
 
 // CatalogEntry is one locked-or-not module blurb from manifest.yaml.
@@ -466,6 +480,10 @@ func claimSummaries(claims []model.Claim) []ClaimSummary {
 	return out
 }
 
+// integrationView reads one hop: the modules this module's depends_on names,
+// and each of those modules' own manifest. It never follows a neighbor's
+// depends_on, so its work is linear in this module's depends_on plus the
+// neighbors' provides lists.
 func integrationView(claims []model.Claim, cfg *config.Config, module string, m Manifest) *IntegrationView {
 	byID := map[string]model.Claim{}
 	for _, c := range claims {
@@ -484,10 +502,11 @@ func integrationView(claims []model.Claim, cfg *config.Config, module string, m 
 			continue
 		}
 		seenNeighbor[c.Module] = true
-		n := Neighbor{Module: c.Module, Via: id}
+		n := Neighbor{Module: c.Module, Via: id, Provides: []ProvidedClaim{}}
 		if raw, ok, _ := LoadModule(cfg, c.Module); ok {
 			nm, _ := ParseBytes(c.Module, RequiredRelPath(c.Module), raw, byID)
 			n.Summary = strings.TrimSpace(nm.Summary)
+			n.Provides = providedClaims(nm.Provides, c.Module, byID)
 		}
 		neighbors = append(neighbors, n)
 	}
@@ -504,7 +523,29 @@ func integrationView(claims []model.Claim, cfg *config.Config, module string, m 
 	if edges == nil {
 		edges = []ModuleEdge{}
 	}
-	return &IntegrationView{Neighbors: neighbors, Edges: edges}
+	idx := projectclaims.Index(claims)
+	if idx == nil {
+		idx = []projectclaims.Entry{}
+	}
+	return &IntegrationView{Neighbors: neighbors, Edges: edges, ProjectClaims: idx}
+}
+
+// providedClaims resolves a neighbor's provides list to its own contract
+// claims and their authored summaries, in the manifest's order. An id that is
+// not one of the neighbor's contract claims is skipped: module-manifest
+// already reports it, and internals never cross a module line.
+func providedClaims(ids []string, module string, byID map[string]model.Claim) []ProvidedClaim {
+	out := make([]ProvidedClaim, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		c, ok := byID[id]
+		if !ok || seen[id] || c.Module != module || c.Facet != ContractFacet {
+			continue
+		}
+		seen[id] = true
+		out = append(out, ProvidedClaim{ID: id, Summary: projectclaims.Summary(c)})
+	}
+	return out
 }
 
 func claimTitle(id string) string {

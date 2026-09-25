@@ -97,8 +97,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--isolation` adds the constitution text, the project claims index, this
   module's manifest, each claim's authored `summary` exactly as written (no
   bodies; there is no `--bodies`) and draft hints;
-  `--integration` adds neighbor blurbs and `depends_on` membership edges.
-  `manifest list` is the summaries-only module catalog. The 16384-byte
+  `--integration` adds, for each module in `depends_on`, its manifest summary,
+  its `provides` ids and each provided contract claim's summary (never
+  internals or bodies), plus the `depends_on` membership edges and the project
+  claims index. It reads one hop and has no byte cap. `manifest list` is the summaries-only module catalog. The 16384-byte
   isolation view is split: 10240 bytes shared (constitution text plus project
   claims index), enforced by the new `shared-context-budget` check on the
   project claim that crosses it, and 6144 bytes owned by the module, whose
