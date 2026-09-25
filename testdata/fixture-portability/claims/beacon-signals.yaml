@@ -1,9 +1,9 @@
-id: beacon.spec.signals
-facet: spec
+id: beacon.internals.signals
+facet: internals
 module: beacon
 status: draft
 layout: list
 body: |
   A beacon emits a small, fixed set of signal kinds.
 rests_on:
-  - beacon.spec.overview
+  - beacon.internals.overview

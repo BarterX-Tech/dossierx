@@ -17,7 +17,7 @@ func TestBuildDirPathHelpersResolveUnderTheBuildDirectory(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger, widget]
 claims_dir: claims
 `)
@@ -64,7 +64,7 @@ func TestTrackedStoreFileNamesAreTheLedgerBaseNames(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract]\nmodules: [m]\nclaims_dir: claims\n")
+	p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract, internals]\nmodules: [m]\nclaims_dir: claims\n")
 	cfg, err := LoadConfig(p)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)

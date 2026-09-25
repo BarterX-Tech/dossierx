@@ -61,6 +61,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names targets does not move; a claim that gains `none: true` is a real edit
   and re-locks through `unlock → lock`. 31 lint rules.
 
+### Changed
+
+- **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list
+  exactly `contract` and `internals`; any other name, a missing one or a
+  duplicate is refused at config load. `contract` is the only surface another
+  module may read or cite. `internals` may be cited only from the owning
+  module, and `rests-on-target` (NIT-24) is the one rule that refuses a
+  foreign module's internals on `check` and `claim lock`. Isolation may
+  include a module's own internals; `catalog.json` (integration) omits
+  internals and internals-targeting edges. Viewer module tabs are
+  Manifest | Contract | Internals as peers; Manifest is not a banner and not
+  a claim facet.
+
 ### Removed
 
 - **The doctrine hub (NIT-23).** The `doctrine_facet` config key, hub-gating

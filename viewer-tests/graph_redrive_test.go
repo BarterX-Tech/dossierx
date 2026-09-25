@@ -219,6 +219,7 @@ func diagnoseTriggerOpen(t *testing.T, ctx context.Context) string {
 const fitConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -510,7 +511,7 @@ func TestGraphPaneControlsMeetContrastAA(t *testing.T) {
 	// The open-claim button only exists once a claim is selected, so select
 	// one. The edge-type toggles start pressed, which is the ON state whose
 	// rule is under test.
-	clickJump(t, ctx, "widget.design.thing")
+	clickJump(t, ctx, "widget.internals.thing")
 	waitVisible(t, ctx, `[data-dxg-open-claim]`)
 	if got := evalString(t, ctx, `document.querySelector('[data-dxg-type="rests_on"]').getAttribute('aria-pressed')`); got != "true" {
 		t.Fatalf("the rests_on toggle is aria-pressed=%q, want true — the ON state is the state this measures", got)

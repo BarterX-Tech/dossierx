@@ -222,10 +222,15 @@ func TestLifecycle_ProjectClaimsThroughThePipeline(t *testing.T) {
 	// claim resting on it sees the same obstacle through the unchanged
 	// intermediate.
 	doc, byID := mustCheck(t, root, cfgPath, "after locking the module claim")
-	for _, id := range []string{scope, retention, overview, fields} {
+	for _, id := range []string{scope, retention, overview} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("catalog.json lacks %s; entries: %+v", id, doc.Claims)
 		}
+	}
+	// catalog.json is the integration projection (NIT-20): internals never
+	// appear in it, a project claim's view included.
+	if _, ok := byID[fields]; ok {
+		t.Fatalf("catalog.json must omit the internals claim %s; entries: %+v", fields, doc.Claims)
 	}
 	for _, id := range []string{scope, retention} {
 		e := byID[id]
@@ -247,8 +252,8 @@ func TestLifecycle_ProjectClaimsThroughThePipeline(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(doc.ByModule["widget"], []string{overview, fields}) {
-		t.Fatalf("by_module[widget] = %v, want exactly the two module claims", doc.ByModule["widget"])
+	if !reflect.DeepEqual(doc.ByModule["widget"], []string{overview}) {
+		t.Fatalf("by_module[widget] = %v, want exactly the one contract claim (internals are omitted)", doc.ByModule["widget"])
 	}
 	if e := byID[scope]; !e.Edges.RestsOnNone || strings.TrimSpace(e.Edges.RestsOnReason) == "" || len(e.Edges.RestsOn) != 0 || e.Status != "draft" {
 		t.Fatalf("%s must be a draft leaf with rests_on: {none: true, reason}: %+v", scope, e)
@@ -299,8 +304,8 @@ func TestLifecycle_ProjectClaimsThroughThePipeline(t *testing.T) {
 			t.Fatalf("%s must be locked and ready with no conditions or causes once the project claim is approved: %+v", id, e)
 		}
 	}
-	if e := byID[fields]; e.Status != "draft" || e.Readiness == nil || !e.Readiness.DependencyReady || e.Readiness.Ready {
-		t.Fatalf("%s stays a dependency-ready draft: %+v", fields, e)
+	if _, ok := byID[fields]; ok {
+		t.Fatalf("catalog.json must still omit the internals claim %s", fields)
 	}
 
 	// 5. A rewrite of the project claim, through the honest path (unlock,

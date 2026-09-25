@@ -357,6 +357,7 @@ func TestUIReopenReturnsThreadToOpen(t *testing.T) {
 const twoModuleConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
   - gadget

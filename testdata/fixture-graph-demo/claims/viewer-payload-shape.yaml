@@ -1,5 +1,5 @@
-id: viewer.schema.payload-shape
-facet: schema
+id: viewer.internals.payload-shape
+facet: internals
 module: viewer
 status: locked
 layout: card
@@ -7,4 +7,4 @@ build_role: schema
 body: |
   The graph payload carries nodes, edges, the two grouping axes and a count of what could not be represented.
 rests_on:
-  - engine.schema.catalog-shape
+  - engine.contract.catalog-shape

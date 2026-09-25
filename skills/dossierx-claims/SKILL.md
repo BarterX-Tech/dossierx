@@ -40,8 +40,8 @@ the five rules are there and are not repeated here.
 One YAML document per file. A second `---` document in the same file is a hard load error — split
 it out.
 
-- `id: module.FACET.slug` — **exactly three** non-empty dot-separated segments. `module` and
-  `FACET` must be ones the project declares in `project.config.yaml`; `slug` must be kebab-case
+- `id: module.FACET.slug` — **exactly three** non-empty dot-separated segments. `module` must be
+  one the project declares; `FACET` is **engine-fixed**: only `contract` or `internals`. `slug` must be kebab-case
   (lowercase alphanumerics, single hyphens). The viewer's card title is derived from the slug, so
   `retry-policy` renders as "Retry Policy" — you never write a title.
 - `status: draft | locked` — **only** `dossierx claim lock` / `unlock` may change this. Editing it
@@ -67,6 +67,10 @@ it out.
   constitution** below). Targets are **drift** edges (a target's content changing under a locked
   claim flags `review_pending`). `governed_by` is gone as of v0.7.21 — a claim file that still
   carries it fails to load; the router's "governed_by is gone" section says what to do.
+- **Facets are hard law:** exactly `contract` and `internals`, engine-fixed. Only `contract` may be
+  read or cited by another module; a foreign module's `internals` is refused (`rests-on-target`) and
+  never appears in integration output (catalog, `manifest show --integration`). Doctrine is not a
+  third facet — it belongs in the constitution or a contract claim.
 - **A `rests_on` loop is refused** at ERROR (`cycle`).
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
@@ -288,5 +292,5 @@ so**, do not confirm.
 
 ## Portability
 
-Facets, modules, claims dir, source dirs and template overrides all come from
-`project.config.yaml` — never patch the engine.
+Modules, claims dir, source dirs and template overrides come from `project.config.yaml` — never
+patch the engine. Facets are engine-fixed (`contract`, `internals`); never invent a third.

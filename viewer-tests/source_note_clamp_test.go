@@ -45,6 +45,7 @@ import (
 const clampConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims

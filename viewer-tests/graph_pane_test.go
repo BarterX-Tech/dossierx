@@ -46,7 +46,7 @@ import (
 const graphConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -78,7 +78,7 @@ func newGraphProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, graphConfig)
 	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
-	p.writeClaim("thing.yaml", graphClaim("widget.design.thing", "design", "widget.contract.base"))
+	p.writeClaim("thing.yaml", graphClaim("widget.internals.thing", "internals", "widget.contract.base"))
 	return p
 }
 
@@ -362,7 +362,7 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 	p := newProjectRaw(t, graphConfig)
 	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
 	p.writeClaim("two.yaml", graphClaim("widget.contract.two", "contract", "widget.contract.base"))
-	p.writeClaim("thing.yaml", graphClaim("widget.design.thing", "design", "widget.contract.base"))
+	p.writeClaim("thing.yaml", graphClaim("widget.internals.thing", "internals", "widget.contract.base"))
 	ctx := staticGraphTab(t, p)
 
 	if !evalBool(t, ctx, `!!document.getElementById('dossierx-graph')`) {
@@ -577,16 +577,16 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		.map(function (e) { return e.textContent; })`)
 	// Re-pinned for 13 §4.5/§6 (RETRY fix list item 12): legend facet names
 	// are Title Case ("contract" -> "Contract").
-	if fmt.Sprint(facets) != fmt.Sprint([]string{"Contract", "Design"}) {
+	if fmt.Sprint(facets) != fmt.Sprint([]string{"Contract", "Internals"}) {
 		t.Fatalf("legend facet names = %v, want the project's own facets, Title Case", facets)
 	}
 
 	// Selecting a node fills the detail panel — facet identity's THIRD
 	// channel, which names the facet in TEXT so a reader never has to resolve
 	// a colour to answer "which facet is this?".
-	clickJump(t, ctx, "widget.design.thing")
-	if got := evalString(t, ctx, `document.querySelector('.dxg-detail-id').textContent`); got != "widget.design.thing" {
-		t.Fatalf("detail panel id = %q, want widget.design.thing", got)
+	clickJump(t, ctx, "widget.internals.thing")
+	if got := evalString(t, ctx, `document.querySelector('.dxg-detail-id').textContent`); got != "widget.internals.thing" {
+		t.Fatalf("detail panel id = %q, want widget.internals.thing", got)
 	}
 	facetRow := evalString(t, ctx, `(function () {
 		var dts = document.querySelectorAll('.dxg-detail-rows dt');
@@ -596,11 +596,11 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		return '';
 	})()`)
 	// Re-pinned for 13 §6 (RETRY fix list item 7): the rail's FACET value is
-	// humanised ("design" -> "Design"), same sentence-case rule as MODULE.
-	if facetRow != "Design" {
-		t.Fatalf("detail panel facet row = %q, want Design", facetRow)
+	// humanised ("internals" -> "Internals"), same sentence-case rule as MODULE.
+	if facetRow != "Internals" {
+		t.Fatalf("detail panel facet row = %q, want Internals", facetRow)
 	}
-	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.design.thing"]').length`); n != 1 {
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.internals.thing"]').length`); n != 1 {
 		t.Fatalf("detail panel open-claim links = %d, want 1", n)
 	}
 
@@ -635,6 +635,7 @@ func TestGraphPaneLargeCorpusDefaultsToClaims(t *testing.T) {
 	p := newProjectRaw(t, `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - m1
   - m2
@@ -854,7 +855,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 func TestGraphPaneSurvivesFragmentSwap(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
-	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
+	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
 	ctx := serveAndOpenLive(t, p)
 	desktopViewport(t, ctx)
 	openGraphPane(t, ctx)

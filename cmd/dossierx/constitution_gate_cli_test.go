@@ -286,15 +286,6 @@ func TestProjectClaimsLiveInTheirOwnStoreAndNeverRestOnInternals(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "claims", "detail.yaml"), []byte(internals), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// icWriteFixtureProject's config declares only the contract facet.
-	cfg, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(cfgPath, []byte(strings.Replace(string(cfg), "facets:\n  - contract\n", "facets:\n  - contract\n  - internals\n", 1)), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "new", "project.retention", "--body", "Data is kept for thirty days.\nLonger on request.", "--rests-on", "widget.contract.overview")
 	if err != nil || !env.OK {
 		t.Fatalf("claim new project.<slug>: %v %+v", err, env.Error)

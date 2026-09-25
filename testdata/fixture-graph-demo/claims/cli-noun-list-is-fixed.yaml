@@ -7,4 +7,4 @@ build_role: api
 body: |
   A new capability rides inside an existing command's output rather than becoming a new command. A command surface that grows with every feature stops being learnable.
 rests_on:
-  - cli.schema.json-envelope
+  - cli.internals.json-envelope

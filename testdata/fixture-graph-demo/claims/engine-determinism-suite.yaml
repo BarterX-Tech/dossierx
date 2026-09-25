@@ -1,5 +1,5 @@
-id: engine.verification.determinism-suite
-facet: verification
+id: engine.internals.determinism-suite
+facet: internals
 module: engine
 status: locked
 layout: card

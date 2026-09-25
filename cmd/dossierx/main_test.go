@@ -245,7 +245,7 @@ func TestReportLintFindingsErrorSeverityFails(t *testing.T) {
 func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 	root := t.TempDir()
 	cfgFile := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgFile, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - m\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - m\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write fixture config: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {

@@ -7,4 +7,4 @@ build_role: orientation
 body: |
   Read this module before any other. It carries the shapes and the guarantees every other module in this project is written against.
 rests_on:
-  - engine.schema.claim-shape
+  - engine.contract.claim-shape

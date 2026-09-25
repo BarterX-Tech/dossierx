@@ -56,7 +56,7 @@ func TestBuildTargetStatusLookup_CapturesStatusAndReviewPending(t *testing.T) {
 func targetPillTestConfig(t *testing.T, module string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
 	cfgPath := dir + "/project.config.yaml"
 	writeFile(t, cfgPath, cfgYAML)
 	cfg, err := config.LoadConfig(cfgPath)

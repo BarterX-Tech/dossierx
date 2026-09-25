@@ -1,7 +1,7 @@
 // id_shape.go implements the "id-shape" lint: a claim's id must be exactly
 // three dot-separated segments, module.facet.slug, where module is one of
-// the project's configured modules, facet is one of the project's
-// configured facets, those two segments agree with the claim's own Module
+// the project's configured modules, facet is an engine-fixed name
+// (contract or internals), those two segments agree with the claim's own Module
 // and Facet fields, and slug is a non-empty kebab-case identifier.
 package lint
 
@@ -26,10 +26,9 @@ func (IDShapeLint) Name() string { return "id-shape" }
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 func (IDShapeLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
-	var modules, facets map[string]bool
+	var modules map[string]bool
 	if cfg != nil {
 		modules = toSet(cfg.Modules)
-		facets = toSet(cfg.Facets)
 	}
 
 	var findings []Finding
@@ -73,11 +72,11 @@ func (IDShapeLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 				Message:  "id module segment " + module + " is not in the project's configured modules",
 			})
 		}
-		if facets != nil && !facets[facet] {
+		if !config.IsEngineFacet(facet) {
 			findings = append(findings, Finding{
 				LintName: "id-shape",
 				ClaimID:  c.ID,
-				Message:  "id facet segment " + facet + " is not in the project's configured facets",
+				Message:  "id facet segment " + facet + " is not an engine-fixed facet (contract or internals)",
 			})
 		}
 		if c.Module != "" && c.Module != module {

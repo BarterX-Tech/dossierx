@@ -1,5 +1,5 @@
-id: cli.decision.no-new-noun-for-the-graph
-facet: decision
+id: cli.internals.no-new-noun-for-the-graph
+facet: internals
 module: cli
 status: draft
 layout: card

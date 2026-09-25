@@ -7,4 +7,4 @@ build_role: api
 body: |
   The rendered document makes no outbound request of any kind. It opens from a local file and works with the network removed.
 rests_on:
-  - viewer.schema.payload-shape
+  - viewer.internals.payload-shape

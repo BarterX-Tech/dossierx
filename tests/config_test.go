@@ -63,7 +63,7 @@ func TestClaimsDirResolvedAgainstConfigDirAtCLILevel(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgBody := "schema_version: 1\n" +
-		"facets:\n  - contract\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - relmod\n" +
 		"claims_dir: claims\n" // relative, deliberately
 	cfgPath := filepath.Join(projectDir, "project.config.yaml")

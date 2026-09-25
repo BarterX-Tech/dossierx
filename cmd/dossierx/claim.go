@@ -858,15 +858,15 @@ func newClaimListCmd() *cobra.Command {
 			// --facet gets the same membership test --module has, and for the
 			// reason cliout.CodeUnknownModule already states about modules: "an
 			// empty report for a typo'd module looks exactly like success". A
-			// human says "show me the contracts facet", the project declares
+			// human says "show me the contracts facet", the engine has
 			// `contract`, and an unchecked filter answers ok:true / count 0 /
 			// exit 0 — indistinguishable from the truth, and every decision after
-			// it is made against an empty set. The config declares facets: the
-			// same way it declares modules:, and "claim new" already refuses an
-			// undeclared facet with this exact shape (see parseClaimID).
-			if facet != "" && !containsStr(cfg.Facets, facet) {
+			// it is made against an empty set. Facets are engine-fixed
+			// (contract | internals); "claim new" already refuses any other
+			// name (see parseClaimID).
+			if facet != "" && !config.IsEngineFacet(facet) {
 				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
-					"claim list: unknown facet %q; this project declares: %s", facet, strings.Join(cfg.Facets, ", ")).
+					"claim list: unknown facet %q; engine-fixed facets are %s", facet, strings.Join(config.EngineFacets(), ", ")).
 					WithHint("run: dossierx claim list (unfiltered) to see what is there")
 			}
 			store, storeErr := lock.LoadStore(storePath(cfg))
@@ -1201,7 +1201,7 @@ func parseClaimID(cfg *config.Config, id string) (module, facet, slug string, er
 	}
 	if !containsStr(cfg.Facets, facet) {
 		return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
-			"claim new: id facet segment %q is not one of this project's facets: %s", facet, strings.Join(cfg.Facets, ", "))
+			"claim new: id facet segment %q is not an engine-fixed facet (contract or internals)", facet)
 	}
 	return module, facet, slug, nil
 }

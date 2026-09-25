@@ -7,4 +7,4 @@ build_role: api
 body: |
   The check entry point stops at the first failing stage and names the stage it stopped at.
 rests_on:
-  - engine.behavior.lint-runs-before-catalog
+  - engine.internals.lint-runs-before-catalog

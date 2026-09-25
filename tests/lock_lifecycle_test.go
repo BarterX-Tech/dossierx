@@ -105,7 +105,7 @@ func llReadFile(t *testing.T, path string) string {
 
 func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"})
+	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"})
 
 	claimPath := llWriteClaim(t, root, llClaimSpec{
 		id: "widget.contract.broken", facet: "contract", module: "widget", status: "draft",
@@ -135,7 +135,7 @@ func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
 
 func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"})
+	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"})
 
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dependency claim, v1."})
 	mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main claim resting on the dependency.", restsOn: []string{"widget.contract.dep"}})
@@ -186,7 +186,7 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 
 func TestLockLifecycle_ReauditRefusedWhenNotPending(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"})
+	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"})
 
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.stable", facet: "contract", module: "widget", status: "locked", body: "a stable, already-locked claim."})
 	before := llReadFile(t, claimPath)
@@ -210,7 +210,7 @@ func TestLockLifecycle_ReauditRefusedWhenNotPending(t *testing.T) {
 
 func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"})
+	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"})
 
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dependency claim, v1."})
 	_ = depPath
@@ -282,7 +282,7 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 
 func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"})
+	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"})
 
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "shared dependency, v1."})
 	mainAPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.maina", facet: "contract", module: "widget", status: "draft", body: "dependent A.", restsOn: []string{"widget.contract.dep"}})
@@ -341,7 +341,7 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 
 func TestLockLifecycle_ReviewPendingFilterIsEmptyWhenNothingIsLocked(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"})
+	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"})
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.draftonly", facet: "contract", module: "widget", status: "draft", body: "never locked."})
 
 	out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")

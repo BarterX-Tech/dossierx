@@ -18,7 +18,7 @@ import (
 // Curtainly YAML never does.
 const (
 	readingScaleModules        = 8
-	readingScaleFacets         = 3
+	readingScaleFacets         = 2
 	readingScaleClaimsPerFacet = 12
 	readingScaleTracks         = 2
 	readingScaleClaimsPerTrack = 6
@@ -33,10 +33,7 @@ const (
 
 func readingScaleConfigYAML() string {
 	var b strings.Builder
-	b.WriteString("schema_version: 1\nfacets:\n")
-	for i := 0; i < readingScaleFacets; i++ {
-		fmt.Fprintf(&b, "  - facet%02d\n", i)
-	}
+	b.WriteString("schema_version: 1\nfacets:\n  - contract\n  - internals\n")
 	b.WriteString("modules:\n")
 	for i := 0; i < readingScaleModules; i++ {
 		fmt.Fprintf(&b, "  - mod%02d\n", i)
@@ -54,13 +51,13 @@ func readingScaleProject(t *testing.T) (p *project, totalClaims int) {
 	for mi := 0; mi < readingScaleModules; mi++ {
 		for fi := 0; fi < readingScaleFacets; fi++ {
 			for ci := 0; ci < readingScaleClaimsPerFacet; ci++ {
-				id := fmt.Sprintf("mod%02d.facet%02d.c%02d", mi, fi, ci)
+				id := fmt.Sprintf("mod%02d.%s.c%02d", mi, []string{"contract", "internals"}[fi], ci)
 				trackBlock := ""
 				if mi < readingScaleTracks && fi == 0 && ci < readingScaleClaimsPerTrack {
 					trackBlock = fmt.Sprintf("tracks:\n  - id: track%02d\n    role: owns\n", mi)
 				}
 				p.writeClaim(id+".yaml", fmt.Sprintf(`id: %s
-facet: facet%02d
+facet: %s
 module: mod%02d
 status: draft
 body: |
@@ -68,7 +65,7 @@ body: |
 rests_on:
   none: true
   reason: viewer-test scale fixture, not backed by any doctrine claim
-%s`, id, fi, mi, id, trackBlock))
+%s`, id, []string{"contract", "internals"}[fi], mi, id, trackBlock))
 				totalClaims++
 			}
 		}

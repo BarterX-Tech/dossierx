@@ -487,17 +487,17 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:b5a1b11ba6e75009e10a9b867d75c6af9c432312cf826d9dee92251982d7eb50",
+  "render_fingerprint": "sha256:e25eab638bca6196254a3afdc30e2b54a7e9e3e9e3a31b602a3e6ce5ace45110",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:9ec8968703dc7eb80f3276dbcec6788ce34522f4999674e195e4c390ed094c5a",
+    "cmd/dossierx": "sha256:5628ec2f86d4c9d707ea71b6d717d9335d272d07f345770c71a5cd6c46a6fcfd",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/catalog": "sha256:377c9fe198f52d3680a163239a3db46392eb4f7c4ba3fe701fd96273f9829093",
+    "internal/catalog": "sha256:6018468c8dc0b7b6f4592a797997ac3f6e83bffa7c3060c3a43875b935d5c1e7",
     "internal/check": "sha256:a4ebfbed6312721aad86b1f192c19443a078b5fcff3d8f3ac55384a9800eebb0",
     "internal/cliout": "sha256:bbd11a5f3a2b24aee4d557280f470f971f2124402dbabb5d1a8cac678bce1bfe",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:a15827d131e944f626a8a539da72b5b66d5c2fdc08a53208ed6652cd51da6a5a",
+    "internal/config": "sha256:ef1db45a465b68b7d17e4478e979acbfa2170364f1262489ff00e380aec3ffe9",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:d40d8ae4bb547e32a9c04fbae73cd887f290bab08e669f1355fbe196af8ccc31",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
@@ -505,7 +505,7 @@
     "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:c4350530e1907839833a59ff3c81bafe366822e35bd8a1e91f5c461445c7a624",
+    "internal/lint": "sha256:a197dad8aaac12ff16b21c58062b1e836ec257ee67c85980ff05fb1b2815cd5a",
     "internal/loader": "sha256:3f016bec4118c24d48427e7ed085288b5df5ae8f4040dafabcfda907becda39a",
     "internal/lock": "sha256:e192569b38c5968faa5e8b9079e815e62569bd0de679424a5e62bb7db8861fa4",
     "internal/model": "sha256:0fd89e250d483bda6ef3d3b642627b29d8b1fe281370d2b888664379c1bf588c",
@@ -513,14 +513,15 @@
     "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
     "internal/reaudit": "sha256:cfa9ca71f387eac1ec8ce841cf80a59d2acd14f20a001820987d7cde7ccf5852",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:1060a6bae913a6ea7ba810bd68ce973497b765c6f0d8364cc0db6219d1c163f3",
+    "internal/render": "sha256:87c92ac9c336035993da789b74981b7468f3481c37ad00509ab9719858307ddd",
     "internal/render/components": "sha256:e4170bcb14adef2b15d4d19a8995850800013e21ef9a30a577e8171afb91b11e",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:0ad4bd18550a8d50d5a55b39293549398a62c78379c20b97b9c4969305ea6867",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:bda39a0ec32a014244146b4c7b49107b6937aaf0208f6222d16d63b1b72f7cf7"
+    "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
+    "skills": "sha256:cf0295802190774336e2cb0506df33b407876f5de157b3431239cf2e57a3a85f"
   },
   "envelope": {
     "keys": [

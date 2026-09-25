@@ -83,6 +83,7 @@ func clickNavigationGroupSummary(t *testing.T, ctx context.Context, selector str
 const navigationGroupsConfigYAML = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - module-01
   - module-02

@@ -73,7 +73,7 @@ func singleTreeFixture(t *testing.T) *config.Config {
 // than substituted so a fixture can point claims_dir anywhere, including at a
 // nested directory a substitution would have mangled.
 func claimsDirConfig(dir string) string {
-	return "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: " + dir + "\n"
+	return "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: " + dir + "\n"
 }
 
 // repointClaimsDir rewrites claims_dir in the working tree's

@@ -23,7 +23,7 @@ func trackTestConfig(t *testing.T, tracksYAML string) *config.Config {
 	if err := os.MkdirAll(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - gateway\nclaims_dir: claims\n" + tracksYAML
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gateway\nclaims_dir: claims\n" + tracksYAML
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	writeFile(t, cfgPath, cfgYAML)
 

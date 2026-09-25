@@ -1,5 +1,5 @@
-id: viewer.decision.facts-not-verdicts
-facet: decision
+id: viewer.contract.facts-not-verdicts
+facet: contract
 module: viewer
 status: draft
 layout: card

@@ -20,8 +20,7 @@ rests_on:
 const statusTwoFacetConfigYAML = `schema_version: 1
 facets:
   - contract
-  - behavior
-  - schema
+  - internals
 modules:
   - widget
   - other
@@ -38,14 +37,14 @@ rests_on:
   - widget.contract.missing
 `
 
-const behaviorIssueClaimYAML = `id: widget.behavior.issue
-facet: behavior
+const behaviorIssueClaimYAML = `id: widget.internals.issue
+facet: internals
 module: widget
 status: draft
 body: |
-  the behavior facet has a different review issue.
+  the internals facet has a different review issue.
 rests_on:
-  - widget.behavior.missing
+  - widget.internals.missing
 `
 
 const cleanOtherModuleClaimYAML = `id: other.contract.clean
@@ -59,12 +58,12 @@ rests_on:
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
-const cleanWidgetFacetClaimYAML = `id: widget.schema.clean
-facet: schema
+const cleanWidgetFacetClaimYAML = `id: widget.internals.clean
+facet: internals
 module: widget
 status: draft
 body: |
-  the widget schema facet has no review issue.
+  the widget internals facet has no review issue.
 rests_on:
   none: true
   reason: viewer-test fixture, not backed by any doctrine claim
@@ -217,7 +216,7 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 			/1\s+\w* ?claims? (is|are) blocked/.test(title) ||
 			title.indexOf('1 contract claim') >= 0) &&
 			strip.textContent.indexOf('widget.contract.issue') >= 0 &&
-			strip.textContent.indexOf('widget.behavior.issue') < 0;
+			strip.textContent.indexOf('widget.internals.issue') < 0;
 	})()`) {
 		t.Fatal("contract facet must show only its own issue")
 	}
@@ -230,13 +229,13 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.sec-tab[data-target="#widget"]').click()`, nil))
 	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden])').id === 'widget'`)
-	runCDP(t, ctx, chromedp.Click(`[data-target="#widget-schema"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden]) > .claim-group:not([hidden])').id === 'widget-schema'`)
+	runCDP(t, ctx, chromedp.Click(`[data-target="#widget-manifest"]`, chromedp.ByQuery))
+	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden]) > .claim-group:not([hidden])').id === 'widget-manifest'`)
 	if !evalBool(t, ctx, `document.getElementById('statusStrip').hidden`) {
 		t.Fatal("the issues component must be absent from an unaffected facet in the affected module")
 	}
 
-	runCDP(t, ctx, chromedp.Click(`[data-target="#widget-behavior"]`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Click(`[data-target="#widget-internals"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden && document.querySelector('#statusStripTitle').textContent.indexOf('contract') < 0`)
 	if !evalBool(t, ctx, `(function(){
 		var strip = document.getElementById('statusStrip');
@@ -244,10 +243,10 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 		return !strip.hidden &&
 			(title === '1 issue in this facet needs attention' ||
 				/1\s+\w* ?claims? (is|are) blocked/.test(title) ||
-				title.indexOf('1 behavior claim') >= 0) &&
-			strip.textContent.indexOf('widget.behavior.issue') >= 0 &&
+				title.indexOf('1 internals claim') >= 0) &&
+			strip.textContent.indexOf('widget.internals.issue') >= 0 &&
 			strip.textContent.indexOf('widget.contract.issue') < 0;
 	})()`) {
-		t.Fatal("behavior facet must replace the list with only its own issue")
+		t.Fatal("internals facet must replace the list with only its own issue")
 	}
 }

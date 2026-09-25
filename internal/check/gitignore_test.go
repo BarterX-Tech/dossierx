@@ -24,7 +24,7 @@ func gitignoreProject(t *testing.T, root string) *config.Config {
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFixtureFile(t, filepath.Join(root, config.FileName), "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n")
+	writeFixtureFile(t, filepath.Join(root, config.FileName), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n")
 	cfg, err := config.LoadConfig(filepath.Join(root, config.FileName))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -263,7 +263,7 @@ func TestGitignored_BuildDirAboveTheTopLevelIsAReason(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFixtureFile(t, filepath.Join(repo, config.FileName), "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
+	writeFixtureFile(t, filepath.Join(repo, config.FileName), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
 	cfg, err := config.LoadConfig(filepath.Join(repo, config.FileName))
 	if err != nil {
 		t.Fatal(err)

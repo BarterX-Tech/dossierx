@@ -1,7 +1,8 @@
 // Package config loads and validates project.config.yaml — the single
 // project-specific input that keeps this engine generic. Nothing in this
-// package (or anywhere else in the engine) may hardcode a project name,
-// facet, or module; every project-specific value comes from the Config
+// package (or anywhere else in the engine) may hardcode a project name
+// or module. Claim facets are engine-fixed: exactly contract and internals
+// (NIT-20). Every other project-specific value comes from the Config
 // this package produces.
 package config
 
@@ -24,6 +25,25 @@ const CurrentSchemaVersion = 1
 // facets[] is refused; leftover claims with facet: overview fail id-shape
 // like any other undeclared facet.
 const removedOverviewFacet = "overview"
+
+// Engine-fixed claim facets (NIT-20). project.config.yaml must list exactly
+// these two names; no other facet is legal. Manifest is a viewer tab, not a
+// claim facet — see internal/visibility.ViewerTabManifest.
+const (
+	FacetContract  = "contract"
+	FacetInternals = "internals"
+)
+
+// EngineFacets is the only legal facets[] value, in viewer-peer order after
+// Manifest.
+func EngineFacets() []string {
+	return []string{FacetContract, FacetInternals}
+}
+
+// IsEngineFacet reports whether name is contract or internals.
+func IsEngineFacet(name string) bool {
+	return name == FacetContract || name == FacetInternals
+}
 
 // ErrNotFound is wrapped into LoadConfig's returned error whenever the
 // config file itself does not exist at the given path (as opposed to
@@ -401,20 +421,13 @@ func (c *Config) validate() error {
 		return fmt.Errorf("unknown schema_version %d (engine supports %d)", c.SchemaVersion, CurrentSchemaVersion)
 	}
 
-	if len(c.Facets) == 0 {
-		return fmt.Errorf("facets must be non-empty")
+	if err := validateEngineFacets(c.Facets); err != nil {
+		return err
 	}
-	if dup, ok := firstDuplicate(c.Facets); ok {
-		return fmt.Errorf("facets contains duplicate %q", dup)
-	}
-	for i, f := range c.Facets {
-		if strings.TrimSpace(f) == "" {
-			return fmt.Errorf("facets[%d] is empty", i)
-		}
-		if f == removedOverviewFacet {
-			return fmt.Errorf("facets[%d] %q is not allowed: the reserved overview facet has been removed", i, f)
-		}
-	}
+	// Normalize declaration order so every loaded config agrees with the
+	// viewer tab strip (Contract then Internals). YAML order is not a
+	// project vocabulary.
+	c.Facets = EngineFacets()
 
 	if len(c.Modules) == 0 {
 		return fmt.Errorf("modules must be non-empty")
@@ -532,6 +545,32 @@ func pathContains(dir, child string) bool {
 		return true
 	}
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func validateEngineFacets(facets []string) error {
+	if len(facets) == 0 {
+		return fmt.Errorf("facets must be exactly %q and %q (engine-fixed)", FacetContract, FacetInternals)
+	}
+	seen := make(map[string]bool, len(facets))
+	for i, f := range facets {
+		if strings.TrimSpace(f) == "" {
+			return fmt.Errorf("facets[%d] is empty", i)
+		}
+		if f == removedOverviewFacet {
+			return fmt.Errorf("facets[%d] %q is not allowed: the reserved overview facet has been removed", i, f)
+		}
+		if !IsEngineFacet(f) {
+			return fmt.Errorf("facets contains %q; the only legal facets are %q and %q", f, FacetContract, FacetInternals)
+		}
+		if seen[f] {
+			return fmt.Errorf("facets contains duplicate %q", f)
+		}
+		seen[f] = true
+	}
+	if !seen[FacetContract] || !seen[FacetInternals] {
+		return fmt.Errorf("facets must be exactly %q and %q (engine-fixed)", FacetContract, FacetInternals)
+	}
+	return nil
 }
 
 func firstDuplicate(ss []string) (string, bool) {

@@ -69,7 +69,7 @@ func claimWriteFixture(t *testing.T, root string) string {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets:\n  - contract\n  - doctrine\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -250,8 +250,8 @@ func TestEnvelope_ClaimListFilters(t *testing.T) {
 	}
 
 	// --facet / --module.
-	if byFacet := listData("--facet", "doctrine"); byFacet.Count != 0 {
-		t.Fatalf("no claim is in the doctrine facet, got %+v", byFacet)
+	if byFacet := listData("--facet", "internals"); byFacet.Count != 0 {
+		t.Fatalf("no claim is in the internals facet, got %+v", byFacet)
 	}
 	if byModule := listData("--module", "widget"); byModule.Count != 2 {
 		t.Fatalf("both claims are in widget, got %+v", byModule)
@@ -383,7 +383,7 @@ func TestClaimNewRefusals(t *testing.T) {
 			code: cliout.CodeUnknownModule,
 		},
 		{
-			name: "facet is not one the project declares",
+			name: "facet is not engine-fixed",
 			args: []string{"claim", "new", "widget.nosuch.thing", "--body", "x", "--rests-on-none-reason", "y"},
 			code: cliout.CodeBadRequest,
 		},

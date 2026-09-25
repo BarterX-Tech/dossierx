@@ -7,4 +7,4 @@ build_role: orientation
 body: |
   Approval is evidence, not a flag. Everything in this module exists to make an approval survive the edit that would erase it.
 rests_on:
-  - lock.schema.lock-store
+  - lock.internals.lock-store

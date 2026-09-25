@@ -14,7 +14,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 
 // project writes a project.config.yaml (cfgBody) plus every file in files
 // (path relative to root -> content) and returns the loaded config and the

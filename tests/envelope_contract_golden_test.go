@@ -279,7 +279,7 @@ func envTracked(t *testing.T, dir string) map[string]string {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - checkout\n  - payments\n" +
 		"claims_dir: claims\n" +
 		"tracks:\n" +
@@ -409,7 +409,7 @@ func envDangling(t *testing.T, dir string) map[string]string {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}

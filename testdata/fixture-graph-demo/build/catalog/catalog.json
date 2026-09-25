@@ -1,166 +1,6 @@
 {
   "claims": [
     {
-      "id": "cli.behavior.dry-run-writes-nothing",
-      "facet": "behavior",
-      "module": "cli",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.behavior.dry-run-writes-nothing",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.behavior.dry-run-writes-nothing",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.behavior.dry-run-writes-nothing",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "cli.behavior.exit-codes",
-      "facet": "behavior",
-      "module": "cli",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.behavior.exit-codes",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.behavior.exit-codes",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.behavior.exit-codes",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "cli.behavior.format-flag",
-      "facet": "behavior",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.behavior.format-flag",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.behavior.format-flag",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.behavior.format-flag",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
       "id": "cli.contract.check-noun",
       "facet": "contract",
       "module": "cli",
@@ -169,8 +9,7 @@
       "kind": "fact",
       "edges": {
         "rests_on": [
-          "engine.contract.check-is-fail-fast",
-          "cli.behavior.exit-codes"
+          "engine.contract.check-is-fail-fast"
         ]
       },
       "readiness": {
@@ -185,12 +24,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.check-noun",
-              "cli.behavior.exit-codes",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.exit-codes",
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -199,13 +38,13 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
+              "engine.internals.lint-runs-before-catalog",
+              "engine.internals.edge-kinds",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -217,7 +56,7 @@
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "engine.internals.lint-runs-before-catalog"
             ],
             "detail": "c-2e8875",
             "direct": false,
@@ -228,12 +67,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.check-noun",
-              "cli.behavior.exit-codes",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.exit-codes",
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -242,13 +81,13 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
+              "engine.internals.lint-runs-before-catalog",
+              "engine.internals.edge-kinds",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -260,7 +99,7 @@
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "engine.internals.lint-runs-before-catalog"
             ],
             "detail": "c-2e8875",
             "direct": false,
@@ -276,11 +115,7 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "cli.contract.noun-list-is-fixed",
         "policy_version": 0,
@@ -293,11 +128,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.noun-list-is-fixed",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -308,11 +143,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.noun-list-is-fixed",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -328,11 +163,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "cli.contract.serve-noun",
         "policy_version": 0,
@@ -345,11 +176,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.serve-noun",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -360,11 +191,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.serve-noun",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -384,11 +215,7 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "cli.contract.six-nouns",
         "policy_version": 0,
@@ -401,11 +228,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.six-nouns",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -416,11 +243,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.six-nouns",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
+              "cli.internals.json-envelope",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -431,480 +258,6 @@
           "claim status \"draft\" is not locally approved"
         ],
         "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.decision.agent-operates-human-reviews",
-      "facet": "decision",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.contract.serve-noun"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.decision.agent-operates-human-reviews",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": true,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "cli.contract.serve-noun",
-            "path": [
-              "cli.decision.agent-operates-human-reviews",
-              "cli.contract.serve-noun"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "cli.contract.serve-noun",
-            "path": [
-              "cli.decision.agent-operates-human-reviews",
-              "cli.contract.serve-noun"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.decision.agent-operates-human-reviews",
-              "cli.contract.serve-noun",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.decision.agent-operates-human-reviews",
-              "cli.contract.serve-noun",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.decision.no-new-noun-for-the-graph",
-      "facet": "decision",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.contract.noun-list-is-fixed"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.decision.no-new-noun-for-the-graph",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.decision.no-new-noun-for-the-graph",
-              "cli.contract.noun-list-is-fixed",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.decision.no-new-noun-for-the-graph",
-              "cli.contract.noun-list-is-fixed",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.schema.error-codes",
-      "facet": "schema",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.schema.error-codes",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.schema.error-codes",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.schema.error-codes",
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.schema.json-envelope",
-      "facet": "schema",
-      "module": "cli",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "cli.schema.json-envelope",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ],
-        "causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "cli.schema.json-envelope",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ]
-      }
-    },
-    {
-      "id": "engine.behavior.catalog-groups-by-facet",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.catalog-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.catalog-groups-by-facet",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.catalog-groups-by-facet",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.catalog-groups-by-facet",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "engine.behavior.degree-counting",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.edge-kinds"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.degree-counting",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.degree-counting",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.degree-counting",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "engine.behavior.lint-runs-before-catalog",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.edge-kinds"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.lint-runs-before-catalog",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "own_thread",
-            "source_kind": "own_thread",
-            "path": [
-              "engine.behavior.lint-runs-before-catalog"
-            ],
-            "detail": "c-2e8875",
-            "direct": true,
-            "inherited": false
-          },
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.lint-runs-before-catalog",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "own_thread",
-            "source_kind": "own_thread",
-            "path": [
-              "engine.behavior.lint-runs-before-catalog"
-            ],
-            "detail": "c-2e8875",
-            "direct": true,
-            "inherited": false
-          },
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.lint-runs-before-catalog",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "engine.behavior.loader-walks-claims-dir",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.loader-walks-claims-dir",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.loader-walks-claims-dir",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ],
-        "causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.behavior.loader-walks-claims-dir",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ]
       }
     },
     {
@@ -916,7 +269,7 @@
       "kind": "fact",
       "edges": {
         "rests_on": [
-          "engine.schema.catalog-shape"
+          "engine.contract.catalog-shape"
         ]
       },
       "readiness": {
@@ -931,11 +284,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -946,15 +299,65 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
             "inherited": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "engine.contract.catalog-shape",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.contract.claim-shape"
+        ]
+      },
+      "readiness": {
+        "claim_id": "engine.contract.catalog-shape",
+        "policy_version": 0,
+        "local_approved": true,
+        "locally_approved": true,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
           }
         ]
       }
@@ -966,11 +369,7 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.behavior.lint-runs-before-catalog"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "engine.contract.check-is-fail-fast",
         "policy_version": 0,
@@ -983,12 +382,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
+              "engine.internals.lint-runs-before-catalog",
+              "engine.internals.edge-kinds",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -999,7 +398,7 @@
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "engine.internals.lint-runs-before-catalog"
             ],
             "detail": "c-2e8875",
             "direct": false,
@@ -1010,12 +409,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog",
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
+              "engine.internals.lint-runs-before-catalog",
+              "engine.internals.edge-kinds",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -1026,13 +425,80 @@
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "engine.internals.lint-runs-before-catalog"
             ],
             "detail": "c-2e8875",
             "direct": false,
             "inherited": true
           }
         ]
+      }
+    },
+    {
+      "id": "engine.contract.claim-shape",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
+      "readiness": {
+        "claim_id": "engine.contract.claim-shape",
+        "policy_version": 0,
+        "local_approved": true,
+        "locally_approved": true,
+        "dependency_ready": true,
+        "ready": true,
+        "review_pending": false
+      }
+    },
+    {
+      "id": "engine.contract.facts-not-verdicts",
+      "facet": "contract",
+      "module": "engine",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
+      "readiness": {
+        "claim_id": "engine.contract.facts-not-verdicts",
+        "policy_version": 0,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
+      "id": "engine.contract.single-source-of-truth",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
+      "readiness": {
+        "claim_id": "engine.contract.single-source-of-truth",
+        "policy_version": 0,
+        "local_approved": true,
+        "locally_approved": true,
+        "dependency_ready": true,
+        "ready": true,
+        "review_pending": false
       }
     },
     {
@@ -1044,7 +510,7 @@
       "kind": "fact",
       "edges": {
         "rests_on": [
-          "engine.schema.claim-shape"
+          "engine.contract.claim-shape"
         ]
       },
       "readiness": {
@@ -1062,487 +528,13 @@
       }
     },
     {
-      "id": "engine.decision.facts-not-verdicts",
-      "facet": "decision",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "engine.decision.facts-not-verdicts",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "engine.decision.no-code-nodes",
-      "facet": "decision",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "engine.decision.no-code-nodes",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "engine.decision.single-source-of-truth",
-      "facet": "decision",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "engine.decision.single-source-of-truth",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.schema.catalog-shape",
-      "facet": "schema",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.schema.catalog-shape",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ],
-        "causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ]
-      }
-    },
-    {
-      "id": "engine.schema.claim-shape",
-      "facet": "schema",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "engine.schema.claim-shape",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.schema.edge-kinds",
-      "facet": "schema",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.schema.edge-kinds",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ],
-        "causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.schema.edge-kinds",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ]
-      }
-    },
-    {
-      "id": "engine.verification.determinism-suite",
-      "facet": "verification",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.contract.build-is-pure"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.verification.determinism-suite",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.verification.determinism-suite",
-              "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.verification.determinism-suite",
-              "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "engine.verification.nil-safety-suite",
-      "facet": "verification",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.contract.build-is-pure"
-        ]
-      },
-      "readiness": {
-        "claim_id": "engine.verification.nil-safety-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.verification.nil-safety-suite",
-              "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "engine.verification.nil-safety-suite",
-              "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.behavior.comment-digest",
-      "facet": "behavior",
-      "module": "lock",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.behavior.comment-digest",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.behavior.comment-digest",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.behavior.comment-digest",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.behavior.lock-gates",
-      "facet": "behavior",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.behavior.lock-gates",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "lock.behavior.unlock-keeps-the-record",
-      "facet": "behavior",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.behavior.unlock-keeps-the-record",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.behavior.unlock-keeps-the-record",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.behavior.unlock-keeps-the-record",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
       "id": "lock.contract.ledger-first",
       "facet": "contract",
       "module": "lock",
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.lock-store"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "lock.contract.ledger-first",
         "policy_version": 0,
@@ -1555,11 +547,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.ledger-first",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
+              "lock.internals.lock-store",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -1570,11 +562,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.ledger-first",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
+              "lock.internals.lock-store",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -1594,11 +586,7 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.behavior.lock-gates"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "lock.contract.lock-is-human-approved",
         "policy_version": 0,
@@ -1611,13 +599,13 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.lock-is-human-approved",
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
+              "lock.internals.lock-gates",
+              "lock.internals.ledger-record",
+              "lock.internals.lock-store",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -1628,13 +616,13 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.lock-is-human-approved",
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
+              "lock.internals.lock-gates",
+              "lock.internals.ledger-record",
+              "lock.internals.lock-store",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -1650,11 +638,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.behavior.lock-gates"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "lock.contract.review-pending-is-engine-managed",
         "policy_version": 0,
@@ -1667,13 +651,13 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.review-pending-is-engine-managed",
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
+              "lock.internals.lock-gates",
+              "lock.internals.ledger-record",
+              "lock.internals.lock-store",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -1684,333 +668,17 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.review-pending-is-engine-managed",
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
+              "lock.internals.lock-gates",
+              "lock.internals.ledger-record",
+              "lock.internals.lock-store",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
             "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.decision.no-migration-command",
-      "facet": "decision",
-      "module": "lock",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.decision.no-migration-command",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.decision.no-migration-command",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.decision.no-migration-command",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.schema.ledger-record",
-      "facet": "schema",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.lock-store"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.schema.ledger-record",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "lock.schema.lock-store",
-      "facet": "schema",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.schema.lock-store",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ],
-        "causes": [
-          {
-            "kind": "direct_dependency_change",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": true,
-            "inherited": false
-          }
-        ]
-      }
-    },
-    {
-      "id": "lock.verification.ledger-audit-suite",
-      "facet": "verification",
-      "module": "lock",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.behavior.lock-gates"
-        ]
-      },
-      "readiness": {
-        "claim_id": "lock.verification.ledger-audit-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.verification.ledger-audit-suite",
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "lock.verification.ledger-audit-suite",
-              "lock.behavior.lock-gates",
-              "lock.schema.ledger-record",
-              "lock.schema.lock-store",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.behavior.counter-increment",
-      "facet": "behavior",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "telemetry.behavior.counter-increment",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.behavior.counter-increment",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.behavior.counter-increment",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.behavior.flush-on-exit",
-      "facet": "behavior",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "telemetry.behavior.flush-on-exit",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
           }
         ],
         "local_reasons": [
@@ -2042,16 +710,6 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.contract.disabled-by-default",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
             "dependency_id": "telemetry.contract.no-egress",
             "path": [
               "telemetry.contract.disabled-by-default",
@@ -2061,12 +719,22 @@
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "telemetry.internals.counter-shape",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "telemetry.internals.flush-on-exit",
+              "telemetry.internals.counter-shape"
+            ],
+            "detail": "required dependency is not locally approved"
+          },
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "telemetry.internals.flush-on-exit",
+            "path": [
+              "telemetry.contract.disabled-by-default",
+              "telemetry.contract.no-egress",
+              "telemetry.internals.flush-on-exit"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -2074,16 +742,6 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.contract.disabled-by-default",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
             "dependency_id": "telemetry.contract.no-egress",
             "path": [
               "telemetry.contract.disabled-by-default",
@@ -2093,12 +751,22 @@
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "telemetry.internals.counter-shape",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "telemetry.internals.flush-on-exit",
+              "telemetry.internals.counter-shape"
+            ],
+            "detail": "required dependency is not locally approved"
+          },
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "telemetry.internals.flush-on-exit",
+            "path": [
+              "telemetry.contract.disabled-by-default",
+              "telemetry.contract.no-egress",
+              "telemetry.internals.flush-on-exit"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -2116,11 +784,7 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.behavior.flush-on-exit"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "telemetry.contract.no-egress",
         "policy_version": 0,
@@ -2132,20 +796,20 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
+            "dependency_id": "telemetry.internals.counter-shape",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
+              "telemetry.internals.flush-on-exit",
+              "telemetry.internals.counter-shape"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "telemetry.internals.flush-on-exit",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "telemetry.internals.flush-on-exit"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -2153,20 +817,20 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
+            "dependency_id": "telemetry.internals.counter-shape",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
+              "telemetry.internals.flush-on-exit",
+              "telemetry.internals.counter-shape"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "telemetry.internals.flush-on-exit",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "telemetry.internals.flush-on-exit"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -2184,11 +848,7 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "telemetry.contract.what-this-module-is",
         "policy_version": 0,
@@ -2200,10 +860,10 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "telemetry.internals.counter-shape",
             "path": [
               "telemetry.contract.what-this-module-is",
-              "telemetry.schema.counter-shape"
+              "telemetry.internals.counter-shape"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -2211,10 +871,10 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "telemetry.internals.counter-shape",
             "path": [
               "telemetry.contract.what-this-module-is",
-              "telemetry.schema.counter-shape"
+              "telemetry.internals.counter-shape"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -2226,9 +886,9 @@
       }
     },
     {
-      "id": "telemetry.decision.counters-are-local",
-      "facet": "decision",
-      "module": "telemetry",
+      "id": "viewer.contract.facts-not-verdicts",
+      "facet": "contract",
+      "module": "viewer",
       "status": "draft",
       "layout": "card",
       "kind": "fact",
@@ -2237,480 +897,13 @@
         "rests_on_reason": "fixture claim; nothing to rest on"
       },
       "readiness": {
-        "claim_id": "telemetry.decision.counters-are-local",
+        "claim_id": "viewer.contract.facts-not-verdicts",
         "policy_version": 0,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
         "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.schema.counter-shape",
-      "facet": "schema",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "telemetry.schema.counter-shape",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.schema.event-names",
-      "facet": "schema",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "telemetry.schema.event-names",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.schema.event-names",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.schema.event-names",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.verification.offline-suite",
-      "facet": "verification",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.contract.no-egress"
-        ]
-      },
-      "readiness": {
-        "claim_id": "telemetry.verification.offline-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.contract.no-egress",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.contract.no-egress",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.behavior.gap-rules-run-in-the-browser",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.behavior.representative-node-rule"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.gap-rules-run-in-the-browser",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": true,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.representative-node-rule",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.representative-node-rule",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter",
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter",
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.behavior.pane-is-inert-until-opened",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.pane-is-inert-until-opened",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.pane-is-inert-until-opened",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.pane-is-inert-until-opened",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "viewer.behavior.representative-node-rule",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.behavior.scope-filter"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.representative-node-rule",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": true,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter",
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter",
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.behavior.scope-filter",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.node-fields"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.scope-filter",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.scope-filter",
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.behavior.scope-filter",
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -2724,11 +917,7 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "viewer.contract.no-network-at-runtime",
         "policy_version": 0,
@@ -2741,12 +930,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.no-network-at-runtime",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "viewer.internals.payload-shape",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -2757,12 +946,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.no-network-at-runtime",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "viewer.internals.payload-shape",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -2778,11 +967,7 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ]
-      },
+      "edges": {},
       "readiness": {
         "claim_id": "viewer.contract.read-me-first",
         "policy_version": 0,
@@ -2795,12 +980,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.read-me-first",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "viewer.internals.payload-shape",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -2811,12 +996,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.read-me-first",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "viewer.internals.payload-shape",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -2853,12 +1038,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.render-is-pure",
               "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -2869,321 +1054,33 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.render-is-pure",
               "engine.contract.build-is-pure",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
             "inherited": true
           }
         ]
-      }
-    },
-    {
-      "id": "viewer.decision.canvas-not-svg",
-      "facet": "decision",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.decision.canvas-not-svg",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.decision.canvas-not-svg",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.decision.canvas-not-svg",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.decision.colour-is-not-the-only-channel",
-      "facet": "decision",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "viewer.decision.colour-is-not-the-only-channel",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.decision.facts-not-verdicts",
-      "facet": "decision",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on_none": true,
-        "rests_on_reason": "fixture claim; nothing to rest on"
-      },
-      "readiness": {
-        "claim_id": "viewer.decision.facts-not-verdicts",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.schema.node-fields",
-      "facet": "schema",
-      "module": "viewer",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.schema.node-fields",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.schema.node-fields",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "viewer.schema.payload-shape",
-      "facet": "schema",
-      "module": "viewer",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.catalog-shape"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.schema.payload-shape",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ]
-      }
-    },
-    {
-      "id": "viewer.verification.browser-suite",
-      "facet": "verification",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.behavior.pane-is-inert-until-opened"
-        ]
-      },
-      "readiness": {
-        "claim_id": "viewer.verification.browser-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": true,
-        "review_causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.verification.browser-suite",
-              "viewer.behavior.pane-is-inert-until-opened",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "causes": [
-          {
-            "kind": "upstream_dependency_review",
-            "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.schema.claim-shape",
-            "path": [
-              "viewer.verification.browser-suite",
-              "viewer.behavior.pane-is-inert-until-opened",
-              "viewer.schema.payload-shape",
-              "engine.schema.catalog-shape",
-              "engine.schema.claim-shape"
-            ],
-            "detail": "dependency content differs from the reviewed baseline",
-            "direct": false,
-            "inherited": true
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     }
   ],
   "by_facet": {
-    "behavior": [
-      "cli.behavior.dry-run-writes-nothing",
-      "cli.behavior.exit-codes",
-      "cli.behavior.format-flag",
-      "engine.behavior.catalog-groups-by-facet",
-      "engine.behavior.degree-counting",
-      "engine.behavior.lint-runs-before-catalog",
-      "engine.behavior.loader-walks-claims-dir",
-      "lock.behavior.comment-digest",
-      "lock.behavior.lock-gates",
-      "lock.behavior.unlock-keeps-the-record",
-      "telemetry.behavior.counter-increment",
-      "telemetry.behavior.flush-on-exit",
-      "viewer.behavior.gap-rules-run-in-the-browser",
-      "viewer.behavior.pane-is-inert-until-opened",
-      "viewer.behavior.representative-node-rule",
-      "viewer.behavior.scope-filter"
-    ],
     "contract": [
       "cli.contract.check-noun",
       "cli.contract.noun-list-is-fixed",
       "cli.contract.serve-noun",
       "cli.contract.six-nouns",
       "engine.contract.build-is-pure",
+      "engine.contract.catalog-shape",
       "engine.contract.check-is-fail-fast",
+      "engine.contract.claim-shape",
+      "engine.contract.facts-not-verdicts",
+      "engine.contract.single-source-of-truth",
       "engine.contract.start-here",
       "lock.contract.ledger-first",
       "lock.contract.lock-is-human-approved",
@@ -3191,111 +1088,43 @@
       "telemetry.contract.disabled-by-default",
       "telemetry.contract.no-egress",
       "telemetry.contract.what-this-module-is",
+      "viewer.contract.facts-not-verdicts",
       "viewer.contract.no-network-at-runtime",
       "viewer.contract.read-me-first",
       "viewer.contract.render-is-pure"
-    ],
-    "decision": [
-      "cli.decision.agent-operates-human-reviews",
-      "cli.decision.no-new-noun-for-the-graph",
-      "engine.decision.facts-not-verdicts",
-      "engine.decision.no-code-nodes",
-      "engine.decision.single-source-of-truth",
-      "lock.decision.no-migration-command",
-      "telemetry.decision.counters-are-local",
-      "viewer.decision.canvas-not-svg",
-      "viewer.decision.colour-is-not-the-only-channel",
-      "viewer.decision.facts-not-verdicts"
-    ],
-    "schema": [
-      "cli.schema.error-codes",
-      "cli.schema.json-envelope",
-      "engine.schema.catalog-shape",
-      "engine.schema.claim-shape",
-      "engine.schema.edge-kinds",
-      "lock.schema.ledger-record",
-      "lock.schema.lock-store",
-      "telemetry.schema.counter-shape",
-      "telemetry.schema.event-names",
-      "viewer.schema.node-fields",
-      "viewer.schema.payload-shape"
-    ],
-    "verification": [
-      "engine.verification.determinism-suite",
-      "engine.verification.nil-safety-suite",
-      "lock.verification.ledger-audit-suite",
-      "telemetry.verification.offline-suite",
-      "viewer.verification.browser-suite"
     ]
   },
   "by_module": {
     "cli": [
-      "cli.behavior.dry-run-writes-nothing",
-      "cli.behavior.exit-codes",
-      "cli.behavior.format-flag",
       "cli.contract.check-noun",
       "cli.contract.noun-list-is-fixed",
       "cli.contract.serve-noun",
-      "cli.contract.six-nouns",
-      "cli.decision.agent-operates-human-reviews",
-      "cli.decision.no-new-noun-for-the-graph",
-      "cli.schema.error-codes",
-      "cli.schema.json-envelope"
+      "cli.contract.six-nouns"
     ],
     "engine": [
-      "engine.behavior.catalog-groups-by-facet",
-      "engine.behavior.degree-counting",
-      "engine.behavior.lint-runs-before-catalog",
-      "engine.behavior.loader-walks-claims-dir",
       "engine.contract.build-is-pure",
+      "engine.contract.catalog-shape",
       "engine.contract.check-is-fail-fast",
-      "engine.contract.start-here",
-      "engine.decision.facts-not-verdicts",
-      "engine.decision.no-code-nodes",
-      "engine.decision.single-source-of-truth",
-      "engine.schema.catalog-shape",
-      "engine.schema.claim-shape",
-      "engine.schema.edge-kinds",
-      "engine.verification.determinism-suite",
-      "engine.verification.nil-safety-suite"
+      "engine.contract.claim-shape",
+      "engine.contract.facts-not-verdicts",
+      "engine.contract.single-source-of-truth",
+      "engine.contract.start-here"
     ],
     "lock": [
-      "lock.behavior.comment-digest",
-      "lock.behavior.lock-gates",
-      "lock.behavior.unlock-keeps-the-record",
       "lock.contract.ledger-first",
       "lock.contract.lock-is-human-approved",
-      "lock.contract.review-pending-is-engine-managed",
-      "lock.decision.no-migration-command",
-      "lock.schema.ledger-record",
-      "lock.schema.lock-store",
-      "lock.verification.ledger-audit-suite"
+      "lock.contract.review-pending-is-engine-managed"
     ],
     "telemetry": [
-      "telemetry.behavior.counter-increment",
-      "telemetry.behavior.flush-on-exit",
       "telemetry.contract.disabled-by-default",
       "telemetry.contract.no-egress",
-      "telemetry.contract.what-this-module-is",
-      "telemetry.decision.counters-are-local",
-      "telemetry.schema.counter-shape",
-      "telemetry.schema.event-names",
-      "telemetry.verification.offline-suite"
+      "telemetry.contract.what-this-module-is"
     ],
     "viewer": [
-      "viewer.behavior.gap-rules-run-in-the-browser",
-      "viewer.behavior.pane-is-inert-until-opened",
-      "viewer.behavior.representative-node-rule",
-      "viewer.behavior.scope-filter",
+      "viewer.contract.facts-not-verdicts",
       "viewer.contract.no-network-at-runtime",
       "viewer.contract.read-me-first",
-      "viewer.contract.render-is-pure",
-      "viewer.decision.canvas-not-svg",
-      "viewer.decision.colour-is-not-the-only-channel",
-      "viewer.decision.facts-not-verdicts",
-      "viewer.schema.node-fields",
-      "viewer.schema.payload-shape",
-      "viewer.verification.browser-suite"
+      "viewer.contract.render-is-pure"
     ]
   }
 }
