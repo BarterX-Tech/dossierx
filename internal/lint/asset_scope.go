@@ -36,7 +36,7 @@
 // image route answers from an allowlist computed from loaded claims; a src the
 // lint refuses is a src that route must never learn about. Unlike
 // markdown-sanity's craft findings this one is meant to block a lock, and it
-// does, through internal/lock.Lock's existing error-severity gate.
+// does, through internal/lock.EvaluateSet's existing error-severity gate.
 //
 // WHAT THIS LINT DOES NOT CHECK, and why:
 //

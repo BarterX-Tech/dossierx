@@ -807,7 +807,7 @@ func envelopeOf(t *testing.T, args ...string) (cliout.Envelope, error) {
 // ---------------------------------------------------------------------
 
 // restOnUnlockedFixture is a draft claim beside a draft banner. A claim-status
-// lint (rest-on-locked, roll-up) fires only against a LOCKED claim, so against
+// lint (roll-up) fires only against a LOCKED claim, so against
 // the project as it stands it reports nothing at all: `check --validate` is
 // ok:true with lint_error_count 0. The rule nonetheless refuses the lock,
 // because the lock gate lints the about-to-be-locked form — which is why "go

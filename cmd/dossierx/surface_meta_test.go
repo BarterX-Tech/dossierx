@@ -217,8 +217,9 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		"nouns":    9,
 		"commands": 24,
 		// 36 -> 37 with NIT-10's shared-context-budget (the shared half of
-		// the manifest show --isolation view).
-		"lint_rules": 37,
+		// the manifest show --isolation view). 37 -> 36 when lock policy 0
+		// was retired and rest-on-locked went with it.
+		"lint_rules": 36,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
 		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):

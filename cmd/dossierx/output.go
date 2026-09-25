@@ -454,20 +454,6 @@ func errorForCLI(err error) *cliout.Error {
 		// needs one documented sequence run once. See
 		// cliout.CodePreLedgerUnadopted.
 		code = cliout.CodePreLedgerUnadopted
-	case errors.Is(err, lock.ErrLedgerRecordDeleted):
-		// A lock refused because the claim's ledger record was DELETED. It is
-		// integrity_failed rather than a code of its own because it is the same
-		// condition `check` reports as lock-ledger-deleted and it has that
-		// family's recovery exactly: restore from version control, never
-		// re-lock. Giving it a bespoke code would invite an agent to look for a
-		// bespoke fix, and the whole point of this refusal is that there is no
-		// command that clears it.
-		code = cliout.CodeIntegrityFailed
-	case errors.Is(err, lock.ErrCommentDigestUnrecorded):
-		// Same family, same reason as ErrLedgerRecordDeleted above: `check`
-		// reports this state as comment-digest-unrecorded, and its recovery is
-		// version control rather than any command.
-		code = cliout.CodeIntegrityFailed
 	}
 	return &cliout.Error{Code: code, Message: err.Error()}
 }

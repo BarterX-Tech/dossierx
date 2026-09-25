@@ -12,7 +12,7 @@
 //
 // A claim with Layout == "" has not gone through catalog.Build's shape
 // inference yet (lint.RunAll is also called directly against raw claims,
-// e.g. from internal/lock.Lock); by construction, inference always picks a
+// e.g. from internal/lock.EvaluateSet); by construction, inference always picks a
 // layout consistent with the claim's own shape, so an unset Layout can
 // never itself be a mismatch and is skipped here rather than guessed at.
 //

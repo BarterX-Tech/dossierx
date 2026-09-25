@@ -1,25 +1,23 @@
-// lifecycle_fixtures_test.go covers five claim-lifecycle scenarios end to
+// lifecycle_fixtures_test.go covers four claim-lifecycle scenarios end to
 // end via the built CLI binary:
 //
-//  1. rest-on-locked: a draft rests_on target blocks locking a
-//     dependent, via testdata/fixture-coverage/lifecycle/doctrine-gate.
-//  2. undeclared-facet: a claim whose facet is not engine-fixed fails
+//  1. undeclared-facet: a claim whose facet is not engine-fixed fails
 //     lint, via testdata/fixture-coverage/lifecycle/undeclared-facet.
-//  3. empty-claims: a valid config with an empty claims_dir lints clean,
+//  2. empty-claims: a valid config with an empty claims_dir lints clean,
 //     exit 0, via testdata/fixture-coverage/lifecycle/empty-claims.
-//  4. dependency content-hash drift: locking B (rests_on A) then editing
+//  3. dependency content-hash drift: locking B (rests_on A) then editing
 //     A's body flips B to locked+review_pending on "dossierx check", built
-//     programmatically (reusing writeRestOnLockedFixture from
+//     programmatically (reusing writeRestsOnFixture from
 //     edge_lints_test.go) rather than as a static fixture, since it
 //     mutates state across multiple CLI invocations.
-//  5. an explicit "dossierx claim flag" trigger: flags a locked claim, proves it
+//  4. an explicit "dossierx claim flag" trigger: flags a locked claim, proves it
 //     shows up in "dossierx claim list --review-pending", and that "dossierx claim reaudit" (without
 //     --confirm) proposes a real, non-stub diff -- built programmatically
 //     (reusing llWriteConfig/llWriteClaim from lock_lifecycle_test.go) for
-//     the same reason as scenario 4.
+//     the same reason as scenario 3.
 //
-// Scenarios 1-3 use static, checked-in testdata fixtures (per the task
-// brief); scenarios 4-5 build their own throwaway t.TempDir() project,
+// Scenarios 1-2 use static, checked-in testdata fixtures (per the task
+// brief); scenarios 3-4 build their own throwaway t.TempDir() project,
 // since the "dossierx claim lock"/"dossierx claim flag"/"dossierx check" commands they exercise
 // mutate claim files and write lock-store/catalog/viewer artifacts, which
 // must never happen against a checked-in testdata directory.
@@ -44,11 +42,7 @@ func lifecycleFixturesRoot(t *testing.T) string {
 }
 
 // ---------------------------------------------------------------------
-// 1. rest-on-locked: hub left draft blocks locking its dependent.
-// ---------------------------------------------------------------------
-
-// ---------------------------------------------------------------------
-// 2. undeclared-facet: a claim's facet is not engine-fixed -> lint
+// 1. undeclared-facet: a claim's facet is not engine-fixed -> lint
 //    fails (id-shape), never silently accepted.
 // ---------------------------------------------------------------------
 
@@ -67,7 +61,7 @@ func TestLifecycle_UndeclaredFacetFixture(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// 3. empty-claims: a valid config with claims_dir present but empty lints
+// 2. empty-claims: a valid config with claims_dir present but empty lints
 //    clean, exit 0, zero findings.
 // ---------------------------------------------------------------------
 
@@ -85,16 +79,16 @@ func TestLifecycle_EmptyClaimsFixture(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// 4. Dependency content-hash drift: lock A, lock B (rests_on A), edit A's
+// 3. Dependency content-hash drift: lock A, lock B (rests_on A), edit A's
 //    body on disk, re-run check, assert B is now review_pending while
-//    still locked. Built programmatically via writeRestOnLockedFixture
+//    still locked. Built programmatically via writeRestsOnFixture
 //    (edge_lints_test.go), with a module name of its own to avoid any
 //    fixture collision.
 // ---------------------------------------------------------------------
 
 func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 	root := t.TempDir()
-	aPath, bPath := writeRestOnLockedFixture(t, root, "lifecycledriftmod")
+	aPath, bPath := writeRestsOnFixture(t, root, "lifecycledriftmod")
 
 	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "lifecycledriftmod.contract.a", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock A: %s", stderr)
@@ -131,7 +125,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// 5. An explicit "dossierx claim flag" trigger: lock A, "dossierx claim flag A --claim-says
+// 4. An explicit "dossierx claim flag" trigger: lock A, "dossierx claim flag A --claim-says
 //    ... --now-does ... --reason ...", then confirm A shows up in
 //    "dossierx claim list --review-pending" and that "dossierx claim reaudit A" (propose-only) prints a real,
 //    non-stub diff carrying the flagged content. Built programmatically

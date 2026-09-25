@@ -1,7 +1,6 @@
 package lock
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +153,7 @@ func TestAuditCatchesTheRelockedReleasedRecord(t *testing.T) {
 	}
 
 	// And the approval record a genuine re-lock writes clears it, so the rule
-	// cannot fire on honest work — RecordApproval is the write Lock performs
+	// cannot fire on honest work — RecordApproval is the write the lock path performs
 	// once its three gates pass, which is exactly what a released record is
 	// missing.
 	RecordApproval(store, relocked, Approval{Actor: "alice", Reason: "re-approved"})
@@ -421,18 +420,17 @@ func savedStoreWithRecord(t *testing.T, c model.Claim) (model.Claim, *Store) {
 //	                                       with a hash of the EDITED content
 //
 // The finding disappears and the ledger now attests that a human approved bytes
-// they never saw. The dry run had advertised "claim_is_draft" as a precondition
-// all along; only the real run failed to enforce it.
+// they never saw. The lock policy refuses the claim as already_locked, and
+// evaluating it writes nothing.
 func TestLockRefusesAnAlreadyLockedClaim(t *testing.T) {
+	withRegistry(t) // empty registry: the refusal under test must be the ledger's
 	locked, store := lockedWithRecord(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
 	approvedHash := LockedClaimHash(locked)
 
 	tampered := locked
 	tampered.Body = "quietly rewritten"
 
-	if _, err := Lock(tampered, []model.Claim{tampered}, nil, store, Approval{Actor: "mallory", Reason: "re-approved"}); !errors.Is(err, ErrAlreadyLocked) {
-		t.Fatalf("expected ErrAlreadyLocked when re-locking a locked claim, got %v", err)
-	}
+	requireRefusal(t, []model.Claim{tampered}, tampered.ID, nil, store, "already_locked")
 
 	// The record must be UNTOUCHED — a refusal that still wrote would be no
 	// refusal at all.
@@ -448,35 +446,33 @@ func TestLockRefusesAnAlreadyLockedClaim(t *testing.T) {
 		t.Fatalf("the tamper must still be reported after a refused re-lock, got %+v", findings)
 	}
 
-	// The documented recovery must not be blocked BY THIS GATE: once unlock has
-	// released the record and set the claim back to draft, the already-locked
-	// refusal is gone. (Whatever the lint suite then says about this bare
-	// fixture claim is a different gate's business and is covered elsewhere.)
+	// The documented recovery must stay open: once unlock has released the
+	// record and set the claim back to draft, the same claim locks normally.
 	released := Unlock(tampered, store, Approval{Actor: "alice", Reason: "reopening"})
-	if _, err := Lock(released, []model.Claim{released}, nil, store, Approval{Actor: "alice", Reason: "re-approved properly"}); errors.Is(err, ErrAlreadyLocked) {
+	if _, err := approve(released, []model.Claim{released}, nil, store, Approval{Actor: "alice", Reason: "re-approved properly"}); err != nil {
 		t.Fatalf("unlock must clear the already-locked refusal, got %v", err)
 	}
 }
 
 // TestLockRefusesADraftClaimHoldingAStandingRecord closes the ONE-LINE bypass of
-// the refusal above. The already-locked guard was STATUS-based, and status is a
-// line in the audited file:
+// the refusal above. An already-locked guard alone is STATUS-based, and status
+// is a line in the audited file:
 //
 //	lock a claim                        -> record written, hash of the approved body
 //	edit its body by hand               -> check reports lock-content-drift
 //	dossierx claim lock <id>            -> correctly refused (already_locked)
 //	edit "status: locked" -> "draft"    -> the guard no longer sees a locked claim
-//	dossierx claim lock <id> --reason … -> SUCCEEDS, and RecordApproval replaces
-//	                                       the record's hash with a hash of the
-//	                                       TAMPERED bytes
+//	dossierx claim lock <id> --reason … -> would SUCCEED, and RecordApproval
+//	                                       would replace the record's hash with
+//	                                       a hash of the TAMPERED bytes
 //
-// After that run the gate is green forever, no unlock ever happened, and there
-// is no released_at/released_by anywhere to say the approval was withdrawn — the
-// exact evidence the ledger exists to keep. The correct predicate is not what
-// the file's status line says (the attacker writes that) but whether a STANDING,
-// unreleased record still vouches for this claim: a draft claim holding one IS
-// lock-ledger-orphan by definition, and re-locking it is a re-signing, not the
-// draft -> locked transition Lock implements.
+// After that run the gate would be green forever, no unlock ever happened, and
+// there would be no released_at/released_by anywhere to say the approval was
+// withdrawn — the exact evidence the ledger exists to keep. The policy asks
+// instead whether a STANDING, unreleased record still vouches for this claim
+// (standing_ledger_record): a draft claim holding one IS lock-ledger-orphan by
+// definition, and re-locking it is a re-signing, not the draft -> locked
+// transition.
 func TestLockRefusesADraftClaimHoldingAStandingRecord(t *testing.T) {
 	withRegistry(t) // empty registry: the refusal under test must be the ledger's
 	locked, store := savedStoreWithRecord(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
@@ -494,8 +490,11 @@ func TestLockRefusesADraftClaimHoldingAStandingRecord(t *testing.T) {
 		t.Fatalf("fixture is not the attack state: expected %s, got %+v", RuleLockLedgerOrphan, findings)
 	}
 
-	if _, err := Lock(flipped, []model.Claim{flipped}, testConfig(), store, Approval{Actor: "mallory", Reason: "re-approved"}); !errors.Is(err, ErrAlreadyLocked) {
-		t.Fatalf("expected the standing record to refuse the lock, got %v", err)
+	verdict := requireRefusal(t, []model.Claim{flipped}, flipped.ID, testConfig(), store, "standing_ledger_record")
+	for _, r := range verdict.Refusals {
+		if r == "already_locked" {
+			t.Fatalf("the draft status line must not be what refuses this claim: %v", verdict.Refusals)
+		}
 	}
 
 	record, ok := store.Record(locked.ID)
@@ -512,7 +511,7 @@ func TestLockRefusesADraftClaimHoldingAStandingRecord(t *testing.T) {
 	// And the documented recovery is still open: unlock RELEASES the record on
 	// the record, after which the same claim locks normally.
 	released := Unlock(flipped, store, Approval{Actor: "alice", Reason: "reopening deliberately"})
-	if _, err := Lock(released, []model.Claim{released}, testConfig(), store, Approval{Actor: "alice", Reason: "re-approved properly"}); err != nil {
+	if _, err := approve(released, []model.Claim{released}, testConfig(), store, Approval{Actor: "alice", Reason: "re-approved properly"}); err != nil {
 		t.Fatalf("unlock must clear the standing-record refusal, got %v", err)
 	}
 }
@@ -528,7 +527,7 @@ func TestLockAllowsADraftClaimWhoseRecordWasReleased(t *testing.T) {
 	draft := Unlock(locked, store, Approval{Actor: "alice", Reason: "reopening"})
 	draft.Body = "the edit the unlock was for"
 
-	relocked, err := Lock(draft, []model.Claim{draft}, testConfig(), store, Approval{Actor: "alice", Reason: "approved the edit"})
+	relocked, err := approve(draft, []model.Claim{draft}, testConfig(), store, Approval{Actor: "alice", Reason: "approved the edit"})
 	if err != nil {
 		t.Fatalf("a released record must not refuse a lock: %v", err)
 	}
@@ -557,9 +556,9 @@ func lockedProjectOnDisk(t *testing.T, c model.Claim) (model.Claim, *Store) {
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
 	}
-	locked, err := Lock(c, []model.Claim{c}, testConfig(), seed, Approval{Actor: "alice", Reason: "approved"})
+	locked, err := approve(c, []model.Claim{c}, testConfig(), seed, Approval{Actor: "alice", Reason: "approved"})
 	if err != nil {
-		t.Fatalf("Lock: %v", err)
+		t.Fatalf("approve: %v", err)
 	}
 	if err := seed.Save(); err != nil {
 		t.Fatalf("Save: %v", err)

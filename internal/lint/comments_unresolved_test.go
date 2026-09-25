@@ -22,7 +22,7 @@ func TestCommentsUnresolvedLint(t *testing.T) {
 			wantFindings: 1,
 		},
 		{
-			// The rule deliberately has NO Status branch (unlike rest-on-locked):
+			// The rule deliberately has NO Status branch (unlike roll-up):
 			// it fires on locked claims too, since an open thread on a locked
 			// claim is simultaneously its lock-gate refusal and its
 			// review_pending trigger.

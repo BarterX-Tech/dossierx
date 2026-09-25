@@ -8,11 +8,14 @@ are never readable or citable from outside the owning module.
 
 ## Lock policy v1
 
-The lock store has a separate `policy_version` from its JSON `version`. A
-missing store is a new project and begins at policy v1. A store written before
-this policy remains on its recorded legacy rule. Loading a newer binary does
-not reinterpret old approvals, refresh baselines, or clear review causes, and
-there is no everyday command that adopts policy v1 on an existing store.
+The lock store has a separate `policy_version` from its JSON `version`. v1 is
+the only policy. The legacy policy 0 (every `rests_on` target must already be
+locked) was retired in v0.7.21: a store that records `policy_version: 0`, or
+predates the field, loads as v1, and its next write stamps `policy_version: 1`
+with `policy_migrated_at` and `policy_migration_reason`. Every approval such a
+store holds was granted under the stricter legacy rule, so the carry-over
+reinterprets none of them; it does not refresh baselines or clear review
+causes.
 
 Policy v1 evaluates a requested claim set as one final candidate state. A set
 of one uses the same evaluator as a group. `claim lock ... --dry-run` returns
@@ -968,7 +971,7 @@ lock verdict; an agent drafts against the words, never the hash.
 | `edited` | a record stands but the content hash moved — **the edited file is what every module now reads**; nothing from the old version stays in force, and module work stops until a human runs `constitution lock` again |
 
 **No module work until the constitution is locked** (NIT-26). `dossierx claim
-lock` — single, batch and policy-v1 paths alike — `dossierx claim reaudit
+lock` — one claim or a set, through the one policy-v1 path — `dossierx claim reaudit
 --confirm` (a confirmed reaudit writes an approval to the lock ledger; the
 bare preview and `--dry-run` stay open) and plain `dossierx check`
 refuse with `CONSTITUTION_NOT_LOCKED` in every state but `locked`; `check`

@@ -57,7 +57,7 @@ func boundaryProject(t *testing.T) (locks *Store, digests *digest.Store) {
 	return store, digests
 }
 
-// honestLock records everything a real Lock leaves behind for claim c: the
+// honestLock records everything a real lock leaves behind for claim c: the
 // locked_at stamp, the dependency baselines, and the ledger record. It is the
 // "all three keys" state the disowned-claim case has to erase.
 func honestLock(t *testing.T, store *Store, c model.Claim, deps ...model.Claim) {
@@ -111,7 +111,7 @@ func TestAuditBoundary_TheDisownedClaimIsNotDetected(t *testing.T) {
 	if findings := Audit(claims, store, digests); len(findings) != 0 {
 		t.Fatalf("audit.go documents the disowned claim as UNDETECTED. It is now detected as %+v — which is good news, but audit.go's boundary note (RuleLockLedgerDeleted's \"WHAT IT DOES NOT CLOSE\", and THE BOUNDARY OF THIS GATE) still says nothing sees it. Update the prose in the same change as the rule", findings)
 	}
-	// The write path agrees it is blind: Lock would happily record a fresh
+	// The write path agrees it is blind: the lock policy would admit a fresh
 	// approval over the rewritten body.
 	if store.LedgerRecordDeleted(tampered) {
 		t.Fatalf("engineLocked is documented as blind to a three-key erasure; if it is not, audit.go's boundary note is out of date")

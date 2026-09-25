@@ -12,7 +12,7 @@ justify exclusions using the call graph before running proofs.
 
 | Shape | What it must prove |
 | --- | --- |
-| Single edge | Under v1, a child can be locally approved against a readable draft parent while remaining unready; legacy policy is not silently migrated. |
+| Single edge | Under v1, a child can be locally approved against a readable draft parent while remaining unready; a store carried over from policy 0 keeps every approval, baseline and review cause it held. |
 | Chain, including a deep chain | Parent drift and review propagate through unchanged intermediates; depth does not cause unsafe stack or witness growth. |
 | Diamond | Two dependent-to-dependency baselines remain independently clearable. |
 | Reconverging diamond | A key based only on first hop or terminal node cannot merge distinct causes. |

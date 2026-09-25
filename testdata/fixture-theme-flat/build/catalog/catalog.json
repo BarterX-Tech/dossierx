@@ -14,7 +14,7 @@
       },
       "readiness": {
         "claim_id": "panel.contract.api",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -32,7 +32,7 @@
       "edges": {},
       "readiness": {
         "claim_id": "panel.contract.behavior",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -59,7 +59,7 @@
       ],
       "readiness": {
         "claim_id": "widget.contract.overview",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
@@ -91,7 +91,7 @@
       ],
       "readiness": {
         "claim_id": "widget.contract.reviewed",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
@@ -163,7 +163,7 @@
       ],
       "readiness": {
         "claim_id": "widget.contract.walkthrough",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": false,

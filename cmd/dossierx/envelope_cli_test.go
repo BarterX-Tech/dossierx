@@ -299,7 +299,7 @@ func TestEnvelope_LockUnlockRoundTrip(t *testing.T) {
 	if !env.OK || env.Command != "claim lock" {
 		t.Fatalf("envelope drift: %+v", env)
 	}
-	var locked lockData
+	var locked policyLockData
 	envData(t, env, &locked)
 	if locked.ClaimID != id || locked.From != "draft" || locked.To != "locked" {
 		t.Fatalf("transition drift: %+v", locked)

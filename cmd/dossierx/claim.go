@@ -414,7 +414,7 @@ func claimReviewTrigger(claim model.Claim, claims []model.Claim, store *lock.Sto
 // + open threads + lint state will get it wrong sooner or later. This computes
 // it once, in the binary, from the same policy evaluator the preview and write
 // paths enforce, so the advice cannot reinterpret a dependency condition as a
-// refusal. Legacy stores retain the legacy gate until explicit migration.
+// refusal.
 func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Config, store *lock.Store, storeErr error, trigger string, links []claimLinkView, ledger *claimLedgerView) []string {
 	var actions []string
 	id := claim.ID
@@ -423,35 +423,11 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 		if storeErr != nil {
 			return []string{"local approval cannot be assessed because " + config.LockStoreDisplayPath + " is unreadable -> restore the ledger from version control; dossierx check --validate names the integrity finding"}
 		}
-		if store != nil && store.LocalApprovalEnabled() {
-			evaluation := lock.EvaluateSetWithSemanticConflicts(claims, []string{id}, cfg, store, nil)
-			if len(evaluation.Verdicts) != 1 {
-				return []string{fmt.Sprintf("local approval cannot be assessed because the policy evaluator returned no verdict for %s -> dossierx claim lock %s --dry-run", id, id)}
-			}
-			return policyVerdictNextActions(evaluation.Verdicts[0])
+		evaluation := lock.EvaluateSetWithSemanticConflicts(claims, []string{id}, cfg, store, nil)
+		if len(evaluation.Verdicts) != 1 {
+			return []string{fmt.Sprintf("local approval cannot be assessed because the policy evaluator returned no verdict for %s -> dossierx claim lock %s --dry-run", id, id)}
 		}
-		gate := evaluateLockGates(claim, claims, cfg)
-		switch {
-		// The rules NAMED, and the next command pointed at the one that can
-		// name them again.
-		//
-		// This used to read "-> dossierx check --validate", and for the whole
-		// family of lints that decide a LOCK that was a dead end: rest-on-locked,
-		// and roll-up both key off a claim's own
-		// status, so against the project as it stands — with this claim still
-		// draft — `check --validate` reports ok:true and zero findings. The
-		// agent was told a finding blocks the lock, sent to a command that
-		// reports none, and left with no CLI path to the rule's name.
-		// evaluateLockGates lints the ABOUT-TO-BE-LOCKED form, so the answer is
-		// right here; --dry-run is where the same answer lives in full.
-		case gate.LintErrors > 0:
-			actions = append(actions, fmt.Sprintf("%s block locking -> dossierx claim lock %s --dry-run", gate.lintBlockerDetail(), id))
-		case len(gate.OpenThreads) > 0:
-			actions = append(actions, fmt.Sprintf("%d open comment thread(s) block locking -> the human resolves them in the viewer; that click is the approval", len(gate.OpenThreads)))
-		default:
-			actions = append(actions, fmt.Sprintf("ready to lock -> ask the human, then dossierx claim lock %s --reason \"<their words>\"", id))
-		}
-		return actions
+		return policyVerdictNextActions(evaluation.Verdicts[0])
 	}
 
 	// THE INTEGRITY BRANCH, ahead of every other locked-claim action.

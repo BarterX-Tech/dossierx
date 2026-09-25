@@ -47,7 +47,7 @@ func oracleCompute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagS
 		}
 		assessment := Assessment{
 			ClaimID:              id,
-			PolicyVersion:        oraclepolicyVersion(store),
+			PolicyVersion:        lock.PolicyLocalApprovalV1,
 			LocalApproved:        localApproved,
 			LocallyApproved:      localApproved,
 			DependencyReady:      len(conditions) == 0,
@@ -208,15 +208,6 @@ func oraclebaseline(store *lock.Store, dependent, dependency string) (string, bo
 		return receipt.Hash, true
 	}
 	return "", false
-}
-
-func oraclepolicyVersion(store *lock.Store) lock.PolicyVersion {
-	if store == nil {
-		// LoadStore treats a missing store as a new project. This default also
-		// keeps a read-only assessment useful before the first store is saved.
-		return lock.PolicyLocalApprovalV1
-	}
-	return store.PolicyVersion
 }
 
 // oraclecollect walks only rests_on. Its path-relative summaries make each causal
