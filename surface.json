@@ -515,7 +515,7 @@
   ],
   "render_fingerprint": "sha256:f557eac88402c773b567ceaf5620f51bd0e48e4337356b03cab01565a28b6a06",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:5945a4a4adb1353483539d2fcdef902d2c78476ec257ac83925f11f49fdb08da",
+    "cmd/dossierx": "sha256:60720d3fdc085ba00ebc8345708e426ad693d29e3e6f7e09f102700ef8cf413b",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -548,7 +548,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
-    "skills": "sha256:c5fd5ca5b94ccfc2d174f810e231a80ba8aedf7ede3d333d7111b291f12869f7"
+    "skills": "sha256:6fa7d482f3934a2f5494cd5ca90b6dbb7330906efb81a3246f9181f16dfd2fb8"
   },
   "envelope": {
     "keys": [
@@ -871,6 +871,7 @@
       ],
       "skillsCheckData": [
         "checked",
+        "forbidden",
         "hand_edited",
         "missing",
         "no_lock",
@@ -885,6 +886,11 @@
         "skipped",
         "target_dir",
         "written"
+      ],
+      "skillsForbiddenData": [
+        "file",
+        "line",
+        "wording"
       ],
       "trackListData": [
         "count",
