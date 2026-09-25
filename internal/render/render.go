@@ -809,6 +809,19 @@ func buildShellStaticData(in shellInputs) shellData {
 
 func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config) ConstitutionView {
 	view := ConstitutionView{WordCap: constitution.WordCap}
+	// The Project claims tab lists the store whether or not the roof file
+	// exists yet: the two are independent inputs, and a project that authored
+	// project claims before writing its constitution (serve renders it; the
+	// gate only stops check and lock) must not read "No project claims."
+	if cat != nil {
+		for _, c := range cat.Claims {
+			if !c.IsProjectClaim() {
+				continue
+			}
+			view.ProjectClaims = append(view.ProjectClaims, template.HTML(
+				`<article class="project-claim"><h4>`+html.EscapeString(c.ID)+`</h4><p>`+html.EscapeString(c.Body)+`</p></article>`))
+		}
+	}
 	if cfg == nil {
 		return view
 	}
@@ -847,15 +860,6 @@ func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config) Constitutio
 	writeSection("Glossary", f.Glossary, constitution.SectionGlossary)
 	writeSection("Decisions", f.Decisions, constitution.SectionDecisions)
 	view.FileHTML = template.HTML(b.String())
-	if cat != nil {
-		for _, c := range cat.Claims {
-			if !c.IsProjectClaim() {
-				continue
-			}
-			view.ProjectClaims = append(view.ProjectClaims, template.HTML(
-				`<article class="project-claim"><h4>`+html.EscapeString(c.ID)+`</h4><p>`+html.EscapeString(c.Body)+`</p></article>`))
-		}
-	}
 	return view
 }
 
@@ -889,6 +893,15 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 	var ungrouped []model.Claim
 
 	for _, c := range cat.Claims {
+		// A project claim (NIT-25) has no module and no facet by design, not
+		// by omission: it is rendered under the constitution's "Project
+		// claims" tab (buildConstitutionView), so it is not dropped here and
+		// it must not become an "ungrouped" module either — the sidebar's
+		// Modules group would then count and list a pseudo-module directly
+		// under the pin that says PROJECT — NOT A MODULE.
+		if c.IsProjectClaim() {
+			continue
+		}
 		if !knownModule(c.Module) || !knownFacet(c.Facet) {
 			ungrouped = append(ungrouped, c)
 			continue

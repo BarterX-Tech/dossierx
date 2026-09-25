@@ -42,7 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`projectclaims.Index`, id + summary) is the tier-1 read `manifest show`
   carries. A project claim may rest on `project.*` and any module's
   `*.contract.*`, never `*.internals.*`. `claim new project.<slug>` writes into
-  the store.
+  the store. In the viewer a project claim is listed only under the
+  constitution's Project claims tab; the reading view's `Ungrouped`
+  catch-all is for malformed claims and does not adopt it, so the Modules
+  group neither counts nor lists a pseudo-module for the project store.
 - **`rests_on` is required (NIT-24).** Every claim carries a list of claim ids
   or `{none: true, reason}`; `rests-on-required` refuses neither and both.
   Targets are claim ids only — `project.<slug>`, any module's `*.contract.*`,
