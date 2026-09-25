@@ -157,7 +157,7 @@ Meaning changed, body-only claim → Channel A:
 
   **The before/after lives in `build/ledger/flag-store.json`, and that file is a tracked artifact.**
   Only `review_pending` goes into the claim; the two strings the human is going to review go into
-  the store at the project root, beside `build/ledger/lock-store.json` and
+  that store, beside `build/ledger/lock-store.json` and
   `build/ledger/comment-digest.json`. Commit it in the same commit as the flagged claim and never
   `.gitignore` it. Unlike the other two it has **no gate rule behind it** — nothing compares it to
   anything — so a flag that does not travel is lost in silence: the claim arrives elsewhere
