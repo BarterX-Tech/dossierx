@@ -153,7 +153,7 @@ func oraclelocalSummary(c model.Claim, claims []model.Claim, store *lock.Store, 
 			// A missing governed_by input is still reported by the
 			// relevant integrity/lint gate; it is deliberately not turned into
 			// an approval prerequisite here. rests_on is the required chain.
-			if oraclecontains(c.RestsOn.IDs, depID) {
+			if contains(c.RestsOn.IDs, depID) {
 				out.conditions = append(out.conditions, DependencyCondition{
 					Kind: ConditionMissingDependency, DependencyID: depID,
 					Path: Path{c.ID, depID}, Detail: "required dependency is missing",
@@ -161,7 +161,7 @@ func oraclelocalSummary(c model.Claim, claims []model.Claim, store *lock.Store, 
 			}
 			continue
 		}
-		if !oraclecontains(c.RestsOn.IDs, depID) {
+		if !contains(c.RestsOn.IDs, depID) {
 			// governed_by is a comparable drift input, but that
 			// edge creates an approval prerequisite.
 			if stored, known := oraclebaseline(store, c.ID, depID); known && stored != lock.ContentHash(dep) {
