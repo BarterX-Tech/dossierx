@@ -870,7 +870,11 @@ node — with three differences:
   project`, and **no** `module` and **no** `facet` (`id-shape` refuses either).
 - A separate loader: `loader.LoadProjectClaims` is never mixed into the module
   walk, and `loader.LoadAll` merges the two stores for lint, lock and the
-  projections.
+  projections. The staged gate does the same from the index: `check --staged`
+  (the pre-commit hook's entry point) enumerates `project-claims/` out of the
+  git index exactly as it enumerates `claims/` — index content only, under the
+  config the index holds, an absent store an empty store — so the hook and
+  plain `check` agree on a project that uses project claims.
 - **No cap and no manifest.** Every module may rest on every project claim, so
   there is no export boundary to curate; project claims do not count toward a
   per-module cap. The tier-1 read is the system-generated **project claims
