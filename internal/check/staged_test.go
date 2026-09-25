@@ -777,3 +777,48 @@ func TestStaged_FromIndexIgnoresGitsOwnLineEndingConversion(t *testing.T) {
 		t.Fatalf("expected a clean gate, got %v", rulesOf(res.LedgerFindings))
 	}
 }
+
+// shared-context-budget measures the constitution's text, and under --staged
+// it must measure the copy the commit carries: the same index copy the
+// constitution gate reads. It read the working tree, so a roof grown past the
+// shared budget and not staged refused a commit that did not contain it, and
+// (the direction that matters for a gate) a roof staged over budget and then
+// trimmed in the working tree only passed the hook.
+func TestStaged_SharedContextBudgetReadsTheStagedConstitution(t *testing.T) {
+	root := t.TempDir()
+	cfg := writeProjectFiles(t, root, baseConfig, map[string]string{
+		"claims/one.yaml": draftClaim("widget.contract.one"),
+	})
+	gitRepo(t, root)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "fixture")
+	committed, err := os.ReadFile(cfg.ConstitutionPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	oversized := string(committed) + "decisions:\n  - slug: sprawl\n    body: " + strings.Repeat("sprawl ", 2000) + "\n"
+	budgetFired := func(verdict []string) bool {
+		for _, line := range verdict {
+			if strings.HasPrefix(line, "lint|shared-context-budget|") {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Over budget in the working tree only.
+	writeFixtureFile(t, cfg.ConstitutionPath(), oversized)
+	if !budgetFired(worktreeVerdict(t, cfg)) {
+		t.Fatal("fixture precondition: the oversized roof must trip shared-context-budget on the working tree")
+	}
+	if staged, _ := stagedVerdict(t, cfg); budgetFired(staged) {
+		t.Fatalf("--staged judged the unstaged working-tree roof: %v", staged)
+	}
+
+	// Over budget in the index, trimmed back in the working tree.
+	git(t, root, "add", filepath.Base(cfg.ConstitutionPath()))
+	writeFixtureFile(t, cfg.ConstitutionPath(), string(committed))
+	if staged, _ := stagedVerdict(t, cfg); !budgetFired(staged) {
+		t.Fatalf("--staged missed the staged oversized roof: %v", staged)
+	}
+}

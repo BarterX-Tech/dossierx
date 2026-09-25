@@ -152,7 +152,9 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
+	// 96 claims in four modules of 24, each inside its isolation budget, so
+	// the only refusal left is the projection capacity.
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [w0, w1, w2, w3]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 24\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
@@ -160,13 +162,16 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
-	if err := manifesttest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
-		t.Fatal(err)
+	for _, module := range cfg.Modules {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, module); err != nil {
+			t.Fatal(err)
+		}
 	}
 	claims := make([]model.Claim, 96)
 	for i := range claims {
+		module := fmt.Sprintf("w%d", i/24)
 		claims[i] = model.Claim{
-			ID: fmt.Sprintf("widget.contract.shared-%03d", i), Facet: "contract", Module: "widget", Status: model.StatusDraft,
+			ID: fmt.Sprintf("%s.contract.shared-%03d", module, i), Facet: "contract", Module: module, Status: model.StatusDraft,
 			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "shared target fixture", RestsOn: model.RestsNone("fixture"),
 			Embodiment: &model.Embodiment{Mode: model.EmbodimentModeCompare, Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "neutral/v1", Target: "widget://shared", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{fmt.Sprintf("expected-%03d", i)}}}}},
 		}

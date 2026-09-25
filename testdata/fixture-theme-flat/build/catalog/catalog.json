@@ -29,7 +29,9 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "panel.contract.behavior",
         "policy_version": 1,
@@ -154,7 +156,9 @@
       "status": "draft",
       "layout": "steps",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "tracks": [
         {
           "id": "checkout",
@@ -175,17 +179,17 @@
             "dependency_id": "widget.contract.overview",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields",
+              "(internals)",
               "widget.contract.overview"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "widget.internals.fields",
+            "dependency_id": "(internals)",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -196,17 +200,17 @@
             "dependency_id": "widget.contract.overview",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields",
+              "(internals)",
               "widget.contract.overview"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "widget.internals.fields",
+            "dependency_id": "(internals)",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }

@@ -377,7 +377,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			return res, fmt.Errorf("catalog: %w", err)
 		}
 		res.CatalogPath = catPath
-		res.CatalogCount = len(claims)
+		res.CatalogCount = cat.ExportedCount()
 		if err := layout.EnsureBuildGitignoreForConformance(cfg, true); err != nil {
 			res.CatalogError = err.Error()
 			res.ConformanceFailurePhase = "catalog"
@@ -433,7 +433,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			return res, fmt.Errorf("catalog: %w", err)
 		}
 		res.CatalogPath = catPath
-		res.CatalogCount = len(claims)
+		res.CatalogCount = cat.ExportedCount()
 		if !wasConformanceEnabled {
 			if err := layout.EnsureBuildGitignore(cfg); err != nil {
 				res.CatalogError = err.Error()

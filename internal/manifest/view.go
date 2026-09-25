@@ -23,7 +23,10 @@ import (
 //     module does not own.
 //   - ModuleBudgetBytes covers everything else in the view: this module's
 //     manifest, its claim summaries, the draft hints and the JSON framing.
-//     Show refuses an overflow with errIsolationOversize, naming the module.
+//     check enforces it per module (a module-manifest finding), and Show
+//     refuses an overflow with errIsolationOversize, naming the module. It
+//     counts bytes, not characters: summary caps count characters, so
+//     multibyte summaries can overflow it with every summary under its cap.
 //
 // The two add up to MaxIsolationBytes, so a view inside both budgets is
 // inside the whole cap.
@@ -195,14 +198,25 @@ func LoadModule(cfg *config.Config, module string) (raw []byte, ok bool, extras 
 	return raw, ok, extras
 }
 
-// loadConstitution reads the configured constitution.yaml, or nil when it is
-// absent or unreadable (the constitution gate reports those; the views just
+// loadConstitution reads the configured constitution.yaml (the index copy
+// when cfg.ConstitutionIndex is set), or nil when it is absent or unreadable (the constitution gate reports those; the views just
 // carry no text).
 func loadConstitution(cfg *config.Config) (string, *constitution.File) {
 	if cfg == nil {
 		return "", nil
 	}
 	path := cfg.ConstitutionPath()
+	if idx := cfg.ConstitutionIndex; idx != nil {
+		// check --staged: the roof the commit carries, not the working tree.
+		if !idx.Tracked {
+			return path, nil
+		}
+		f, err := constitution.Parse(idx.Raw, path)
+		if err != nil {
+			return path, nil
+		}
+		return path, f
+	}
 	f, err := constitution.LoadOptional(path)
 	if err != nil {
 		return path, nil
@@ -311,33 +325,14 @@ func Show(claims []model.Claim, cfg *config.Config, module string, opts ShowOpti
 	}
 
 	if opts.Isolation {
-		iso := IsolationView{
-			Shared:   BuildSharedContext(claims, cfg),
-			Manifest: m,
-			Claims:   claimSummaries(moduleClaims),
-			DraftHints: DraftHints{
-				SuggestedProvides: suggestedProvides(moduleClaims, module),
-				Note:              "Draft summary/provides/depends_on from these claim summaries plus short neighbor/product use. Do not paste claim bodies into the manifest.",
-			},
-		}
-		if iso.Manifest.Provides == nil {
-			iso.Manifest.Provides = []string{}
-		}
-		if iso.Manifest.DependsOn == nil {
-			iso.Manifest.DependsOn = []string{}
-		}
-		budget, err := measureIsolation(iso)
+		iso := newIsolationView(BuildSharedContext(claims, cfg), m, moduleClaims, module)
+		budget, over, err := measureModuleBudget(iso, module)
 		if err != nil {
 			return out, err
 		}
 		out.IsolationBudget = &budget
-		if budget.ModuleBytes > ModuleBudgetBytes {
-			return out, errIsolationOversize{
-				module:        module,
-				budget:        budget,
-				manifestBytes: jsonLen(iso.Manifest),
-				claims:        len(iso.Claims),
-			}
+		if over != nil {
+			return out, *over
 		}
 		out.Isolation = &iso
 	}
@@ -345,6 +340,76 @@ func Show(claims []model.Claim, cfg *config.Config, module string, opts ShowOpti
 		out.Integration = integrationView(claims, cfg, module, m)
 	}
 	return out, nil
+}
+
+// newIsolationView assembles one module's isolation view from its manifest
+// and its claims (sorted by id). Show and check's module-budget finding both
+// build the view here, so they measure the same bytes.
+func newIsolationView(shared SharedContext, m Manifest, moduleClaims []model.Claim, module string) IsolationView {
+	iso := IsolationView{
+		Shared:   shared,
+		Manifest: m,
+		Claims:   claimSummaries(moduleClaims),
+		DraftHints: DraftHints{
+			SuggestedProvides: suggestedProvides(moduleClaims, module),
+			Note:              "Draft summary/provides/depends_on from these claim summaries plus short neighbor/product use. Do not paste claim bodies into the manifest.",
+		},
+	}
+	if iso.Manifest.Provides == nil {
+		iso.Manifest.Provides = []string{}
+	}
+	if iso.Manifest.DependsOn == nil {
+		iso.Manifest.DependsOn = []string{}
+	}
+	return iso
+}
+
+// measureModuleBudget measures iso and returns the refusal when its
+// module-owned part is over ModuleBudgetBytes. The module part does not
+// depend on the shared text (it is the whole minus the shared object), so a
+// caller that only needs the verdict may pass an empty SharedContext.
+func measureModuleBudget(iso IsolationView, module string) (IsolationBudget, *errIsolationOversize, error) {
+	budget, err := measureIsolation(iso)
+	if err != nil {
+		return IsolationBudget{}, nil, err
+	}
+	if budget.ModuleBytes <= ModuleBudgetBytes {
+		return budget, nil, nil
+	}
+	return budget, &errIsolationOversize{
+		module:        module,
+		budget:        budget,
+		manifestBytes: jsonLen(iso.Manifest),
+		claims:        len(iso.Claims),
+	}, nil
+}
+
+// moduleBudgetFindings is the module half of the isolation cap, judged by
+// check (module-manifest) rather than discovered only when someone runs
+// manifest show --isolation. One finding per module over budget; work is one
+// grouping pass over claims plus one marshal per module.
+func moduleBudgetFindings(claims []model.Claim, modules []string, parsed map[string]Manifest) []Finding {
+	byModule := make(map[string][]model.Claim, len(modules))
+	for _, c := range claims {
+		if c.Module != "" {
+			byModule[c.Module] = append(byModule[c.Module], c)
+		}
+	}
+	empty := SharedContext{ProjectClaims: []projectclaims.Entry{}}
+	var findings []Finding
+	for _, module := range modules {
+		moduleClaims := byModule[module]
+		sort.Slice(moduleClaims, func(i, j int) bool { return moduleClaims[i].ID < moduleClaims[j].ID })
+		_, over, err := measureModuleBudget(newIsolationView(empty, parsed[module], moduleClaims, module), module)
+		if err != nil {
+			findings = append(findings, Finding{Module: module, Message: fmt.Sprintf("module %q isolation context could not be measured: %v", module, err)})
+			continue
+		}
+		if over != nil {
+			findings = append(findings, Finding{Module: module, Message: over.Error()})
+		}
+	}
+	return findings
 }
 
 // measureIsolation splits the view's compact JSON into the shared context and
@@ -384,7 +449,9 @@ type errIsolationOversize struct {
 
 func (e errIsolationOversize) Error() string {
 	return fmt.Sprintf("module %q isolation context is %d bytes, over its %d-byte module budget "+
-		"(%d claim summaries; the manifest itself is %d bytes)",
+		"(%d claim summaries; the manifest itself is %d bytes). The budget counts UTF-8 bytes while "+
+		"max_claim_summary_chars counts characters, so multibyte summaries (CJK is 3 bytes a character) "+
+		"can overflow it with every summary inside its cap; trim this module's claim summaries or manifest, or split the module",
 		e.module, e.budget.ModuleBytes, e.budget.ModuleBudget, e.claims, e.manifestBytes)
 }
 
@@ -412,7 +479,12 @@ func IsolationOversizeDetails(err error) map[string]any {
 	}
 }
 
-// List is the locked-module catalog from manifest.yaml blurbs.
+// List is the locked-module catalog from manifest.yaml blurbs. Each row's
+// Findings is the count manifest show reports for that module: check's
+// findings filtered to the module plus the project-wide ones no module owns.
+// It comes from the same Check pass, so list can never read 0 where show and
+// check refuse (the cross-module export rule is only judged there).
+// The manifest tree is walked once for the whole list.
 func List(claims []model.Claim, cfg *config.Config) []CatalogEntry {
 	if cfg == nil {
 		return nil
@@ -421,15 +493,25 @@ func List(claims []model.Claim, cfg *config.Config) []CatalogEntry {
 	for _, c := range claims {
 		byMod[c.Module] = append(byMod[c.Module], c)
 	}
-	byID := map[string]model.Claim{}
-	for _, c := range claims {
-		byID[c.ID] = c
+	tree, extras, walkErr := loadTree(cfg)
+	var findings []Finding
+	if walkErr != nil {
+		findings = []Finding{{Module: "", Message: walkErr.Error()}}
+	} else {
+		findings = checkTree(claims, cfg, tree, extras)
+	}
+	perModule := map[string]int{}
+	projectWide := 0
+	for _, f := range findings {
+		if f.Module == "" {
+			projectWide++
+		} else {
+			perModule[f.Module]++
+		}
 	}
 	out := make([]CatalogEntry, 0, len(cfg.Modules))
 	for _, module := range cfg.Modules {
-		rel := RequiredRelPath(module)
-		raw, ok, _ := LoadModule(cfg, module)
-		entry := CatalogEntry{Module: module}
+		entry := CatalogEntry{Module: module, Findings: perModule[module] + projectWide}
 		modClaims := byMod[module]
 		entry.ClaimCount = len(modClaims)
 		for _, c := range modClaims {
@@ -438,16 +520,12 @@ func List(claims []model.Claim, cfg *config.Config) []CatalogEntry {
 			}
 		}
 		entry.Locked = entry.ClaimCount > 0 && entry.LockedClaims == entry.ClaimCount
-		if !ok {
-			entry.Findings = 1
-			out = append(out, entry)
-			continue
+		if raw, ok := tree[RequiredRelPath(module)]; ok {
+			m, _ := decodeManifest(module, RequiredRelPath(module), raw)
+			entry.Summary = strings.TrimSpace(m.Summary)
+			entry.Provides = len(m.Provides)
+			entry.DependsOn = len(m.DependsOn)
 		}
-		m, findings := ParseBytes(module, rel, raw, byID)
-		entry.Summary = strings.TrimSpace(m.Summary)
-		entry.Provides = len(m.Provides)
-		entry.DependsOn = len(m.DependsOn)
-		entry.Findings = len(findings)
 		out = append(out, entry)
 	}
 	return out
