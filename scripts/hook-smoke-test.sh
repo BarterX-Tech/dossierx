@@ -212,6 +212,7 @@ new_project() {
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -244,6 +245,7 @@ add_project() {
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -696,6 +698,7 @@ cat >"$SPLIT/docs/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: ../claims
@@ -829,6 +832,7 @@ cat >"$SKIPPED/repo/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: ../outside-claims
@@ -1084,6 +1088,7 @@ cat >"$PROJCLAIMS/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
