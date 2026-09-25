@@ -39,6 +39,8 @@
 package main
 
 import (
+	"regexp"
+
 	"github.com/spf13/cobra"
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
@@ -185,4 +187,51 @@ func retiredTopLevelCmds() []*cobra.Command {
 			`migrate: removed in v0.4.0; there is no automatic adoption and no migration command — nothing can attest to content no ledger ever recorded`,
 			preLedgerCrossingHint),
 	}
+}
+
+// retiredFieldPattern matches the strict decoder's refusal of an unknown key,
+// "field <name> not found in type <pkg>.<Type>". A retired schema field is
+// refused exactly this way, so the refusal is where the binary can name the
+// fold that removes it.
+var retiredFieldPattern = regexp.MustCompile(`field (\w+) not found in type (model\.Claim|config\.Config)`)
+
+// upgradingSkillStep is the command half of every retired-field hint: the
+// folds live in the dossierx-upgrading skill, and a project still carrying a
+// retired field may also carry skills exported by the release that knew it.
+const upgradingSkillStep = "run: dossierx skills export, then load the dossierx-upgrading skill and follow its "
+
+// retiredFields maps a retired key, by the type that used to carry it, to the
+// hint naming its fold. The error codes stay invalid_claim / invalid_config:
+// the file is still wrong for this binary; only the recovery is named.
+var retiredFields = map[string]map[string]string{
+	"model.Claim": {
+		"build_role":  "`build_role` is a retired claim field; " + upgradingSkillStep + "\"build_role is gone\" fold",
+		"governed_by": "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
+		"mirrors":     "`mirrors` is a retired claim field; " + upgradingSkillStep + "fold for it",
+	},
+	"config.Config": {
+		"doctrine_facet": "`doctrine_facet` is a retired config field (the doctrine hub is gone); " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
+	},
+}
+
+// retiredFieldHint returns the upgrade hint for a load error caused by a
+// retired claim or config field, or "" for any other error.
+func retiredFieldHint(err error) string {
+	if err == nil {
+		return ""
+	}
+	for _, m := range retiredFieldPattern.FindAllStringSubmatch(err.Error(), -1) {
+		if hint := retiredFields[m[2]][m[1]]; hint != "" {
+			return hint
+		}
+	}
+	return ""
+}
+
+// withRetiredFieldHint attaches retiredFieldHint(cause) to e when there is one.
+func withRetiredFieldHint(e *cliout.CodedError, cause error) *cliout.CodedError {
+	if hint := retiredFieldHint(cause); hint != "" {
+		return e.WithHint(hint)
+	}
+	return e
 }

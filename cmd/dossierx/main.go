@@ -446,7 +446,7 @@ func loadConfig() (*config.Config, error) {
 		if errors.Is(err, config.ErrNotFound) {
 			code = cliout.CodeConfigNotFound
 		}
-		return nil, cliout.Errorf(code, "load config: %w", err)
+		return nil, withRetiredFieldHint(cliout.Errorf(code, "load config: %w", err), err)
 	}
 	// Every verb refuses a legacy root layout BEFORE reading anything: the
 	// stores, the artifacts, the catalog and the viewer all moved under the
@@ -533,7 +533,7 @@ func lintStopError(res check.Result) error {
 func loadClaims(cfg *config.Config) ([]model.Claim, error) {
 	claims, err := loader.LoadAll(cfg)
 	if err != nil {
-		return nil, cliout.Errorf(cliout.CodeInvalidClaim, "load claims: %w", err)
+		return nil, withRetiredFieldHint(cliout.Errorf(cliout.CodeInvalidClaim, "load claims: %w", err), err)
 	}
 	return claims, nil
 }
@@ -1642,7 +1642,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		// A real git failure is not a verdict either way, so it must not be
 		// reported as a clean run. CodeInternal rather than a check-step code:
 		// nothing about the project was judged.
-		return cmdResult{StoppedAt: "load"}, cliout.Errorf(cliout.CodeInternal, "%w", err)
+		return cmdResult{StoppedAt: "load"}, withRetiredFieldHint(cliout.Errorf(cliout.CodeInternal, "%w", err), err)
 	}
 
 	res := check.StatusStaged(sp, cfg)
@@ -2515,7 +2515,7 @@ func newReauditCmd() *cobra.Command {
 
 			claims, err = loadClaims(cfg)
 			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeInvalidClaim, "reaudit: %w", err)
+				return cmdResult{}, withRetiredFieldHint(cliout.Errorf(cliout.CodeInvalidClaim, "reaudit: %w", err), err)
 			}
 			claim, ok = loader.FindByID(claims, id)
 			if !ok {
