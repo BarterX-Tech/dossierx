@@ -1,0 +1,10 @@
+id: local.contract.main
+facet: contract
+module: local
+status: draft
+layout: card
+summary: The one module claim; the project claims index above it is over the shared budget.
+rests_on:
+  - project.rule-01
+body: |
+  The one module claim in a project whose project claims index is over budget.

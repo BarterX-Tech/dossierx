@@ -227,7 +227,7 @@ func TestShowReportsCheckVerdict(t *testing.T) {
 
 	// Missing: the verdict is check's finding, and the isolation view with
 	// its draft hints is still assembled — that is the adoption path.
-	view, err := Show(claims, cfg, "widget", true, false, false)
+	view, err := Show(claims, cfg, "widget", ShowOptions{Isolation: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestShowReportsCheckVerdict(t *testing.T) {
 
 	// The cross-module export rule reaches manifest show too.
 	write(t, dir, "widget/manifest.yaml", "summary: widget.\nprovides: []\ndepends_on:\n  - lock.contract.hidden\n")
-	view, err = Show(claims, cfg, "widget", false, false, false)
+	view, err = Show(claims, cfg, "widget", ShowOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestShowReportsCheckVerdict(t *testing.T) {
 	// Another module's defect is not this module's verdict.
 	write(t, dir, "widget/manifest.yaml", "summary: widget.\nprovides: []\ndepends_on: []\n")
 	write(t, dir, "lock/manifest.yaml", "summary: \"\"\nprovides: []\ndepends_on: []\n")
-	view, err = Show(claims, cfg, "widget", false, false, false)
+	view, err = Show(claims, cfg, "widget", ShowOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
