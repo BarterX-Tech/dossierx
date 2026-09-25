@@ -12,18 +12,50 @@ import (
 	"github.com/chromedp/chromedp/kb"
 )
 
+// softMountFitModules is the soft-mount corpus's shape: 80 claims, the
+// SoftMount threshold, over three modules. It cannot be one module: check
+// refuses a module whose isolation view is over its 6,144-byte budget (about
+// 38 claims with this summary). The first module, widget, holds 30 — 15 per
+// facet — so its header metric (catalog, 30) and its mounted Contract surface
+// (15 live cards) disagree, which is what tells a catalog-backed metric from
+// one counting cards.
+var softMountFitModules = []struct {
+	name   string
+	claims int
+}{{"widget", 30}, {"gadget", 30}, {"gizmo", 20}}
+
+const softMountFitConfigYAML = `schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - widget
+  - gadget
+  - gizmo
+claims_dir: claims
+`
+
 func softMountFitProject(t *testing.T) *project {
 	t.Helper()
-	p := newProjectRaw(t, twoFacetConfigYAML)
-	for i := 0; i < 80; i++ {
-		facet := "contract"
-		if i >= 40 {
-			facet = "internals"
+	p := newProjectRaw(t, softMountFitConfigYAML)
+	i := 0
+	for _, m := range softMountFitModules {
+		for n := 0; n < m.claims; n, i = n+1, i+1 {
+			facet := "contract"
+			if n >= m.claims/2 {
+				facet = "internals"
+			}
+			writeSoftMountFitClaim(p, m.name, facet, i)
 		}
-		id := fmt.Sprintf("widget.%s.c%02d", facet, i)
-		p.writeClaim(fmt.Sprintf("%s.yaml", id), fmt.Sprintf(`id: %s
+	}
+	return p
+}
+
+func writeSoftMountFitClaim(p *project, module, facet string, i int) {
+	id := fmt.Sprintf("%s.%s.c%02d", module, facet, i)
+	p.writeClaim(fmt.Sprintf("%s.yaml", id), fmt.Sprintf(`id: %s
 facet: %s
-module: widget
+module: %s
 status: draft
 summary: Fixture claim used by the engine test corpus.
 body: |
@@ -31,9 +63,7 @@ body: |
 rests_on:
   none: true
   reason: viewer-test fixture, not backed by any doctrine claim
-`, id, facet, i))
-	}
-	return p
+`, id, facet, module, i))
 }
 
 const group02NavigationConfigYAML = `schema_version: 1
@@ -104,30 +134,30 @@ func TestSoftMountLockMetricUsesCatalogAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := string(raw)
-	if !strings.Contains(html, `data-claim-count="80"`) || !strings.Contains(html, `class="dossierx-surface-template"`) {
+	if !strings.Contains(html, `data-claim-count="30"`) || !strings.Contains(html, `class="dossierx-surface-template"`) {
 		t.Fatal("soft-mount render must stamp catalog counts and defer cards into templates")
 	}
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.Navigate(url))
 	pollTrue(t, ctx, `!!(document.querySelector('.module-section#widget') && document.querySelector('.system-record-head__metric'))`)
-	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '80' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '3'`) {
+	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '30' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '3'`) {
 		t.Fatal("soft-mounted module must stamp catalog lock counts on the section")
 	}
 	// Re-pinned: 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)" replaces the
 	// removed .system-record-head__summary ("N claims across N record
 	// sections") — a mono "MODULE NN / NN" eyebrow, not a count sentence.
-	// This project has exactly one module, so the eyebrow reads
-	// "MODULE 01 / 01".
-	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 80') && document.querySelector('.system-record-head__eyebrow').textContent.trim() === 'MODULE 01 / 01'`) {
+	// The project has three modules and widget is the first, so the eyebrow
+	// reads "MODULE 01 / 03".
+	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 30') && document.querySelector('.system-record-head__eyebrow').textContent.trim() === 'MODULE 01 / 03'`) {
 		t.Fatal("header metric must read catalog attrs, not live cards")
 	}
 	unmounted := evalBool(t, ctx, `document.querySelectorAll('[data-dossierx-surface-host] .claim').length === 0`)
 	pollTrue(t, ctx, `document.querySelectorAll('[data-dossierx-surface-host] .claim').length > 0`)
-	if unmounted && !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 80')`) {
+	if unmounted && !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 30')`) {
 		t.Fatal("header metric must stay catalog-backed after the active surface mounts")
 	}
-	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 80')`) {
-		t.Fatal("header metric must stay 0 of 80 after mount")
+	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 30')`) {
+		t.Fatal("header metric must stay 0 of 30 after mount")
 	}
 }
 
@@ -585,7 +615,7 @@ func TestPhone390SoftMountSmoke(t *testing.T) {
 	if !evalBool(t, ctx, `getComputedStyle(document.getElementById('sidebar')).transform !== 'none'`) {
 		t.Fatal("390px sidebar must sit off-canvas")
 	}
-	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 80')`) {
+	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 30')`) {
 		t.Fatal("390px soft-mount header metric must be non-zero")
 	}
 

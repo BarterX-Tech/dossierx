@@ -43,13 +43,16 @@ import (
 // threeFacetFacets is the fixture's facet list, in project.config.yaml order,
 // with the claim count each facet actually holds. The counts are deliberately
 // NOT all equal: 2/1/1 is what makes "the tab shows its own facet's count"
-// distinguishable from "the tab shows the module's 4".
+// distinguishable from "the tab shows the module's 4". Count -1 marks the
+// Manifest tab, which holds the module's manifest.yaml and never a claim, so
+// it carries no count at all: a "0" there read as an empty tab over one that
+// has content.
 var threeFacetFacets = []struct {
 	GroupID string
 	Label   string
 	Count   int
 }{
-	{"widget-manifest", "Manifest", 0},
+	{"widget-manifest", "Manifest", -1},
 	{"widget-contract", "Contract", 3},
 	{"widget-internals", "Internals", 1},
 }
@@ -272,11 +275,18 @@ func assertThreeFacetStrip(t *testing.T, r stripReading, scheme, when string, wa
 		}
 
 		// ---- the count (02 § 4.9, nodes 6F-0 / 6I-0) ----
-		if !tab.HasCount {
+		switch {
+		case want.Count < 0:
+			if tab.HasCount {
+				t.Errorf("%s, %s: tab %q carries a count %q. It holds the module's manifest, "+
+					"not claims, so a claim count there misstates what is behind it.",
+					scheme, when, tab.Label, tab.Count)
+			}
+		case !tab.HasCount:
 			t.Errorf("%s, %s: tab %q carries no .sec-tab__count. 02 § 4.9 gives every facet tab "+
 				"a count beside its label; without one a reader cannot see how much is behind "+
 				"the tab they are not looking at.", scheme, when, tab.Label)
-		} else {
+		default:
 			if tab.Count != fmt.Sprint(want.Count) {
 				t.Errorf("%s, %s: tab %q shows count %q, want %q — this facet's OWN claims. "+
 					"The fixture's module holds 4 claims across 2/1/1; a tab that reports 4 "+

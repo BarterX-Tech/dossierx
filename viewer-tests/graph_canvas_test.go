@@ -655,8 +655,11 @@ func TestGraphEmptyOverlayIsStatedAndDoesNotGhostTheGraph(t *testing.T) {
 // Finding 1 — labels are laid out, not merely drawn
 // ---------------------------------------------------------------------
 
-// newLabelProject is deliberately dense and deliberately wordy: eighty claims
-// in one module, chained, with derived titles seven words long. At the fitted
+// newLabelProject is deliberately dense and deliberately wordy: eighty claims,
+// with derived titles seven words long. They are spread over four modules of
+// twenty because check refuses a module whose isolation view is over its
+// 6,144-byte budget (about 22 claims with these ids and titles); the default
+// claims granularity still draws all eighty on one canvas. At the fitted
 // zoom their label boxes come nowhere near all fitting, which is the state that
 // used to render as glyph soup — about a third of the labels overprinting each
 // other and running through the node discs. Keep this claim set out of
@@ -664,11 +667,24 @@ func TestGraphEmptyOverlayIsStatedAndDoesNotGhostTheGraph(t *testing.T) {
 // edges now correctly opt the generated viewer into the independent readiness
 // UI (and its deliberately complete diagnostic payload), which would make this
 // test measure that workload too. Isolated claims still draw labels.
+const labelGraphConfig = `schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - widget
+  - gadget
+  - gizmo
+  - doohickey
+claims_dir: claims
+`
+
 func newLabelProject(t *testing.T) *project {
 	t.Helper()
-	p := newProjectRaw(t, graphConfig)
+	p := newProjectRaw(t, labelGraphConfig)
+	modules := []string{"widget", "gadget", "gizmo", "doohickey"}
 	for i := 0; i < 80; i++ {
-		id := fmt.Sprintf("widget.contract.the-claim-that-carries-a-long-title-%02d", i)
+		id := fmt.Sprintf("%s.contract.the-claim-that-carries-a-long-title-%02d", modules[i%len(modules)], i)
 		p.writeClaim(fmt.Sprintf("c%02d.yaml", i), graphClaim(id, "contract", ""))
 	}
 	return p

@@ -802,6 +802,12 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 // writes no meta span at all — the same graceful degradation writeClaimRef's
 // own raw-id fallback uses.
 func writeRelationshipMeta(b *strings.Builder, targetID string) {
+	if model.IsProjectClaimID(targetID) {
+		b.WriteString(`<span class="claim-relationship-meta">`)
+		b.WriteString(html.EscapeString(DisplayCase(model.ScopeProject)))
+		b.WriteString(`</span>`)
+		return
+	}
 	module, facet, _, ok := splitClaimID(targetID)
 	if !ok {
 		return
@@ -1101,7 +1107,14 @@ func splitClaimID(id string) (module, facet, slug string, ok bool) {
 // func, so all seven layout partials' <div class="k"> heading share this one
 // implementation instead of each re-deriving a label from {{.ID}} in template
 // syntax.
+//
+// A project claim's id is two segments, project.<slug> (model.IsProjectClaimID),
+// and labels the same way from its slug: the Project claims tab is the page
+// context "project" would repeat.
 func ClaimLabel(id string) string {
+	if model.IsProjectClaimID(id) {
+		return DisplayCase(strings.TrimPrefix(id, model.ScopeProject+"."))
+	}
 	_, _, slug, ok := splitClaimID(id)
 	if !ok {
 		return id
@@ -1167,6 +1180,23 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, t
 	b.WriteString(`" title="`)
 	b.WriteString(esc)
 	b.WriteString(`">`)
+
+	// A project claim (project.<slug>) is two segments by design, not an
+	// unshaped id: it reads as "Project › Scope" wherever a prefix is shown,
+	// and as its bare label in a relationship row, whose meta column says
+	// "Project" (writeRelationshipMeta).
+	if model.IsProjectClaimID(targetID) {
+		if showPrefix {
+			b.WriteString(`<span class="claim-ref-prefix">`)
+			b.WriteString(html.EscapeString(DisplayCase(model.ScopeProject) + claimRefLabelSep))
+			b.WriteString(`</span>`)
+		}
+		b.WriteString(`<span class="claim-ref-label">`)
+		b.WriteString(html.EscapeString(ClaimLabel(targetID)))
+		b.WriteString(`</span></a>`)
+		b.WriteString(targetPillHTML(targetID, targetStatuses))
+		return
+	}
 
 	module, facet, slug, ok := splitClaimID(targetID)
 	if !ok {

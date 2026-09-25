@@ -58,7 +58,7 @@ func TestRender_ProjectClaimIsNotAnUngroupedModule(t *testing.T) {
 	if !strings.Contains(out, `<p class="claims-empty">No constitution.yaml yet.</p>`) {
 		t.Errorf("a project with no constitution.yaml must say so under The file")
 	}
-	if !strings.Contains(out, `<h4>project.scope</h4>`) {
+	if !strings.Contains(out, ` id="project.scope"`) {
 		t.Errorf("a project with no constitution.yaml must still list its project claims")
 	}
 	writeFile(t, cfg.ConstitutionPath(), "status: draft\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture keeps *every* module under <b>one</b> roof.\n")
@@ -80,13 +80,13 @@ func TestRender_ProjectClaimIsNotAnUngroupedModule(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<span>Modules</span><span class="system-nav-group__count">1</span>`,
-		`<article class="project-claim"><h4>project.scope</h4><p>Every widget is kept under &lt;b&gt;one&lt;/b&gt; roof.`,
+		`Every widget is kept under &lt;b&gt;one&lt;/b&gt; roof.`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered viewer lacks %q", want)
 		}
 	}
-	if n := strings.Count(out, `<h4>project.scope</h4>`); n != 1 {
+	if n := strings.Count(out, ` id="project.scope"`); n != 1 {
 		t.Errorf("the project claim is rendered %d times, want once (under Project claims)", n)
 	}
 }

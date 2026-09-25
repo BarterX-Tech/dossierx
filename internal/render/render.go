@@ -263,6 +263,14 @@ type Group struct {
 	firstInModule bool
 }
 
+// CountsClaims reports whether this tab holds claims, and so whether its tab
+// carries a claim count. The Manifest tab renders the module's manifest.yaml,
+// never a claim, so a count there would always read "0" over a tab that has
+// content.
+func (g Group) CountsClaims() bool {
+	return g.Facet != visibility.ViewerTabManifest
+}
+
 // ModuleGroup is one module's sidebar nav entry together with the one or
 // more facet-level Groups shown inside its content section — the two-level
 // Module -> []Facet shape fix 5 describes (docs/'s real nav has one sec-tab
@@ -815,23 +823,39 @@ func buildShellStaticData(in shellInputs) shellData {
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.
 		Tracks:       nil,
-		Constitution: buildConstitutionView(in.cat, cfg),
+		Constitution: buildConstitutionView(in.cat, cfg, in.renderedByID),
 	}
 }
 
-func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config) ConstitutionView {
+func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML) ConstitutionView {
 	view := ConstitutionView{WordCap: constitution.WordCap}
 	// The Project claims tab lists the store whether or not the roof file
 	// exists yet: the two are independent inputs, and a project that authored
 	// project claims before writing its constitution (serve renders it; the
 	// gate only stops check and lock) must not read "No project claims."
+	//
+	// A project claim is a claim like any other, so it renders through the
+	// same layout partial as a module claim (renderedByID): its element id is
+	// what a module claim's RESTS ON link (#project.<slug>) and the graph
+	// navigate to, and the card carries the lock pill, the relationships
+	// footer and the comment chip. buildGroups skips project claims, so this
+	// is the one id-bearing copy on the page. The one addition is the
+	// summary: the project-claims index a module reads is id + summary, so
+	// the tab shows the same line under each card's heading.
 	if cat != nil {
-		for _, c := range cat.Claims {
+		for _, c := range orderClaims(cat.Claims) {
 			if !c.IsProjectClaim() {
 				continue
 			}
-			view.ProjectClaims = append(view.ProjectClaims, template.HTML(
-				`<article class="project-claim"><h4>`+html.EscapeString(c.ID)+`</h4><p>`+html.EscapeString(c.Body)+`</p></article>`))
+			h, ok := renderedByID[c.ID]
+			if !ok {
+				continue
+			}
+			if s := strings.TrimSpace(c.Summary); s != "" {
+				h = template.HTML(insertAfterClaimHead(string(h),
+					`<p class="project-claim-summary">`+html.EscapeString(s)+`</p>`))
+			}
+			view.ProjectClaims = append(view.ProjectClaims, h)
 		}
 	}
 	if cfg == nil {
@@ -1163,6 +1187,20 @@ func insertEngineBlockBeforeClose(host, block string) string {
 		}
 	}
 	return host + block
+}
+
+// insertAfterClaimHead places block directly after a rendered claim's .k
+// heading line, where every default layout partial's heading is one <div>
+// holding only spans. A project override without that heading gets the block
+// ahead of the card instead, so the text is never dropped.
+func insertAfterClaimHead(host, block string) string {
+	if i := strings.Index(host, `<div class="k"`); i >= 0 {
+		if j := strings.Index(host[i:], "</div>"); j >= 0 {
+			at := i + j + len("</div>")
+			return host[:at] + block + host[at:]
+		}
+	}
+	return block + host
 }
 
 // displayCase renders a raw module/facet value (e.g. "token-ledger" or

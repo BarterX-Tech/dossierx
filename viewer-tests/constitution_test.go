@@ -20,7 +20,12 @@ import (
 //   - the section carries the same kicker, two tabs "The file" and "Project
 //     claims", with "The file" open by default;
 //   - the word meter reads "N of 800 words" with N the engine's own count;
-//   - "Project claims" lists the fixture's project claim by id;
+//   - "Project claims" renders the fixture's project claim as a claim card
+//     like any module claim: its element id (so a link can land on it), its
+//     summary, its lock-state pill, its RESTS ON row and its comment chip;
+//   - a module claim's RESTS ON link to that project claim navigates: it
+//     switches to the Constitution section and its Project claims tab and
+//     lands on the card, instead of falling back to the first module;
 //   - the constitution's body is plain escaped text: a `*` and a `<b>` in the
 //     file appear literally, never as markup.
 
@@ -63,7 +68,9 @@ rests_on:
 // carries markup characters, and one project claim the module claim rests
 // on. The roof is re-locked through the real command after the fixture's
 // default roof is replaced, so the lock store's record matches the file the
-// viewer renders.
+// viewer renders. The project claim is locked and then commented on through
+// the real commands too, so its lock state and its open thread are what the
+// engine recorded, not what this file wrote.
 func roofProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, defaultConfigYAML)
@@ -79,8 +86,15 @@ func roofProject(t *testing.T) *project {
 	if err := os.WriteFile(filepath.Join(store, "scope.yaml"), []byte(projectClaimScopeYAML), 0o644); err != nil {
 		t.Fatalf("write the project claim: %v", err)
 	}
+	p.run("claim", "lock", projectClaimID, "--reason", "the roof's scope is approved")
+	p.run("comment", "add", projectClaimID, "--as", "human", "--body", projectClaimComment)
 	return p
 }
+
+const (
+	projectClaimID      = "project.scope"
+	projectClaimComment = "Does this include gadgets?"
+)
 
 // engineWordCount asks the binary for the roof's word count, so the meter is
 // compared against the real meter and not only against this file's arithmetic.
@@ -187,15 +201,79 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 		 var subtabs = sec.querySelectorAll('.sub-nav .subtab');
 		 var file = document.getElementById('constitution-file');
 		 var claims = document.getElementById('constitution-project-claims');
-		 var cards = claims.querySelectorAll('article.project-claim');`,
+		 var cards = claims.querySelectorAll('.claim');
+		 var card = document.getElementById('project.scope');
+		 var pill = card && card.querySelector('.k .pill');
+		 var summary = card && card.querySelector('.project-claim-summary');
+		 var restsOn = card && card.querySelector('.claim-rests-on');
+		 var chip = card && card.querySelector('.comment-chip');`,
 		[][2]string{
 			{"Project claims is on", `subtabs[1].classList.contains('on') && !subtabs[0].classList.contains('on')`},
 			{"The file is hidden", `file.hidden === true`},
 			{"section still shown", `!sec.hidden`},
 			{"exactly the fixture's project claim", `cards.length === 1`},
-			{"listed by id", `cards[0].querySelector('h4').textContent.trim() === 'project.scope'`},
-			{"its body is escaped text too", `cards[0].querySelector('b') === null && cards[0].textContent.indexOf('<b>one</b>') >= 0`},
+			{"the card carries the claim id as its element id", `!!card && cards[0] === card`},
+			{"titled from its slug", `card.querySelector('.k-title').textContent.trim() === 'Scope'`},
+			{"its machine id is shown", `card.querySelector('.k-id').textContent.trim() === 'project.scope'`},
+			{"its summary is shown", `!!summary && summary.offsetParent !== null && summary.textContent.trim() === 'Every widget is kept under one roof.'`},
+			{"the engine recorded it locked", `card.dataset.status === 'locked'`},
+			{"its pill shows an approval on record", `!!pill && pill.offsetParent !== null && !!pill.querySelector('use[href="#dx-icon-lock"]') && pill.textContent.trim() !== '' && pill.textContent.indexOf('Draft') < 0`},
+			{"its RESTS ON row states the absence and its reason", `!!restsOn && restsOn.textContent.indexOf('the roof above it is the constitution') >= 0`},
+			{"the module claim resting on it is listed as depending on it", `!!card.querySelector('.claim-depended-by a.claim-ref[href="#widget.contract.overview"]')`},
+			{"its comment chip shows the open thread", `!!chip && chip.offsetParent !== null && chip.querySelector('.comment-chip-count').textContent.trim() === '1'`},
+			{"its body is escaped text too", `card.querySelector('.claim-body b') === null && card.querySelector('.claim-body').textContent.indexOf('<b>one</b>') >= 0`},
 			{"no placeholder", `claims.textContent.indexOf('No project claims') < 0`},
 		})
 
+	// The comment affordance is the module claims' own: the chip opens the
+	// shared rail on this claim's thread.
+	runCDP(t, ctx, chromedp.Click(`[id="project.scope"] .comment-chip`, chromedp.ByQuery))
+	pollTrue(t, ctx, `(function(){ var p = document.getElementById('commentsPanel'); return !!p && !p.hidden && p.getBoundingClientRect().width > 0 && document.getElementById('commentsRailSubtitle').textContent.trim() === 'on Scope' && Array.prototype.some.call(p.querySelectorAll('.comment-thread'), function (th) { return th.textContent.indexOf('`+projectClaimComment+`') >= 0; }); })()`)
+}
+
+// TestProjectClaimLinkNavigatesToTheRoof follows a module claim's RESTS ON
+// link to a project claim the way a reader does — open the claim's
+// relationships door, click the row — and requires the viewer to land on the
+// project claim's card under the Constitution's Project claims tab. The card
+// used to carry no element id, so the link resolved to nothing and the viewer
+// fell back to the first module: the reader clicked and stayed where they were.
+func TestProjectClaimLinkNavigatesToTheRoof(t *testing.T) {
+	p := roofProject(t)
+	url := p.renderStatic()
+
+	// The load's fragment scroll must not still be sliding the page when the
+	// row is clicked (see instantScrollScript).
+	ctx := withInstantScroll(t, browserContext(t))
+	runCDP(t, ctx,
+		chromedp.Navigate(url+"#widget-contract"),
+		chromedp.WaitVisible(`[id="widget.contract.overview"]`, chromedp.ByQuery),
+		chromedp.Click(`[id="widget.contract.overview"] .claim-links > summary`, chromedp.ByQuery),
+		chromedp.WaitVisible(`[id="widget.contract.overview"] .claim-rests-on a.claim-ref`, chromedp.ByQuery),
+	)
+	requireAll(t, ctx, "the RESTS ON row before the click",
+		`var a = document.querySelector('[id="widget.contract.overview"] .claim-rests-on a.claim-ref');`,
+		[][2]string{
+			{"it links to the project claim", `a.getAttribute('href') === '#project.scope'`},
+			{"it reads as the project claim's label", `a.textContent.trim() === 'Scope'`},
+			{"its meta column names the project", `a.closest('li').querySelector('.claim-relationship-meta').textContent.trim() === 'Project'`},
+			{"the Constitution section is hidden", `document.getElementById('constitution').hidden === true`},
+		})
+
+	runCDP(t, ctx, chromedp.Click(`[id="widget.contract.overview"] .claim-rests-on a.claim-ref`, chromedp.ByQuery))
+	pollTrue(t, ctx, `!document.getElementById('constitution').hidden && !document.getElementById('constitution-project-claims').hidden`)
+
+	requireAll(t, ctx, "the landing after the click",
+		`var card = document.getElementById('project.scope');
+		 var r = card ? card.getBoundingClientRect() : null;
+		 var tabs = document.querySelectorAll('#constitution .sub-nav .subtab');
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)');`,
+		[][2]string{
+			{"the hash names the claim", `decodeURIComponent(location.hash) === '#project.scope'`},
+			{"the Constitution pin is the active sidebar tab", `document.querySelector('#nav .constitution-tab').classList.contains('on')`},
+			{"Project claims is the active tab", `tabs[1].classList.contains('on') && !tabs[0].classList.contains('on')`},
+			{"The file is hidden", `document.getElementById('constitution-file').hidden === true`},
+			{"the module section gave way", `modules.length === 1 && modules[0].hidden === true`},
+			{"the card is painted", `!!card && card.offsetParent !== null`},
+			{"the card is in the viewport", `!!r && r.top >= 0 && r.top < window.innerHeight`},
+		})
 }
