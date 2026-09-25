@@ -59,8 +59,11 @@ For changes touching approval or readiness, preserve these current boundaries:
 
 - Local approval, dependency readiness, and integrated proof are different.
 - Under policy v1, a readable draft prerequisite can support local approval;
-  that does not make the dependent ready. Legacy stores retain their policy
-  until explicit migration. Do not silently apply v1 rules to legacy evidence.
+  that does not make the dependent ready. v1 is the only policy: a store that
+  records the retired policy 0 loads as v1 and stamps the carry-over on its
+  next write. That is sound only because every policy-0 approval satisfied the
+  stricter rule; the carry-over must never refresh baselines, rewrite
+  approvals or clear review causes.
 - A claim can retain `status: locked` and local approval while live readiness
   reports `review_pending: true` or `dependency_ready: false`. Standing ledger
   integrity and live causes, not the saved review bit alone, determine truth.

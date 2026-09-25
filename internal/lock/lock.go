@@ -48,7 +48,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
-	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -89,16 +88,20 @@ const (
 	policySchemaVersion     = 3
 )
 
-// PolicyVersion records which approval semantics a project has explicitly
-// adopted. A missing store is a new project and starts on LocalApprovalV1.
-// A pre-v3 store stays Legacy until the migration command records adoption;
-// loading it never changes existing approvals or baselines.
+// PolicyVersion records which approval semantics a store was written under.
+// Local approval v1 is the only policy this engine runs. The legacy policy 0
+// ("every rests_on target must already be locked") was retired in v0.7.21:
+// a store that records it, or predates the field, loads as v1 and is stamped
+// v1 on its next write (see decodeStore). Every approval such a store holds
+// was granted under the stricter legacy rule, so none of them is reinterpreted.
 type PolicyVersion int
 
-const (
-	PolicyLegacy          PolicyVersion = 0
-	PolicyLocalApprovalV1 PolicyVersion = 1
-)
+const PolicyLocalApprovalV1 PolicyVersion = 1
+
+// retiredPolicyMigrationReason is stamped on a store the first time a write
+// carries it off the retired policy 0, so the adoption shows in the diff a
+// reviewer reads rather than happening silently.
+const retiredPolicyMigrationReason = "lock policy 0 retired in v0.7.21; this store now records local approval v1"
 
 // DependencyReceipt is the exact readable dependency boundary a local approval
 // reviewed. Hash is a comparison aid only; Content keeps the reviewed text
@@ -450,11 +453,17 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 	s.fileExists = true
 	s.diskVersion = onDisk.Version
 	s.Version = onDisk.Version
-	// Do not infer policy adoption from a binary upgrade. Existing stores stay
-	// on the legacy doctrine until an explicit migration writes this field.
+	// Policy 0 is retired. A store that records it (or predates the field,
+	// which omitempty wrote as absent) carries over to v1; the migration
+	// fields say so on the next write, in the file a reviewer diffs.
 	s.PolicyVersion = onDisk.PolicyVersion
 	s.PolicyMigratedAt = onDisk.PolicyMigratedAt
 	s.PolicyMigrationReason = onDisk.PolicyMigrationReason
+	if s.PolicyVersion < PolicyLocalApprovalV1 {
+		s.PolicyVersion = PolicyLocalApprovalV1
+		s.PolicyMigratedAt = time.Now().UTC().Format(time.RFC3339)
+		s.PolicyMigrationReason = retiredPolicyMigrationReason
+	}
 
 	// Legacy (pre-versioning, schema 0) store: drop its flat hashes, keep
 	// LockedAt, and present it to callers as an already-migrated
@@ -484,13 +493,6 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 		}
 	}
 	return s, nil
-}
-
-// LocalApprovalEnabled reports whether the explicit local-approval policy has
-// been adopted. It is intentionally false for existing stores missing the
-// policy field, so an engine upgrade cannot reinterpret old locks.
-func (s *Store) LocalApprovalEnabled() bool {
-	return s != nil && s.PolicyVersion >= PolicyLocalApprovalV1
 }
 
 // MigrateLegacyStore re-arms per-dependent hash baselines for a store that
@@ -962,316 +964,14 @@ func writeContentHashUint64(w hash.Hash, value uint64) {
 	w.Write(framed[:]) //nolint:errcheck // hash.Hash.Write cannot fail
 }
 
-// ErrAlreadyLocked is Lock's refusal of a claim that is already locked. It is a
-// sentinel because the CLI has to classify it into cliout.CodeAlreadyLocked and
-// the skills document a recovery for that code (unlock -> fix -> lock); matching
-// on prose would silently reclassify the refusal the first time the sentence is
-// reworded. See Lock for why re-locking has to be a refusal rather than a no-op.
-var ErrAlreadyLocked = errors.New("lock: claim is already locked")
-
 // ErrPreLedgerUnadopted is the refusal every approval-recording path makes on a
 // project whose lock store predates the lock ledger while the project still
 // holds locked artifacts (see Store.PreLedgerUnadopted and CrossPreLedger).
-// It is a sentinel for the same reason ErrAlreadyLocked is: the CLI classifies it
-// into a machine-readable error code, and the recovery — an ordered sequence of
+// It is a sentinel because the CLI classifies it into a machine-readable
+// error code, and the recovery — an ordered sequence of
 // ordinary commands — has to be reachable from the envelope rather than only
 // from the prose.
 var ErrPreLedgerUnadopted = errors.New("lock: this project's lock store predates the lock ledger and still holds locked artifacts")
-
-// ErrLedgerRecordDeleted is Lock's refusal of a claim whose ledger record was
-// DELETED — the write-path twin of the audit's RuleLockLedgerDeleted, and the
-// thing that makes that finding more than an observation.
-//
-// It is a separate sentinel from ErrAlreadyLocked because the recovery is
-// different and the wrong one is destructive. already_locked's answer is
-// "unlock, fix, lock". This condition's answer is "restore the lock store from
-// version control": the approved bytes are in git, and unlocking here would
-// accept the attacker's edit and ask a human to sign it. The CLI classifies it
-// as integrity_failed, which is the family whose documented recovery is version
-// control and never a re-lock.
-var ErrLedgerRecordDeleted = errors.New("lock: this claim's lock-ledger record was deleted")
-
-// ErrCommentDigestUnrecorded is Lock's refusal of a claim that carries comment
-// threads with no entry in the comment digest store, in a ledger-covered
-// project — the write-path twin of the audit's RuleCommentDigestUnrecorded.
-//
-// It is the same shape as ErrLedgerRecordDeleted, one file over: the audit rule
-// names the state, and this is what stops the next ordinary command from
-// erasing it. The CLI classifies it as integrity_failed for the same reason —
-// the recovery is version control, and no command in the binary clears it.
-var ErrCommentDigestUnrecorded = errors.New("lock: this claim's comment threads have no entry in the comment digest store")
-
-// Lock transitions claim from draft to locked. It is refused (with a
-// non-nil error) if running the full lint suite against claims produces
-// any error-severity finding — matching "dossierx lint"/"dossierx check"'s own
-// pass/fail semantics (see reportLintFindings in cmd/dossierx/main.go), where
-// warning-severity findings (e.g. "orphan") are reported but never fail
-// the command. A claim with only warning-level findings against it is
-// therefore still lockable. On success it records claim's current content
-// hash as the new baseline for every claim it depends on, and returns the
-// updated claim (Status=locked, ReviewPending=false).
-//
-// Beyond the lint gate, Lock has one further, candidate-scoped refusal path:
-// the comment gate (a claim carrying an unresolved comment thread cannot lock;
-// the refusal names the open thread ids). The comment gate is the real enforcement — the comments-unresolved lint is only
-// a non-blocking warning — and it reads only THIS claim's own threads, so an
-// unrelated claim's open thread never blocks locking a thread-free one.
-//
-// The lint suite runs against claims with claim's own entry replaced by
-// its about-to-be-locked (Status=locked) form, not against claim's
-// still-draft entry in claims. Lints that key off a claim's own Status —
-// rest-on-locked (a locked claim's rests_on targets must themselves be
-// locked) and roll-up (a locked banner's module-mates must themselves be
-// locked) — describe a property of the claim once it is locked; checking
-// against its pre-lock draft status would let a claim that rests_on a
-// still-draft dependency lock successfully, silently defeating the
-// lint's entire purpose.
-//
-// ap is the approval this lock executes — the human's own --reason words and
-// the account that ran the command — and it is a REQUIRED PARAMETER rather than
-// something the caller records afterwards on purpose: a lock that writes the
-// claim but forgets the ledger record is indistinguishable, from then on, from
-// a hand-flipped status, and the gate would refuse the honest lock. Putting it
-// in the signature makes forgetting it a compile error.
-func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *Store, ap Approval) (model.Claim, error) {
-	// FIRST gate, ahead of lint and the comment gate: Lock is the
-	// draft -> locked transition, and it is not a re-signing tool.
-	//
-	// Without this the ledger has a laundering path made of one ordinary
-	// command. Hand-edit a locked claim's body; "check" correctly reports
-	// lock-content-drift against the ledger record. Then run
-	//
-	//	dossierx claim lock <id> --reason "..."
-	//
-	// and RecordApproval below overwrites the record with a hash of the EDITED
-	// content. The finding disappears, no unlock ever happened, and the ledger
-	// now attests that a human approved bytes they never saw — which is the
-	// precise thing the ledger exists to make impossible. The dry run already
-	// advertised "claim_is_draft" as a precondition; the real run simply did not
-	// enforce it, so the preview and the command disagreed about the one gate
-	// that mattered.
-	//
-	// The recovery is the approval path the whole release is built on: unlock
-	// (which RELEASES the record, on the record), fix, lock. That path is
-	// unchanged and always available — Unlock has no gates by design.
-	if claim.Status == model.StatusLocked {
-		return claim, fmt.Errorf("%w: claim %q is already locked, and lock is the draft -> locked transition, not a re-approval. Re-locking would overwrite its ledger record with a hash of whatever the file says NOW, which is how a hand edit to a locked claim gets blessed. To change it: dossierx claim unlock %s --reason \"...\", make the edit, then lock it again",
-			ErrAlreadyLocked, claim.ID, claim.ID)
-	}
-
-	// THE SAME GATE, ON THE PREDICATE THE ATTACKER DOES NOT WRITE. The check
-	// above reads claim.Status — a line in the audited file — so it was
-	// disarmed by editing that line, and the whole refusal above cost one hand
-	// edit to bypass:
-	//
-	//	dossierx claim lock <id> --reason …    record written
-	//	edit the body by hand                  check reports lock-content-drift
-	//	dossierx claim lock <id> --reason …    refused, already_locked (above)
-	//	edit "status: locked" -> "status: draft"
-	//	dossierx claim lock <id> --reason …    SUCCEEDED — draft -> locked, and
-	//	                                       RecordApproval replaced the record's
-	//	                                       hash with a hash of the TAMPERED bytes
-	//
-	// After that run every gate is green, permanently, and there is no
-	// released_at/released_by anywhere in the ledger: the one command that is
-	// allowed to withdraw an approval (unlock) never ran, so nothing records
-	// that the approval this lock overwrote was ever given up.
-	//
-	// The right question is not what the file's status line says but whether a
-	// STANDING, unreleased approval still vouches for this claim. A draft claim
-	// holding one IS lock-ledger-orphan by definition (see audit.go's rule of
-	// that name) — it was locked, and something took it out of locked without
-	// going through unlock — so locking it is never the draft -> locked
-	// transition; it is a re-signing of content the ledger already speaks for.
-	// The same predicate is what `claim reaudit --confirm` and `claim show`
-	// already ask before they trust a record (cmd/dossierx's
-	// standingLedgerRecord), so all three now agree about what "still approved"
-	// means.
-	//
-	// It is deliberately UNCONDITIONAL on content: refusing only when the hash
-	// disagrees would bless the flip-back-and-relock of unedited content, which
-	// is the released-record bypass audit.go's RuleLockLedgerReleased exists for,
-	// arriving from the other direction.
-	//
-	// RELEASED records are not standing, which is what keeps this off the one
-	// recovery every other refusal in this package points at: unlock -> fix ->
-	// lock stays open, because unlock stamps the release first. And a claim with
-	// NO record (a pre-ledger project, or a ledger someone deleted) is not
-	// refused here either — that is lock-ledger-missing/absent, a finding the
-	// gate already owns, and turning it into a lock refusal would leave an
-	// honest project with no way to lock anything.
-	//
-	// It reuses ErrAlreadyLocked rather than adding a second sentinel because
-	// the LEDGER's answer to "is this locked?" is yes: the record stands. The
-	// CLI maps that sentinel to already_locked and hints at unlock, which is
-	// half of the recovery; the message carries the other half (restore), which
-	// is the one to prefer — restoring the file gives back the content that was
-	// approved, while unlocking accepts the edit and asks a human to say so.
-	if rec, ok := ledgerRecordFor(store, claim.ID); ok && !rec.Released() {
-		return claim, fmt.Errorf("%w: claim %q says status: draft, but the lock ledger still holds a STANDING approval for it from %s (%q) — nothing released it, so it left locked outside the approval path and the gate reports it as lock-ledger-orphan. Locking it here would replace that approval's hash with a hash of whatever the file says NOW, blessing bytes nobody approved. Restore the claim file from version control (status: locked, with the approved content), or — if the change is wanted — restore it and then release the approval on the record: dossierx claim unlock %s --reason \"...\", make the edit, and lock it again",
-			ErrAlreadyLocked, claim.ID, rec.At, rec.Reason, claim.ID)
-	}
-
-	// THE PRE-LEDGER PROJECT. A store that predates the lock ledger must not
-	// acquire its first ledger record from an ordinary lock while anything
-	// locked still predates it, and this refusal is what keeps that true. It is
-	// the write-path twin of the gate's RuleLockLedgerPreLedger: same predicate,
-	// same recovery.
-	//
-	// It is not tidiness. A record written into a pre-ledger store leaves a store
-	// carrying ledger records at a pre-ledger version — which is exactly the
-	// contradiction Store.LedgerDowngraded exists to detect, and it would report
-	// this project as DOWNGRADED from then on, with a "restore from version
-	// control" recovery aimed at a file nobody tampered with. The alternative
-	// (stamping the schema here) is worse: the store would become covered while
-	// every OTHER locked claim in it still had no record, converting an honest
-	// upgrade state into N lock-ledger-deleted findings. There is no third option
-	// that keeps the store's version field honest, which is why this is a refusal
-	// rather than a repair.
-	//
-	// unlock -> fix -> lock is NOT blocked by this in any project already on the
-	// ledger. Unlock itself stays gateless, as it always has been, so a project
-	// can always get a claim out of locked, which is what makes the crossing
-	// below reachable from any state.
-	//
-	// IT IS A BACKSTOP FOR OTHER CALLERS, not the CLI's own gate. cmd/dossierx
-	// calls CrossPreLedger before every approval-recording write, so by the time
-	// an ordinary `claim lock` reaches here the predicate is false — either the
-	// project crossed, or CrossPreLedger already returned this same sentinel with
-	// this same text. Keeping it is belt and braces, deliberately: see the
-	// paragraphs above for why a first record in a pre-ledger store is not a
-	// tidiness question.
-	if store.preLedgerUnadoptedOnDisk() {
-		return claim, preLedgerRefusal(countLocked(claims))
-	}
-
-	// THE DELETED RECORD. The two gates above refuse a claim whose record
-	// STANDS; this one refuses a claim whose record is GONE, which is the half
-	// they left open and the one that completes the bypass.
-	//
-	// The gate above says, in its own comment, that "a claim with NO record (a
-	// pre-ledger project, or a ledger someone deleted) is not refused here
-	// either ... turning it into a lock refusal would leave an honest project
-	// with no way to lock anything". That was true when it was written, because
-	// nothing could tell those two cases apart. engineLocked can (see audit.go):
-	// locked_at and the claim's own dependency baselines are written by every
-	// Lock and removed by nothing, not even unlock, so they survive the one edit
-	// an attacker makes to the ledger. A claim this engine never locked has
-	// neither and is untouched by this gate.
-	//
-	// Without it the release's headline invariant fails to a four-step sequence
-	// made of two hand edits and one ordinary command:
-	//
-	//	delete this claim's record from .dossierx-lock-store.json
-	//	edit "status: locked" -> "status: draft"     check reports lock-ledger-deleted
-	//	rewrite the body
-	//	dossierx claim lock <id> --reason "..."      SUCCEEDED — and RecordApproval
-	//	                                             wrote a FRESH record over the
-	//	                                             rewritten content
-	//
-	// The finding that named it every step of the way disappears at the last
-	// one, and the project is green forever after with the ledger attesting that
-	// a human approved bytes nobody read. The audit rule's own message ends "do
-	// NOT re-lock, which would record whatever the claim says NOW as approved" —
-	// this is what stops the tool from doing the thing its own finding warns
-	// against.
-	//
-	// It sits AFTER the pre-ledger refusal so a pre-ledger project gets that
-	// message instead: there, every locked claim legitimately has locked_at and
-	// no record, and the honest recovery is the crossing rather than a restore.
-	// A RELEASED record is a record, so it never reaches here — which is what
-	// keeps unlock -> fix -> lock open, the one path every other refusal in this
-	// package points at.
-	if store.LedgerRecordDeleted(claim) {
-		return claim, fmt.Errorf("%w: claim %q has no lock-ledger record, but the lock store still carries its own locked_at stamp and/or its dependency baselines — so this engine locked it, and the record was deleted rather than released. Nothing in this build deletes a record: unlock KEEPS it and stamps released_at on it, precisely so the evidence survives. Locking here would write a FRESH approval over whatever the file says now, which is the last step of that bypass and the one that makes it invisible. Restore %s from version control — the approved content is in git. Do not unlock-and-relock to clear this: that accepts the edit and asks a human to sign bytes they never saw",
-			ErrLedgerRecordDeleted, claim.ID, config.LockStoreDisplayPath)
-	}
-
-	// THE DELETED DIGEST KEY, which is the same bypass one file over and which
-	// this command was the laundering step for.
-	//
-	// RecordApproval below records the claim's comment digest in the same act as
-	// the approval (see recordCommentDigestBeside, and the comment above it for
-	// why it has to). That recording is UNCONDITIONAL, so on a claim whose digest
-	// entry was deleted it does not refresh an entry — it manufactures one, out
-	// of whatever the comments block says at that moment. Verified against the
-	// binary before this gate existed:
-	//
-	//	a human opens a thread; the claim cannot lock (unresolved_comments)
-	//	forge "status: open" -> "status: resolved" in the YAML
-	//	drop this claim's key from "digests" in .dossierx-comment-digest.json
-	//	dossierx check          exit 1, comment-digest-unrecorded — correctly
-	//	dossierx claim lock     exit 0, AND the digest store gained an entry
-	//	                        certifying the forged block
-	//	dossierx check          exit 0, ZERO findings, permanently
-	//
-	// The human's objection is gone, the claim is locked, and the record says a
-	// review it never had was clean. The audit rule's own text says "do NOT run a
-	// comment op to re-create the entry: that records whatever the claim says NOW
-	// as the truth" — locking was the path that did it without anyone having to.
-	//
-	// The predicate is the audit rule's, exactly (see RuleCommentDigestUnrecorded):
-	// a covered project, a PRESENT digest store, threads on the claim, and no
-	// entry for it. Each of the three silences is load-bearing — an uncovered
-	// project has nothing approved yet, an absent store is comment-digest-absent
-	// said once, and a threadless claim is the ordinary case that must keep
-	// working, since an entry is something a comment op creates rather than
-	// something locking requires.
-	if commentDigestUnrecorded(store, claim) {
-		return claim, fmt.Errorf("%w: claim %q carries %d comment thread(s) but has no entry in the comment digest store, and this project is covered by the lock ledger — so the entry was removed, or the threads were not written by the engine. Locking here would RECORD the current comments block as the approved review history, manufacturing the evidence whose absence is the finding: a thread forged as resolved would become the record of a review that never happened. Restore %s from version control (or git add it, if this commit is the one that updated it), and check the claim's threads against what the human actually wrote. `dossierx check` reports this as comment-digest-unrecorded",
-			ErrCommentDigestUnrecorded, claim.ID, len(claim.Comments), config.CommentDigestDisplayPath)
-	}
-
-	lintClaims := withLockedCandidate(claims, claim)
-	findings := lint.RunAll(lintClaims, cfg)
-	errCount := 0
-	for _, f := range findings {
-		if f.Severity != lint.SeverityWarning {
-			errCount++
-		}
-	}
-	if errCount > 0 {
-		return claim, fmt.Errorf("lock: refused, %d error-level lint finding(s) outstanding", errCount)
-	}
-
-	// Third refusal path (after the lint gate): a claim cannot
-	// lock while it carries an unresolved comment thread. THIS is the lock
-	// gate; the comments-unresolved lint is only a non-blocking warning (a
-	// project-wide error-lint would freeze all locking and take render/check
-	// down with it). It is candidate-scoped — it inspects only THIS claim's own
-	// threads via the pure model predicate — so an unrelated locked claim's
-	// open thread never blocks locking a different, thread-free claim.
-	//
-	// The refusal deliberately does NOT name a command to run. Resolving a
-	// thread is the human's act — it IS the approval this lock is waiting on —
-	// and "comment resolve" was removed from the CLI in v0.3.0 precisely so an
-	// agent cannot clear its own gate. Naming the viewer instead tells the
-	// caller who has to act, which is the actual blocker.
-	if open := claim.OpenThreadIDs(); len(open) > 0 {
-		return claim, fmt.Errorf("lock: refused, claim %q has %d unresolved comment thread(s) %v — the human resolves them in the viewer (\"dossierx serve\"); an agent may reply but never resolve", claim.ID, len(open), open)
-	}
-
-	claim.Status = model.StatusLocked
-	claim.ReviewPending = false
-
-	for _, dep := range BaselineDependencyIDs(claim) {
-		if depClaim, ok := findByID(claims, dep); ok {
-			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
-			store.recordReceipt(claim.ID, depClaim)
-		}
-	}
-	if store.LockedAt == nil {
-		store.LockedAt = map[string]string{}
-	}
-	store.LockedAt[claim.ID] = nowFunc().UTC().Format(time.RFC3339Nano)
-
-	// The ledger record: what this human approved, in bytes. Recorded from the
-	// already-flipped claim, which is safe in either order — LockedClaimHash
-	// does not sign Status (see lockedClaimHashExcluded).
-	RecordApproval(store, claim, ap)
-
-	return claim, nil
-}
 
 // Unlock transitions claim back to draft. This is always human-initiated
 // and always allowed (no lint gate) — a project may need to unlock a
@@ -1407,25 +1107,6 @@ func dedupeStable(ids []string) []string {
 		out = append(out, id)
 	}
 	return out
-}
-
-// withLockedCandidate returns a copy of claims with the entry matching
-// candidate.ID replaced by candidate as it will look once locked
-// (Status=locked, ReviewPending=false) — or with candidate appended if its
-// id isn't present in claims at all. claims itself is never mutated.
-func withLockedCandidate(claims []model.Claim, candidate model.Claim) []model.Claim {
-	candidate.Status = model.StatusLocked
-	candidate.ReviewPending = false
-
-	out := make([]model.Claim, len(claims))
-	copy(out, claims)
-	for i, c := range out {
-		if c.ID == candidate.ID {
-			out[i] = candidate
-			return out
-		}
-	}
-	return append(out, candidate)
 }
 
 func findByID(claims []model.Claim, id string) (model.Claim, bool) {

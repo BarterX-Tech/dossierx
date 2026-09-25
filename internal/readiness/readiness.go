@@ -446,7 +446,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 
 		assessment := Assessment{
 			ClaimID:              id,
-			PolicyVersion:        policyVersion(store),
+			PolicyVersion:        lock.PolicyLocalApprovalV1,
 			LocalApproved:        localApproved,
 			LocallyApproved:      localApproved,
 			DependencyReady:      len(conditions) == 0,
@@ -618,15 +618,6 @@ func baseline(store *lock.Store, dependent, dependency string) (string, bool) {
 		return receipt.Hash, true
 	}
 	return "", false
-}
-
-func policyVersion(store *lock.Store) lock.PolicyVersion {
-	if store == nil {
-		// LoadStore treats a missing store as a new project. This default also
-		// keeps a read-only assessment useful before the first store is saved.
-		return lock.PolicyLocalApprovalV1
-	}
-	return store.PolicyVersion
 }
 
 func dependencyState(c model.Claim) ConditionKind {

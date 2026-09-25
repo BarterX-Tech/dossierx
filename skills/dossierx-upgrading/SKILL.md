@@ -8,8 +8,9 @@ description: >-
   check reports lock-ledger-pre-ledger / pre_ledger_unadopted — and whenever
   you run dossierx claim recover-approved-content or re-export the skills.
   Covers re-exporting skills (retired bundles are pruned), the layout_legacy
-  moves, the pre-ledger crossing, recovering approved wording from git, and the
-  hand folds for governed_by, the doctrine hub and build_role. Every fold that
+  moves, the pre-ledger crossing, recovering approved wording from git, the
+  lock-store diff when lock policy 0 is carried over to v1, and the hand
+  folds for governed_by, the doctrine hub and build_role. Every fold that
   re-locks is the human's approval, claim by claim. Load the DossierX router
   skill first.
 ---
@@ -58,6 +59,20 @@ human the finding, say what it discards, and get a yes. Commit the lock store an
 store the crossing writes. The **store file** tells this benign case from its opposite: pre-ledger =
 store **present** on the old schema (cross it); `lock-ledger-absent` = store **gone** while locked
 claims remain (tampering; restore it from git).
+
+## Lock policy 0 is retired — the store says so on its next write
+
+Local approval v1 is the only lock policy. A lock store that records `policy_version: 0`, or has no
+`policy_version` at all, reads as v1 with no command from you. The next command that writes the store
+(for example `claim lock`, `unlock` or `constitution lock`) adds `policy_version: 1`,
+`policy_migrated_at` and `policy_migration_reason` to `build/ledger/lock-store.json`. That diff is the
+carry-over, not tampering: commit it with the write that produced it. No approval, baseline or
+review cause changes.
+
+What changes is what a draft dependency means. `rest-on-locked` no longer exists: a locked claim
+that rests on a draft is no longer a lint error; `claim show` and `readiness` report it as
+`dependency_unapproved`, and the claim is not dependency-ready. A draft whose dependency is still
+draft can now be locked (preview first, then the human's `--reason` and the `--proposal` snapshot).
 
 ## `claim recover-approved-content` — once, for old approvals
 

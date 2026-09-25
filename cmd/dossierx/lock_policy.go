@@ -55,11 +55,6 @@ type policyLockData struct {
 	LockedAt   string             `json:"locked_at"`
 }
 
-func policyEnabledForConfig(cfg interface{ Dir() string }) bool {
-	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), lock.StoreFileName))
-	return err == nil && store.LocalApprovalEnabled()
-}
-
 func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflicts []lock.SemanticConflict) (cmdResult, error) {
 	cfg, claims, err := loadConfigAndClaims()
 	if err != nil {
@@ -141,10 +136,9 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	if err != nil {
 		return cmdResult{}, err
 	}
-	// The policy-enabled path must enforce the same repository carrier guard as
-	// the legacy singleton and batch paths before taking any write sentinel.
-	// Ignored stores cannot carry an approval to collaborators, and a failed
-	// git check is equally unsafe to proceed through.
+	// The repository carrier guard runs before any write sentinel. Ignored
+	// stores cannot carry an approval to collaborators, and a failed git check
+	// is equally unsafe to proceed through.
 	gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "lock")
 	if err != nil {
 		return cmdResult{}, err

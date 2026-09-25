@@ -13,7 +13,7 @@ import (
 // ModuleManifestLintName is the finding's LintName. Its ClaimID is the
 // MODULE whose file is defective ("" for a project-wide defect), never a
 // claim id — lock-path scoping keys off this name to block every claim of
-// that module (cmd/dossierx/lock_batch.go, internal/lock/policy.go).
+// that module (internal/lock/policy.go).
 const ModuleManifestLintName = "module-manifest"
 
 func init() {

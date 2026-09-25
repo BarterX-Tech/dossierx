@@ -75,10 +75,7 @@ func EvaluateSet(claims []model.Claim, requestedIDs []string, cfg *config.Config
 // inferred from a hash or silently cleared by a snapshot refresh.
 func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []string, cfg *config.Config, store *Store, conflicts []SemanticConflict) SetEvaluation {
 	ids := uniqueIDs(requestedIDs)
-	result := SetEvaluation{RequestedIDs: ids, PolicyVersion: PolicyLegacy}
-	if store != nil {
-		result.PolicyVersion = store.PolicyVersion
-	}
+	result := SetEvaluation{RequestedIDs: ids, PolicyVersion: PolicyLocalApprovalV1}
 	requested := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		requested[id] = true
@@ -148,13 +145,6 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 			if finding.Severity == lint.SeverityWarning && !(finding.LintName == "roll-up" && finding.ClaimID == id) {
 				continue
 			}
-			// Local approval deliberately replaces only the old "rests_on must
-			// already be locked" doctrine. Other graph/integrity lints keep
-			// their ordinary force; dependency readiness carries the visible
-			// condition this one rule used to hide by refusing the approval.
-			if store != nil && store.LocalApprovalEnabled() && finding.LintName == "rest-on-locked" {
-				continue
-			}
 			if findingAffects(finding, id, claim.Module) {
 				verdict.LocalAdmissible = false
 				verdict.Refusals = append(verdict.Refusals, "lint:"+finding.LintName)
@@ -190,12 +180,10 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 				verdict.Refusals = append(verdict.Refusals, "unreadable_dependency:"+depID)
 				continue
 			}
-			if store == nil || !store.LocalApprovalEnabled() {
-				if !candidateLocked(depID, candidate) {
-					verdict.LocalAdmissible = false
-					verdict.Refusals = append(verdict.Refusals, "dependency_not_locked:"+depID)
-				}
-			} else if !candidateLocked(depID, candidate) {
+			// Local approval replaces the retired "rests_on must already be
+			// locked" doctrine: a readable draft dependency is a visible
+			// readiness condition, never a refusal of the reviewed statement.
+			if !candidateLocked(depID, candidate) {
 				verdict.Conditions = append(verdict.Conditions, DependencyCondition{
 					DependencyID: depID,
 					Kind:         "dependency_unapproved",
@@ -209,9 +197,6 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 	}
 	for _, finding := range allFindings {
 		if finding.Severity == lint.SeverityWarning {
-			continue
-		}
-		if store != nil && store.LocalApprovalEnabled() && finding.LintName == "rest-on-locked" {
 			continue
 		}
 		related := false

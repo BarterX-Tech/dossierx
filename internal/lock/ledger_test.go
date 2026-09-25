@@ -68,9 +68,9 @@ func TestLockWritesTheLedgerRecord(t *testing.T) {
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "the approved body"}
 	store := newStore(t)
 
-	locked, err := Lock(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "yes, ship it"})
+	locked, err := approve(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "yes, ship it"})
 	if err != nil {
-		t.Fatalf("Lock: %v", err)
+		t.Fatalf("approve: %v", err)
 	}
 
 	rec, ok := store.Record(claim.ID)
@@ -97,23 +97,6 @@ func TestLockWritesTheLedgerRecord(t *testing.T) {
 	}
 }
 
-// TestRefusedLockWritesNoLedgerRecord: the ledger records APPROVALS, and a
-// refused lock is not one. A record written before the gates ran would say a
-// human approved content that never locked.
-func TestRefusedLockWritesNoLedgerRecord(t *testing.T) {
-	withRegistry(t, failingLint{})
-
-	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft}
-	store := newStore(t)
-
-	if _, err := Lock(claim, []model.Claim{claim}, testConfig(), store, testApproval()); err == nil {
-		t.Fatalf("precondition: expected the lint gate to refuse this lock")
-	}
-	if _, ok := store.Record(claim.ID); ok {
-		t.Fatalf("a refused lock must not leave a ledger record behind")
-	}
-}
-
 // TestUnlockReleasesTheRecordButKeepsIt is the "keep the record alive across
 // Unlock" requirement. Deleting it would destroy the only evidence the claim
 // was ever locked — which lock-ledger-orphan needs to tell an honest unlock
@@ -125,9 +108,9 @@ func TestUnlockReleasesTheRecordButKeepsIt(t *testing.T) {
 
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "body"}
 	store := newStore(t)
-	locked, err := Lock(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
+	locked, err := approve(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
 	if err != nil {
-		t.Fatalf("Lock: %v", err)
+		t.Fatalf("approve: %v", err)
 	}
 	lockedHash, _ := store.Record(claim.ID)
 
@@ -161,16 +144,16 @@ func TestRelockClearsThePriorRelease(t *testing.T) {
 
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "v1"}
 	store := newStore(t)
-	locked, err := Lock(claim, []model.Claim{claim}, testConfig(), store, testApproval())
+	locked, err := approve(claim, []model.Claim{claim}, testConfig(), store, testApproval())
 	if err != nil {
-		t.Fatalf("Lock: %v", err)
+		t.Fatalf("approve: %v", err)
 	}
 	drafted := Unlock(locked, store, testApproval())
 	drafted.Body = "v2"
 
-	relocked, err := Lock(drafted, []model.Claim{drafted}, testConfig(), store, Approval{Actor: "alice", Reason: "approved v2"})
+	relocked, err := approve(drafted, []model.Claim{drafted}, testConfig(), store, Approval{Actor: "alice", Reason: "approved v2"})
 	if err != nil {
-		t.Fatalf("re-Lock: %v", err)
+		t.Fatalf("re-approve: %v", err)
 	}
 	rec, _ := store.Record(claim.ID)
 	if rec.Released() {
@@ -207,9 +190,9 @@ func TestLedgerRoundTripsThroughTheStoreFile(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "body"}
-	locked, err := Lock(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
+	locked, err := approve(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
 	if err != nil {
-		t.Fatalf("Lock: %v", err)
+		t.Fatalf("approve: %v", err)
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -289,9 +272,9 @@ func TestDowngradingTheStoreCannotCrossThePreLedgerLine(t *testing.T) {
 	}
 
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "the approved body"}
-	locked, err := Lock(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
+	locked, err := approve(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
 	if err != nil {
-		t.Fatalf("Lock: %v", err)
+		t.Fatalf("approve: %v", err)
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("save store: %v", err)
@@ -765,10 +748,11 @@ func TestSaveCreatesTheCommentDigestStoreForAFreshProject(t *testing.T) {
 // decide — see RecordApproval and internal/check's comment-digest-missing.
 //
 // What is given up is stated plainly: a comments block hand-written before the
-// claim's first lock is adopted as-found rather than left unknown. Lock refuses a
-// claim with an UNRESOLVED thread, so what can be adopted here is a resolved
-// history nobody can now attest to — the same caveat grandfathering carries, in
-// exchange for the emptied-map launder being reported.
+// claim's first lock is adopted as-found rather than left unknown. The lock
+// policy refuses a claim with an UNRESOLVED thread, so what can be adopted here
+// is a resolved history nobody can now attest to — the same caveat
+// grandfathering carries, in exchange for the emptied-map launder being
+// reported.
 func TestApprovalRecordsTheClaimsCommentDigest(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "store.json")
@@ -1099,8 +1083,8 @@ func TestLockRefusesUntilThePreLedgerProjectHoldsNothingLocked(t *testing.T) {
 	fresh := model.Claim{ID: "widget.contract.new", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "written today"}
 	claims := []model.Claim{old, fresh}
 
-	if _, err := Lock(fresh, claims, testConfig(), store, testApproval()); !errors.Is(err, ErrPreLedgerUnadopted) {
-		t.Fatalf("Lock on a pre-ledger project holding a locked claim = %v, want ErrPreLedgerUnadopted", err)
+	if _, err := approve(fresh, claims, testConfig(), store, testApproval()); !errors.Is(err, ErrPreLedgerUnadopted) {
+		t.Fatalf("locking on a pre-ledger project holding a locked claim = %v, want ErrPreLedgerUnadopted", err)
 	}
 	if len(store.Ledger) != 0 {
 		t.Fatalf("a refused lock must leave the store exactly as it found it, got %+v", store.Ledger)
@@ -1115,7 +1099,7 @@ func TestLockRefusesUntilThePreLedgerProjectHoldsNothingLocked(t *testing.T) {
 		t.Fatalf("CrossPreLedger: %v", err)
 	}
 
-	locked, err := Lock(fresh, claims, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
+	locked, err := approve(fresh, claims, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
 	if err != nil {
 		t.Fatalf("after the crossing, locking must work normally: %v", err)
 	}
@@ -1123,7 +1107,7 @@ func TestLockRefusesUntilThePreLedgerProjectHoldsNothingLocked(t *testing.T) {
 	// unlock -> fix -> lock, unchanged.
 	drafted := Unlock(locked, store, Approval{Actor: "alice", Reason: "needs a fix"})
 	drafted.Body = "fixed"
-	if _, err := Lock(drafted, []model.Claim{released, drafted}, testConfig(), store, Approval{Actor: "alice", Reason: "approved the fix"}); err != nil {
+	if _, err := approve(drafted, []model.Claim{released, drafted}, testConfig(), store, Approval{Actor: "alice", Reason: "approved the fix"}); err != nil {
 		t.Fatalf("unlock -> fix -> lock must never be blocked: %v", err)
 	}
 }

@@ -227,7 +227,7 @@ func TestLockedClaimHashIgnoresSourcePath(t *testing.T) {
 }
 
 // TestLockedClaimHashIsIndependentOfStatus is what lets every write hook hash
-// the claim before or after flipping its status and still agree. Lock records
+// the claim before or after flipping its status and still agree. The lock path records
 // the hash of the claim it has just flipped to locked; the gate re-computes it
 // from the file. If Status were signed, those two would differ by construction
 // and every lock would immediately report drift against its own record.

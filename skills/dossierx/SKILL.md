@@ -107,12 +107,12 @@ synced" in chat is neither and is never a certificate; when the evidence is miss
 
 ### Local-approval policy v1
 
-New projects use one set evaluator for single/group lock preview and write.
+Every project uses one set evaluator for single/group lock preview and write.
 `--dry-run` returns verdicts, conditions and a `snapshot`; `--proposal` is
 required on every lock write, rejecting missing, invalid, stale and wrong-set review. Draft dependencies yield visible
 `dependency_unapproved`, never readiness. Read `claim show` or API `readiness`
-for causes/paths. Existing stores stay on their recorded policy; a newer
-binary does not reinterpret old approvals.
+for causes/paths. v1 is the only policy: a store that still records policy 0
+reads as v1 and says so on its next write (see the upgrading skill).
 
 Every mutating verb takes `--dry-run`. It writes nothing and **always exits 0 with `ok: true`**,
 even when the real run would refuse — including when you forgot a required flag.

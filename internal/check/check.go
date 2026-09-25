@@ -252,7 +252,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
 	res.Constitution = inputs.constitution
-	res.LintFindings = withConstitutionFindings(inputs.constitution, policyLintFindings(lint.RunAll(claims, cfg), inputs.store))
+	res.LintFindings = withConstitutionFindings(inputs.constitution, lint.RunAll(claims, cfg))
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -653,7 +653,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 	}
 
 	res.Constitution = in.constitution
-	res.LintFindings = withConstitutionFindings(in.constitution, policyLintFindings(lint.RunAll(claims, cfg), in.store))
+	res.LintFindings = withConstitutionFindings(in.constitution, lint.RunAll(claims, cfg))
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -929,31 +929,26 @@ func joinInts(ns []int) string {
 // cmd/dossierx.reportNextSteps.
 //
 // firstLockableDraft returns the id of the first draft claim in drafts that
-// would survive both of lock.Lock's claim gates (open threads and lint), or ""
-// if none would, so the claim it names is a claim the real command would
-// accept.
+// would survive both of the lock evaluator's claim gates (open threads and
+// lint), or "" if none would, so the claim it names is a claim the real command
+// would accept.
 //
 // The LINT gate is the one that cannot be skipped, and the reason is that it is
-// evaluated against the ABOUT-TO-BE-LOCKED form, not the current one. Two lints
-// key off a claim's own status: rest-on-locked (a locked claim's rests_on
-// targets must themselves be locked) and roll-up (a locked banner's
-// module-mates must be locked). So a project can pass `check` completely
-// cleanly and still have `claim lock <id>` refuse with lint_failed — which is
-// exactly what happened on a module drafted alongside its own dependencies, the
-// ordinary case, where the first draft in load order rests on a sibling that is
-// also still draft.
+// evaluated against the ABOUT-TO-BE-LOCKED form, not the current one: a lint
+// that keys off a claim's own status (roll-up: a locked banner's module-mates
+// must be locked) can pass `check` cleanly and still refuse `claim lock <id>`.
 //
 // It is evaluated LAZILY, stopping at the first claim that passes, because that
 // is what keeps the cost proportionate: naming an example is an advisory line,
 // and in the common case the answer is the first or second candidate. The cheap
 // thread gate is tested first so a full lint pass is only spent on a candidate
 // that could still qualify.
-func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config, store *lock.Store) string {
+func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config) string {
 	for _, c := range drafts {
 		if c.HasOpenThreads() {
 			continue
 		}
-		if lintErrorsForCandidate(c, claims, cfg, store) == 0 {
+		if lintErrorsForCandidate(c, claims, cfg) == 0 {
 			return c.ID
 		}
 	}
@@ -962,10 +957,10 @@ func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config, store 
 
 // lintErrorsForCandidate counts the error-severity findings the lint suite would
 // raise if c were locked RIGHT NOW — the corpus with c's own entry replaced by
-// its locked form, which is precisely what lock.Lock lints. Linting the
+// its locked form, which is precisely what the lock evaluator lints. Linting the
 // still-draft entry instead would report zero for the very claims this is meant
 // to filter out.
-func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config, store *lock.Store) int {
+func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config) int {
 	candidate := c
 	candidate.Status = model.StatusLocked
 	candidate.ReviewPending = false
@@ -979,7 +974,7 @@ func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Con
 	}
 
 	errs := 0
-	for _, f := range policyLintFindings(lint.RunAll(lintClaims, cfg), store) {
+	for _, f := range lint.RunAll(lintClaims, cfg) {
 		if f.Severity != lint.SeverityWarning {
 			errs++
 		}
@@ -1081,19 +1076,18 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 	//
 	// The third consequence is the example id. draftIDs[0] is whichever draft
 	// claim happens to sort first, which is not the same thing as a draft claim
-	// that would actually LOCK: all three of lock.Lock's gates can refuse it,
-	// and the lint gate refuses it while the project as a whole lints clean
-	// (rest-on-locked and roll-up are evaluated against the ABOUT-TO-BE-LOCKED
-	// form). Naming such a claim produces a command that exists, reads as
+	// that would actually LOCK: the lock evaluator's gates can refuse it, and
+	// the lint gate refuses it while the project as a whole lints clean
+	// (roll-up is evaluated against the ABOUT-TO-BE-LOCKED form). Naming such a claim produces a command that exists, reads as
 	// recommended, and then exits 1 — and the agent, which the skills tell to
 	// trust next_actions rather than re-derive the lifecycle, acts on it. So the
 	// example is the first draft that passes every gate, and when none does the
 	// hint says so instead of pretending to know where to start.
 	if len(draftIDs) > 0 {
-		if example := firstLockableDraft(drafts, claims, cfg, store); example != "" {
+		if example := firstLockableDraft(drafts, claims, cfg); example != "" {
 			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. %s)", len(draftIDs), example))
 		} else {
-			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (none is lockable yet: every draft is blocked by a lint error, an open comment thread, or an unlocked dependency)", len(draftIDs)))
+			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (none is lockable yet: every draft is blocked by a lint error or an open comment thread)", len(draftIDs)))
 		}
 	}
 	if len(commentPending) > 0 {
@@ -1161,23 +1155,4 @@ func digestStorePresent(cfg *config.Config) bool {
 
 func flagStorePath(cfg *config.Config) string {
 	return cfg.FlagStorePath()
-}
-
-// policyLintFindings keeps the registry authoritative while reconciling the
-// one legacy rule that local-approval v1 explicitly replaces. A v1 approval
-// may rest on a readable draft boundary; readiness reports that condition and
-// withholds integrated readiness. Stores without recorded adoption preserve
-// the old lint result, so upgrading a binary does not relax old projects.
-func policyLintFindings(findings []lint.Finding, store *lock.Store) []lint.Finding {
-	if store == nil || !store.LocalApprovalEnabled() {
-		return findings
-	}
-	out := make([]lint.Finding, 0, len(findings))
-	for _, finding := range findings {
-		if finding.LintName == "rest-on-locked" {
-			continue
-		}
-		out = append(out, finding)
-	}
-	return out
 }

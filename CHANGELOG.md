@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   content hash and the human's words in `build/ledger/lock-store.json`
   (`constitution`), re-locks a roof edited after its lock, and refuses
   `already_locked` only when locked and unchanged. **The roof gate:** `claim
-  lock` (single, batch and policy-v1 paths), `claim reaudit --confirm` (a
+  lock` (one claim or a set), `claim reaudit --confirm` (a
   confirmed reaudit is a ledger write; the preview stays open) and plain
   `check` refuse `CONSTITUTION_NOT_LOCKED` while the constitution is missing, `status:
   draft`, unrecorded, or edited after its lock; plain `check` regenerates the
@@ -192,10 +192,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Leftover artifact files and leftover ledger rows must not refuse `check`.
   The viewer has no Build order tab and no Mermaid bundle. The consumer
   skill `dossierx-build-order` is not embedded.
-- The lock-policy adoption CLI leaf is deleted. Existing lock stores stay on
-  their recorded policy; a new project still starts on lock policy v1. Policy
-  evaluation, approvals, and baselines are unchanged. The surface is now
+- The lock-policy adoption CLI leaf is deleted. The surface is now
   twenty-two leaves under eight nouns.
+- **Lock policy 0 is retired; local approval v1 is the only lock policy.** A
+  lock store that records `policy_version: 0`, or predates the field, loads
+  as v1, and its next write stamps `policy_version: 1`, `policy_migrated_at`
+  and `policy_migration_reason`. Every approval such a store holds was granted
+  under the stricter legacy rule, so none is reinterpreted, and no baseline or
+  review cause changes. The `rest-on-locked` lint is deleted (36 rules): a
+  locked claim resting on a draft reports `dependency_unapproved` and is not
+  dependency-ready, as it already did under v1. `claim show`, `check` and the
+  lock preview no longer apply the legacy gate to such a store. The legacy
+  single-claim and batch lock write paths are deleted; `claim lock` always
+  takes the one set evaluator, `--dry-run` then `--reason` with
+  `--proposal`. The `batchLockData`, `batchLockRefusedData` and `lockData`
+  payloads are gone (`claim lock` answers with `policyLockData`).
+  Render change: every catalog/viewer readiness entry reports
+  `"policy_version": 1`; fixtures whose store predated the field move from 0
+  (`fixture-graph-demo`, `fixture-theme-flat`).
 - `kind: orientation-note` and the reserved `overview` facet. The only legal
   `kind` is `fact` (or omit the field); `kind-shape` refuses every other
   value. Listing `overview` in `facets[]` is a config error, leftover
@@ -252,6 +266,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `claim lock` looked for the lock store at `<project>/lock-store.json`
+  instead of `build/ledger/lock-store.json`, so it always took the policy-v1
+  path while `claim show` and `check` applied the recorded policy. Removing
+  policy 0 removes the lookup; every command reads the real store.
 - Windows `go test -race` no longer dies at Go's 10-minute package deadline
   inside `internal/render/markdown` after the claim-body image cost sweep.
   The growth guards still cover every shape at every size; under `-race`

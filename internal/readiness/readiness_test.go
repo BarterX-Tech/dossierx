@@ -247,9 +247,8 @@ func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
 	legacyB := lockedClaim("fixture.contract.legacy-b", legacyA.ID)
 
 	s := standingStore(missing, retired, cycleA, cycleB, governed, legacyA, legacyB)
-	// An old policy store keeps the approval record but has no attributable
-	// dependency baseline. Readiness must remain explicitly unknown.
-	s.PolicyVersion = lock.PolicyLegacy
+	// legacyB's approval record has no attributable dependency baseline (the
+	// store records none). Readiness must remain explicitly unknown.
 	claims := []model.Claim{missing, retired, retiredDep, cycleA, cycleB, governor, governed, legacyA, legacyB}
 	got := Compute(claims, s, nil)
 	if !hasCondition(got[missing.ID], ConditionMissingDependency, missing.ID, "fixture.contract.does-not-exist") {
@@ -749,9 +748,6 @@ func TestIndependentDifferentialDAG(t *testing.T) {
 			claims = append(claims, c)
 		}
 		s := standingStore(claims...)
-		if seed%2 == 0 {
-			s.PolicyVersion = lock.PolicyLegacy
-		}
 		for _, c := range claims {
 			for _, dep := range lock.BaselineDependencyIDs(c) {
 				if rng.Intn(5) == 0 {

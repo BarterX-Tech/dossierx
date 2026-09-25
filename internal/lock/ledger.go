@@ -690,7 +690,7 @@ func CrossPreLedger(s *Store, claims []model.Claim) error {
 	// locked_at and the per-dependent baselines are what engineLocked reads as
 	// "this engine locked that claim" (audit.go). In a pre-ledger project they
 	// were written by a build that had no ledger, and the pre-ledger predicate is
-	// what stops RuleLockLedgerDeleted and Lock's ErrLedgerRecordDeleted from
+	// what stops RuleLockLedgerDeleted and the evaluator's ledger_record_deleted from
 	// reading them as a record somebody DELETED. The stamp removes that
 	// suppression while leaving the evidence behind — so without this, the very
 	// first re-lock of step 3 is refused as a deleted record, and `check` accuses

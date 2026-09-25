@@ -4,7 +4,7 @@
 //
 // This is a gate, NOT a lint, and the distinction is a design decision the
 // release depends on. A lint is registered in lint.Registry, which means it runs
-// inside "dossierx check" and inside lock.Lock's own refusal gate, and an
+// inside "dossierx check" and inside the lock evaluator's refusal gate, and an
 // error-severity finding there stops the whole pipeline: no catalog, no viewer,
 // and no claim in the project can be locked. One tampered claim would take the
 // documentation offline for everybody, which is a denial-of-service handed to

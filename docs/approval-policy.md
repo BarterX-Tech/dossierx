@@ -144,12 +144,13 @@ does not guarantee linear work, memory, or serialized output.
 
 ## Existing projects
 
-A missing lock store belongs to a new project and defaults to local-approval
-policy v1. An existing store without explicit policy adoption remains on the
-legacy policy; loading a newer binary does not reinterpret its old approvals,
-refresh baselines, or clear review causes.
+Local-approval policy v1 is the only policy. The legacy policy 0 ("every
+`rests_on` target must already be locked") was retired in v0.7.21. A store
+that records policy 0, or predates the field, loads as v1 and its next write
+records the carry-over (`policy_version: 1`, `policy_migrated_at`,
+`policy_migration_reason`). Every approval such a store holds was granted
+under the stricter legacy rule, so none of them is reinterpreted.
 
-There is no everyday command that adopts policy v1 on an existing store.
 Existing approvals, dependency baselines, receipts and review causes stay as
 recorded. Loading a newer binary does not lock or unlock claims, refresh a
 baseline, or make a historical approval mean that an unseen draft dependency

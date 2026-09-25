@@ -283,7 +283,6 @@
     "module-manifest",
     "orphan",
     "raw-html-scope",
-    "rest-on-locked",
     "rests-on-required",
     "rests-on-target",
     "roll-up",
@@ -517,12 +516,12 @@
   ],
   "render_fingerprint": "sha256:3d4de113a20f2aec8ac141b5ebcfd2e333a6fc94873bef7b2c08194de2df5598",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:1b7bd422b227056a22aeece58aefabb50cb4d671e99e40ac3bf2f2e9b96dd6f5",
+    "cmd/dossierx": "sha256:24bae00ef1f0a90fa0591eeab0592e14491f8c6f09138e89f34539e0e1f614f8",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/catalog": "sha256:58bf0a93299f57669bdd5bd1819f6f6663536bc598040a1304741a7fabe7bb0e",
-    "internal/check": "sha256:74e3a0a6a4ad0022fe87db30119cfaaa41e8e9550fca07dc4f09857dc76f6703",
+    "internal/check": "sha256:a15d8f3751a3d5a543b7b7451e60a0e7271c46cd1c9d21b37be404262b240a06",
     "internal/cliout": "sha256:36b207a0bdefd5a8523b27161b12ab36e5a9b0f8390715a33764589b231faa25",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
     "internal/config": "sha256:94b016cea5313478cad46e5a9ee891355522e47d7df82e5814e1efaed834aa6a",
@@ -534,14 +533,14 @@
     "internal/graph": "sha256:b9c74d9040d5f27a0470c6fd3704b091642b2a15b768b4a64f402333f9cd8153",
     "internal/implink": "sha256:fcd3d4ff7e5425ec4f5c533448f2ba5b901ced18703d796ac1c6410a278f049d",
     "internal/layout": "sha256:6f2f699218c8402eccffef20eb46c7e30b08a39529381ff68bdc8b70e42ad07d",
-    "internal/lint": "sha256:7111371914bbf3bf3e0efe0be6d885ecbd133f2deba447b83e520962ef1b78be",
+    "internal/lint": "sha256:a293dcdd8834d18ab8709c8efca6f1b0b9faf95a5fd785ccec9207c851aa5555",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
-    "internal/lock": "sha256:1e0fe63f860c5239859c80df588ab04727b94005c85384a2bbc13312e4b69136",
+    "internal/lock": "sha256:cdcb4df256fca9780f18a0b8715b06dabcd734e191a68780fbe0be22e0586fa4",
     "internal/manifest": "sha256:ddd2d2324984620ab314256d17cab37e2206fed078b17b620aded95bc46afb57",
     "internal/manifest/manifesttest": "sha256:9923dd2e327d0d8238fe3ec4b2de74e8ae0fd7a1d7efc8eb6cc638a19f990f94",
     "internal/model": "sha256:4cef78619e8293a4c1c60d2b33f1d801bbfa4aa61d87da0775d3969695778bbd",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
-    "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
+    "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
     "internal/render": "sha256:fd8f2e38f17b14fe00e54edd8c98392c2578c689e492923a58f8272fd523f49b",
@@ -552,7 +551,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:54211b30eb631951e2f0a5f40fb419412ad5d9c9f3b9ef11c66845098282b9e1"
+    "skills": "sha256:c8f90dd79938e47a240d4a4edd1294a56f342cfb69342fa72a3f828db680c006"
   },
   "envelope": {
     "keys": [
@@ -616,17 +615,6 @@
       "wrong_state": 2
     },
     "payloads": {
-      "batchLockData": [
-        "claim_ids",
-        "locked",
-        "reason"
-      ],
-      "batchLockRefusedData": [
-        "lint_errors",
-        "lint_findings",
-        "offenders",
-        "requested_ids"
-      ],
       "checkData": [
         "catalog_count",
         "catalog_error",
@@ -775,13 +763,6 @@
         "lint",
         "message",
         "severity"
-      ],
-      "lockData": [
-        "claim_id",
-        "from",
-        "locked_at",
-        "reason",
-        "to"
       ],
       "lockRefusedData": [
         "claim_id",
@@ -960,7 +941,7 @@
     "commands": 24,
     "error_codes": 50,
     "http_routes": 14,
-    "lint_rules": 37,
+    "lint_rules": 36,
     "nouns": 9
   }
 }

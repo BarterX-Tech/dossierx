@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,7 +46,7 @@ func TestClaimShowV1DraftParentAgreesWithSingletonPreview(t *testing.T) {
 	var show claimShowData
 	envData(t, showEnv, &show)
 	actions := strings.Join(show.NextActions, "\n")
-	if strings.Contains(actions, "rest-on-locked") || strings.Contains(actions, "block locking") {
+	if strings.Contains(actions, "block locking") {
 		t.Fatalf("show must not turn a v1 condition into a blocker: %v", show.NextActions)
 	}
 	if !strings.Contains(actions, "ready for local approval") || !strings.Contains(actions, "--dry-run") {
@@ -59,7 +60,7 @@ func TestClaimShowV1DraftParentAgreesWithSingletonPreview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim show text: %v", err)
 	}
-	if strings.Contains(textOut, "rest-on-locked") || !strings.Contains(textOut, "ready for local approval") {
+	if strings.Contains(textOut, "block locking") || !strings.Contains(textOut, "ready for local approval") {
 		t.Fatalf("text and JSON advice disagree:\n%s", textOut)
 	}
 	if after := snapshotFiles(t, root); !reflect.DeepEqual(after, before) {
@@ -67,30 +68,79 @@ func TestClaimShowV1DraftParentAgreesWithSingletonPreview(t *testing.T) {
 	}
 }
 
-func TestClaimShowLegacyDraftParentStillBlocks(t *testing.T) {
+// Lock policy 0 is retired. A store that still records it reads as v1: the
+// draft parent is a dependency condition in show and in the preview alike,
+// neither read rewrites the store, and the first write records the carry-over
+// while keeping what the store already held.
+func TestRetiredPolicy0StoreReadsAsV1AndStampsOnWrite(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 	storeFile := filepath.Join(root, "build", "ledger", "lock-store.json")
-	if err := os.MkdirAll(filepath.Dir(storeFile), 0o755); err != nil {
+	var stored map[string]any
+	raw, err := os.ReadFile(storeFile)
+	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := `{"version":3,"policy_version":0,"hashes":{},"receipts":{},"locked_at":{},"ledger":{}}`
-	if err := os.WriteFile(storeFile, []byte(legacy), 0o644); err != nil {
+	if err := json.Unmarshal(raw, &stored); err != nil {
 		t.Fatal(err)
+	}
+	if stored["constitution"] == nil {
+		t.Fatalf("fixture precondition: the store must carry the locked constitution: %s", raw)
+	}
+	stored["policy_version"] = 0
+	raw, err = json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(storeFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const id = "widget.contract.timeout-budget"
+	before := snapshotFiles(t, root)
+
+	previewEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--dry-run", "--reason", "fixture review")
+	if err != nil {
+		t.Fatalf("lock preview: %v", err)
+	}
+	var preview policyLockPreviewData
+	envData(t, previewEnv, &preview)
+	if preview.Evaluation.PolicyVersion != lock.PolicyLocalApprovalV1 || len(preview.Evaluation.Verdicts) != 1 || !preview.Evaluation.Verdicts[0].LocalAdmissible {
+		t.Fatalf("a policy-0 store must evaluate under v1: %+v", preview.Evaluation)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.timeout-budget")
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
 	var show claimShowData
 	envData(t, env, &show)
 	actions := strings.Join(show.NextActions, "\n")
-	if !strings.Contains(actions, "rest-on-locked") || !strings.Contains(actions, "block locking") {
-		t.Fatalf("legacy policy must keep the existing prerequisite gate: %v", show.NextActions)
+	if strings.Contains(actions, "block locking") || !strings.Contains(actions, "ready for local approval") {
+		t.Fatalf("show must agree with the v1 preview: %v", show.NextActions)
 	}
-	if strings.Contains(actions, "ready for local approval") {
-		t.Fatalf("legacy policy must not be silently migrated: %v", show.NextActions)
+	if got := show.Readiness.DependencyConditions; len(got) != 1 || got[0].Kind != "dependency_unapproved" {
+		t.Fatalf("show readiness must retain the draft-parent condition: %+v", got)
+	}
+	if after := snapshotFiles(t, root); !reflect.DeepEqual(after, before) {
+		t.Fatalf("preview/show rewrote a policy-0 store\nbefore=%v\nafter=%v", before, after)
+	}
+
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "fixture review"); err != nil {
+		t.Fatalf("lock against a draft parent under the carried-over policy: %v", err)
+	}
+	raw, err = os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var written map[string]any
+	if err := json.Unmarshal(raw, &written); err != nil {
+		t.Fatal(err)
+	}
+	if written["policy_version"] != float64(1) || written["policy_migration_reason"] == "" || written["policy_migration_reason"] == nil || written["policy_migrated_at"] == nil {
+		t.Fatalf("the first write must record the carry-over to v1: %s", raw)
+	}
+	if !reflect.DeepEqual(written["constitution"], stored["constitution"]) {
+		t.Fatalf("the carry-over must keep the constitution record\nbefore=%v\nafter=%v", stored["constitution"], written["constitution"])
 	}
 }
 
@@ -216,7 +266,7 @@ func TestPolicyVerdictAdviceNeverTurnsRefusalsIntoReady(t *testing.T) {
 		verdict lock.CandidateVerdict
 		want    string
 	}{
-		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:rest-on-locked"}, LintFindings: []lint.Finding{{LintName: "rest-on-locked", ClaimID: "child", Message: "unlocked dependency"}}}, "rest-on-locked"},
+		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:rests-on-target"}, LintFindings: []lint.Finding{{LintName: "rests-on-target", ClaimID: "child", Message: "bad target"}}}, "rests-on-target"},
 		{"own roll-up", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:roll-up"}, LintFindings: []lint.Finding{{LintName: "roll-up", ClaimID: "child", Message: "draft sibling"}}}, "roll-up"},
 		{"open comments", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"unresolved_comments"}, OpenThreads: []string{"c-1"}}, "open comment thread"},
 		{"missing prerequisite", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"missing_dependency:gone"}}, "missing_dependency:gone"},
