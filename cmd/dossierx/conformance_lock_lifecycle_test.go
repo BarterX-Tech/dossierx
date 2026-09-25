@@ -16,7 +16,7 @@ import (
 )
 
 func lifecycleClaim(id, embodiment string) string {
-	return fmt.Sprintf("id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: lifecycle fixture\n%s", id, embodiment)
+	return fmt.Sprintf("id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: lifecycle fixture\nrests_on:\n  none: true\n  reason: fixture\n%s", id, embodiment)
 }
 
 func loadLifecycleClaim(t *testing.T, cfgPath, id string) model.Claim {
@@ -89,6 +89,7 @@ func TestConformanceRealSingletonAndBatchLockLifecycle(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(cfgText), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	ids := []string{"widget.contract.one", "widget.contract.two", "widget.contract.three"}
 	for i, id := range ids {
 		writeLifecycleClaim(t, root, []string{"one", "two", "three"}[i], id, "")

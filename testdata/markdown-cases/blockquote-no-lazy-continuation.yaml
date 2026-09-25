@@ -6,3 +6,6 @@ layout: card
 body: |
   > Quoted line.
   Not quoted.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the quote ends at the first line not starting with >

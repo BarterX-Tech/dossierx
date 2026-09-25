@@ -76,6 +76,11 @@ func renderThreeFacetFixture(t *testing.T) string {
 		t.Fatalf("copy the three-facet fixture: %v\n%s", err, out)
 	}
 	cfg := filepath.Join(dst, "project.config.yaml")
+	// The fixture ships its constitution.yaml as draft; the copy locks it
+	// (NIT-26: no plain check passes until the roof is locked).
+	if out, err := exec.Command(bin, "--config", cfg, "--format", "text", "constitution", "lock", "--reason", "fixture roof").CombinedOutput(); err != nil {
+		t.Fatalf("lock the three-facet fixture's constitution: %v\n%s", err, out)
+	}
 	if out, err := exec.Command(bin, "--config", cfg, "--format", "text", "check").CombinedOutput(); err != nil {
 		t.Fatalf("check the three-facet fixture: %v\n%s", err, out)
 	}

@@ -1,9 +1,8 @@
 // lifecycle_fixtures_test.go covers five claim-lifecycle scenarios end to
 // end via the built CLI binary:
 //
-//  1. doctrine-gate: a doctrine_facet hub claim left in draft blocks
-//     locking a dependent that rests_on it, via testdata/fixture-coverage/
-//     lifecycle/doctrine-gate.
+//  1. rest-on-locked: a draft rests_on target blocks locking a
+//     dependent, via testdata/fixture-coverage/lifecycle/doctrine-gate.
 //  2. undeclared-facet: a claim whose facet isn't in config.facets fails
 //     lint, via testdata/fixture-coverage/lifecycle/undeclared-facet.
 //  3. empty-claims: a valid config with an empty claims_dir lints clean,
@@ -27,52 +26,11 @@
 package tests
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// copyFixtureDir recursively copies every file under src into dst,
-// preserving relative paths, so a static testdata fixture that a test is
-// about to mutate (lock/flag/check all write to disk) can be copied into a
-// throwaway t.TempDir() first, keeping the checked-in fixture pristine and
-// every test run idempotent.
-func copyFixtureDir(t *testing.T, src, dst string) {
-	t.Helper()
-	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		in, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer in.Close()
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		out, err := os.Create(target)
-		if err != nil {
-			return err
-		}
-		defer out.Close()
-		_, err = io.Copy(out, in)
-		return err
-	})
-	if err != nil {
-		t.Fatalf("copy fixture %s -> %s: %v", src, dst, err)
-	}
-}
 
 // lifecycleFixturesRoot resolves testdata/fixture-coverage/lifecycle
 // relative to this test file's own package directory (tests/).
@@ -86,45 +44,8 @@ func lifecycleFixturesRoot(t *testing.T) string {
 }
 
 // ---------------------------------------------------------------------
-// 1. doctrine-gate: hub left draft blocks locking its dependent, per
-//    doctrine_facet hub-gating.
+// 1. rest-on-locked: hub left draft blocks locking its dependent.
 // ---------------------------------------------------------------------
-
-func TestLifecycle_DoctrineGateFixture(t *testing.T) {
-	src := filepath.Join(lifecycleFixturesRoot(t), "doctrine-gate")
-	root := t.TempDir()
-	copyFixtureDir(t, src, root)
-
-	childPath := filepath.Join(root, "claims", "child.yaml")
-	hubPath := filepath.Join(root, "claims", "hub.yaml")
-
-	// Hub still draft: locking the child (which rests_on the hub) must be
-	// refused by hub-gating, mentioning the doctrine facet.
-	_, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture")
-	if code == 0 {
-		t.Fatalf("expected lock of child to be refused while doctrine hub is still draft")
-	}
-	if !strings.Contains(stderr, "doctrine") {
-		t.Fatalf("expected hub-gating refusal to mention doctrine, got stderr: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, childPath), "status: draft") {
-		t.Fatalf("expected child to remain draft after refused lock")
-	}
-
-	// Lock the hub, then the child locks successfully.
-	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.doctrine.hub", "--reason", "test fixture"); code != 0 {
-		t.Fatalf("expected hub to lock successfully: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, hubPath), "status: locked") {
-		t.Fatalf("expected hub to be locked on disk")
-	}
-	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture"); code != 0 {
-		t.Fatalf("expected child lock to succeed once hub is locked: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, childPath), "status: locked") {
-		t.Fatalf("expected child to be locked on disk")
-	}
-}
 
 // ---------------------------------------------------------------------
 // 2. undeclared-facet: a claim's facet isn't in config.facets -> lint
@@ -185,7 +106,8 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 	// Edit A's body underneath the now-locked B.
 	changedA := "id: lifecycledriftmod.contract.a\n" +
 		"facet: contract\nmodule: lifecycledriftmod\nstatus: locked\nlayout: card\n" +
-		"body: |\n  CHANGED body for A, after B locked against it.\n"
+		"body: |\n  CHANGED body for A, after B locked against it.\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(aPath, []byte(changedA), 0o644); err != nil {
 		t.Fatalf("rewrite claim a: %v", err)
 	}
@@ -218,7 +140,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 
 func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 	root := t.TempDir()
-	llWriteConfig(t, root, []string{"contract"}, []string{"flagmod"}, "")
+	llWriteConfig(t, root, []string{"contract"}, []string{"flagmod"})
 	claimPath := llWriteClaim(t, root, llClaimSpec{
 		id: "flagmod.contract.a", facet: "contract", module: "flagmod", status: "draft",
 		body: "the claim's original, soon-to-be-flagged assertion.",

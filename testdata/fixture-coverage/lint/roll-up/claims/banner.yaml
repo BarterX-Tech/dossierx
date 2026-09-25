@@ -6,3 +6,6 @@ layout: banner
 body: |
   A locked banner claim whose module still has a draft sibling below --
   the roll-up must stay unlocked until every claim in the module locks.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

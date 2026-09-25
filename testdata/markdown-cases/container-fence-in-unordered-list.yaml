@@ -13,3 +13,6 @@ body: |
   ```
 
   - Third item
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests fence inside unordered list (currently splits list)

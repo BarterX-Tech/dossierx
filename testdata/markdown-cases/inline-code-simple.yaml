@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   The function `getValue()` returns a string.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

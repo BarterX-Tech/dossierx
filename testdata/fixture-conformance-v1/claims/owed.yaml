@@ -13,3 +13,6 @@ embodiment:
       expectation:
         shape: scalar
         value: ready
+rests_on:
+  none: true
+  reason: neutral fixture

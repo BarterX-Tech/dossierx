@@ -9,3 +9,6 @@ body: |
   -----
 
   Below.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - three or more dashes is a thematic break

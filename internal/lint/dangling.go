@@ -26,7 +26,7 @@ func (DanglingLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 
 	var findings []Finding
 	for _, c := range claims {
-		for _, target := range c.RestsOn {
+		for _, target := range c.RestsOn.IDs {
 			if !known[target] {
 				findings = append(findings, Finding{
 					LintName: "dangling",

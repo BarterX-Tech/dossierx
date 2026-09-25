@@ -11,3 +11,6 @@ body: |
   | link | [docs](https://x.test/) |
   | strike | ~~s~~ |
   | autolink | <https://y.test/> |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a cell runs the inline pass - emphasis, code spans, links, strikethrough, autolinks

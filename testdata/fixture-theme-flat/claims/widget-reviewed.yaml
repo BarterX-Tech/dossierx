@@ -1,7 +1,7 @@
 id: widget.contract.reviewed
 facet: contract
 module: widget
-status: locked
+status: draft
 layout: card
 section: A claim under standing review
 body: |
@@ -12,7 +12,6 @@ tracks:
   - id: checkout
 rests_on:
   - panel.contract.api
-review_pending: true
 comments:
   - id: c-7e728a
     status: open

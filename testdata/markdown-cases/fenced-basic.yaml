@@ -10,3 +10,6 @@ body: |
   first line
   second line
   ```
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

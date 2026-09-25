@@ -74,7 +74,7 @@ func TestSignedFieldsDifferingNamesOnlySignedFields(t *testing.T) {
 	a := model.Claim{ID: "fixture.contract.d", Status: model.StatusLocked, Body: "one", BuildRole: "rule"}
 	b := a
 	b.Body = "two"
-	b.RestsOn = []string{"fixture.contract.other"}
+	b.RestsOn = model.RestsOnIDs("fixture.contract.other")
 	// status, review_pending and comments are the three fields
 	// LockedClaimHash does not sign; a difference in them is not a reason the
 	// hash moved and must not be reported as one.

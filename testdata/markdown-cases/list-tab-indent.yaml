@@ -7,3 +7,6 @@ body: |
   - L1
   	- L2 under a tab
   - Back to L1
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a tab counts as four indent columns

@@ -156,7 +156,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 	sccs := findSCCs(eligible)
 	sccNodesMap := make(map[string]map[string]bool)
 	for _, scc := range sccs {
-		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
+		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn.IDs, scc[0]))
 		if isCyclic {
 			sccID := scc[0] // canonical ID (scc is sorted)
 			nodes := make(map[string]bool, len(scc))
@@ -208,7 +208,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			for _, uID := range currentLevel {
 				uClaim := byID[uID]
 				uPath := paths[uID]
-				uDeps := unique(uClaim.RestsOn)
+				uDeps := unique(uClaim.RestsOn.IDs)
 				sort.Strings(uDeps)
 
 				for _, depID := range uDeps {
@@ -386,7 +386,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		// 4. Reachable cyclic SCCs: globally minimize the complete witness path
 		// len(prefix + cycle) across all reachable entries in the SCC.
 		for _, scc := range sccs {
-			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
+			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn.IDs, scc[0]))
 			if !isCyclic {
 				continue
 			}
@@ -691,7 +691,7 @@ func findSCCs(byID map[string]model.Claim) [][]string {
 		state.onStack[v] = true
 
 		c := byID[v]
-		deps := unique(c.RestsOn)
+		deps := unique(c.RestsOn.IDs)
 		sort.Strings(deps)
 
 		for _, w := range deps {
@@ -742,7 +742,7 @@ func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]mo
 	if !ok {
 		return []string{start, start}
 	}
-	for _, depID := range unique(startClaim.RestsOn) {
+	for _, depID := range unique(startClaim.RestsOn.IDs) {
 		if depID == start {
 			return []string{start, start}
 		}
@@ -755,7 +755,7 @@ func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]mo
 	var queue []queueItem
 	visited := map[string]int{start: 0}
 
-	startNeighbors := unique(startClaim.RestsOn)
+	startNeighbors := unique(startClaim.RestsOn.IDs)
 	sort.Strings(startNeighbors)
 
 	for _, depID := range startNeighbors {
@@ -781,7 +781,7 @@ func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]mo
 			continue
 		}
 
-		cNeighbors := unique(c.RestsOn)
+		cNeighbors := unique(c.RestsOn.IDs)
 		sort.Strings(cNeighbors)
 
 		for _, nextID := range cNeighbors {

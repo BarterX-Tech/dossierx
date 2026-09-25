@@ -4,6 +4,6 @@ module: dgatemod
 status: draft
 layout: card
 body: |
-  Child rests on the doctrine hub so hub-gating walks this edge.
+  Child rests on an unlocked claim so rest-on-locked refuses lock.
 rests_on:
-  - dgatemod.doctrine.hub
+  - dgatemod.contract.hub

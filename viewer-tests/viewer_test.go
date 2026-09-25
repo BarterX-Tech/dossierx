@@ -370,6 +370,9 @@ module: ` + module + `
 status: draft
 body: |
   a claim in module ` + module + `.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -385,12 +388,12 @@ func TestDelegatedTabNavigationSwitchesModules(t *testing.T) {
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
 	)
 	// On load the first module is shown, the second hidden.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section').length === 2 && !document.querySelectorAll('.module-section')[0].hidden && document.querySelectorAll('.module-section')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
 
 	// Click the SECOND sidebar tab. Its handler is bound by delegation on
 	// document (not on the button), so this exercises the delegated path.
-	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab')[1].click();`, nil))
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab:not(.constitution-tab)')[1].click();`, nil))
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
 }
 
 // ---------------------------------------------------------------------

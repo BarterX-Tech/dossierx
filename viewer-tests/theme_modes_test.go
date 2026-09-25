@@ -37,6 +37,9 @@ body: |
   | field | meaning |
   | --- | --- |
   | id | identity |
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 func newReaderModeProject(t *testing.T) *project {

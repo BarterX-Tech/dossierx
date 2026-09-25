@@ -239,8 +239,9 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 
 	t.Run("no cycle of any shape", func(t *testing.T) {
 		// "dossierx check" returns above the catalog and render stages on the
-		// first error-severity finding, and a rests_on loop is error
-		// severity. So a fixture that renders at all cannot carry one — and if this fixture
+		// first error-severity finding, and a rests_on loop, a governed_by
+		// loop and a loop alternating the two are all error severity. So a
+		// fixture that renders at all cannot carry one — and if this fixture
 		// ever did, it would stop rendering rather than fail here. Asserting
 		// it anyway states the property at the level the PANE cares about,
 		// which is the payload's edge set, and it is what makes the empty
@@ -249,7 +250,7 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 			name  string
 			types map[string]bool
 		}{
-			{"rests_on", map[string]bool{EdgeRestsOn: true}},
+			{"rests_on only", map[string]bool{EdgeRestsOn: true}},
 		}
 		for _, sh := range shapes {
 			adj := map[string][]string{}

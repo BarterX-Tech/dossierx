@@ -208,7 +208,7 @@ func isTagBoundary(c byte) bool {
 // filtered to open threads with ?open=1. body_html is produced only by
 // markdown.Render, the one safe renderer, so a hostile body is inert here.
 func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
 		return
@@ -271,7 +271,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // readiness map is the exact map check.Status used for catalog/viewer capacity
 // grading; there is deliberately no second store read after the verdict.
 func (s *Server) renderStatus() ([]byte, error) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("load claims: %w", err)
 	}
@@ -321,7 +321,7 @@ func (s *Server) renderStatus() ([]byte, error) {
 // dropped.unresolved_edges, and the pane shows a notice rather than silently
 // drawing a smaller graph than the data describes.
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
 		return
@@ -896,7 +896,10 @@ func statusToDTO(res check.Result) statusDTO {
 		conformanceCode = cliout.CodeConformanceCapacityExceeded
 	}
 	switch {
-	case len(res.LintErrors) > 0:
+	case len(res.ClaimLintErrors()) > 0:
+		// The claims' own findings; the roof's finding rides in the same list
+		// but is decided at its own gate below, after the ledger, exactly as
+		// every check mode decides it.
 		errorCode = cliout.CodeLintFailed
 		failurePhase = "lint"
 	case res.ConformanceCapacityExceeded:
@@ -908,6 +911,14 @@ func statusToDTO(res check.Result) statusDTO {
 		if failurePhase == "" {
 			failurePhase = "ledger"
 		}
+	case !res.Constitution.Locked() || res.Constitution.OverCap:
+		// The roof gate (NIT-26): the strip shows the project as refused
+		// until the constitution is locked, with the finding in lint_errors.
+		errorCode = cliout.CodeConstitutionNotLocked
+		if res.Constitution.OverCap {
+			errorCode = cliout.CodeConstitutionOverCap
+		}
+		failurePhase = "constitution"
 	case conformanceBlocked:
 		errorCode = cliout.CodeConformanceFailed
 		failurePhase = "conformance"

@@ -248,11 +248,13 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, root)
 
 	writeClaim := func(name, id string) {
 		claim := "id: " + id + "\n" +
 			"facet: contract\nmodule: cwmod\nstatus: draft\nlayout: card\n" +
-			"body: |\n  concurrent-writer fixture claim.\n"
+			"body: |\n  concurrent-writer fixture claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 		if err := os.WriteFile(filepath.Join(claimsDir, name+".yaml"), []byte(claim), 0o644); err != nil {
 			t.Fatalf("write claim %s: %v", id, err)
 		}

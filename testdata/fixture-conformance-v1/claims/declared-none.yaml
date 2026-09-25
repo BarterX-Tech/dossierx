@@ -7,3 +7,6 @@ body: This claim deliberately has no software embodiment.
 embodiment:
   mode: none
   reason: this fixture claim describes documentation only
+rests_on:
+  none: true
+  reason: neutral fixture

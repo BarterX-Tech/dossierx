@@ -110,7 +110,7 @@ func incomingEdges(claims []model.Claim, id string) (dependedOnBy []string) {
 		if c.ID == id {
 			continue
 		}
-		if containsStr(c.RestsOn, id) {
+		if containsStr(c.RestsOn.IDs, id) {
 			dependedOnBy = append(dependedOnBy, c.ID)
 		}
 	}
@@ -259,8 +259,10 @@ func claimTrackViews(refs []model.TrackRef) []claimTrackView {
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
 type claimEdgesData struct {
-	RestsOn      []string `json:"rests_on"`
-	DependedOnBy []string `json:"depended_on_by"`
+	RestsOn       []string `json:"rests_on"`
+	RestsOnNone   bool     `json:"rests_on_none,omitempty"`
+	RestsOnReason string   `json:"rests_on_reason,omitempty"`
+	DependedOnBy  []string `json:"depended_on_by"`
 }
 
 // claimCommentCounts is the discussion roll-up. OpenThreadIDs is carried in
@@ -444,8 +446,6 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 		// right here; --dry-run is where the same answer lives in full.
 		case gate.LintErrors > 0:
 			actions = append(actions, fmt.Sprintf("%s block locking -> dossierx claim lock %s --dry-run", gate.lintBlockerDetail(), id))
-		case gate.UnlockedDoctrineDep != "":
-			actions = append(actions, fmt.Sprintf("dependency %s is doctrine and still draft -> lock it first", gate.UnlockedDoctrineDep))
 		case len(gate.OpenThreads) > 0:
 			actions = append(actions, fmt.Sprintf("%d open comment thread(s) block locking -> the human resolves them in the viewer; that click is the approval", len(gate.OpenThreads)))
 		default:
@@ -558,13 +558,6 @@ func policyVerdictNextActions(verdict lock.CandidateVerdict) []string {
 				actions = append(actions, fmt.Sprintf("%d blocking lint finding(s): %s block local approval -> %s", len(details), strings.Join(details, "; "), preview))
 			case refusal == "unresolved_comments":
 				actions = append(actions, fmt.Sprintf("%d open comment thread(s) block local approval -> the human resolves them in the viewer; that click is the approval", len(verdict.OpenThreads)))
-			case strings.HasPrefix(refusal, "doctrine_dependency_not_locked:"):
-				parts := strings.SplitN(refusal, ":", 3)
-				depID := refusal
-				if len(parts) == 3 {
-					depID = parts[2]
-				}
-				actions = append(actions, fmt.Sprintf("dependency %s is doctrine and still draft -> lock it first", depID))
 			default:
 				actions = append(actions, fmt.Sprintf("local approval refused (%s) -> %s", refusal, preview))
 			}
@@ -653,8 +646,10 @@ func newClaimShowCmd() *cobra.Command {
 				Trigger:       trigger,
 				Readiness:     assessment,
 				Edges: claimEdgesData{
-					RestsOn:      emptyIfNil(claim.RestsOn),
-					DependedOnBy: emptyIfNil(dependedOnBy),
+					RestsOn:       emptyIfNil(claim.RestsOn.IDs),
+					RestsOnNone:   claim.RestsOn.None,
+					RestsOnReason: claim.RestsOn.Reason,
+					DependedOnBy:  emptyIfNil(dependedOnBy),
 				},
 				ImplementedIn: links,
 				Comments:      counts,
@@ -700,7 +695,11 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 	if d.Ledger != nil && d.Ledger.Recorded && !d.Ledger.Released && !d.Ledger.ContentMatches {
 		fmt.Fprintln(out, "  lock ledger:        CONTENT DOES NOT MATCH THE APPROVAL ON RECORD (see dossierx check --validate)")
 	}
-	fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
+	if d.Edges.RestsOnNone {
+		fmt.Fprintf(out, "  outgoing rests_on:  none (%s)\n", d.Edges.RestsOnReason)
+	} else {
+		fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
+	}
 	fmt.Fprintf(out, "  incoming rests_on:  %v\n", d.Edges.DependedOnBy)
 	if len(d.ImplementedIn) == 0 {
 		fmt.Fprintln(out, "  implemented in:     (nothing linked)")
@@ -1178,6 +1177,14 @@ type claimNewData struct {
 // either way, and now every other command in the project fails until someone
 // deletes it by hand — which is precisely the hand-editing this release gates.
 func parseClaimID(cfg *config.Config, id string) (module, facet, slug string, err error) {
+	if model.IsProjectClaimID(id) {
+		_, slug, _ = strings.Cut(id, ".")
+		if !slugPatternMatches(slug) {
+			return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
+				"claim new: id slug %q must be kebab-case (lowercase alphanumerics separated by single hyphens)", slug)
+		}
+		return "", "", slug, nil
+	}
 	segs := strings.Split(id, ".")
 	if len(segs) != 3 || segs[0] == "" || segs[1] == "" || segs[2] == "" {
 		return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
@@ -1232,6 +1239,24 @@ func slugPatternMatches(slug string) bool {
 // anywhere else would report a cheerful success for a file the project can
 // never see, which is a worse outcome than a clear refusal.
 func claimNewPath(cfg *config.Config, id, override string) (string, error) {
+	if model.IsProjectClaimID(id) {
+		if override == "" {
+			_, slug, _ := strings.Cut(id, ".")
+			return filepath.Join(cfg.ProjectClaimsDirPath(), slug+".yaml"), nil
+		}
+		if filepath.IsAbs(override) {
+			return "", cliout.Errorf(cliout.CodeBadRequest,
+				"claim new: --file %q must be relative to project_claims_dir, not absolute", override)
+		}
+		root := cfg.ProjectClaimsDirPath()
+		path := filepath.Join(root, override)
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", cliout.Errorf(cliout.CodeBadRequest,
+				"claim new: --file %q escapes project_claims_dir", override)
+		}
+		return path, nil
+	}
 	if override == "" {
 		return filepath.Join(cfg.ClaimsDir, id+".yaml"), nil
 	}
@@ -1249,16 +1274,18 @@ func claimNewPath(cfg *config.Config, id, override string) (string, error) {
 }
 
 func newClaimNewCmd() *cobra.Command {
-	var body, layout, section, buildRole, file string
+	var body, layout, section, buildRole, restsOnNoneReason, file string
 	var restsOn []string
 	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "new <id>",
 		Short: "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
-		Long: "Author a new draft claim at <claims_dir>/<id>.yaml.\n\n" +
-			"The claim it writes is shaped to pass the lint suite immediately: a body\n" +
-			"and layout: card (or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
+		Long: "Author a new draft claim at <claims_dir>/<id>.yaml or, for project.<slug>,\n" +
+			"<project_claims_dir>/<slug>.yaml.\n\n" +
+			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
+			"required rests_on (targets or --rests-on-none-reason), and layout: card\n" +
+			"(or --layout). Draft authoring is deliberately unfrictioned — no --reason,\n" +
 			"no confirmation — because drafts are the agent's workshop. The gate in this\n" +
 			"release is on LOCKED claims.",
 		Args: cobra.ExactArgs(1),
@@ -1285,6 +1312,9 @@ func newClaimNewCmd() *cobra.Command {
 				if strings.TrimSpace(body) == "" {
 					dr.Lacking("--body")
 				}
+				if len(restsOn) == 0 && strings.TrimSpace(restsOnNoneReason) == "" {
+					dr.Lacking("--rests-on-none-reason")
+				}
 				// Both details are written for the verdict they are attached to,
 				// not for the failure. A Detail is emitted verbatim whether OK is
 				// true or false, so "a claim with this id already exists" printed
@@ -1309,6 +1339,10 @@ func newClaimNewCmd() *cobra.Command {
 			if strings.TrimSpace(body) == "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
 					"claim new: --body is required and must be non-empty; a claim with no content states nothing")
+			}
+			if len(restsOn) == 0 && strings.TrimSpace(restsOnNoneReason) == "" {
+				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
+					"claim new: --rests-on-none-reason is required when --rests-on is empty")
 			}
 
 			// Claim-file write discipline (Phase 0): take the project-wide
@@ -1344,8 +1378,17 @@ func newClaimNewCmd() *cobra.Command {
 				Body:       normalizeClaimBody(body),
 				Section:    section,
 				BuildRole:  model.BuildRole(buildRole),
-				RestsOn:    restsOn,
 				SourcePath: path,
+			}
+			if model.IsProjectClaimID(id) {
+				claim.Scope = model.ScopeProject
+				claim.Facet = ""
+				claim.Module = ""
+			}
+			if len(restsOn) > 0 {
+				claim.RestsOn = model.RestsOnIDs(restsOn...)
+			} else {
+				claim.RestsOn = model.RestsNone(restsOnNoneReason)
 			}
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: create claim dir: %w", err)
@@ -1385,7 +1428,8 @@ func newClaimNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&layout, "layout", string(model.LayoutCard), "render layout: card, list, tree, banner (table/steps/mockup need rows/steps/raw_html, which this command does not author)")
 	cmd.Flags().StringVar(&section, "section", "", "optional in-content section heading this claim sits under")
 	cmd.Flags().StringVar(&buildRole, "build-role", "", "optional build phase: orientation, schema, behavior, api, verification, out-of-scope (required only once the claim locks)")
-	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on")
+	cmd.Flags().StringVar(&restsOnNoneReason, "rests-on-none-reason", "", "why this claim rests on nothing (required when --rests-on is empty)")
+	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on: project.<slug>, any module's *.contract.*, or this module's own *.internals.*")
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what creating this claim would do, and write nothing")
 	return cmd

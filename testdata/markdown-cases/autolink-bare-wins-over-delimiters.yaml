@@ -7,3 +7,6 @@ body: |
   A consumed url is one token, so every delimiter inside it is literal:
   https://example.com/v1/_status_ and https://example.com/a*b*c and
   https://example.com/a~~b~~c.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the url wins over every emphasis, strike and underscore delimiter it contains

@@ -223,4 +223,7 @@ module: widget
 status: locked
 build_role: schema
 body: claim b
+rests_on:
+  none: true
+  reason: fixture
 `

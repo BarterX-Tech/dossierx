@@ -50,7 +50,7 @@ func TestConfirmAppliesAndClearsFlag(t *testing.T) {
 		Module:        "widget",
 		Status:        model.StatusLocked,
 		ReviewPending: true,
-		RestsOn:       []string{dep.ID},
+		RestsOn:       model.RestsOnIDs(dep.ID),
 		Body:          "Widget supports old behavior.",
 	}
 	claims := []model.Claim{claim, dep}

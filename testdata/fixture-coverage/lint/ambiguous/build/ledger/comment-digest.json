@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "digests": {
+    "ambmod.contract.dup": "e4617f3845eb57f06e25aaf2988b4df06da7939670a136b6cb6a48ac23619ac3",
+    "ambmod.contract.helper": "b688f4aa8ebb8fb82c4596645f65e8406a7842c1f6c6c134b9c07fa807dcd20c"
+  }
+}

@@ -16,6 +16,9 @@ const tracksDoc = `id: widget.contract.a
 facet: contract
 module: widget
 status: draft
+rests_on:
+  none: true
+  reason: fixture
 tracks:
   - id: checkout
     role: owns
@@ -89,7 +92,7 @@ func TestTrackRef_OmittedRoleMeansCites(t *testing.T) {
 // see the equivalent in source_test.go for why the absent key, rather than an
 // empty list, is what the lock ledger's compatibility gate depends on.
 func TestClaim_Tracks_OptionalAndOmitted(t *testing.T) {
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nrests_on:\n  none: true\n  reason: fixture\n")
 	if c.Tracks != nil {
 		t.Fatalf("Tracks = %+v, want nil when omitted", c.Tracks)
 	}

@@ -1,7 +1,10 @@
-id: dgatemod.doctrine.hub
-facet: doctrine
+id: dgatemod.contract.hub
+facet: contract
 module: dgatemod
 status: draft
 layout: card
 body: |
-  Doctrine hub for the hub-gating fixture.
+  Upstream claim the child rests on.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any other claim

@@ -29,6 +29,7 @@ func writeSourcedClaimFixture(t *testing.T) string {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 
 	sourced := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  requests retry three times with backoff [1], and the ceiling is fixed [2].\n" +
@@ -39,13 +40,15 @@ func writeSourcedClaimFixture(t *testing.T) string {
 		"    does_not_support: the specific ceiling value\n" +
 		"  - ref: 2\n    kind: internal\n    title: Extraction ledger row\n" +
 		"    path: research/ledger.jsonl\n    record_id: r-17\n" +
-		"    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n"
+		"    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "retry.yaml"), []byte(sourced), 0o644); err != nil {
 		t.Fatalf("write sourced claim: %v", err)
 	}
 
 	bare := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  the total time budget across retries.\n"
+		"body: |\n  the total time budget across retries.\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "timeout.yaml"), []byte(bare), 0o644); err != nil {
 		t.Fatalf("write unsourced claim: %v", err)
 	}

@@ -17,24 +17,23 @@ func TestCycleLint(t *testing.T) {
 			name: "passing: acyclic rests_on chain",
 			claims: []model.Claim{
 				{ID: "widget.contract.overview"},
-				{ID: "widget.internals.fields", RestsOn: []string{"widget.contract.overview"}},
-				{ID: "widget.internals.detail", RestsOn: []string{"widget.internals.fields"}},
+				{ID: "widget.internals.detail", RestsOn: model.RestsOnIDs("widget.internals.fields")},
 			},
 			wantFindings: 0,
 		},
 		{
 			name: "failing: three-claim rests_on cycle",
 			claims: []model.Claim{
-				{ID: "widget.a.one", RestsOn: []string{"widget.b.two"}},
-				{ID: "widget.b.two", RestsOn: []string{"widget.c.three"}},
-				{ID: "widget.c.three", RestsOn: []string{"widget.a.one"}},
+				{ID: "widget.a.one", RestsOn: model.RestsOnIDs("widget.b.two")},
+				{ID: "widget.b.two", RestsOn: model.RestsOnIDs("widget.c.three")},
+				{ID: "widget.c.three", RestsOn: model.RestsOnIDs("widget.a.one")},
 			},
 			wantFindings: 3,
 		},
 		{
 			name: "failing: claim rests_on itself is a degenerate one-claim cycle",
 			claims: []model.Claim{
-				{ID: "widget.contract.self", RestsOn: []string{"widget.contract.self"}},
+				{ID: "widget.contract.self", RestsOn: model.RestsOnIDs("widget.contract.self")},
 			},
 			wantFindings: 1,
 		},
@@ -58,9 +57,9 @@ func TestCycleLint(t *testing.T) {
 // sees, and this is what holds it to that.
 func TestCycleLintFindingShape(t *testing.T) {
 	findings := CycleLint{}.Check([]model.Claim{
-		{ID: "widget.a.one", RestsOn: []string{"widget.b.two"}},
-		{ID: "widget.b.two", RestsOn: []string{"widget.c.three"}},
-		{ID: "widget.c.three", RestsOn: []string{"widget.a.one"}},
+		{ID: "widget.a.one", RestsOn: model.RestsOnIDs("widget.b.two")},
+		{ID: "widget.b.two", RestsOn: model.RestsOnIDs("widget.c.three")},
+		{ID: "widget.c.three", RestsOn: model.RestsOnIDs("widget.a.one")},
 	}, nil)
 
 	want := []Finding{
@@ -101,12 +100,12 @@ func TestCycleLintDeepChainDoesNotPanic(t *testing.T) {
 		}
 		claims = append(claims, model.Claim{
 			ID:      fmt.Sprintf("widget.chain.n%d", i),
-			RestsOn: []string{next},
+			RestsOn: model.RestsOnIDs(next),
 		})
 	}
 	claims = append(claims,
-		model.Claim{ID: "widget.chain.loop-a", RestsOn: []string{"widget.chain.loop-b"}},
-		model.Claim{ID: "widget.chain.loop-b", RestsOn: []string{"widget.chain.loop-a"}},
+		model.Claim{ID: "widget.chain.loop-a", RestsOn: model.RestsOnIDs("widget.chain.loop-b")},
+		model.Claim{ID: "widget.chain.loop-b", RestsOn: model.RestsOnIDs("widget.chain.loop-a")},
 	)
 
 	findings := CycleLint{}.Check(claims, nil)

@@ -7,3 +7,6 @@ body: |
   # One
 
   ## Two
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - # and ## are reserved for viewer chrome and stay literal

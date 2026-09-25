@@ -6,3 +6,6 @@ layout: card
 body: |
   A claim whose facet, "ghostfacet", is not listed in this project's
   config.facets at all.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

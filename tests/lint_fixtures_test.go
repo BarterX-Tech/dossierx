@@ -75,6 +75,8 @@ func runValidateFindings(t *testing.T, fixtureDir, cfgPath string) (findings []l
 // engine design (not an accident of fixture authoring). Two rules overlap
 // on purpose:
 //
+//   - validated-on-missing: a governed_by.type that names a doctrine claim
+//     id with no matching claim is also a dangling edge.
 //   - cycle: its fixture includes the degenerate one-node case (a claim
 //     whose rests_on names itself), which is by construction also a
 //     self-edge. Both rules are telling the truth about that claim -- it is
@@ -85,8 +87,10 @@ func runValidateFindings(t *testing.T, fixtureDir, cfgPath string) (findings []l
 //
 // Every other fixture is built to trip its target rule alone.
 var coFiresWith = map[string][]string{
-	"cycle":     {"self-edge"},
-	"self-edge": {"cycle"},
+	"cycle":                 {"self-edge"},
+	"self-edge":             {"cycle"},
+	"constitution-over-cap": {"orphan"},
+	"rests-on-required":     {"orphan"},
 }
 
 // lintFixtureExpectedExit is the exit code "dossierx check --validate" must

@@ -41,7 +41,7 @@ func sourcedClaim(sources ...model.Source) model.Claim {
 // segment of the relationships chip's text.
 func TestEdges_NoSourcesRendersPlainTruthfulZeroState(t *testing.T) {
 	c := sourcedClaim()
-	c.RestsOn = []string{"widget.contract.other"}
+	c.RestsOn = model.RestsOnIDs("widget.contract.other")
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
 	if strings.Contains(got, `<details class="claim-sources"`) {

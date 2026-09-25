@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"io"
 	"io/fs"
 	"net/http"
@@ -27,7 +30,8 @@ const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widg
 // thread to a draft never sets review_pending, so the file stays predictable).
 func draftClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  a draft claim.\n"
+		"body: |\n  a draft claim.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 // lockedClaimWithOpenThread is a locked card carrying one open thread c-aaaaaa,
@@ -35,6 +39,7 @@ func draftClaim(id string) string {
 func lockedClaimWithOpenThread(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
 		"body: |\n  a locked claim.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n"
 }
@@ -74,6 +79,7 @@ func startServerWatch(t *testing.T, cfgBody string, files map[string]string, pol
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+	armConstitution(t, cfg)
 	srv = serve.New(cfg, testVersion)
 	if poll > 0 {
 		srv.SetWatchIntervals(poll, debounce)
@@ -853,6 +859,7 @@ func TestListComments_OpenFilter(t *testing.T) {
 	files := map[string]string{
 		"claims/mixed.yaml": "id: widget.contract.mixed\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"body: |\n  mixed threads.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-open01\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: still open\n    edited: false\n" +
 			"  - id: c-done01\n    status: resolved\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: all done\n    edited: false\n    resolved_by: human\n    resolved_at: \"2026-07-24T11:00:00Z\"\n",
@@ -881,4 +888,42 @@ func countComments(t *testing.T, data []byte) int {
 		t.Fatalf("decode comments: %v (body=%s)", err, data)
 	}
 	return len(out.Comments)
+}
+
+// armConstitution gives a served fixture the locked roof the gate demands
+// (NIT-26): a minimal constitution.yaml beside the config (unless the fixture
+// wrote its own) and the lock-store record `constitution lock` would leave.
+func armConstitution(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	if cfg == nil {
+		// A fixture whose config is refused on purpose has no roof to lock.
+		return
+	}
+	path := cfg.ConstitutionPath()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		roof := "status: locked\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture has one lockable constitution above every module.\n"
+		if err := os.WriteFile(path, []byte(roof), 0o644); err != nil {
+			t.Fatalf("arm constitution: write: %v", err)
+		}
+	}
+	f, err := constitution.Load(path)
+	if err != nil {
+		t.Fatalf("arm constitution: load: %v", err)
+	}
+	store, err := lock.LoadStore(cfg.LockStorePath())
+	if err != nil {
+		t.Fatalf("arm constitution: load store: %v", err)
+	}
+	lock.LockConstitution(store, f, "fixture roof", time.Now())
+	// The crossing the real command performs on a fresh project: the comment
+	// threads already on disk are taken into digest coverage now, silently,
+	// so a fixture that hand-writes a thread before arming is not "unrecorded".
+	if !store.LedgerCovered() && !store.PreLedger() {
+		if claims, loadErr := loader.LoadAll(cfg); loadErr == nil {
+			lock.SweepCommentDigests(store, claims, false)
+		}
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("arm constitution: save store: %v", err)
+	}
 }

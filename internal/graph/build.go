@@ -99,7 +99,7 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 	// client reports them under their own rule id, and swallowing them
 	// here would make that rule unable to fire.
 	for _, c := range claims {
-		for _, target := range c.RestsOn {
+		for _, target := range c.RestsOn.IDs {
 			p.appendEdge(known, c.ID, target, EdgeRestsOn)
 		}
 		// c.Tracks IS NOT WALKED HERE, AND NOTHING BELONGS IN THIS LOOP FOR

@@ -6,3 +6,6 @@ layout: card
 body: |
   a `code\
   more` b
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a code span does not span a hard break

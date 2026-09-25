@@ -8,3 +8,6 @@ body: |
     | a | b |
     | --- | --- |
     | 1 | 2 |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a table inside a list item is literal item prose, per the container matrix

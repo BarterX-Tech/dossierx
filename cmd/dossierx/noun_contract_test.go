@@ -29,7 +29,7 @@ import (
 // and the process exited 0. An agent that checked the status concluded its call
 // had succeeded and that the empty result was the answer.
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
-	for _, noun := range []string{"claim", "comment", "track", "skills"} {
+	for _, noun := range []string{"claim", "comment", "constitution", "track", "skills"} {
 		t.Run(noun, func(t *testing.T) {
 			env, _, err := execReviewedCLIJSON(t, noun)
 			if err == nil {
@@ -219,7 +219,8 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"body: |\n  the original approved body.\n",
+			"body: |\n  the original approved body.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	claimFile := filepath.Join(root, "claims", "a.yaml")
 

@@ -94,6 +94,7 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 	// git cannot answer inside the work tree.
 	storesArePreconditionData := cliout.NewDryRun(data.Would)
 	storesArePrecondition(storesArePreconditionData, cfg)
+	constitutionPrecondition(storesArePreconditionData, constitutionVerdictWith(cfg, store))
 	for _, precondition := range storesArePreconditionData.Preconditions {
 		data.Preconditions = append(data.Preconditions, precondition)
 		if !precondition.OK {
@@ -165,6 +166,12 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	store, err := lock.LoadStore(storePath(cfg))
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
+	}
+	// The roof gate (NIT-26): the policy evaluator scopes lint findings to the
+	// requested claims, and the constitution is not a claim, so it is refused
+	// here, before the set is evaluated at all.
+	if err := constitutionGate("lock", constitutionVerdictWith(cfg, store)); err != nil {
+		return cmdResult{}, err
 	}
 	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
 		return cmdResult{}, err
@@ -345,13 +352,6 @@ func policyRefusalError(evaluation lock.SetEvaluation) error {
 				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID).WithDetails(details)
 			case strings.HasPrefix(refusal, "semantic_contradiction_requires_human_review"):
 				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details)
-			case strings.HasPrefix(refusal, "doctrine_dependency_not_locked:"):
-				parts := strings.SplitN(refusal, ":", 3)
-				if len(parts) == 3 {
-					details["doctrine_facet"] = parts[1]
-					details["dependency_id"] = parts[2]
-					return cliout.Errorf(cliout.CodeLintFailed, "lock: claim %q requires locked %s doctrine dependency %q", verdict.ClaimID, parts[1], parts[2]).WithDetails(details)
-				}
 			case strings.HasPrefix(refusal, "retired_dependency:"), strings.HasPrefix(refusal, "unreadable_dependency:"):
 				parts := strings.SplitN(refusal, ":", 2)
 				if len(parts) == 2 {
@@ -424,7 +424,7 @@ func policySnapshot(claims []model.Claim, ids []string) string {
 		if !ok {
 			return
 		}
-		for _, dep := range claim.RestsOn {
+		for _, dep := range claim.RestsOn.IDs {
 			visit(dep)
 		}
 	}
@@ -481,7 +481,7 @@ func reviewedPolicyClaims(claims []model.Claim, ids []string) ([]policyReviewedC
 		if !ok {
 			return
 		}
-		for _, dep := range claim.RestsOn {
+		for _, dep := range claim.RestsOn.IDs {
 			visit(dep)
 		}
 	}

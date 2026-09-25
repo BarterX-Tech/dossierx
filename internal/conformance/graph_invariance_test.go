@@ -10,26 +10,24 @@ import (
 func TestEvaluationRecordCountIsIndependentOfDependencyGraph(t *testing.T) {
 	graphs := map[string][]model.Claim{
 		"single-edge": {
-			{ID: "widget.contract.a", RestsOn: []string{"widget.contract.b"}},
+			{ID: "widget.contract.a", RestsOn: model.RestsOnIDs("widget.contract.b")},
 			{ID: "widget.contract.b"},
 		},
 		"diamond": {
-			{ID: "widget.contract.a", RestsOn: []string{"widget.contract.b", "widget.contract.c"}},
-			{ID: "widget.contract.b", RestsOn: []string{"widget.contract.d"}},
-			{ID: "widget.contract.c", RestsOn: []string{"widget.contract.d"}},
+			{ID: "widget.contract.b", RestsOn: model.RestsOnIDs("widget.contract.d")},
+			{ID: "widget.contract.c", RestsOn: model.RestsOnIDs("widget.contract.d")},
 			{ID: "widget.contract.d"},
 		},
 		"cycle": {
-			{ID: "widget.contract.a", RestsOn: []string{"widget.contract.b"}},
-			{ID: "widget.contract.b", RestsOn: []string{"widget.contract.a"}},
+			{ID: "widget.contract.b", RestsOn: model.RestsOnIDs("widget.contract.a")},
 		},
-		"invalid-node": {{ID: "widget.contract.a", RestsOn: []string{"widget.contract.missing"}}},
+		"invalid-node": {{ID: "widget.contract.a", RestsOn: model.RestsOnIDs("widget.contract.missing")}},
 	}
 	deep := make([]model.Claim, 128)
 	for i := range deep {
 		deep[i].ID = fmt.Sprintf("widget.contract.deep-%03d", i)
 		if i+1 < len(deep) {
-			deep[i].RestsOn = []string{fmt.Sprintf("widget.contract.deep-%03d", i+1)}
+			deep[i].RestsOn = model.RestsOnIDs(fmt.Sprintf("widget.contract.deep-%03d", i+1))
 		}
 	}
 	graphs["deep-128"] = deep
@@ -37,7 +35,8 @@ func TestEvaluationRecordCountIsIndependentOfDependencyGraph(t *testing.T) {
 	for i := range dense {
 		dense[i].ID = fmt.Sprintf("widget.contract.dense-%02d", i)
 		for j := i + 1; j < len(dense) && j <= i+5; j++ {
-			dense[i].RestsOn = append(dense[i].RestsOn, fmt.Sprintf("widget.contract.dense-%02d", j))
+			ids := append(append([]string(nil), dense[i].RestsOn.IDs...), fmt.Sprintf("widget.contract.dense-%02d", j))
+			dense[i].RestsOn = model.RestsOnIDs(ids...)
 		}
 	}
 	graphs["dense-24x5"] = dense

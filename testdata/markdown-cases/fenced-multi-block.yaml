@@ -17,3 +17,6 @@ body: |
   ```
 
   After.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

@@ -19,7 +19,8 @@ package viewertests
 //
 // CYCLES ARE PROVEN BY INJECTION, NOT BY A FIXTURE. dossierx check returns
 // above the render stage on the first error-severity lint partition, and
-// cycle and self-edge are both error severity. So no corpus that renders at all can contain a cycle of
+// cycle, governed-cycle, self-edge and (from v0.5.0) mixed-cycle are all
+// error severity. So no corpus that renders at all can contain a cycle of
 // any shape. Because the pane parses the payload block at FIRST OPEN rather
 // than at parse time, a test can replace that block's textContent before
 // opening the pane: the rendered document never contained a cycle, the pane
@@ -60,6 +61,11 @@ status: draft
 `
 	if restsOn != "" {
 		body += "rests_on:\n  - " + restsOn + "\n"
+	} else {
+		body += `rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
+`
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
@@ -161,9 +167,10 @@ func jsQuote(s string) string { return "\"" + s + "\"" }
 // Step 70 — cycle rendering, proven by INJECTING a cycle-carrying payload
 // ---------------------------------------------------------------------
 
-// injectedCyclePayload carries the structural shapes at once: two plain
-// rests_on loops and a literal self-edge — which is reported under its own
-// rule id and never merged into the cycle list.
+// injectedCyclePayload carries all three structural shapes at once: a plain
+// rests_on loop, the MIXED rests_on/governed_by loop that neither engine
+// cycle lint could see before v0.5.0, and a literal self-edge — which is
+// reported under its own rule id and never merged into the cycle list.
 //
 // core.contract.free is in no cycle and no self-edge, and it is what makes the
 // CANVAS half of this test mean something: with every node ringed red, "the
@@ -428,6 +435,9 @@ module: widget
 status: draft
 body: |
   a claim whose facet is a script-closing breakout attempt.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 
 	base, _ := p.serve()
@@ -545,14 +555,14 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	types := evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-type]'))
 		.map(function (e) { return e.getAttribute('data-dxg-type'); })`)
 	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on"}) {
-		t.Fatalf("edge-type toggles = %v, want the one remaining relation type", types)
+		t.Fatalf("edge-type toggles = %v, want rests_on", types)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-labels], [data-dxg-relayout]').length`); n != 2 {
 		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
 	}
 
-	// The overlay select carries all five overlays plus none (governance
-	// left with the governed_by edge, NIT-29).
+	// The overlay select carries all six overlays plus none, including
+	// governance — the channel that answers "what does this doctrine reach?"
 	overlays := evalStrings(t, ctx, `Array.from(document.querySelectorAll('#dxgOverlay option'))
 		.map(function (o) { return o.value; })`)
 	wantOverlays := []string{"none", "isolated", "cycles", "review", "comments", "status"}
@@ -640,6 +650,9 @@ module: `+module+`
 status: draft
 body: |
   one of many claims.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	}
 
@@ -800,7 +813,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	openGraphPane(t, ctx)
 
 	// On load the first module is the visible one.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section').length === 2 && !document.querySelectorAll('.module-section')[0].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`)
 
 	// Change a graph filter. The pane writes its segment through
 	// history.replaceState ONLY, which does not fire hashchange — so the
@@ -815,7 +828,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	if !strings.Contains(hash, "!g=") || !strings.Contains(hash, "ov=cycles") {
 		t.Fatalf("hash = %q, want a !g= segment carrying the graph state", hash)
 	}
-	if evalBool(t, ctx, `document.querySelectorAll('.module-section')[0].hidden`) {
+	if evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`) {
 		t.Fatal("a graph filter change must not move the reading view")
 	}
 
@@ -823,7 +836,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	// Both halves must apply.
 	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=review&ty=r&lb=1&ex=&se=';`)
 	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'review'`)
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
 		t.Fatalf("granularity from the pasted hash = %q, want module", got)
 	}

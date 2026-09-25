@@ -26,7 +26,10 @@
 package check
 
 import (
+	"errors"
 	"fmt"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
@@ -194,6 +197,13 @@ type ledgerInputs struct {
 	digestErr error
 	flagsErr  error
 
+	// constitution is the roof as the SAME tree holds it — disk for Run and
+	// Status, the index for StatusStaged — judged against store.Constitution.
+	// It rides here rather than being read by a lint because a registered
+	// lint sees only claims and config, and the whole point of --staged is
+	// that nothing it judges comes from the working tree.
+	constitution constitution.Verdict
+
 	// THERE ARE NO HISTORY FIELDS HERE ANY MORE, and that is deliberate. This
 	// struct used to carry scopeFindings, parentFindings and scopeNote — refusals
 	// and one advisory produced by comparing the commit under judgement against
@@ -243,7 +253,95 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 		in.flags = flags
 	}
 
+	in.constitution = constitution.EvaluateAt(cfg.ConstitutionPath(), constitutionRecord(in.store))
 	return in
+}
+
+// constitutionRecord is the store's roof record, or nil for an unreadable or
+// never-locked store — either way "not locked", which is the conservative
+// reading and the one the gate refuses on.
+func constitutionRecord(store *lock.Store) *constitution.LockRecord {
+	if store == nil {
+		return nil
+	}
+	return store.Constitution
+}
+
+// Names of the three constitution findings check reports. They are not
+// registered lints (a lint sees claims and config, and the roof is neither),
+// but they ride in lint_findings so every consumer that already branches on
+// data.lint_findings[].lint sees them without a new field.
+const (
+	// ConstitutionNotLockedFinding is the gate (NIT-26): error severity, and
+	// the finding plain check refuses on with CONSTITUTION_NOT_LOCKED.
+	ConstitutionNotLockedFinding = "constitution-not-locked"
+	// ConstitutionOverCapFinding is the hard cap: error severity, refused
+	// with CONSTITUTION_OVER_CAP.
+	ConstitutionOverCapFinding = "constitution-over-cap"
+	// ConstitutionNearCapFinding is the 720-word warning band.
+	ConstitutionNearCapFinding = "constitution-near-cap"
+)
+
+// ErrConstitutionGate is the error Run returns when the roof gate refuses
+// (wrapped, with the verdict's detail). Callers branch on it with errors.Is.
+var ErrConstitutionGate = errors.New("constitution gate refused")
+
+// IsConstitutionFinding reports whether a lint finding is one of the roof's
+// three, which are project-level and never about a claim.
+func IsConstitutionFinding(name string) bool {
+	switch name {
+	case ConstitutionNotLockedFinding, ConstitutionOverCapFinding, ConstitutionNearCapFinding:
+		return true
+	}
+	return false
+}
+
+// ClaimLintErrors is LintErrors without the roof's findings: the count the
+// lint step fails on, and the count a claim author can act on.
+func (r Result) ClaimLintErrors() []lint.Finding {
+	var out []lint.Finding
+	for _, f := range r.LintErrors {
+		if !IsConstitutionFinding(f.LintName) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// ConstitutionFindings projects a verdict into check's finding list. The
+// claim_id is the literal "constitution": there is no claim to point at, and
+// an empty id reads as a printing bug.
+func ConstitutionFindings(v constitution.Verdict) []lint.Finding {
+	var out []lint.Finding
+	if v.OverCap {
+		out = append(out, lint.Finding{
+			LintName: ConstitutionOverCapFinding, ClaimID: "constitution", Severity: lint.SeverityError,
+			Message: fmt.Sprintf("constitution is %d of %d words; check and constitution lock refuse CONSTITUTION_OVER_CAP until it is trimmed", v.Words, v.WordCap),
+		})
+	} else if v.NearCap {
+		out = append(out, lint.Finding{
+			LintName: ConstitutionNearCapFinding, ClaimID: "constitution", Severity: lint.SeverityWarning,
+			Message: fmt.Sprintf("constitution is %d of %d words, within %d of the cap", v.Words, v.WordCap, v.WordCap-constitution.NearCap),
+		})
+	}
+	if !v.Locked() {
+		out = append(out, lint.Finding{
+			LintName: ConstitutionNotLockedFinding, ClaimID: "constitution", Severity: lint.SeverityError,
+			Message: v.Detail() + " — no module claim locks and no plain check passes until `dossierx constitution lock` (" + string(v.State) + ")",
+		})
+	}
+	return out
+}
+
+// withConstitutionFindings puts the roof's findings FIRST: it is the one
+// project-level verdict, and a reader who sees forty per-claim findings
+// under it should meet the cause before the consequences.
+func withConstitutionFindings(v constitution.Verdict, findings []lint.Finding) []lint.Finding {
+	roof := ConstitutionFindings(v)
+	if len(roof) == 0 {
+		return findings
+	}
+	return append(roof, findings...)
 }
 
 // ledgerGate evaluates every ledger rule over claims and returns the findings,

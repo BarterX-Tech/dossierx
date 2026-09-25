@@ -7,7 +7,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "neutral fixture"
+      },
       "readiness": {
         "claim_id": "widget.contract.declared-none",
         "policy_version": 1,
@@ -35,7 +38,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "neutral fixture"
+      },
       "readiness": {
         "claim_id": "widget.contract.matched",
         "policy_version": 1,
@@ -90,7 +96,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "neutral fixture"
+      },
       "readiness": {
         "claim_id": "widget.contract.mismatch",
         "policy_version": 1,
@@ -153,7 +162,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "neutral fixture"
+      },
       "readiness": {
         "claim_id": "widget.contract.owed",
         "policy_version": 1,
@@ -192,7 +204,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "neutral fixture"
+      },
       "readiness": {
         "claim_id": "widget.contract.uncheckable",
         "policy_version": 1,

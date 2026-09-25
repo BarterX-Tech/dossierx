@@ -58,7 +58,7 @@ func TestMigrateLegacyStoreRefusesADowngradedStoreCarryingLedgerRecords(t *testi
 	path := filepath.Join(dir, "store.json")
 
 	dep := model.Claim{ID: "widget.contract.overview", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "the drifted body"}
-	dependent := model.Claim{ID: "widget.internals.fields", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	dependent := model.Claim{ID: "widget.internals.fields", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	// A store that says schema 0 (so both existing guards are satisfied: no
 	// hashes, diskVersion 0) while carrying a ledger record, which no genuine
@@ -116,7 +116,7 @@ func TestMigrateLegacyStoreRefusesADowngradeBesideADigestStore(t *testing.T) {
 	}
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "v2"}
-	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	store, err := LoadStore(path)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestMigrateLegacyStoreStillReArmsAnHonestLegacyStoreAndSaysSo(t *testing.T)
 	}
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "v2"}
-	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	store, err := LoadStore(path)
 	if err != nil {

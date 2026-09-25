@@ -54,6 +54,8 @@ func boClaim(id, facet, module, role string, restsOn ...string) string {
 		for _, r := range restsOn {
 			fmt.Fprintf(&b, "  - %s\n", r)
 		}
+	} else {
+		b.WriteString("rests_on:\n  none: true\n  reason: viewer-test fixture, not backed by any doctrine claim\n")
 	}
 	fmt.Fprintf(&b, "body: |\n  the %s claim.\n", id)
 	return b.String()

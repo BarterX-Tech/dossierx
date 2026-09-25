@@ -58,13 +58,17 @@ func readinessScaleProject(t *testing.T, layers, width int) *project {
 					fmt.Fprintf(&restsOn, "  - widget.contract.l%03d-n%02d\n", layer+1, dependency)
 				}
 			}
+			restsBlock := restsOn.String()
+			if restsBlock == "" {
+				restsBlock = "rests_on:\n  none: true\n  reason: viewer-test fixture, not backed by any doctrine claim\n"
+			}
 			p.writeClaim(id+".yaml", fmt.Sprintf(`id: %s
 facet: contract
 module: widget
 status: draft
 body: |
   browser scale fixture at layer %d, node %d.
-%s`, id, layer, node, restsOn.String()))
+%s`, id, layer, node, restsBlock))
 		}
 	}
 	return p
@@ -248,6 +252,9 @@ module: widget
 status: draft
 body: |
   a direct prerequisite awaiting approval.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const readinessBetaYAML = `id: widget.contract.beta
@@ -266,6 +273,9 @@ module: widget
 status: draft
 body: |
   an upstream prerequisite awaiting approval.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 func newReadinessProject(t *testing.T) *project {
@@ -299,6 +309,9 @@ module: widget
 status: draft
 body: |
   an upstream prerequisite awaiting approval.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `, id))
 	}
 	p.writeClaim("hub.yaml", `id: widget.contract.hub

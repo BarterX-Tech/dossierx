@@ -562,6 +562,11 @@ func TestREADME_DigestStoreCommitTimingMatchesTheEngine(t *testing.T) {
 	// Half two — the reader's side. Follow the tracked-artifacts sentence
 	// literally: the lock store goes in "the moment anything is locked"; the
 	// digest waits for a comment that has not happened. Stage exactly that.
+	// The roof lock (NIT-6) was this project's first ledger write and created
+	// the digest store in the same act, so the fixture's setup commit already
+	// carries it. The reader this half simulates never added it: untrack it
+	// first, then stage exactly what the sentence says.
+	gitInConsumer(t, root, "rm", "--cached", "-q", "--ignore-unmatch", "build/ledger/comment-digest.json")
 	gitInConsumer(t, root, "add", "claims", "build/ledger/lock-store.json")
 
 	stdout, _, code := reviewedRun(t, root, "check", "--staged", "--format", "json")

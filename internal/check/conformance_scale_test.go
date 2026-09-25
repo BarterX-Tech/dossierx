@@ -125,8 +125,9 @@ func graphScaleFiles(layers, width int) (files map[string]string, declared, chec
 				for previous := 0; previous < width; previous++ {
 					fmt.Fprintf(&b, "  - widget.contract.c%03d\n", (layer-1)*width+previous)
 				}
+			} else {
+				b.WriteString("rests_on:\n  none: true\n  reason: fixture\n")
 			}
-			b.WriteString("")
 			switch {
 			case index%5 == 0:
 				b.WriteString("embodiment:\n  mode: none\n  reason: generated documentation claim\n")

@@ -128,7 +128,7 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "claim", "list"},
 		{"--config", cfgPath, "claim", "list", "--review-pending"},
 		{"--config", cfgPath, "claim", "list", "--migrated"},
-		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--body", "a new fact"},
+		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--body", "a new fact", "--rests-on-none-reason", "fixture"},
 		{"--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "unlock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "flag", "widget.contract.overview", "--dry-run"},
@@ -425,7 +425,8 @@ func TestEnvelope_BuildOrderStatusIsRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  leftover.\n",
+			"body: |\n  leftover.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {
@@ -588,7 +589,8 @@ func TestLockGateCodes(t *testing.T) {
 	broken := t.TempDir()
 	brokenCfg := writeCheckFixture(t, broken, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\nrests_on:\n  - widget.contract.nope\n",
+			"body: |\n  a claim.\n" +
+			"rests_on:\n  - widget.contract.nope\n",
 	})
 	env, _, err = execReviewedCLIJSON(t, "--config", brokenCfg, "claim", "lock", "widget.contract.a", "--reason", "approved")
 	if err == nil {
@@ -628,6 +630,10 @@ func TestDryRun_LockReportsGatesAndLeavesDiskAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read claim: %v", err)
 	}
+	storeBefore, err := os.ReadFile(storePathForTest(t, cfgPath))
+	if err != nil {
+		t.Fatalf("read store before dry run: %v", err)
+	}
 
 	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
 	if dr.Blocked {
@@ -658,8 +664,10 @@ func TestDryRun_LockReportsGatesAndLeavesDiskAlone(t *testing.T) {
 	if string(after) != string(before) {
 		t.Fatal("--dry-run wrote to the claim file")
 	}
-	if _, statErr := os.Stat(storePathForTest(t, cfgPath)); !os.IsNotExist(statErr) {
-		t.Fatalf("--dry-run created a lock store: %v", statErr)
+	// The roof lock already wrote the store; the dry run must leave it
+	// byte-identical rather than merely present.
+	if storeAfter, readErr := os.ReadFile(storePathForTest(t, cfgPath)); readErr != nil || string(storeAfter) != string(storeBefore) {
+		t.Fatalf("--dry-run touched the lock store: %v", readErr)
 	}
 }
 
@@ -776,7 +784,8 @@ func buildOrderFixture(t *testing.T) string {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  a locked claim with a build role.\n",
+			"body: |\n  a locked claim with a build role.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	return cfgPath
 }
@@ -785,7 +794,8 @@ func TestEnvelope_BuildOrderVerbsAreRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"build_role: schema\n" +
-			"body: |\n  leftover.\n",
+			"body: |\n  leftover.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err == nil || env.OK {

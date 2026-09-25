@@ -28,6 +28,7 @@ func writeIDsFixtureProject(t *testing.T, root string) (claimsDir string) {
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, root)
 	return claimsDir
 }
 
@@ -50,12 +51,18 @@ facet: contract
 module: widget
 status: draft
 body: first claim with this id
+rests_on:
+  none: true
+  reason: fixture
 `)
 	writeIDsClaim(t, claimsDir, "b.yaml", `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
 body: second claim with the same id
+rests_on:
+  none: true
+  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -80,6 +87,9 @@ facet: contract
 module: widget
 status: draft
 body: id has only one segment, not module.facet.slug
+rests_on:
+  none: true
+  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -102,6 +112,9 @@ facet: doctrine
 module: widget
 status: draft
 body: doctrine is not a configured facet
+rests_on:
+  none: true
+  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -127,6 +140,9 @@ facet: contract
 module: gadget
 status: draft
 body: gadget is not a configured module
+rests_on:
+  none: true
+  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -172,6 +188,9 @@ func TestClaimsIDs_NoContentIsInvalid(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+rests_on:
+  none: true
+  reason: fixture
 `)
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
@@ -205,6 +224,9 @@ rows:
     type: string
   - field: name
     type: string
+rests_on:
+  none: true
+  reason: fixture
 `)
 
 	if stdout, stderr, code := run(t, root, "check"); code != 0 {
@@ -223,7 +245,10 @@ func TestClaimsIDs_UnicodeSlugRejected(t *testing.T) {
 		"facet: contract\n"+
 		"module: widget\n"+
 		"status: draft\n"+
-		"body: slug contains an accented character outside [a-z0-9-]\n")
+		"body: slug contains an accented character outside [a-z0-9-]\n"+
+		"rests_on:\n"+
+		"  none: true\n"+
+		"  reason: fixture\n")
 
 	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {

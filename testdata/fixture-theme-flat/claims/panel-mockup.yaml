@@ -10,3 +10,6 @@ body: |
   paints.
 raw_html: '<div class="mockup-diagram"><div class="gcp-console"><div class="gcp-row"><span class="mockup-badge">DRAFT</span> widget.contract.overview</div></div></div>'
 raw_html_reviewed: true
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

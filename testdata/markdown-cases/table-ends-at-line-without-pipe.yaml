@@ -9,3 +9,6 @@ body: |
   | 1 | 2 |
   Prose with no pipe ends it.
   | 3 | 4 |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a table ends at the first line with no unescaped pipe

@@ -44,7 +44,7 @@ func TestAuditScale(t *testing.T) {
 					}
 					if l+1 < shape.layers {
 						for k := 0; k < shape.width; k++ {
-							c.RestsOn = append(c.RestsOn, fmt.Sprintf("audit.n%03d_%02d", l+1, k))
+							c.RestsOn.IDs = append(c.RestsOn.IDs, fmt.Sprintf("audit.n%03d_%02d", l+1, k))
 						}
 					}
 					if shape.mixed {
@@ -58,7 +58,7 @@ func TestAuditScale(t *testing.T) {
 			for _, c := range claims {
 				s.Ledger[c.ID] = lock.LedgerRecord{Subject: lock.SubjectClaim, Hash: lock.LockedClaimHash(c)}
 				s.Hashes[c.ID] = map[string]string{}
-				for _, d := range c.RestsOn {
+				for _, d := range c.RestsOn.IDs {
 					s.Hashes[c.ID][d] = "stale"
 				}
 				if shape.mixed {

@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   ####### Seven
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - seven or more hashes is not a heading

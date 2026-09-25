@@ -6,3 +6,6 @@ layout: card
 body: |
   > This is a blockquote.
   > It can span multiple lines.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests blockquote

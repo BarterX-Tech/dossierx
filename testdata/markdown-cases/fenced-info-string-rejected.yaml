@@ -9,3 +9,6 @@ body: |
   ```<script>alert(1)</script>
   still just code
   ```
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the language class is rejected, not escaped-and-emitted

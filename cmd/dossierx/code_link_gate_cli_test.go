@@ -66,6 +66,7 @@ func codeLinkGateProject(t *testing.T) (cfgPath, srcPath string) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the widget retries twice")
 	armLedgerFixture(t, cfgPath)
 	srcPath = filepath.Join(root, "src", "widget.go")

@@ -405,7 +405,7 @@ func (d *Deps) ReauditDigest(claimID string, actor model.CommentRole, reason str
 	}
 	defer release()
 
-	claims, err := loader.LoadClaims(d.Cfg.ClaimsDir)
+	claims, err := loader.LoadAll(d.Cfg)
 	if err != nil {
 		return model.Claim{}, err
 	}
@@ -462,7 +462,7 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 	}
 	defer release()
 
-	claims, err := loader.LoadClaims(d.Cfg.ClaimsDir)
+	claims, err := loader.LoadAll(d.Cfg)
 	if err != nil {
 		return model.Claim{}, err
 	}

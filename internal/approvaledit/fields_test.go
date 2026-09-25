@@ -31,10 +31,10 @@ func editedPair(t *testing.T, approved, current model.Claim) Change {
 func TestFieldChangesShowWhatMovedWhenTheBodyDidNot(t *testing.T) {
 	approved := model.Claim{
 		ID: "widget.contract.a", Facet: "contract", Body: "Unchanged prose.\n",
-		RestsOn: []string{"widget.contract.old"},
+		RestsOn: model.RestsOnIDs("widget.contract.old"),
 	}
 	current := approved
-	current.RestsOn = []string{"widget.contract.new"}
+	current.RestsOn = model.RestsOnIDs("widget.contract.new")
 
 	change := editedPair(t, approved, current)
 	if change.BodyChanged() {
@@ -73,11 +73,11 @@ func TestFieldChangesShowWhatMovedWhenTheBodyDidNot(t *testing.T) {
 func TestFieldChangesAgreeWithOtherFields(t *testing.T) {
 	approved := model.Claim{
 		ID: "widget.contract.b", Facet: "contract", Body: "Unchanged.\n",
-		RestsOn: []string{"widget.contract.x"}, Steps: []string{"one"},
+		RestsOn: model.RestsOnIDs("widget.contract.x"), Steps: []string{"one"},
 		AuditNotes: []string{"first note"},
 	}
 	current := approved
-	current.RestsOn = []string{"widget.contract.y"}
+	current.RestsOn = model.RestsOnIDs("widget.contract.y")
 	current.Steps = []string{"one", "two"}
 	current.AuditNotes = []string{"first note", "second note"}
 

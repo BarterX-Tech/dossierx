@@ -10,3 +10,6 @@ body: |
   | a & b | ampersand |
   | "quoted" | quotes |
   | [x](javascript:alert(1)) | rejected scheme |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - hostile cell content - script tags, ampersands, quotes and a rejected link scheme

@@ -9,3 +9,6 @@ body: |
   ---
 
   Section two content.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests horizontal rule

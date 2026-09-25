@@ -200,9 +200,16 @@ const (
 	// Resolve in the viewer — that click IS the approval this gate is waiting
 	// for — so an agent must not treat this as something to work around.
 	CodeUnresolvedComments Code = "unresolved_comments"
-	// CodeDependencyNotLocked is doctrine hub gating: a claim cannot lock while
-	// a dependency in the doctrine facet is still draft.
-	CodeDependencyNotLocked Code = "dependency_not_locked"
+	// CodeConstitutionOverCap is check+lock refusing a present constitution.yaml
+	// that exceeds the 800-word cap. The wire token is the Done-when name.
+	CodeConstitutionOverCap Code = "CONSTITUTION_OVER_CAP"
+	// CodeConstitutionNotLocked is the roof gate (NIT-26): `claim lock` and
+	// plain `check` refuse while the constitution is missing, status: draft,
+	// or edited after its lock (stored hash != file hash). Always on, no
+	// config switch. `claim new/show/list`, `serve` and `constitution
+	// show|lock` keep working so the agent can draft and the human can read
+	// and re-lock. Wire token matches the ticket's name, like OVER_CAP.
+	CodeConstitutionNotLocked Code = "CONSTITUTION_NOT_LOCKED"
 	// CodeStructuredLayout is a body-only operation refused on a claim whose
 	// rendered content lives outside body. The test is on CONTENT, not on the
 	// layout name, and that is v0.4.1's widening rather than a detail: any claim

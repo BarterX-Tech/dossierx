@@ -300,6 +300,7 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 	if err := os.WriteFile(filepath.Join(project, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, project)
 
 	mustRun := func(dir, what string, name string, args ...string) {
 		t.Helper()
@@ -313,7 +314,8 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 	mustRun(repo, "git config user.name", "git", "config", "user.name", "hostile path corpus")
 	mustRun(repo, "git config commit.gpgsign", "git", "config", "commit.gpgsign", "false")
 	mustRun(project, "claim new", binPath, "--format", "text", "claim", "new", hostileClaimID,
-		"--body", "the widget answers within 200ms.")
+		"--body", "the widget answers within 200ms.",
+		"--rests-on-none-reason", "hostile-path fixture, not backed by any doctrine claim")
 	mustRun(project, "check", binPath, "--format", "text", "check")
 	previewOut, previewErr, previewCode := hostileExec(t, project, env, binPath, "--format", "json", "claim", "lock", hostileClaimID,
 		"--reason", "approved for the hostile-path corpus", "--dry-run")

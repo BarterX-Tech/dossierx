@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "digests": {
+    "rowsmod.internals.fields": "e8afe555b0f89fde95704af58e4a7c9ce2d8786d0a38bd37fdaab7c05402fb7d",
+    "rowsmod.internals.helper": "ac8cfd4f4b7869e1f56a8ff3c1fd3c897e23f054cf41b4b661c0e3099a460083"
+  }
+}

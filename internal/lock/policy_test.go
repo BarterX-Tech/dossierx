@@ -18,7 +18,7 @@ func TestEvaluateSetRefusesRetiredAndUnreadableRequiredDependencies(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			claims := []model.Claim{
 				{ID: "widget.contract.a", Status: tc.status},
-				{ID: "widget.contract.b", Status: model.StatusDraft, RestsOn: []string{"widget.contract.a"}},
+				{ID: "widget.contract.b", Status: model.StatusDraft, RestsOn: model.RestsOnIDs("widget.contract.a")},
 			}
 			evaluation := EvaluateSet(claims, []string{"widget.contract.b"}, nil, &Store{PolicyVersion: PolicyLocalApprovalV1})
 			if len(evaluation.Verdicts) != 1 || evaluation.Verdicts[0].LocalAdmissible {

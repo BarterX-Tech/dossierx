@@ -8,3 +8,6 @@ body: |
      3. Nested starts at three
      4. Next
   2. Second
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - <ol start> on a nested ordered list

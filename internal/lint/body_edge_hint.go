@@ -34,8 +34,8 @@ func (bodyEdgeHintLint) Check(claims []model.Claim, cfg *config.Config) []Findin
 			continue
 		}
 
-		declared := make(map[string]bool, len(c.RestsOn))
-		for _, id := range c.RestsOn {
+		declared := make(map[string]bool, len(c.RestsOn.IDs))
+		for _, id := range c.RestsOn.IDs {
 			declared[id] = true
 		}
 
@@ -49,7 +49,7 @@ func (bodyEdgeHintLint) Check(claims []model.Claim, cfg *config.Config) []Findin
 			findings = append(findings, Finding{
 				LintName: "body-edge-hint",
 				ClaimID:  c.ID,
-				Message:  fmt.Sprintf("body mentions claim %q but does not declare it as a rests_on edge", tok),
+				Message:  fmt.Sprintf("body mentions claim %q but does not declare it as a rests_on target", tok),
 				Severity: SeverityWarning,
 			})
 		}

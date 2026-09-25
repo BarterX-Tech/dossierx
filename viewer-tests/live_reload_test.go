@@ -61,6 +61,9 @@ module: widget
 status: draft
 body: |
   a claim in the ` + facet + ` facet.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -73,7 +76,7 @@ func longBodyClaim(id, facet string, paragraphs int) string {
 	for i := 0; i < paragraphs; i++ {
 		b.WriteString("  Paragraph " + strconv.Itoa(i) + " lorem ipsum dolor sit amet consectetur adipiscing.\n\n")
 	}
-	b.WriteString("")
+	b.WriteString("rests_on:\n  none: true\n  reason: viewer-test fixture, not backed by any doctrine claim\n")
 	return b.String()
 }
 
@@ -135,7 +138,7 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 	// The active module-section is NOT hidden and the active (design) facet is
 	// still the visible one: the reload restored the view rather than resetting to
 	// the first facet or deep-linking away.
-	if evalBool(t, ctx, `document.querySelector('.module-section').hidden`) {
+	if evalBool(t, ctx, `document.querySelector('.module-section:not(.constitution-section)').hidden`) {
 		t.Fatal("active module-section must not be hidden after a reload")
 	}
 	if !evalBool(t, ctx, facetVisibleExpr("widget-design")) {
@@ -170,7 +173,7 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 	ctx := serveAndOpenLive(t, p)
 
 	// On load: first module shown, second hidden.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section').length === 2 && !document.querySelectorAll('.module-section')[0].hidden && document.querySelectorAll('.module-section')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
 
 	// External change -> reload (a fresh card in gadget proves the swap ran).
 	p.writeClaim("gadget2.yaml", twoModuleClaim("gadget.contract.extra", "gadget"))
@@ -179,8 +182,8 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 	// After the reload, click the SECOND sidebar tab. Its listener is delegated on
 	// document (the swapped <nav> buttons carry none), so a working switch proves
 	// delegation survived the fragment swap.
-	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab')[1].click();`, nil))
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab:not(.constitution-tab)')[1].click();`, nil))
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
 }
 
 // ---------------------------------------------------------------------

@@ -29,6 +29,14 @@ func oracleCompute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagS
 	for id, c := range byID {
 		local := oraclelocalSummary(c, claims, store, flags, byID)
 		collected := oraclecollect(c.ID, []string{c.ID}, map[string]bool{c.ID: true}, byID, local, claims, store, flags)
+		filtered := collected.conditions[:0]
+		for _, cond := range collected.conditions {
+			if cond.Kind == ConditionDependencyUnapproved && cond.DependencyID == id {
+				continue
+			}
+			filtered = append(filtered, cond)
+		}
+		collected.conditions = append([]DependencyCondition(nil), filtered...)
 		conditions := oraclesortConditions(collected.conditions)
 		causes := oraclesortCauses(collected.causes)
 		approval := oracleapprovalState(c, store)
@@ -142,10 +150,27 @@ func oraclelocalSummary(c model.Claim, claims []model.Claim, store *lock.Store, 
 	for _, depID := range lock.BaselineDependencyIDs(c) {
 		dep, exists := byID[depID]
 		if !exists {
-			out.conditions = append(out.conditions, DependencyCondition{
-				Kind: ConditionMissingDependency, DependencyID: depID,
-				Path: Path{c.ID, depID}, Detail: "required dependency is missing",
-			})
+			// A missing governed_by input is still reported by the
+			// relevant integrity/lint gate; it is deliberately not turned into
+			// an approval prerequisite here. rests_on is the required chain.
+			if oraclecontains(c.RestsOn.IDs, depID) {
+				out.conditions = append(out.conditions, DependencyCondition{
+					Kind: ConditionMissingDependency, DependencyID: depID,
+					Path: Path{c.ID, depID}, Detail: "required dependency is missing",
+				})
+			}
+			continue
+		}
+		if !oraclecontains(c.RestsOn.IDs, depID) {
+			// governed_by is a comparable drift input, but that
+			// edge creates an approval prerequisite.
+			if stored, known := oraclebaseline(store, c.ID, depID); known && stored != lock.ContentHash(dep) {
+				out.causes = append(out.causes, Cause{
+					Kind: CauseDirectDependencyChange, SourceKind: CauseDirectDependencyChange,
+					DependencyID: depID, Path: Path{c.ID, depID}, Direct: true,
+					Detail: "dependency content differs from the reviewed oraclebaseline",
+				})
+			}
 			continue
 		}
 		state := oracledependencyState(dep)
@@ -200,10 +225,16 @@ func oraclepolicyVersion(store *lock.Store) lock.PolicyVersion {
 // forever.
 func oraclecollect(id string, path []string, active map[string]bool, byID map[string]model.Claim, out summary, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) summary {
 	c := byID[id]
-	for _, depID := range oracleunique(c.RestsOn) {
+	for _, depID := range oracleunique(c.RestsOn.IDs) {
 		dep, exists := byID[depID]
 		if !exists {
 			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionMissingDependency, DependencyID: depID, Path: oracleappendPath(oraclecurrentNode(path), depID), Detail: "required dependency is missing"})
+			continue
+		}
+		if depID == path[0] {
+			if active[depID] {
+				out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyCycle, DependencyID: depID, Path: oraclecyclePath(path, depID), Detail: "required dependency cycle"})
+			}
 			continue
 		}
 		state := oracledependencyState(dep)

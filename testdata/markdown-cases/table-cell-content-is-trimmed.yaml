@@ -7,3 +7,6 @@ body: |
   |      spaced      |     also spaced     |
   | --- | --- |
   |        a         |          b          |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - cell content is trimmed of surrounding whitespace

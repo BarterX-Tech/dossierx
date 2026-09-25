@@ -89,9 +89,9 @@
     "engine.behavior.loader-walks-claims-dir": "2026-08-05T15:19:19.099119Z",
     "engine.contract.build-is-pure": "2026-08-05T15:19:19.111116Z",
     "engine.contract.check-is-fail-fast": "2026-08-05T15:19:19.029619Z",
-    "engine.decision.single-source-of-truth": "2026-08-05T15:19:19.125483Z",
+    "engine.decision.single-source-of-truth": "2026-09-24T15:48:39.475264Z",
     "engine.schema.catalog-shape": "2026-08-05T15:19:19.071194Z",
-    "engine.schema.claim-shape": "2026-08-05T15:19:18.937118Z",
+    "engine.schema.claim-shape": "2026-09-24T15:48:39.596218Z",
     "engine.schema.edge-kinds": "2026-08-05T15:19:19.002938Z",
     "engine.verification.determinism-suite": "2026-08-05T15:19:19.138847Z",
     "lock.behavior.lock-gates": "2026-08-05T15:19:19.177732Z",
@@ -178,10 +178,42 @@
     },
     "engine.decision.single-source-of-truth": {
       "subject": "claim",
-      "hash": "e4e59bfebc243d3d660adfacb11460f232f432e1c392fe2b5d2e1d48378a64d2",
-      "at": "2026-08-05T15:19:19.125494Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+      "hash": "85e392a3510938d70bcc3b03a9cd648b3b19c3d96c3dcd6079354451865ca185",
+      "at": "2026-09-24T15:48:39.475276Z",
+      "actor": "nitinkhanna",
+      "reason": "fixture re-lock: rests_on is required",
+      "content": {
+        "ID": "engine.decision.single-source-of-truth",
+        "Facet": "decision",
+        "Module": "engine",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "orientation",
+        "Embodiment": null,
+        "Body": "Every fact in this project has exactly one home. A second place that states the same thing is a second place to keep correct, and the two will disagree.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": {
+          "None": true,
+          "Reason": "fixture claim; nothing to rest on",
+          "IDs": null
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": true,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-graph-demo/claims/engine-single-source-of-truth.yaml"
+      }
     },
     "engine.schema.catalog-shape": {
       "subject": "claim",
@@ -192,10 +224,42 @@
     },
     "engine.schema.claim-shape": {
       "subject": "claim",
-      "hash": "ce5efc84839b43024299a6539a172dc8044e68706c12d875ec996e372d98957e",
-      "at": "2026-08-05T15:19:18.937151Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+      "hash": "30d3d3ed63ebaa65b037f371dd2470eb4296b625526c66dbb7f0cc1525c2bf82",
+      "at": "2026-09-24T15:48:39.59623Z",
+      "actor": "nitinkhanna",
+      "reason": "fixture re-lock: rests_on is required",
+      "content": {
+        "ID": "engine.schema.claim-shape",
+        "Facet": "schema",
+        "Module": "engine",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "schema",
+        "Embodiment": null,
+        "Body": "A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": {
+          "None": true,
+          "Reason": "fixture claim; nothing to rest on",
+          "IDs": null
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-graph-demo/claims/engine-claim-shape.yaml"
+      }
     },
     "engine.schema.edge-kinds": {
       "subject": "claim",
@@ -281,5 +345,10 @@
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     }
+  },
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-24T15:48:25.190108Z"
   }
 }

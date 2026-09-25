@@ -34,6 +34,9 @@ status: draft
 layout: steps
 body: |
   a short lede that on its own would not need a disclosure at all.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 steps:
 `+steps.String())
 	ctx := browserContext(t)

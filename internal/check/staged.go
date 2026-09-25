@@ -159,9 +159,11 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/gitrepo"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
@@ -240,11 +242,14 @@ type StagedProject struct {
 	// untracked-config run is refused with ErrUntrackedConfig; see stagedConfig.
 	ConfigFromIndex bool
 
-	// Claims is the complete registry, sorted by SourcePath exactly as
-	// loader.LoadClaims sorts it, with SourcePath pointing at the WORKING-TREE
-	// location of each claim even for content that came out of the index. That
-	// is deliberate: a finding a human has to act on must name a path they can
-	// open, and "the index's copy of claims/foo.yaml" is not a path.
+	// Claims is the complete registry — the module claims under claims_dir AND
+	// the project claims under project_claims_dir, merged exactly as
+	// loader.LoadAll merges them for plain check and sorted by SourcePath as
+	// loader.MergeClaims sorts them — with SourcePath pointing at the
+	// WORKING-TREE location of each claim even for content that came out of
+	// the index. That is deliberate: a finding a human has to act on must name
+	// a path they can open, and "the index's copy of claims/foo.yaml" is not a
+	// path.
 	Claims []model.Claim
 
 	// FromIndex lists, sorted, the paths whose INDEX content differs from the
@@ -377,91 +382,32 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return stagedWithUnreachableClaims(g, cfg, sp)
 	}
 
-	// EVERY claim's content comes from the index. Unconditionally, with no
-	// worktree shortcut for the ones git says are clean.
-	//
-	// There used to be one: "git diff" was asked which paths differed, those
-	// were fetched from the index, and the rest were read off disk as a cheaper
-	// equivalent. It is not an equivalent. "git diff" consults git's stat cache
-	// and honours the per-path skip bits, so a single
-	//
-	//	git update-index --assume-unchanged claims/whatever.yaml
-	//
-	// makes git report a modified file as clean — and the gate then read the
-	// clean WORKTREE copy while the tampered blob sat in the index waiting to be
-	// committed. The refusal disappeared and the commit landed. The same is true
-	// of --skip-worktree, of a racily-clean stat entry, and of anything else
-	// that ever teaches git's cache a lie. A gate whose evidence source is
-	// chosen by a mutable, attacker-writable bit is not a gate.
-	//
-	// The cost is one "git cat-file --batch" for the whole registry, which is a
-	// single subprocess either way.
-	//
-	// indexBlobs is ALSO the authority on WHICH claims exist — the file list and
-	// the content come from one query rather than two that could disagree. That
-	// is what makes three otherwise-invisible cases come out right: a claim
-	// staged for DELETION is gone from the index and so must not be linted; a
-	// claim that is merely UNTRACKED is not part of the commit and must not be
-	// linted either; and a claim staged for ADDITION is in the index before it is
-	// in any commit and must be.
-	blobs, err := g.indexBlobs(claimsSpec)
+	// EVERY claim's content comes from the index — see stagedClaimsUnder for
+	// why there is no worktree shortcut for the files git says are clean, and
+	// why the same query decides WHICH claims exist.
+	moduleClaims, moduleFromIndex, err := stagedClaimsUnder(g, cfg.ClaimsDir, claimsSpec)
 	if err != nil {
 		return StagedProject{}, err
 	}
 
-	rels := make([]string, 0, len(blobs))
-	for rel := range blobs {
-		rels = append(rels, rel)
+	// THE PROJECT-CLAIMS STORE, FROM THE SAME INDEX. project_claims_dir is a
+	// second store beside claims_dir — never inside it — and plain check reads
+	// both (loader.LoadAll) before it lints or audits anything. A --staged that
+	// enumerated claims_dir alone judged a registry with a hole in it: every
+	// module claim resting on project.<slug> was `dangling`, every locked
+	// project claim's approval was `lock-ledger-abandoned`, and the pre-commit
+	// hook refused a tree that `check` and `check --validate` accepted — so a
+	// project that adopted project claims could not commit through the hook at
+	// all. The store is read here under exactly the discipline claims_dir gets:
+	// index content only, the same decoder, the same line-ending comparison,
+	// and it merges through loader.MergeClaims so a duplicate id across the two
+	// stores surfaces as the same `ambiguous` finding plain check reports.
+	projectClaims, projectFromIndex, err := stagedProjectClaims(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
 	}
-	sort.Strings(rels)
-
-	for _, rel := range rels {
-		if !isClaimFile(rel) {
-			continue
-		}
-		abs := worktreePath(cfg.ClaimsDir, claimsSpec, rel)
-		raw := blobs[rel]
-
-		// FromIndex is derived by comparing bytes we already hold, NOT by asking
-		// git what differs. That keeps the report honest under exactly the
-		// conditions that broke the old shortcut: an assume-unchanged file whose
-		// worktree copy differs is still listed here, because this comparison
-		// consults no cache. A worktree file that cannot be read (staged
-		// deletion, permissions) counts as differing — it certainly is not
-		// identical.
-		//
-		// LINE ENDINGS ARE NORMALISED ON BOTH SIDES FIRST, and that is what makes
-		// the field mean the same thing on all three CI platforms. Under
-		// core.autocrlf=true — the Windows default, and the configuration the
-		// windows-latest leg runs in — git stores LF in the index and checks out
-		// CRLF, so a byte comparison reported EVERY claim as differing on a
-		// perfectly clean tree: "2 claim(s) from the git index (2 differ from the
-		// working tree)" with `git status --porcelain` empty. The field is
-		// documented as "the files where index and worktree disagree", and a field
-		// that is unconditionally saturated on one platform carries no signal at
-		// all. Normalising here preserves the anti-stat-cache property the
-		// paragraph above defends — the comparison still consults no git cache,
-		// only bytes — while dropping exactly the difference git itself introduced
-		// on the way to disk. The verdict was never affected (YAML parsing
-		// normalises line breaks, so hashes and lint agree either way); the report
-		// was.
-		if onDisk, readErr := os.ReadFile(abs); readErr != nil || !bytes.Equal(normalizeLineEndings(onDisk), normalizeLineEndings(raw)) {
-			sp.FromIndex = append(sp.FromIndex, rel)
-		}
-
-		c, err := decodeClaim(abs, raw)
-		if err != nil {
-			return StagedProject{}, err
-		}
-		sp.Claims = append(sp.Claims, c)
-	}
-
-	// loader.LoadClaims sorts by SourcePath, and every downstream consumer —
-	// lint's finding order, the catalog, the reporting — inherits that order.
-	// git ls-files already sorts, but it sorts BYTES of slash-separated paths
-	// while loader sorts the platform-separated absolute path, so sort here
-	// rather than assume the two agree.
-	sort.Slice(sp.Claims, func(i, j int) bool { return sp.Claims[i].SourcePath < sp.Claims[j].SourcePath })
+	sp.Claims = loader.MergeClaims(moduleClaims, projectClaims)
+	sp.FromIndex = append(moduleFromIndex, projectFromIndex...)
 	sort.Strings(sp.FromIndex)
 
 	// The two stores and every build-order artifact, from the same index. That
@@ -502,6 +448,15 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 // something this repository does not contain — and the same tree is refused by
 // `check --validate` the moment those claims are not where claims_dir points.
 // The alternative is the false clean above, in the mode that runs in the hook.
+//
+// The registry is empty OF MODULE CLAIMS. The project-claims store is a
+// separate directory with its own pathspec, and one the index may well carry
+// even when claims_dir is unreachable; it is read here exactly as on the main
+// path, so a locked project claim the commit does contain is not reported as
+// abandoned for the sake of a sibling directory it has nothing to do with.
+// Whether there is anything to judge at all is still decided by the STORES
+// alone, as before: a project claim without a ledger is a draft, and a draft
+// is not gate evidence.
 func stagedWithUnreachableClaims(g *gitRunner, cfg *config.Config, sp StagedProject) (StagedProject, error) {
 	in, err := stagedLedgerInputs(g, cfg)
 	if err != nil {
@@ -512,8 +467,137 @@ func stagedWithUnreachableClaims(g *gitRunner, cfg *config.Config, sp StagedProj
 			"%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it — and the index holds no lock ledger, no comment digest store and no build-order artifact either, so there is nothing in it to judge",
 			ErrNoIndex, cfg.ClaimsDir, g.Dir())
 	}
+	projectClaims, projectFromIndex, err := stagedProjectClaims(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	sp.Claims = loader.MergeClaims(nil, projectClaims)
+	sp.FromIndex = projectFromIndex
+	sort.Strings(sp.FromIndex)
 	sp.ledger = in
 	return sp, nil
+}
+
+// stagedProjectClaims reads the project-claims store (config
+// project_claims_dir) as the INDEX holds it, under the same discipline as the
+// module store: index content only, never os.ReadFile of a claim.
+//
+// Two states need naming, and both follow the working-tree loader rather than
+// inventing a rule of their own:
+//
+//   - A store ABSENT FROM THE INDEX is an empty store, not an error, exactly as
+//     loader.LoadProjectClaims treats a directory that does not exist:
+//     project-claims/ is optional until a project authors one, and most
+//     projects never do.
+//   - A store OUTSIDE THE WORK TREE is likewise empty here, because no commit
+//     can carry it; that is the same reading materializeIndexFile gives a store
+//     path git cannot name, and the same direction as claims_dir's own
+//     out-of-tree case. If the ledger holds approvals for project claims that
+//     only exist off-repository, the single-tree sweep reports them as
+//     lock-ledger-abandoned — a refusal at the keyboard, never a false clean.
+//
+// A store INSIDE claims_dir never reaches here: config.DecodeConfig refuses
+// that layout, and stagedConfig decodes the staged config through it, so the
+// staged run fails to load the config exactly as every other verb does. There
+// is no second containment check to drift from the first.
+func stagedProjectClaims(g *gitRunner, cfg *config.Config) ([]model.Claim, []string, error) {
+	dir := cfg.ProjectClaimsDirPath()
+	if strings.TrimSpace(dir) == "" {
+		return nil, nil, nil
+	}
+	spec, err := g.spec(dir)
+	if err != nil {
+		return nil, nil, nil
+	}
+	return stagedClaimsUnder(g, dir, spec)
+}
+
+// stagedClaimsUnder decodes every claim file the index holds under spec — the
+// git pathspec for the working-tree directory dir — and returns the claims in
+// git's listing order (the caller sorts the merged registry), plus the
+// repository-relative paths whose index content differs from the worktree
+// file, for StagedProject.FromIndex.
+//
+// EVERY claim's content comes from the index. Unconditionally, with no
+// worktree shortcut for the ones git says are clean.
+//
+// There used to be one: "git diff" was asked which paths differed, those
+// were fetched from the index, and the rest were read off disk as a cheaper
+// equivalent. It is not an equivalent. "git diff" consults git's stat cache
+// and honours the per-path skip bits, so a single
+//
+//	git update-index --assume-unchanged claims/whatever.yaml
+//
+// makes git report a modified file as clean — and the gate then read the
+// clean WORKTREE copy while the tampered blob sat in the index waiting to be
+// committed. The refusal disappeared and the commit landed. The same is true
+// of --skip-worktree, of a racily-clean stat entry, and of anything else
+// that ever teaches git's cache a lie. A gate whose evidence source is
+// chosen by a mutable, attacker-writable bit is not a gate.
+//
+// The cost is one "git cat-file --batch" per store, which is a single
+// subprocess either way.
+//
+// indexBlobs is ALSO the authority on WHICH claims exist — the file list and
+// the content come from one query rather than two that could disagree. That
+// is what makes three otherwise-invisible cases come out right: a claim
+// staged for DELETION is gone from the index and so must not be linted; a
+// claim that is merely UNTRACKED is not part of the commit and must not be
+// linted either; and a claim staged for ADDITION is in the index before it is
+// in any commit and must be.
+func stagedClaimsUnder(g *gitRunner, dir, spec string) (claims []model.Claim, fromIndex []string, err error) {
+	blobs, err := g.indexBlobs(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rels := make([]string, 0, len(blobs))
+	for rel := range blobs {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+
+	for _, rel := range rels {
+		if !isClaimFile(rel) {
+			continue
+		}
+		abs := worktreePath(dir, spec, rel)
+		raw := blobs[rel]
+
+		// FromIndex is derived by comparing bytes we already hold, NOT by asking
+		// git what differs. That keeps the report honest under exactly the
+		// conditions that broke the old shortcut: an assume-unchanged file whose
+		// worktree copy differs is still listed here, because this comparison
+		// consults no cache. A worktree file that cannot be read (staged
+		// deletion, permissions) counts as differing — it certainly is not
+		// identical.
+		//
+		// LINE ENDINGS ARE NORMALISED ON BOTH SIDES FIRST, and that is what makes
+		// the field mean the same thing on all three CI platforms. Under
+		// core.autocrlf=true — the Windows default, and the configuration the
+		// windows-latest leg runs in — git stores LF in the index and checks out
+		// CRLF, so a byte comparison reported EVERY claim as differing on a
+		// perfectly clean tree: "2 claim(s) from the git index (2 differ from the
+		// working tree)" with `git status --porcelain` empty. The field is
+		// documented as "the files where index and worktree disagree", and a field
+		// that is unconditionally saturated on one platform carries no signal at
+		// all. Normalising here preserves the anti-stat-cache property the
+		// paragraph above defends — the comparison still consults no git cache,
+		// only bytes — while dropping exactly the difference git itself introduced
+		// on the way to disk. The verdict was never affected (YAML parsing
+		// normalises line breaks, so hashes and lint agree either way); the report
+		// was.
+		if onDisk, readErr := os.ReadFile(abs); readErr != nil || !bytes.Equal(normalizeLineEndings(onDisk), normalizeLineEndings(raw)) {
+			fromIndex = append(fromIndex, rel)
+		}
+
+		c, err := decodeClaim(abs, raw)
+		if err != nil {
+			return nil, nil, err
+		}
+		claims = append(claims, c)
+	}
+	return claims, fromIndex, nil
 }
 
 // holdsGateEvidence reports whether the index carries anything the ledger gate
@@ -833,6 +917,17 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	} else {
 		in.flags = flags
 	}
+
+	// The roof, from the index like everything else here: a constitution
+	// edited in the working tree but not staged is not what the commit
+	// carries, and one staged but not yet on disk is. The verdict keeps the
+	// worktree path so a finding names a file a human can open.
+	constitutionPath, err := materializeIndexFile(g, dir, cfg.ConstitutionPath())
+	if err != nil {
+		return ledgerInputs{}, err
+	}
+	in.constitution = constitution.EvaluateAt(constitutionPath, constitutionRecord(in.store))
+	in.constitution.Path = cfg.ConstitutionPath()
 
 	return in, nil
 }

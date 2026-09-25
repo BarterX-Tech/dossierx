@@ -1,0 +1,9 @@
+id: local.contract.main
+facet: contract
+module: local
+status: draft
+layout: card
+body: Rests on a project claim (allowed) and on a foreign internals claim (refused).
+rests_on:
+  - project.roof
+  - other.internals.secret

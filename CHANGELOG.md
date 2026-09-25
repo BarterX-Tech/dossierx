@@ -7,8 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The constitution — one lockable roof (NIT-6, NIT-26, NIT-27).** A single
+  `constitution.yaml` beside `project.config.yaml`, outside `claims_dir`:
+  sections invariants / glossary / decisions, an **800-word** cap (words, not
+  bytes; `constitution-near-cap` warns from 720; `CONSTITUTION_OVER_CAP` on
+  `check` and `constitution lock`). It is not a module and **never a
+  `rests_on` target**: there is no `constitution.*` ref grammar, no edge in
+  either direction, and a constitution edit never touches a claim. Two new
+  leaves: `dossierx constitution show` prints the full text, the digest and
+  the lock state; `dossierx constitution lock --reason "…"` records the file's
+  content hash and the human's words in `build/ledger/lock-store.json`
+  (`constitution`), re-locks a roof edited after its lock, and refuses
+  `already_locked` only when locked and unchanged. **The roof gate:** `claim
+  lock` (single, batch and policy-v1 paths), `claim reaudit --confirm` (a
+  confirmed reaudit is a ledger write; the preview stays open) and plain
+  `check` refuse `CONSTITUTION_NOT_LOCKED` while the constitution is missing, `status:
+  draft`, unrecorded, or edited after its lock; plain `check` regenerates the
+  catalog and viewer first and refuses at `stopped_at: constitution`, like the
+  ledger gate; `check --validate` / `--staged` report `constitution-not-locked`
+  at error severity (the staged gate reads the roof from the index). Always
+  on, no config switch. `claim new/show/list`, `serve` and `constitution
+  show|lock` keep working. Every fixture and every upgrading project needs a
+  locked constitution before any claim can lock — accepted churn. The viewer
+  pins **Constitution** above Modules (PROJECT — NOT A MODULE) with two UI tabs,
+  The file | Project claims, and a "N of 800 words" meter; bodies render as
+  plain text.
+- **Project claims (NIT-25).** `project-claims/<slug>.yaml`
+  (`project_claims_dir`, default `project-claims`, never inside `claims_dir`),
+  `id: project.<slug>`, `scope: project`, no `module` / no `facet`, a graph
+  node like any claim, loaded by a separate walk (`loader.LoadAll` merges).
+  No cap, no manifest: the system-generated project-claims index
+  (`projectclaims.Index`, id + summary) is the tier-1 read `manifest show`
+  carries. A project claim may rest on `project.*` and any module's
+  `*.contract.*`, never `*.internals.*`. `claim new project.<slug>` writes into
+  the store. In the viewer a project claim is listed only under the
+  constitution's Project claims tab; the reading view's `Ungrouped`
+  catch-all is for malformed claims and does not adopt it, so the Modules
+  group neither counts nor lists a pseudo-module for the project store.
+  `check --staged` reads the store from the git index like `claims/` —
+  index content only, under the staged config, an absent store an empty
+  store — so the pre-commit hook agrees with plain `check` on a project that
+  uses project claims instead of reporting `dangling` on every module claim
+  resting on `project.<slug>` and `lock-ledger-abandoned` on every locked
+  project claim.
+- **`rests_on` is required (NIT-24).** Every claim carries a list of claim ids
+  or `{none: true, reason}`; `rests-on-required` refuses neither and both.
+  Targets are claim ids only — `project.<slug>`, any module's `*.contract.*`,
+  own-module `*.internals.*` — and `rests-on-target` refuses a foreign
+  module's internals. `claim new --rests-on-none-reason` writes the stated
+  absence. The claim card's row is **RESTS ON**. The lock hash of a claim that
+  names targets does not move; a claim that gains `none: true` is a real edit
+  and re-locks through `unlock → lock`. 31 lint rules.
+
 ### Removed
 
+- **The doctrine hub (NIT-23).** The `doctrine_facet` config key, hub-gating
+  (a doctrine dependency still draft refusing a lock), its
+  `dependency_not_locked` error code (dead once the gate went, and deleted —
+  49 codes), the `doctrine_dependencies_locked` dry-run precondition and the
+  `lifecycle/doctrine-gate` fixture. No alias, no migrate CLI. A former
+  doctrine claim goes exactly one way: critical system law becomes a
+  constitution entry; a fact other claims rest on becomes a project claim
+  (`project.<slug>`, its `rests_on` retargeted); the rest is a project claim
+  or deleted. `doctrine` as a facet is not kept.
 - **Build order is gone.** The `dossierx build-order` noun and its
   propose/status/lock/show leaves are deleted, not stubbed. A locked
   implementation sequence is not a product once module `depends_on` exists
@@ -21,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The lock-policy adoption CLI leaf is deleted. Existing lock stores stay on
   their recorded policy; a new project still starts on lock policy v1. Policy
   evaluation, approvals, and baselines are unchanged. The surface is now
-  twenty leaves under seven nouns.
+  twenty-two leaves under eight nouns.
 - `kind: orientation-note` and the reserved `overview` facet. The only legal
   `kind` is `fact` (or omit the field); `kind-shape` refuses every other
   value. Listing `overview` in `facets[]` is a config error, leftover
@@ -33,10 +96,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged.
 - The `mirrors` edge is gone. `claim new --mirrors` is gone; `claim show`
   no longer reports `mirrors`/`mirrored_by`; catalog, graph payload, and
-  the viewer no longer draw that relation (`EDGE_TYPES` is `rests_on` and
-  `governed_by` only). The `mirror-mismatch`, `mirror-reciprocal`, and
-  `mirror-unanchored` lints are gone. Hub-gating and dependency drift
-  walk `rests_on` and a claim-valued `governed_by` only. The YAML key
+  the viewer no longer draw that relation (`EDGE_TYPES` is `rests_on`
+  only). The `mirror-mismatch`, `mirror-reciprocal`, and
+  `mirror-unanchored` lints are gone. Dependency drift walks `rests_on`
+  only. The YAML key
   remains on the claim struct so existing lock hashes stay
   byte-identical; the engine does not walk it. (NIT-17)
 - The `governed_by` edge is gone. The field and its `Governed` struct leave
@@ -48,32 +111,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no GOVERNED BY footer row, no `governed_by` toggle, no governance overlay,
   no wedge marker (`EDGE_TYPES` is `rests_on` alone). The `governed-cycle`,
   `governed-required`, `mixed-cycle` and `validated-on-missing` lints are
-  gone (29 rules remain). Hub-gating and dependency drift walk `rests_on`
-  only. **Every lock hash moves:** `governed_by` was in both `ContentHash`
+  gone. Dependency drift walks `rests_on` only. **Every lock hash moves:** `governed_by` was in both `ContentHash`
   and `LockedClaimHash`, so an upgraded corpus reports `lock-content-drift`
   on every locked claim. There is no migration tooling, by decision. (NIT-29)
 
-  **Migration (client projects), stage A — with this release, before the
-  first `dossierx check`:** (1) delete every `governed_by:` block from every
-  claim file; a file that still has one fails to load. (2) Where
-  `governed_by.type` named a real claim the dependent genuinely relies on,
-  add that id to the claim's `rests_on` so the drift edge survives; where it
-  was `type: none`, nothing replaces it in this release (NIT-24 later adds
-  `rests_on: {none: true, reason}`). (3) Keep `doctrine_facet` and the
-  doctrine claims exactly where they are; hub-gating still walks `rests_on`.
-  (4) Expect `lock-content-drift` on every locked claim and take each one
-  through `unlock → lock` with the human's approval. Restoring the old file
-  from git is not a recovery: it is the file that no longer loads.
-
-  **Stage B — after the constitution and project claims land (NIT-6 /
-  NIT-25), not this release:** each former doctrine claim goes exactly one
-  way — anything rests on it → a project claim (`project.<slug>` under
-  `project-claims/`, `scope: project`, no `module`/`facet`, every
-  `rests_on: <module>.doctrine.<slug>` retargeted to `project.<slug>`);
-  nothing rests on it and it is system law → a constitution entry (never
-  citable); otherwise a project claim, or delete it. Never both. Then
-  `doctrine_facet` and the `doctrine` facet go (NIT-23). NIT-23 / NIT-25
-  carry that stage.
+  **Migration (client projects) — by hand, one pass, in this order** (the
+  full recipe, with the target rule, is in the shipped `dossierx` and
+  `dossierx-claims` skills): (1) write `constitution.yaml` beside
+  `project.config.yaml` from the critical former doctrine claims (invariants /
+  glossary / decisions, plain text, under 800 words) and have the human run
+  `dossierx constitution lock --reason "…"` — nothing else locks until then
+  (`CONSTITUTION_NOT_LOCKED`). (2) Move every other doctrine claim to
+  `project-claims/<slug>.yaml` as `project.<slug>` (`scope: project`, no
+  `module`, no `facet`); delete the hub module and its `doctrine` facet — a
+  config still setting `doctrine_facet:` fails to load, exactly like a claim
+  still carrying `governed_by:`. (3) In every remaining claim delete the
+  `governed_by:` block and write `rests_on`: `project.<slug>` where the
+  governor became a project claim, nothing where it became a constitution
+  entry (the constitution is never cited), `{none: true, reason}` where
+  nothing is left; targets are `project.*`, any module's `*.contract.*` and
+  own-module `*.internals.*`, never foreign internals. (4) `dossierx check
+  --validate`, fix every `rests-on-required` / `rests-on-target` finding, then
+  re-lock per module through `unlock → lock --dry-run → lock --reason
+  --proposal` with the human's approval. Every locked claim that carried
+  `governed_by` re-locks (its hash moved); the list form of `rests_on`
+  hashes exactly as before, so a claim that only gained list targets does
+  not move, and only one that gained `{none: true, reason}` is a real edit.
+  Restoring the old file from git is not a recovery: it is the file that no
+  longer loads. (NIT-23 / NIT-25 / NIT-30)
 
 ### Fixed
 

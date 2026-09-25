@@ -3,14 +3,6 @@
 // triggers can never diverge" — against the one thing that made that sentence
 // untrue: this package used to carry its own hand-copied dependencyIDs, so
 // widening lock's drift set left comments' copy behind.
-//
-// The consequence was not a missing test, it was a self-contradicting engine:
-// lock.DetectStale wrote review_pending: true to the claim file while
-// PendingTriggers reported no trigger at all, so `check` announced "1 claim(s)
-// review_pending with no active trigger", `claim show` said review_trigger:
-// none, and any comment op overwrote the flag away via Recompute. The tests
-// below are written against lock.BaselineDependencyIDs by construction: there
-// is no second list here to keep in step.
 package comments
 
 import (
@@ -21,14 +13,12 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// dependentPair returns a locked hub and a locked claim that rests_on it,
-// plus a store already baselined at the hub's current content.
-func dependentPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
+func restsOnPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 	t.Helper()
 	hub = model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "hub v1"}
 	child = model.Claim{
 		ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked,
-		Body: "child", RestsOn: []string{hub.ID},
+		Body: "child", RestsOn: model.RestsOnIDs(hub.ID),
 	}
 	var err error
 	store, err = lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
@@ -40,30 +30,22 @@ func dependentPair(t *testing.T) (hub, child model.Claim, store *lock.Store) {
 }
 
 func TestPendingTriggers_DependencyEditIsDrift(t *testing.T) {
-	hub, child, store := dependentPair(t)
+	hub, child, store := restsOnPair(t)
 
-	// Baselined and unchanged: no trigger at all.
 	if drift, flag, open := PendingTriggers(child, []model.Claim{hub, child}, store, nil); drift || flag || open != 0 {
 		t.Fatalf("a freshly baselined claim has no trigger; got drift=%v flag=%v open=%d", drift, flag, open)
 	}
 
-	// The dependency's comparable content changes.
 	hub.Body = "hub v2"
 	drift, _, _ := PendingTriggers(child, []model.Claim{hub, child}, store, nil)
 	if !drift {
-		t.Fatalf("editing the dependency must report drift=true — this is the trigger lock.DetectStale acted on when it wrote review_pending")
+		t.Fatalf("editing the rests_on target must report drift=true")
 	}
 	if !Recompute(child, []model.Claim{hub, child}, store, nil) {
-		t.Fatalf("Recompute must agree with PendingTriggers; a comment op that disagrees erases the drift silently")
+		t.Fatalf("Recompute must agree with PendingTriggers")
 	}
 }
 
-// TestPendingTriggers_AgreesWithDetectStale is the invariant this package's own
-// doc claims and the reason the hand-copy was deleted rather than widened: for
-// the same claims and the same store, comments and lock must reach the same
-// verdict. It is asserted over every edge type at once — one, since the
-// governed_by drift edge retired (NIT-29); the table stays a table for the
-// next one.
 func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "hub v1"}
 	rested := model.Claim{ID: "widget.contract.rested", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "rested"}
@@ -74,8 +56,13 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 		edit  func(claims []model.Claim)
 	}{
 		{
-			name:  "rests_on",
-			child: model.Claim{ID: "c3", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{rested.ID}},
+			name:  "rests_on hub",
+			child: model.Claim{ID: "c1", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(hub.ID)},
+			edit:  func(claims []model.Claim) { claims[0].Body = "hub v2" },
+		},
+		{
+			name:  "rests_on rested",
+			child: model.Claim{ID: "c3", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(rested.ID)},
 			edit:  func(claims []model.Claim) { claims[1].Body = "rested v2" },
 		},
 	}
@@ -104,5 +91,24 @@ func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
 				t.Fatalf("expected the %s edit to be drift", tc.name)
 			}
 		})
+	}
+}
+
+func TestPendingTriggers_RestsOnNoneIsNotADependency(t *testing.T) {
+	claim := model.Claim{
+		ID: "widget.contract.ungoverned", Facet: "contract", Module: "widget", Status: model.StatusLocked,
+		Body: "ungoverned", RestsOn: model.RestsNone("deliberately rests on nothing"),
+	}
+	store, err := lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
+	if err != nil {
+		t.Fatalf("lock.LoadStore: %v", err)
+	}
+	lock.RefreshBaseline(claim, []model.Claim{claim}, store)
+
+	if _, known := store.Baseline(claim.ID, "none"); known {
+		t.Fatalf("rests_on none must create no baseline; store has %v", store.Hashes)
+	}
+	if drift, _, _ := PendingTriggers(claim, []model.Claim{claim}, store, nil); drift {
+		t.Fatalf("rests_on none must never report drift")
 	}
 }

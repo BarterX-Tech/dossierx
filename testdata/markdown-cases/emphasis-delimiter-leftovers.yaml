@@ -14,3 +14,6 @@ body: |
   Never consumed: a * b, a ** b, three *** alone, a lone ~ and a ~~~ run.
 
   Mixed with prose: 2 * 3 * 4 = 24, and 5 ** 2 is exponentiation.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the leftover-characters half of the delimiter write-out, which the streaming rewrite is responsible for

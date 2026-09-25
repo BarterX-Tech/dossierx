@@ -7,3 +7,6 @@ body: |
   | L | C | R | D |
   | :-- | :-: | --: | --- |
   | 1 | 2 | 3 | 4 |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - alignment - a column with no colon carries no class at all

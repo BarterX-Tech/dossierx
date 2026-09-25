@@ -6,7 +6,7 @@
 // reaching the state through the CLI would have turned each of them into a
 // lifecycle test. The gate now — correctly, and this IS the release — reads a
 // locked claim with no approval record as tampering: a status flipped by hand
-// walks straight past the lint gate, hub gating and the unresolved-comment gate
+// walks straight past the lint gate and the unresolved-comment gate
 // as though all three had passed.
 //
 // armLedger says out loud what those fixtures always meant: these claims are

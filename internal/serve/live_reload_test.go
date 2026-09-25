@@ -263,6 +263,7 @@ func TestServe_RefusesWhenOutputsInsideClaimsTree(t *testing.T) {
 			t.Fatal("Serve accepted a claims_dir that contains the build directory")
 		}
 	}
+	armConstitution(t, cfg)
 	if !strings.Contains(err.Error(), "claims_dir") || !strings.Contains(err.Error(), "build_dir") {
 		t.Fatalf("refusal = %v, want it to name both claims_dir and build_dir", err)
 	}

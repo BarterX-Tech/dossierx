@@ -9,3 +9,6 @@ body: |
   | 1 | 2 |
 
   Prose after | a pipe.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a table ends at the first blank line

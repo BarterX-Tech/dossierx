@@ -2,8 +2,8 @@ package viewertests
 
 // graph-core.js is the DossierX claims graph's pure-computation half: scope
 // filtering, the representative-node rule, edge aggregation, scope-relative
-// degrees, iterative Tarjan SCC, facet slot assignment, the gap rules and
-// the hash-state codec. It has no DOM, no canvas
+// degrees, iterative Tarjan SCC, facet slot assignment, the governance
+// channels, the gap rules and the hash-state codec. It has no DOM, no canvas
 // and no global beyond one namespace — which is exactly what lets this file
 // prove all of it through a single chromedp.Evaluate against ONE loaded page.
 //
@@ -363,18 +363,16 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 			args: []any{coreNodes(), "facet", []any{}}, post: ".repByClaim",
 			want: map[string]any{"a.one": "facet:contract", "a.two": "facet:contract", "b.one": "facet:contract", "c.one": "facet:schema"}},
 
-		// Aggregation: the type toggle drops a type that is not enabled (a
-		// retired kind still present in an old payload, here), two
-		// claim-level edges collapse into one weighted group edge, and the
-		// intra-module edge becomes a self-loop and is dropped rather than
-		// drawn.
+		// Aggregation: the type toggle drops governed_by, two claim-level
+		// edges collapse into one weighted group edge, and the intra-module
+		// edge becomes a self-loop and is dropped rather than drawn.
 		{name: "aggregateEdges collapses, weights and drops self-loops", fn: "aggregateEdges",
 			args: []any{
 				[]any{
 					edge("a.one", "b.one", "rests_on"),
 					edge("a.two", "b.one", "rests_on"),
 					edge("a.one", "a.two", "rests_on"),
-					edge("a.one", "b.one", "mirrors"),
+					edge("a.one", "b.one", "governed_by"),
 				},
 				map[string]any{"a.one": "module:a", "a.two": "module:a", "b.one": "module:b"},
 				[]any{"rests_on"},
@@ -394,7 +392,7 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "degrees are scope-relative and count both ends", fn: "degrees",
 			args: []any{
 				[]any{"x", "y"},
-				[]any{[]any{"x", "y"}, edge("y", "x", "rests_on"), edge("x", "q", "rests_on")},
+				[]any{[]any{"x", "y"}, edge("y", "x", "governed_by"), edge("x", "q", "rests_on")},
 			},
 			want: map[string]any{
 				"x": map[string]any{"in": 1, "out": 2, "total": 3},
@@ -413,7 +411,7 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// SCC, self-edges and facet slots
+// SCC, self-edges, facet slots and the governance channels
 // ---------------------------------------------------------------------
 
 func TestGraphCoreStructureAndChannels(t *testing.T) {
@@ -425,7 +423,9 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 	}
 
 	runCoreCases(t, []coreCase{
-		{name: "scc finds a two-node rests_on cycle", fn: "scc",
+		// The loop that neither engine cycle lint could see before v0.5.0:
+		// one rests_on hop and one governed_by hop. scc walks the union.
+		{name: "scc finds a rests_on cycle", fn: "scc",
 			args: []any{[]any{"a", "b"}, []any{edge("a", "b", "rests_on"), edge("b", "a", "rests_on")}},
 			want: []any{[]any{"a", "b"}}},
 		{name: "scc ignores an unknown edge type", fn: "scc",
@@ -479,12 +479,11 @@ func TestGraphCoreStructureAndChannels(t *testing.T) {
 			})()`,
 			want: map[string]any{"components": 1, "size": 10000, "first": "n00000", "last": "n09999"}},
 
-		// self_edge is reported under its own name and over ANY edge type —
-		// a retired kind still present in an old payload included — because
-		// the engine has a dedicated self-edge lint distinct from cycle and
-		// the rail must tell the same story check does.
-		{name: "selfEdges spans every edge type", fn: "selfEdges",
-			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "rests_on"), edge("b", "b", "mirrors")}},
+		// self_edge is reported under its own name and over ALL three types,
+		// because the engine has a dedicated self-edge lint distinct from
+		// cycle and the rail must tell the same story check does.
+		{name: "selfEdges reports every directed self-loop", fn: "selfEdges",
+			args: []any{[]any{"a", "b"}, []any{edge("a", "a", "rests_on"), edge("b", "b", "rests_on")}},
 			want: []any{"a", "b"}},
 		{name: "selfEdges ignores an id outside the node set", fn: "selfEdges",
 			args: []any{[]any{"a"}, []any{edge("z", "z", "rests_on")}},
@@ -522,8 +521,9 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		"id": "m3.schema.a", "module": "m3", "facet": "schema", "status": "draft",
 	})
 
-	// A cycle with no types enabled: the structural rules must ignore the
-	// edge-type toggles while the connectivity rules honour them.
+	// A cycle that alternates edge types, with no types enabled: the
+	// structural rules must ignore the edge-type toggles while the
+	// connectivity rules honour them.
 	mixedCycle := []any{edge("a.one", "a.two", "rests_on"), edge("a.two", "a.one", "rests_on")}
 
 	runCoreCases(t, []coreCase{
@@ -573,10 +573,10 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		{name: "encodeState escapes the separator and the delimiters", fn: "encodeState",
 			args: []any{map[string]any{
 				"scopeModule": "a b", "scopeFacet": "c&d", "granularity": "facet", "overlay": "review",
-				"types": []any{}, "labels": false,
+				"types": []any{"rests_on"}, "labels": false,
 				"expanded": []any{"module:b", "module:a"}, "selected": "x.y",
 			}},
-			want: "md=a%20b&fc=c%26d&gr=facet&ov=review&ty=&lb=0&ex=module%3Aa,module%3Ab&se=x.y"},
+			want: "md=a%20b&fc=c%26d&gr=facet&ov=review&ty=r&lb=0&ex=module%3Aa,module%3Ab&se=x.y"},
 		// The two axes are INDEPENDENT in the hash as well as in the control
 		// bar: either one alone encodes, and neither implies the other.
 		{name: "encodeState carries the module axis alone", fn: "encodeState",
@@ -614,17 +614,16 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 				"types": []any{"rests_on"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
-		// Same MEANING, same string: the codec canonicalises the
-		// order-sensitive fields so a hash never churns on array order, and
-		// drops a retired kind an old hash still names.
+		// Same MEANING, same string: the codec canonicalises the two
+		// order-sensitive fields so a hash never churns on array order.
 		{name: "encodeState is stable under argument order",
-			expr: `window.dossierxGraphCore.encodeState({ types: ['mirrors', 'rests_on'], expanded: ['module:b', 'module:a'] }) ===
-				window.dossierxGraphCore.encodeState({ types: ['rests_on'], expanded: ['module:a', 'module:b'] })`,
+			expr: `window.dossierxGraphCore.encodeState({ types: ['rests_on'] }) ===
+				window.dossierxGraphCore.encodeState({ types: ['rests_on', 'rests_on'] })`,
 			want: true},
 		{name: "encodeState/decodeState round-trip losslessly",
 			expr: `(function () {
 				var s = { scopeModule: 'a b', scopeFacet: 'c d', granularity: 'module', overlay: 'cycles',
-					types: [], labels: false, expanded: ['facet:d', 'facet:c'], selected: 'a.b' };
+					types: ['rests_on'], labels: false, expanded: ['facet:d', 'facet:c'], selected: 'a.b' };
 				var once = window.dossierxGraphCore.encodeState(s);
 				return window.dossierxGraphCore.encodeState(window.dossierxGraphCore.decodeState(once)) === once;
 			})()`,

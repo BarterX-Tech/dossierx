@@ -448,6 +448,20 @@ func (f *fixture) WriteProjectConfig() {
 	if err := os.WriteFile(filepath.Join(f.root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		f.t.Fatalf("write project.config.yaml: %v", err)
 	}
+	f.LockConstitution()
+}
+
+// LockConstitution writes the smallest roof a fixture can carry and locks it
+// through the binary (NIT-26: no claim locks and no plain check passes until
+// the constitution is locked). Setup, not a documented step: the procedures
+// under test start from a project whose roof is already locked.
+func (f *fixture) LockConstitution() {
+	f.t.Helper()
+	roof := "status: draft\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture has one lockable constitution above every module.\n"
+	if err := os.WriteFile(filepath.Join(f.root, "constitution.yaml"), []byte(roof), 0o644); err != nil {
+		f.t.Fatalf("write constitution.yaml: %v", err)
+	}
+	f.Setup("dossierx constitution lock --reason <why>", map[string]string{"why": "procedure-suite fixture roof"})
 }
 
 func (f *fixture) git(args ...string) {
@@ -629,8 +643,8 @@ func (f *fixture) Enact(step string, do func()) {
 // scenarios specifically need claims that never adopted build_role.
 func (f *fixture) NewClaim(id, body, buildRole string) {
 	f.t.Helper()
-	tmpl := "dossierx claim new <id> --body <body>"
-	bind := map[string]string{"id": id, "body": body}
+	tmpl := "dossierx claim new <id> --body <body> --rests-on-none-reason <why>"
+	bind := map[string]string{"id": id, "body": body, "why": "procedure-suite fixture, not backed by any doctrine claim"}
 	if buildRole != "" {
 		tmpl += " --build-role <role>"
 		bind["role"] = buildRole

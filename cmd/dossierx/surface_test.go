@@ -1170,6 +1170,8 @@ func registerSurfacePayloadType(name string, sample any) {
 func surfacePayloadTypes() map[string]any {
 	table := map[string]any{
 		"checkData":             checkData{},
+		"constitutionShowData":  constitutionShowData{},
+		"constitutionLockData":  constitutionLockData{},
 		"codeLinksData":         codeLinksData{},
 		"moduleCodeLinksData":   moduleCodeLinksData{},
 		"claimEdgesData":        claimEdgesData{},

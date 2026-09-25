@@ -90,8 +90,9 @@ func liveGraphScaleFiles(layers, width int) (files map[string]string, claimCount
 				for previous := 0; previous < width; previous++ {
 					fmt.Fprintf(&claim, "  - widget.contract.live-%03d\n", (layer-1)*width+previous)
 				}
+			} else {
+				claim.WriteString("rests_on:\n  none: true\n  reason: fixture\n")
 			}
-			claim.WriteString("")
 			claim.WriteString("embodiment:\n  mode: compare\n  checks:\n    - id: set-state\n      adapter: neutral/v1\n      target: widget://shared/set\n      expectation:\n        shape: set\n        value: [ready, waiting]\n    - id: scalar-state\n      adapter: neutral/v1\n      target: widget://shared/scalar\n      expectation:\n        shape: scalar\n        value: ready\n")
 			files[fmt.Sprintf("claims/live-%03d.yaml", index)] = claim.String()
 		}

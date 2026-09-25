@@ -15,26 +15,17 @@ func TestDanglingLint(t *testing.T) {
 		{
 			name: "passing: all edges resolve",
 			claims: []model.Claim{
-				{
-					ID:      "widget.contract.overview",
-					RestsOn: nil,
-				},
-				{
-					ID:      "widget.internals.fields",
-					RestsOn: []string{"widget.contract.overview"},
-				},
+				{ID: "widget.contract.overview", RestsOn: model.RestsNone("root")},
+				{ID: "widget.internals.fields", RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantFindings: 0,
 		},
 		{
-			name: "failing: two rests_on entries both dangle",
+			name: "failing: rests_on dangles",
 			claims: []model.Claim{
-				{
-					ID:      "widget.internals.fields",
-					RestsOn: []string{"widget.contract.missing", "widget.doctrine.ghost"},
-				},
+				{ID: "widget.internals.fields", RestsOn: model.RestsOnIDs("widget.contract.missing")},
 			},
-			wantFindings: 2,
+			wantFindings: 1,
 		},
 	}
 

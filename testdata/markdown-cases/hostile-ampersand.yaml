@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   This has & ampersands & in text.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests ampersand escaping

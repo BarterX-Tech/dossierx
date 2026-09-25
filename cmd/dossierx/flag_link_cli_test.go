@@ -20,7 +20,8 @@ func writeLockedFixtureClaim(t *testing.T, claimsDir, id, module, body string) s
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
 	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
-		"body: |\n  " + body + "\n"
+		"body: |\n  " + body + "\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}
@@ -41,6 +42,7 @@ func TestCLI_Flag_RequiresAllThreeFlags(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "original body")
 
 	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main", "--claim-says", "x"); err == nil {
@@ -86,6 +88,7 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	claimPath := writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the old assertion")
 
 	flagOut, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
@@ -162,6 +165,7 @@ func TestCLI_Flag_AnyLockedClaimCanBeReflagged(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 
 	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
@@ -184,6 +188,7 @@ func TestCLI_ClaimLink_ThenShow(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 
 	srcPath := filepath.Join(root, "widget.go")
@@ -283,6 +288,7 @@ func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.unlinked", "widget", "never gets an implink Set call")
 	armLedgerFixture(t, cfgPath) // both are legitimately locked, not hand-flipped
@@ -342,6 +348,7 @@ func icWriteScanFixtureProject(t *testing.T, root, module, claimID string) (cfgP
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, claimID, module, "fixture for source-scan tests")
 	// The claim above is hand-authored "status: locked", which the v0.3.0
 	// lock-ledger gate reads as a status flipped outside the approval path.
@@ -403,7 +410,7 @@ func writeLockedStepsFixtureClaim(t *testing.T, claimsDir, id, module string, st
 	for _, s := range steps {
 		src += "  - " + s + "\n"
 	}
-	src += ""
+	src += "rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}
@@ -424,6 +431,7 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidStepTag(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
 	armLedgerFixture(t, cfgPath)
 	hash := implink.StepContentHash("do the thing")
@@ -459,6 +467,7 @@ func TestCLI_Check_ScansSourceDirs_StepHashMismatchIsHardFailure(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
 	armLedgerFixture(t, cfgPath)
 	bad := strings.Repeat("0", 64)
@@ -491,6 +500,7 @@ func TestCLI_ClaimShow_ExposesStepLink(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
 	armLedgerFixture(t, cfgPath)
 	hash := implink.StepContentHash("do the thing")

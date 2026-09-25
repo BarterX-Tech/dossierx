@@ -9,3 +9,6 @@ body: |
   > ---
   >
   > Text.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - headings and thematic breaks are legal in a blockquote interior

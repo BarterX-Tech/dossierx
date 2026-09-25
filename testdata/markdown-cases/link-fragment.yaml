@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   Jump to [section](#widget.contract.x) above.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

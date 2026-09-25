@@ -1,0 +1,9 @@
+id: other.internals.secret
+facet: internals
+module: other
+status: draft
+layout: card
+body: Foreign internals a local claim must not rest on.
+rests_on:
+  none: true
+  reason: helper

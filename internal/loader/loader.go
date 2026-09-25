@@ -23,6 +23,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -74,6 +75,57 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 
 	sort.Slice(claims, func(i, j int) bool { return claims[i].SourcePath < claims[j].SourcePath })
 	return claims, nil
+}
+
+// LoadProjectClaims reads every *.yaml/*.yml under dir into claims. A
+// missing directory is an empty store (not an error): project-claims is
+// optional until a project authors one. Never call LoadClaims on this
+// directory — module id-shape would refuse project.<slug> files if they
+// sat under claims_dir, and this store must stay a separate walk.
+func LoadProjectClaims(dir string) ([]model.Claim, error) {
+	if strings.TrimSpace(dir) == "" {
+		return nil, nil
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("loader: project_claims_dir %q: %w", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("loader: project_claims_dir %q is not a directory", dir)
+	}
+	return LoadClaims(dir)
+}
+
+// LoadAll loads module claims from claims_dir and project claims from
+// project_claims_dir, then merges them. Constitution.yaml is never loaded
+// here — it is not a claim and not a graph node.
+func LoadAll(cfg *config.Config) ([]model.Claim, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("loader: config is required")
+	}
+	moduleClaims, err := LoadClaims(cfg.ClaimsDir)
+	if err != nil {
+		return nil, err
+	}
+	projectClaims, err := LoadProjectClaims(cfg.ProjectClaimsDirPath())
+	if err != nil {
+		return nil, err
+	}
+	return MergeClaims(moduleClaims, projectClaims), nil
+}
+
+// MergeClaims concatenates module claims and project claims, sorted by
+// SourcePath. Callers that lint, lock, or project the graph must use the
+// merged set so project.* nodes exist; they still load through two walks.
+func MergeClaims(moduleClaims, projectClaims []model.Claim) []model.Claim {
+	out := make([]model.Claim, 0, len(moduleClaims)+len(projectClaims))
+	out = append(out, moduleClaims...)
+	out = append(out, projectClaims...)
+	sort.Slice(out, func(i, j int) bool { return out[i].SourcePath < out[j].SourcePath })
+	return out
 }
 
 // ParseClaim decodes one claim file's BYTES, under exactly the discipline

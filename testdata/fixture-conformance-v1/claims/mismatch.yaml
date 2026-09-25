@@ -19,3 +19,6 @@ embodiment:
       expectation:
         shape: scalar
         value: "3"
+rests_on:
+  none: true
+  reason: neutral fixture

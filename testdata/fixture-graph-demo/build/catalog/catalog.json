@@ -18,8 +18,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.behavior.dry-run-writes-nothing",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.behavior.dry-run-writes-nothing",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -40,8 +70,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.behavior.exit-codes",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.behavior.exit-codes",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -63,7 +123,37 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.behavior.format-flag",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.behavior.format-flag",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -94,6 +184,35 @@
         "review_causes": [
           {
             "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.check-noun",
+              "cli.behavior.exit-codes",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.check-noun",
+              "engine.contract.check-is-fail-fast",
+              "engine.behavior.lint-runs-before-catalog",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
             "path": [
               "cli.contract.check-noun",
@@ -106,6 +225,35 @@
           }
         ],
         "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.check-noun",
+              "cli.behavior.exit-codes",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.check-noun",
+              "engine.contract.check-is-fail-fast",
+              "engine.behavior.lint-runs-before-catalog",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
           {
             "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
@@ -139,8 +287,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.noun-list-is-fixed",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.noun-list-is-fixed",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -162,7 +340,37 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.serve-noun",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.serve-noun",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -188,7 +396,37 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.six-nouns",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.contract.six-nouns",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -214,7 +452,7 @@
         "locally_approved": false,
         "dependency_ready": false,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
@@ -235,6 +473,38 @@
               "cli.contract.serve-noun"
             ],
             "detail": "required dependency is not locally approved"
+          }
+        ],
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.decision.agent-operates-human-reviews",
+              "cli.contract.serve-noun",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.decision.agent-operates-human-reviews",
+              "cli.contract.serve-noun",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
         "local_reasons": [
@@ -262,7 +532,39 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.decision.no-new-noun-for-the-graph",
+              "cli.contract.noun-list-is-fixed",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.decision.no-new-noun-for-the-graph",
+              "cli.contract.noun-list-is-fixed",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -288,7 +590,37 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.schema.error-codes",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.schema.error-codes",
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -313,8 +645,36 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "cli.schema.json-envelope",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ]
       }
     },
     {
@@ -335,8 +695,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.catalog-groups-by-facet",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.catalog-groups-by-facet",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -358,7 +748,37 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.degree-counting",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.degree-counting",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -395,6 +815,19 @@
             "detail": "c-2e8875",
             "direct": true,
             "inherited": false
+          },
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.lint-runs-before-catalog",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
         "causes": [
@@ -407,6 +840,19 @@
             "detail": "c-2e8875",
             "direct": true,
             "inherited": false
+          },
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.lint-runs-before-catalog",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ]
       }
@@ -429,8 +875,36 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.loader-walks-claims-dir",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.behavior.loader-walks-claims-dir",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ]
       }
     },
     {
@@ -451,8 +925,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -478,6 +982,20 @@
         "review_causes": [
           {
             "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.contract.check-is-fail-fast",
+              "engine.behavior.lint-runs-before-catalog",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
@@ -489,6 +1007,20 @@
           }
         ],
         "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.contract.check-is-fail-fast",
+              "engine.behavior.lint-runs-before-catalog",
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
           {
             "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
@@ -536,7 +1068,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "engine.decision.facts-not-verdicts",
         "policy_version": 0,
@@ -558,7 +1093,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "engine.decision.no-code-nodes",
         "policy_version": 0,
@@ -580,7 +1118,10 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "engine.decision.single-source-of-truth",
         "policy_version": 0,
@@ -609,8 +1150,36 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ]
       }
     },
     {
@@ -620,7 +1189,10 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "engine.schema.claim-shape",
         "policy_version": 0,
@@ -649,8 +1221,36 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.schema.edge-kinds",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ]
       }
     },
     {
@@ -671,8 +1271,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.verification.determinism-suite",
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.verification.determinism-suite",
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -694,7 +1326,39 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.verification.nil-safety-suite",
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "engine.verification.nil-safety-suite",
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -720,7 +1384,39 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.behavior.comment-digest",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.behavior.comment-digest",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -745,8 +1441,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -767,8 +1495,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.behavior.unlock-keeps-the-record",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.behavior.unlock-keeps-the-record",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -790,7 +1550,37 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.contract.ledger-first",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.contract.ledger-first",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -815,8 +1605,42 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.contract.lock-is-human-approved",
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.contract.lock-is-human-approved",
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -838,7 +1662,41 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.contract.review-pending-is-engine-managed",
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.contract.review-pending-is-engine-managed",
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -864,7 +1722,39 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.decision.no-migration-command",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.decision.no-migration-command",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -889,8 +1779,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -911,8 +1831,36 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ]
       }
     },
     {
@@ -934,7 +1882,41 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.verification.ledger-audit-suite",
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "lock.verification.ledger-audit-suite",
+              "lock.behavior.lock-gates",
+              "lock.schema.ledger-record",
+              "lock.schema.lock-store",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -1250,7 +2232,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "telemetry.decision.counters-are-local",
         "policy_version": 0,
@@ -1272,7 +2257,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "telemetry.schema.counter-shape",
         "policy_version": 0,
@@ -1444,7 +2432,7 @@
         "locally_approved": false,
         "dependency_ready": false,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
@@ -1485,6 +2473,44 @@
               "viewer.behavior.scope-filter"
             ],
             "detail": "required dependency is not locally approved"
+          }
+        ],
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.gap-rules-run-in-the-browser",
+              "viewer.behavior.representative-node-rule",
+              "viewer.behavior.scope-filter",
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.gap-rules-run-in-the-browser",
+              "viewer.behavior.representative-node-rule",
+              "viewer.behavior.scope-filter",
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
         "local_reasons": [
@@ -1511,8 +2537,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.pane-is-inert-until-opened",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.pane-is-inert-until-opened",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -1534,7 +2592,7 @@
         "locally_approved": false,
         "dependency_ready": false,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
@@ -1555,6 +2613,42 @@
               "viewer.behavior.scope-filter"
             ],
             "detail": "required dependency is not locally approved"
+          }
+        ],
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.representative-node-rule",
+              "viewer.behavior.scope-filter",
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.representative-node-rule",
+              "viewer.behavior.scope-filter",
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
         "local_reasons": [
@@ -1582,7 +2676,41 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.scope-filter",
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.behavior.scope-filter",
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -1607,8 +2735,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.contract.no-network-at-runtime",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.contract.no-network-at-runtime",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -1630,7 +2790,39 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.contract.read-me-first",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.contract.read-me-first",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -1655,8 +2847,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.contract.render-is-pure",
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.contract.render-is-pure",
+              "engine.contract.build-is-pure",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -1678,7 +2902,39 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.decision.canvas-not-svg",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.decision.canvas-not-svg",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
@@ -1692,7 +2948,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "viewer.decision.colour-is-not-the-only-channel",
         "policy_version": 0,
@@ -1714,7 +2973,10 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
       "readiness": {
         "claim_id": "viewer.decision.facts-not-verdicts",
         "policy_version": 0,
@@ -1747,8 +3009,40 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.schema.node-fields",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -1769,8 +3063,38 @@
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -1792,7 +3116,41 @@
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.verification.browser-suite",
+              "viewer.behavior.pane-is-inert-until-opened",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.schema.claim-shape",
+            "path": [
+              "viewer.verification.browser-suite",
+              "viewer.behavior.pane-is-inert-until-opened",
+              "viewer.schema.payload-shape",
+              "engine.schema.catalog-shape",
+              "engine.schema.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],

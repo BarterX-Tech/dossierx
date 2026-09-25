@@ -38,7 +38,7 @@ func (l CycleLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 	// empty Severity to SeverityError at its single choke point, so every
 	// consumer already sees "error" — see lint.go's normalization comment.
 	return findEdgeCycles(claims, "cycle", "rests_on cycle detected: ", "", func(c model.Claim) []string {
-		return c.RestsOn
+		return c.RestsOn.IDs
 	})
 }
 

@@ -6,3 +6,6 @@ layout: card
 body: |
   | `a|b` | c |
   | --- | --- | --- |
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - a code span does NOT protect a pipe - row splitting happens before inline parsing

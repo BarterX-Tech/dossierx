@@ -288,19 +288,23 @@ func envTracked(t *testing.T, dir string) map[string]string {
 	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, dir)
 	claims := map[string]string{
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: owns\n",
+			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
+			"rests_on:\n  none: true\n  reason: fixture claim\n",
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
 			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: cites\n",
+			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
+			"rests_on:\n  none: true\n  reason: fixture claim\n",
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
 			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
-			"tracks:\n  - id: guest-checkout\n",
+			"tracks:\n  - id: guest-checkout\n" +
+			"rests_on:\n  none: true\n  reason: fixture claim\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
@@ -409,6 +413,7 @@ func envDangling(t *testing.T, dir string) map[string]string {
 	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, dir)
 	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  a claim resting on an id nothing declares.\n" +
 		"rests_on:\n  - widget.contract.ghost\n"
@@ -461,7 +466,7 @@ func envelopeCases() []envelopeCase {
 		{"claim show / a draft claim", envFresh, []string{"claim", "show", "widget.contract.overview"}},
 		{"claim show / an id no claim carries", envFresh, []string{"claim", "show", "widget.contract.ghost"}},
 		{"claim list / every claim", envFresh, []string{"claim", "list"}},
-		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--body", "another fact"}},
+		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--body", "another fact", "--rests-on-none-reason", "fixture"}},
 
 		{"claim lock / approved", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
@@ -513,6 +518,12 @@ func envelopeCases() []envelopeCase {
 		{"check --staged / legacy viewer.theme is rejected at config, staged", envRemovedTheme, []string{"check", "--staged"}},
 
 		{"skills export / into an explicit directory", envFresh, []string{"skills", "export", "skills-out"}},
+
+		{"constitution show / absent file", envFresh, []string{"constitution", "show"}},
+		{"constitution lock / absent file", envFresh, []string{"constitution", "lock", "--reason", "fixture"}},
+		{"manifest show / constitution digest", envFresh, []string{"manifest", "show"}},
+		{"usage / constitution with no leaf", envFresh, []string{"constitution"}},
+		{"usage / manifest with no leaf", envFresh, []string{"manifest"}},
 
 		{"usage / a noun with no leaf", envFresh, []string{"claim"}},
 		{"usage / a format nothing renders", envFresh, []string{"--format", "yaml", "version"}},

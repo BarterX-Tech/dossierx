@@ -59,11 +59,13 @@ func recoverFixtureIn(t *testing.T, useGit bool) (cfgPath, approvedBody string) 
 
 	approvedBody = "The approved wording.\n"
 	claim := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  " + strings.TrimSuffix(approvedBody, "\n") + "\n"
+		"body: |\n  " + strings.TrimSuffix(approvedBody, "\n") + "\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	lockFixtureConstitution(t, cfgPath)
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +359,8 @@ func TestClaimRecoverNeedsNoWorkTreeWhenNothingIsEligible(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  fixture.\n",
+			"body: |\n  fixture.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "recover-approved-content", "--dry-run")
 	if err != nil {

@@ -17,3 +17,6 @@ body: |
   The cover is the ordinary one. A code span defuses the whole run:
   `{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}`. So does a backslash escape:
   \_\_init\_\_.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - class 3 of the underscore exposure, punctuation on both sides, which an earlier statement of the ceiling left out

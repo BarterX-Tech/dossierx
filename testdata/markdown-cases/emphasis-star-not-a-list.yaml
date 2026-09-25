@@ -10,3 +10,6 @@ body: |
 
   - *italic* inside a list item
   - **bold** inside a list item
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - the L3 matrix rows where a star could mean either thing

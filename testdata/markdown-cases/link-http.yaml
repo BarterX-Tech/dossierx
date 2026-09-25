@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   Check the [documentation](https://example.com/docs) for details.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture

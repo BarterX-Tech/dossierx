@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   Visit <https://example.com> for more.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests angle-bracket autolink

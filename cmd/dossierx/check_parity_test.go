@@ -27,8 +27,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -57,6 +59,7 @@ func writeCheckFixture(t *testing.T, root, cfgBody string, files map[string]stri
 	// nearly every golden in this file, and the parity assertions would be
 	// pinning the output of a project the engine considers tampered with.
 	armLedgerFixture(t, cfgPath)
+	lockFixtureConstitution(t, cfgPath)
 	return cfgPath
 }
 
@@ -84,9 +87,11 @@ func TestCheckParity_DraftClaims(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  fixture start-here claim.\n",
+			"body: |\n  fixture start-here claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/c1.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  fixture claim one.\n",
+			"body: |\n  fixture claim one.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
@@ -109,6 +114,7 @@ func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a locked claim with an open comment thread.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -155,7 +161,8 @@ func TestCheckParity_FullyLocked(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"body: |\n  a fully locked claim.\n",
+			"body: |\n  a fully locked claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
 	viewer := filepath.Join(root, "build", "viewer", "index.html")
@@ -174,7 +181,8 @@ func TestCheckParity_ImplinkScanAndStatus(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"body: |\n  a locked claim linked from code.\n",
+			"body: |\n  a locked claim linked from code.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
@@ -198,7 +206,8 @@ func TestCheckParity_RawHTMLFailsAtLint(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\nraw_html: \"<b>hi</b>\"\n",
+			"body: |\n  a claim.\nraw_html: \"<b>hi</b>\"\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	wantStdout := "[warning] orphan: widget.contract.mock: claim has no rests_on edges in either direction\n" +
 		"[error] raw-html-scope: widget.contract.mock: module \"widget\" is not in the project's mockup_modules allowlist and may not author layout: mockup / raw_html claims\n" +
@@ -219,7 +228,8 @@ func TestCheckParity_ScanErrorFailsAtScan(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/draft.yaml": "id: widget.contract.draft\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a draft claim.\n",
+			"body: |\n  a draft claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-claim: widget.contract.draft\nfunc Foo() {}\n",
 	})
 	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
@@ -241,7 +251,8 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"body: |\n  a locked claim to flag.\n",
+			"body: |\n  a locked claim to flag.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.locked",
 		"--claim-says", "old", "--now-does", "new", "--reason", "changed"); err != nil {
@@ -270,9 +281,11 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 	root := t.TempDir()
 	baseV1 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-		"body: |\n  base body, version one.\n"
+		"body: |\n  base body, version one.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	baseV2 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-		"body: |\n  base body, version TWO — changed to drift the dependent.\n"
+		"body: |\n  base body, version TWO — changed to drift the dependent.\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"body: |\n  the dependent claim.\n" +
 		"rests_on:\n  - widget.contract.base\n"
@@ -342,5 +355,80 @@ func TestCheckParity_MalformedClaimLoadErrorPrefix(t *testing.T) {
 	}
 	if !strings.HasPrefix(stderr, "Error: load claims: ") {
 		t.Fatalf("claims-load error must be reported unprefixed as \"Error: load claims: ...\"; got %q", stderr)
+	}
+}
+
+// K: a project that USES PROJECT CLAIMS — a locked project claim, a locked
+// module claim resting on it, and a locked project claim resting on that
+// module *.contract.* claim — through the plain `check` reporter, and then
+// the parity that matters for the pre-commit hook: `check --validate` and
+// `check --staged` must report the same lint and ledger findings on the same
+// index. --staged used to enumerate claims_dir alone, so this exact project
+// came out `dangling` plus `lock-ledger-abandoned` from the hook while plain
+// check said OK.
+func TestCheckParity_ProjectClaimsStagedAndValidateAgree(t *testing.T) {
+	root := t.TempDir()
+	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
+		"claims/overview.yaml": "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+			"body: |\n  a locked module claim resting on a project claim.\n" +
+			"rests_on:\n  - project.scope\n",
+		"project-claims/scope.yaml": "id: project.scope\nscope: project\nstatus: locked\nlayout: card\n" +
+			"body: |\n  a locked project claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+		"project-claims/retention.yaml": "id: project.retention\nscope: project\nstatus: locked\nlayout: card\n" +
+			"body: |\n  a locked project claim resting on a module contract claim.\n" +
+			"rests_on:\n  - widget.contract.overview\n",
+	})
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
+	want := "lint: 0 findings\n" +
+		"catalog: wrote " + catalog + " (3 claim(s))\n" +
+		"render: wrote " + viewer + "\n" +
+		"check: OK\n"
+	assertCheckParity(t, cfgPath, want, "", false)
+
+	// The same project, staged. Both stores, the roof, the ledger and the
+	// generated build artifacts go into the index together, so the index and
+	// the working tree hold identical bytes and the two modes are being asked
+	// exactly the same question.
+	stagedGit(t, root, "init", "-q", "-b", "main")
+	stagedGit(t, root, "config", "user.email", "fixture@example.invalid")
+	stagedGit(t, root, "config", "user.name", "fixture")
+	stagedGit(t, root, "add", "-A")
+
+	type verdict struct {
+		OK             bool            `json:"ok"`
+		LintFindings   json.RawMessage `json:"lint_findings"`
+		LedgerFindings json.RawMessage `json:"ledger_findings"`
+		Skipped        bool            `json:"skipped"`
+	}
+	read := func(mode string) verdict {
+		t.Helper()
+		env, stderr, err := execCLIJSON(t, "--config", cfgPath, "check", mode)
+		if err != nil {
+			t.Fatalf("check %s: %v (stderr=%s)", mode, err, stderr)
+		}
+		raw, marshalErr := json.Marshal(env.Data)
+		if marshalErr != nil {
+			t.Fatalf("check %s: re-encode data: %v", mode, marshalErr)
+		}
+		var v verdict
+		if err := json.Unmarshal(raw, &v); err != nil {
+			t.Fatalf("check %s: decode data: %v\n%s", mode, err, raw)
+		}
+		v.OK = env.OK
+		return v
+	}
+	validate := read("--validate")
+	staged := read("--staged")
+	if !validate.OK {
+		t.Fatalf("control precondition: check --validate must accept the project-claims fixture, got lint %s ledger %s", validate.LintFindings, validate.LedgerFindings)
+	}
+	if staged.Skipped {
+		t.Fatalf("check --staged skipped the project-claims fixture instead of judging it")
+	}
+	if !staged.OK || !reflect.DeepEqual(validate.LintFindings, staged.LintFindings) || !reflect.DeepEqual(validate.LedgerFindings, staged.LedgerFindings) {
+		t.Fatalf("check --staged and check --validate disagree on one tree that uses project claims:\n--staged:   ok=%v lint=%s ledger=%s\n--validate: ok=%v lint=%s ledger=%s",
+			staged.OK, staged.LintFindings, staged.LedgerFindings, validate.OK, validate.LintFindings, validate.LedgerFindings)
 	}
 }

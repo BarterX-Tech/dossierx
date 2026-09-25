@@ -17,37 +17,31 @@ func TestSelfEdgeLint(t *testing.T) {
 		{
 			name: "passing: every edge points at another claim",
 			claims: []model.Claim{
-				{ID: "widget.contract.doctrine"},
-				{
-					ID:      "widget.contract.overview",
-					RestsOn: []string{"widget.contract.doctrine"},
-				},
-				{ID: "widget.internals.overview", RestsOn: []string{"widget.contract.overview"}},
+				{ID: "widget.contract.doctrine", RestsOn: model.RestsNone("root")},
+				{ID: "widget.contract.overview", RestsOn: model.RestsOnIDs("widget.contract.doctrine")},
+				{ID: "widget.internals.overview", RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantFindings: 0,
 		},
 		{
 			name: "failing: rests_on names its own id",
 			claims: []model.Claim{
-				{ID: "widget.contract.self", RestsOn: []string{"widget.contract.self"}},
+				{ID: "widget.contract.self", RestsOn: model.RestsOnIDs("widget.contract.self")},
 			},
 			wantFindings: 1,
 			wantContains: "rests_on names this claim's own id",
 		},
 		{
-			// One finding per edge kind, not per occurrence.
 			name: "failing: a duplicated self reference in one list is still one finding",
 			claims: []model.Claim{
-				{ID: "widget.contract.self", RestsOn: []string{"widget.contract.self", "widget.contract.self"}},
+				{ID: "widget.contract.self", RestsOn: model.RestsOnIDs("widget.contract.self", "widget.contract.self")},
 			},
 			wantFindings: 1,
 		},
 		{
-			// An empty id belongs to id-shape and may not be reported here.
-			name: "passing: an edgeless claim and an id-less claim are not self-edges",
+			name: "passing: rests_on none and an id-less claim are not self-edges",
 			claims: []model.Claim{
-				{ID: "widget.contract.grounded"},
-				{ID: ""},
+				{ID: "", RestsOn: model.RestsNone("no id yet")},
 			},
 			wantFindings: 0,
 		},
@@ -74,9 +68,6 @@ func TestSelfEdgeLint(t *testing.T) {
 	}
 }
 
-// TestSelfEdgeLintIsRegistered guards the coverage meta-gate's premise: the
-// rule has to be in Registry for RunAll (and therefore "dossierx lint") to
-// run it at all.
 func TestSelfEdgeLintIsRegistered(t *testing.T) {
 	for _, l := range Registry {
 		if l.Name() == "self-edge" {

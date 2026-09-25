@@ -145,13 +145,18 @@ type Config struct {
 	// mirroring the reference docs explainer page's .eyebrow line. Unset means no
 	// eyebrow line is rendered at all — it is not required the way Title's
 	// generic fallback is.
-	Eyebrow       string      `yaml:"eyebrow,omitempty"`
-	Facets        []string    `yaml:"facets"`
-	Modules       []string    `yaml:"modules"`
-	ClaimsDir     string      `yaml:"claims_dir"`
-	DoctrineFacet string      `yaml:"doctrine_facet,omitempty"`
-	Viewer        Viewer      `yaml:"viewer,omitempty"`
-	Conformance   Conformance `yaml:"conformance,omitempty"`
+	Eyebrow   string   `yaml:"eyebrow,omitempty"`
+	Facets    []string `yaml:"facets"`
+	Modules   []string `yaml:"modules"`
+	ClaimsDir string   `yaml:"claims_dir"`
+	// Constitution is the project-root roof file, default constitution.yaml.
+	// It is not a module and is never walked by LoadClaims.
+	Constitution string `yaml:"constitution,omitempty"`
+	// ProjectClaimsDir is the store for scope: project claims, default
+	// project-claims. Outside claims_dir. Missing directory is empty, not an error.
+	ProjectClaimsDir string      `yaml:"project_claims_dir,omitempty"`
+	Viewer           Viewer      `yaml:"viewer,omitempty"`
+	Conformance      Conformance `yaml:"conformance,omitempty"`
 
 	// BuildDir is the directory every runtime-generated file lives under —
 	// the build-order and code-links artifacts, the three ledger stores, the
@@ -208,8 +213,7 @@ type Config struct {
 	// an unset/empty list as "no module may author one", not a vacuous
 	// pass. Every entry must also appear in Modules — an
 	// allowlisted module that isn't even a project module can never gate
-	// anything, which almost certainly indicates a typo (same reasoning as
-	// DoctrineFacet's membership check below).
+	// anything, which almost certainly indicates a typo.
 	MockupModules []string `yaml:"mockup_modules,omitempty"`
 
 	// dir is the absolute directory containing the config file itself;
@@ -298,6 +302,18 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	if !filepath.IsAbs(cfg.ClaimsDir) {
 		cfg.ClaimsDir = filepath.Join(dir, cfg.ClaimsDir)
 	}
+	if strings.TrimSpace(cfg.Constitution) == "" {
+		cfg.Constitution = DefaultConstitution
+	}
+	if !filepath.IsAbs(cfg.Constitution) {
+		cfg.Constitution = filepath.Join(dir, cfg.Constitution)
+	}
+	if strings.TrimSpace(cfg.ProjectClaimsDir) == "" {
+		cfg.ProjectClaimsDir = DefaultProjectClaimsDir
+	}
+	if !filepath.IsAbs(cfg.ProjectClaimsDir) {
+		cfg.ProjectClaimsDir = filepath.Join(dir, cfg.ProjectClaimsDir)
+	}
 	if strings.TrimSpace(cfg.BuildDir) == "" {
 		cfg.BuildDir = DefaultBuildDir
 	}
@@ -329,6 +345,12 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	// a loop with no exit.
 	if err := checkBuildDirContainment(cfg.BuildDir, cfg.ClaimsDir, dir); err != nil {
 		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	if pathContains(cfg.ClaimsDir, filepath.Clean(cfg.Constitution)) {
+		return nil, fmt.Errorf("config: %s: constitution (%s) must sit outside claims_dir (%s)", path, cfg.Constitution, cfg.ClaimsDir)
+	}
+	if pathContains(cfg.ClaimsDir, filepath.Clean(cfg.ProjectClaimsDir)) || pathContains(cfg.ProjectClaimsDir, cfg.ClaimsDir) {
+		return nil, fmt.Errorf("config: %s: project_claims_dir (%s) must sit outside claims_dir (%s)", path, cfg.ProjectClaimsDir, cfg.ClaimsDir)
 	}
 	if cfg.Conformance.Observations != "" {
 		if pathContains(cfg.BuildDir, filepath.Clean(cfg.Conformance.Observations)) {
@@ -408,13 +430,6 @@ func (c *Config) validate() error {
 
 	if strings.TrimSpace(c.ClaimsDir) == "" {
 		return fmt.Errorf("claims_dir must be set")
-	}
-
-	// doctrine_facet is optional; when set, it must be a facet this project
-	// actually declares (an unknown doctrine facet can never gate anything,
-	// which almost certainly indicates a typo rather than intent).
-	if c.DoctrineFacet != "" && !contains(c.Facets, c.DoctrineFacet) {
-		return fmt.Errorf("doctrine_facet %q is not in facets", c.DoctrineFacet)
 	}
 
 	if dup, ok := firstDuplicate(c.MockupModules); ok {
@@ -539,9 +554,18 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
-// HubGatingEnabled reports whether doctrine hub-gating logic should run at
-// all. When false, callers must skip the check entirely rather than treat
-// it as a vacuous pass.
-func (c *Config) HubGatingEnabled() bool {
-	return c.DoctrineFacet != ""
+// ConstitutionPath is the resolved constitution.yaml path.
+func (c *Config) ConstitutionPath() string {
+	if c == nil {
+		return ""
+	}
+	return c.Constitution
+}
+
+// ProjectClaimsDirPath is the resolved project-claims directory.
+func (c *Config) ProjectClaimsDirPath() string {
+	if c == nil {
+		return ""
+	}
+	return c.ProjectClaimsDir
 }

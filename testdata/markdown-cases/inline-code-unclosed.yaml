@@ -5,3 +5,6 @@ status: draft
 layout: card
 body: |
   This has an unclosed backtick: `getValue()
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - tests unclosed code span

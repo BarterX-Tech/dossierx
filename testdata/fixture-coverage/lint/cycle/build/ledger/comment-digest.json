@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "digests": {
+    "cyclemod.contract.self": "d50e1c11e97824014e0b7738891d3d073b5015e7cf7b7bc3365a5eb157db673c",
+    "cyclemod.contract.triangle-a": "a13e7ff0e7417a9ff092100fedd1ad8e7a469c8849fc2862fbf11ad7e706f6f6",
+    "cyclemod.contract.triangle-b": "ee560c10a777e1c61632df3c4fd3e6efe98bc577ea3aaf54bda5a564b5a0c59e",
+    "cyclemod.contract.triangle-c": "4a1c9404607a0e6cd0ca5095d7a2bc9ec902d671a8f8ca66ed7fe8270ddc243b"
+  }
+}

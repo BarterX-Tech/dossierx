@@ -255,6 +255,11 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 	// The pre-ledger project gate is a property of the PROJECT, not of any one
 	// requested claim, so it runs once here — exactly as it does in the
 	// single-lock path — rather than once per id.
+	// The roof gate (NIT-26) refuses the whole batch before any per-claim
+	// gate runs: it is project-level, not an offender on a member.
+	if err := constitutionGate("lock", constitutionVerdictWith(cfg, store)); err != nil {
+		return cmdResult{}, err
+	}
 	if err := crossPreLedger(cfg, store, claims, "lock"); err != nil {
 		return cmdResult{Warnings: adoptionWarnings(adopted)}, err
 	}
@@ -304,33 +309,6 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 				Detail:  fmt.Sprintf("%d comment thread(s) with no entry in the comment digest store — restore %s from version control", len(claim.Comments), config.CommentDigestDisplayPath),
 			})
 			continue
-		}
-
-		// Hub (doctrine) gating — the same predicate evaluateLockGates
-		// evaluates inline for a single claim, since internal/lock's own
-		// checkHubGating is unexported and this package already keeps its own
-		// copy in step for that reason.
-		if cfg != nil && cfg.HubGatingEnabled() {
-			deps := append([]string(nil), claim.RestsOn...)
-			var depBlock string
-			for _, dep := range deps {
-				depClaim, ok := loader.FindByID(claims, dep)
-				if !ok {
-					continue
-				}
-				if depClaim.Facet == cfg.DoctrineFacet && depClaim.Status != model.StatusLocked {
-					depBlock = dep
-					break
-				}
-			}
-			if depBlock != "" {
-				offenders = append(offenders, batchLockOffender{
-					ClaimID: id,
-					Gate:    string(cliout.CodeDependencyNotLocked),
-					Detail:  fmt.Sprintf("dependency %q is in doctrine facet %q and is not yet locked", depBlock, cfg.DoctrineFacet),
-				})
-				continue
-			}
 		}
 
 		if open := claim.OpenThreadIDs(); len(open) > 0 {

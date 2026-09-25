@@ -9,10 +9,19 @@ package viewertests
 // engine's lint computes its verdicts in Go, project-wide. Those two are
 // allowed to disagree — scope makes divergence unavoidable — but there is
 // exactly one configuration in which they are defined over the same edges,
-// and in that configuration they must agree exactly: unscoped, over every
-// edge type the engine declares. Since the governed_by edge retired (NIT-29)
-// that is rests_on alone, so the panel's DEFAULT isolated set and lint's
-// orphan set are the same set, and the test pins that they stay so.
+// and in that configuration they must agree exactly.
+//
+// WHY governed_by IS EXCLUDED. The panel's `isolated` rule is defined over
+// the ENABLED edge types, which by default includes governed_by. lint's
+// `orphan` rule builds its incoming/outgoing sets from RestsOn
+// only, and does so deliberately: `governed_by: {type: none, reason: …}` is
+// the normal, expected state for a claim with no doctrine backing, so
+// counting governance as an edge would make the rule nearly useless. So the
+// graph's DEFAULT isolated set is a strict subset of lint's orphan set, and
+// the only honest parity claim is the unscoped, rests_on-only one
+// this test pins. The corpus below contains a claim that separates the two —
+// widget.contract.lonely, whose only edge is a governance edge — so the
+// assertion is not accidentally true of every corpus.
 
 import (
 	"encoding/json"
@@ -31,11 +40,13 @@ modules:
 claims_dir: claims
 `
 
-// parityClaims seeds three claims covering both sides of the rule:
+// parityClaims seeds four claims covering both sides of the rule:
 //
 //	base    no edges at all                  -> orphan, isolated
 //	root    the target of leaf's rests_on    -> neither
 //	leaf    rests_on root                    -> neither
+//	lonely  governed_by root and nothing else -> orphan, and isolated ONLY
+//	        once governed_by is excluded
 //
 // Every one of them is legal for `dossierx check`: orphan is a WARNING, so
 // the corpus renders and the process exits 0.
@@ -46,6 +57,9 @@ module: widget
 status: draft
 body: |
   a claim with no edges in either direction.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `,
 	"root.yaml": `id: widget.contract.root
 facet: contract
@@ -53,15 +67,28 @@ module: widget
 status: draft
 body: |
   a claim other claims rest on.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
 `,
 	"leaf.yaml": `id: widget.contract.leaf
 facet: contract
 module: widget
 status: draft
-rests_on:
-  - widget.contract.root
 body: |
   a claim that rests on the root.
+rests_on:
+  - widget.contract.root
+`,
+	"lonely.yaml": `id: widget.contract.lonely
+facet: contract
+module: widget
+status: draft
+body: |
+  a second orphan; RESTS ON NONE is not a graph edge.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any other claim
 `,
 }
 
@@ -106,7 +133,7 @@ func TestGraphIsolatedMatchesOrphanLintUnscoped(t *testing.T) {
 		p.writeClaim(name, body)
 	}
 
-	wantOrphans := []string{"widget.contract.base"}
+	wantOrphans := []string{"widget.contract.base", "widget.contract.lonely"}
 	orphans := orphanIDs(t, p)
 	if fmt.Sprint(orphans) != fmt.Sprint(wantOrphans) {
 		t.Fatalf("orphan lint findings = %v, want %v", orphans, wantOrphans)
@@ -115,11 +142,11 @@ func TestGraphIsolatedMatchesOrphanLintUnscoped(t *testing.T) {
 	ctx := staticGraphTab(t, p)
 
 	// The panel's verdict, computed the way the panel computes it: unscoped
-	// (every node), over the default edge-type set. The pane need not even be
-	// open — these are pure functions over the payload the document carries.
+	// (every node), rests_on only. The pane need not even be open —
+	// these are pure functions over the payload the document carries.
 	isolated := evalStrings(t, ctx, `(function () {
 		var p = JSON.parse(document.getElementById('dossierx-graph').textContent);
-		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, {});
+		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, { enabledTypes: ['rests_on'] });
 		var out = [];
 		for (var i = 0; i < gaps.facts.length; i++) {
 			if (gaps.facts[i].rule === 'isolated') { out = out.concat(gaps.facts[i].node_ids); }
@@ -133,5 +160,22 @@ func TestGraphIsolatedMatchesOrphanLintUnscoped(t *testing.T) {
 	}
 	if len(isolated) == 0 {
 		t.Fatal("both sets are empty: this corpus proves nothing")
+	}
+
+	// And the divergence the exclusion exists for: with governed_by enabled —
+	// the panel's DEFAULT — the governed claim is no longer isolated, so the
+	// two sets genuinely differ and the parity claim above is specific to the
+	// configuration it names.
+	withGovernance := evalStrings(t, ctx, `(function () {
+		var p = JSON.parse(document.getElementById('dossierx-graph').textContent);
+		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, {});
+		var out = [];
+		for (var i = 0; i < gaps.facts.length; i++) {
+			if (gaps.facts[i].rule === 'isolated') { out = out.concat(gaps.facts[i].node_ids); }
+		}
+		return out;
+	})()`)
+	if fmt.Sprint(withGovernance) != fmt.Sprint(orphans) {
+		t.Fatalf("default isolated set = %v, want the orphan set %v — rests_on is the only edge", withGovernance, orphans)
 	}
 }

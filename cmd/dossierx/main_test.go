@@ -146,7 +146,7 @@ func TestContainsStr(t *testing.T) {
 func TestPickChangedDependencyPrefersStaleHash(t *testing.T) {
 	fresh := model.Claim{ID: "m.contract.fresh", Body: "fresh"}
 	stale := model.Claim{ID: "m.contract.stale", Body: "stale, changed since lock"}
-	claim := model.Claim{ID: "m.contract.main", RestsOn: []string{"m.contract.fresh", "m.contract.stale"}}
+	claim := model.Claim{ID: "m.contract.main", RestsOn: model.RestsOnIDs("m.contract.fresh", "m.contract.stale")}
 	claims := []model.Claim{claim, fresh, stale}
 
 	store := &lock.Store{Hashes: map[string]map[string]string{
@@ -164,7 +164,7 @@ func TestPickChangedDependencyPrefersStaleHash(t *testing.T) {
 
 func TestPickChangedDependencyFallsBackToFirstDep(t *testing.T) {
 	dep := model.Claim{ID: "m.contract.dep"}
-	claim := model.Claim{ID: "m.contract.main", RestsOn: []string{"m.contract.dep"}}
+	claim := model.Claim{ID: "m.contract.main", RestsOn: model.RestsOnIDs("m.contract.dep")}
 	claims := []model.Claim{claim, dep}
 
 	store := &lock.Store{Hashes: map[string]map[string]string{}}
@@ -376,6 +376,9 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 		"serve":         true,
 		"skills export": true,
 		"version":       true,
+
+		"constitution lock": true,
+		"constitution show": true,
 	}
 
 	got := map[string]bool{}
@@ -421,8 +424,8 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 20 {
-		t.Errorf("the surface is 20 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 22 {
+		t.Errorf("the surface is 22 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 

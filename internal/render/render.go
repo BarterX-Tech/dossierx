@@ -28,9 +28,12 @@ import (
 	"strings"
 	"time"
 
+	"html"
+
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
@@ -195,6 +198,20 @@ type shellData struct {
 	// every byte of track markup on that — a corpus with no tracks must render
 	// exactly as it did before the axis existed. See track_view.go.
 	Tracks []TrackSection
+
+	// Constitution is the project roof, pinned above Modules. Always present
+	// as a nav target; Present is false when the file is absent (NIT-11).
+	Constitution ConstitutionView
+}
+
+// ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.
+type ConstitutionView struct {
+	Present       bool
+	Status        string
+	Words         int
+	WordCap       int
+	FileHTML      template.HTML
+	ProjectClaims []template.HTML
 }
 
 // Group is one module/facet section of the sidebar nav + content area, as
@@ -785,8 +802,65 @@ func buildShellStaticData(in shellInputs) shellData {
 		// Built from the SAME renderedByID the module groups read, so a claim
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.
-		Tracks: nil,
+		Tracks:       nil,
+		Constitution: buildConstitutionView(in.cat, cfg),
 	}
+}
+
+func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config) ConstitutionView {
+	view := ConstitutionView{WordCap: constitution.WordCap}
+	// The Project claims tab lists the store whether or not the roof file
+	// exists yet: the two are independent inputs, and a project that authored
+	// project claims before writing its constitution (serve renders it; the
+	// gate only stops check and lock) must not read "No project claims."
+	if cat != nil {
+		for _, c := range cat.Claims {
+			if !c.IsProjectClaim() {
+				continue
+			}
+			view.ProjectClaims = append(view.ProjectClaims, template.HTML(
+				`<article class="project-claim"><h4>`+html.EscapeString(c.ID)+`</h4><p>`+html.EscapeString(c.Body)+`</p></article>`))
+		}
+	}
+	if cfg == nil {
+		return view
+	}
+	f, err := constitution.LoadOptional(cfg.ConstitutionPath())
+	if err != nil || f == nil {
+		return view
+	}
+	d := constitution.NewDigest(cfg.ConstitutionPath(), f)
+	view.Present = true
+	view.Status = d.Status
+	view.Words = d.Words
+	view.WordCap = d.WordCap
+	var b strings.Builder
+	writeSection := func(title string, entries []constitution.Entry, section string) {
+		if len(entries) == 0 {
+			return
+		}
+		b.WriteString("<h3>")
+		b.WriteString(html.EscapeString(title))
+		b.WriteString("</h3>")
+		for _, e := range entries {
+			b.WriteString(`<article class="constitution-entry" id="`)
+			b.WriteString(html.EscapeString("constitution-" + section + "-" + e.Slug))
+			b.WriteString(`"><h4>`)
+			if e.Title != "" {
+				b.WriteString(html.EscapeString(e.Title))
+			} else {
+				b.WriteString(html.EscapeString(e.Slug))
+			}
+			b.WriteString(`</h4><p>`)
+			b.WriteString(html.EscapeString(e.Body))
+			b.WriteString(`</p></article>`)
+		}
+	}
+	writeSection("Invariants", f.Invariants, constitution.SectionInvariants)
+	writeSection("Glossary", f.Glossary, constitution.SectionGlossary)
+	writeSection("Decisions", f.Decisions, constitution.SectionDecisions)
+	view.FileHTML = template.HTML(b.String())
+	return view
 }
 
 // softMountClaimThreshold is the corpus size at which shell.html starts
@@ -819,6 +893,15 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 	var ungrouped []model.Claim
 
 	for _, c := range cat.Claims {
+		// A project claim (NIT-25) has no module and no facet by design, not
+		// by omission: it is rendered under the constitution's "Project
+		// claims" tab (buildConstitutionView), so it is not dropped here and
+		// it must not become an "ungrouped" module either — the sidebar's
+		// Modules group would then count and list a pseudo-module directly
+		// under the pin that says PROJECT — NOT A MODULE.
+		if c.IsProjectClaim() {
+			continue
+		}
 		if !knownModule(c.Module) || !knownFacet(c.Facet) {
 			ungrouped = append(ungrouped, c)
 			continue

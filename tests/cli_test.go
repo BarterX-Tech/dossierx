@@ -159,9 +159,73 @@ func writeFixtureProject(t *testing.T, root, module string) {
 
 	claim := "id: " + module + ".contract.overview\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
-		"body: |\n  fixture claim for CLI tests.\n"
+		"body: |\n  fixture claim for CLI tests.\n" +
+		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
+	}
+	lockFixtureConstitution(t, root)
+}
+
+// fixtureConstitutionYAML is the smallest roof a fixture can carry.
+const fixtureConstitutionYAML = "status: draft\n" +
+	"invariants:\n" +
+	"  - slug: one-roof\n" +
+	"    title: One roof\n" +
+	"    body: This fixture has one lockable constitution above every module.\n"
+
+// lockFixtureConstitution gives a fixture project the locked roof the gate
+// demands (NIT-26), through the real binary: constitution.yaml beside the
+// config at root (written when absent) and `constitution lock`. cfgArgs is
+// the --config pair to pass when the config is not root/project.config.yaml.
+func lockFixtureConstitution(t *testing.T, root string, cfgArgs ...string) {
+	t.Helper()
+	dir := root
+	if len(cfgArgs) == 2 {
+		dir = filepath.Dir(cfgArgs[1])
+	}
+	path := filepath.Join(dir, "constitution.yaml")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte(fixtureConstitutionYAML), 0o644); err != nil {
+			t.Fatalf("write fixture constitution: %v", err)
+		}
+	}
+	args := append(append([]string{}, cfgArgs...), "constitution", "lock", "--reason", "fixture roof", "--format", "json")
+	stdout, stderr, code := run(t, root, args...)
+	if code == 0 {
+		return
+	}
+	// Idempotent: a builder that composes another builder arms the roof
+	// twice, and a roof that is locked and unchanged is done. A config that
+	// does not load yet (a fixture that finishes its layout later, or one
+	// that is deliberately broken) has no roof to lock; the verb under test
+	// refuses at config before the roof matters.
+	var env struct {
+		Error *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(stdout), &env) == nil && env.Error != nil {
+		switch env.Error.Code {
+		case "already_locked":
+			return
+		case "invalid_config", "config_not_found":
+			t.Logf("lock fixture constitution: skipped, %s", env.Error.Code)
+			return
+		}
+	}
+	t.Fatalf("lock fixture constitution: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+}
+
+// unroofProject undoes lockFixtureConstitution: the constitution and the lock
+// store go, leaving the shape of a project that has never crossed into the
+// ledger. For the few tests whose subject is that state.
+func unroofProject(t *testing.T, root string) {
+	t.Helper()
+	for _, rel := range []string{"constitution.yaml", filepath.Join("build", "ledger")} {
+		if err := os.RemoveAll(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("unroof %s: %v", rel, err)
+		}
 	}
 }
 
@@ -291,7 +355,15 @@ func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
 	if err := os.Chmod(root, 0o555); err != nil {
 		t.Fatalf("chmod root read-only: %v", err)
 	}
+	// build/ already exists (the roof lock wrote build/ledger), so it is the
+	// directory the catalog write must be refused in.
+	if err := os.Chmod(filepath.Join(root, "build"), 0o555); err != nil {
+		t.Fatalf("chmod build read-only: %v", err)
+	}
 	t.Cleanup(func() {
+		if err := os.Chmod(filepath.Join(root, "build"), 0o755); err != nil {
+			t.Logf("restore build permissions: %v", err)
+		}
 		if err := os.Chmod(root, 0o755); err != nil {
 			t.Logf("restore permissions: %v", err)
 		}
@@ -326,6 +398,7 @@ func TestLintFailureExitsNonZeroInBothFormats(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	lockFixtureConstitution(t, root)
 	// A claim with a dangling rests_on reference: guaranteed error-severity
 	// "dangling" lint finding.
 	claim := "id: brokenmod.contract.overview\n" +

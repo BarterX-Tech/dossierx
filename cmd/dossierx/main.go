@@ -20,6 +20,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
@@ -113,7 +114,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the nine nouns the way the noun
+	// The message is inlined instead, naming the eight nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -168,11 +169,12 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: seven nouns, twenty leaves, and not one more.
+	// The whole surface: eight nouns, twenty-two leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link recover-approved-content 9
 	//	comment inbox list add reply                                      4
+	//	constitution show lock                                            2
 	//	track   list show status                                          3
 	//	serve · skills export · version                                   3
 	//
@@ -207,6 +209,7 @@ func newRootCmd() *cobra.Command {
 		newCheckCmd(),
 		newClaimCmd(),
 		newCommentCmd(),
+		newConstitutionCmd(),
 		newTrackCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
@@ -480,8 +483,52 @@ func refuseLegacyLayout(cfg *config.Config) error {
 // failure is reported unprefixed by "check:", since it precedes the pipeline);
 // cliout.Errorf reproduces fmt.Errorf's string exactly, so attaching the code
 // changes no byte of the message.
+// lintErrorCode is the code a lint stop reports. The roof's two findings
+// (internal/check.ConstitutionFindings) get their own codes so an agent
+// branches on the constitution rather than on "fix the claims": over-cap
+// first, because trimming the file is the first move whether or not it is
+// also unlocked; then not-locked; everything else is lint_failed.
+func lintErrorCode(findings []lint.Finding) cliout.Code {
+	code := cliout.CodeLintFailed
+	for _, f := range findings {
+		if f.Severity == lint.SeverityWarning {
+			continue
+		}
+		switch f.LintName {
+		case check.ConstitutionOverCapFinding:
+			return cliout.CodeConstitutionOverCap
+		case check.ConstitutionNotLockedFinding:
+			code = cliout.CodeConstitutionNotLocked
+		}
+	}
+	return code
+}
+
+// withConstitutionHint attaches the roof's verdict and recovery to a check
+// refusal whose code is one of the constitution's — the same details
+// `claim lock` carries — and passes any other error through untouched.
+func withConstitutionHint(err *cliout.CodedError, v constitution.Verdict) *cliout.CodedError {
+	switch err.E.Code {
+	case cliout.CodeConstitutionNotLocked:
+		return err.WithDetails(verdictDetails(v)).
+			WithHint("no module work until the constitution is locked: `dossierx constitution show` prints the roof and its lock state; a human locks it with `dossierx constitution lock --reason \"<their words>\"`. The catalog and viewer were regenerated; only the verdict is refused")
+	case cliout.CodeConstitutionOverCap:
+		return err.WithDetails(verdictDetails(v)).
+			WithHint("trim constitution.yaml under 800 words, then `dossierx constitution lock --reason \"<the human's words>\"`")
+	}
+	return err
+}
+
+// lintStopError is the error every check mode returns when it stops at the
+// LINT step. The code is derived from the claims' findings alone: a claim's
+// lint error is why the run stopped here, and the roof's finding — still in
+// data.lint_findings — is decided at its own gate, after the ledger.
+func lintStopError(res check.Result) error {
+	return cliout.Errorf(lintErrorCode(res.ClaimLintErrors()), "check: lint: %d error-level finding(s)", len(res.LintErrors))
+}
+
 func loadClaims(cfg *config.Config) ([]model.Claim, error) {
-	claims, err := loader.LoadClaims(cfg.ClaimsDir)
+	claims, err := loader.LoadAll(cfg)
 	if err != nil {
 		return nil, cliout.Errorf(cliout.CodeInvalidClaim, "load claims: %w", err)
 	}
@@ -1245,7 +1292,7 @@ func checkStoppedAt(res check.Result, err error) string {
 	switch {
 	case err == nil:
 		return ""
-	case len(res.LintErrors) > 0:
+	case len(res.ClaimLintErrors()) > 0:
 		return "lint"
 	case res.ConformanceFailurePhase != "":
 		return res.ConformanceFailurePhase
@@ -1259,6 +1306,11 @@ func checkStoppedAt(res check.Result, err error) string {
 		return "render"
 	case len(res.LedgerFindings) > 0:
 		return "ledger"
+	case !res.Constitution.Locked() || res.Constitution.OverCap:
+		// The roof gate (NIT-26): a gate, not an outage — the catalog and
+		// the viewer were regenerated and the run was refused after them,
+		// exactly like "ledger".
+		return "constitution"
 	case res.CodeLinkGateFailed:
 		return "links"
 	case res.ConformanceGateFailed:
@@ -1283,7 +1335,9 @@ func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
 	}
 	switch stoppedAt {
 	case "lint":
-		return cliout.CodeLintFailed
+		return lintErrorCode(res.ClaimLintErrors())
+	case "constitution":
+		return lintErrorCode(res.LintErrors)
 	case "ledger":
 		return cliout.CodeIntegrityFailed
 	case "links":
@@ -1501,7 +1555,7 @@ func newCheckCmd() *cobra.Command {
 				// check_parity_test.go / tests/check_exit_test.go. cliout.Errorf
 				// reproduces fmt.Errorf's string precisely, so attaching the
 				// code costs nothing on the text side.
-				failure := cliout.Errorf(checkFailureCode(res, stoppedAt), "check: %w", runErr)
+				failure := withConstitutionHint(cliout.Errorf(checkFailureCode(res, stoppedAt), "check: %w", runErr), res.Constitution)
 				if projectionError(res) != "" || res.ConformanceCapacityExceeded {
 					failure = failure.WithHint(projectionRecoveryHint(res))
 				}
@@ -1603,9 +1657,9 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	// Fail-fast in the same order the writing pipeline uses: a project that
 	// does not lint is not one whose ledger findings are worth reading, because
 	// half of them may be artifacts of the malformed claim.
-	if len(res.LintErrors) > 0 {
+	if len(res.ClaimLintErrors()) > 0 {
 		out.StoppedAt = "lint"
-		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
+		return out, lintStopError(res)
 	}
 	if projectionError(res) != "" {
 		out.StoppedAt = projectionStoppedAt(res)
@@ -1620,6 +1674,13 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "ledger"
 		return out, cliout.Errorf(cliout.CodeIntegrityFailed, "check: ledger: %d integrity finding(s)", len(res.LedgerFindings)).
 			WithHint(ledgerRecoveryHint(res.LedgerFindings))
+	}
+	if !res.Constitution.Locked() || res.Constitution.OverCap {
+		// The roof gate (NIT-26), decided after the ledger exactly as plain
+		// check decides it, so the three modes never disagree about one tree.
+		// Its finding is already in data.lint_findings at error severity.
+		out.StoppedAt = "constitution"
+		return out, withConstitutionHint(cliout.Errorf(lintErrorCode(res.LintErrors), "check: constitution: %s", res.Constitution.Detail()), res.Constitution)
 	}
 	if res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0 {
 		out.StoppedAt = "conformance"
@@ -1715,14 +1776,15 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), res.ViewerWarnings...),
 		Text:     func() { formatCheckValidateResult(cmd, res) },
 	}
-	if len(res.LintErrors) > 0 {
+	if len(res.ClaimLintErrors()) > 0 {
 		// Same wrap, same code, and therefore the same exit status 1 as a
 		// writing check that stops at lint: a validation failure is a
 		// validation failure whichever door it came through, and
 		// tests/check_exit_test.go's "a lint error is 1, never 2" holds for
-		// both.
+		// both. The roof's own finding is in the same list but is decided
+		// below, after the ledger, in the order plain check decides it.
 		out.StoppedAt = "lint"
-		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
+		return out, lintStopError(res)
 	}
 	if projectionError(res) != "" {
 		out.StoppedAt = projectionStoppedAt(res)
@@ -1742,6 +1804,13 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "ledger"
 		return out, cliout.Errorf(cliout.CodeIntegrityFailed, "check: ledger: %d integrity finding(s)", len(res.LedgerFindings)).
 			WithHint(ledgerRecoveryHint(res.LedgerFindings))
+	}
+	if !res.Constitution.Locked() || res.Constitution.OverCap {
+		// The roof gate (NIT-26), decided after the ledger exactly as plain
+		// check decides it, so the three modes never disagree about one tree.
+		// Its finding is already in data.lint_findings at error severity.
+		out.StoppedAt = "constitution"
+		return out, withConstitutionHint(cliout.Errorf(lintErrorCode(res.LintErrors), "check: constitution: %s", res.Constitution.Detail()), res.Constitution)
 	}
 	if res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0 {
 		out.StoppedAt = "conformance"
@@ -2031,7 +2100,7 @@ func containsStr(ss []string, s string) bool {
 // and lock.Lock answers that question only by refusing, in prose, after it has
 // already taken the claims sentinel. Reimplementing the three gates as a pure
 // read is what lets the preview exist AND lets the refusal be classified into a
-// machine code (lint_failed / dependency_not_locked / unresolved_comments)
+// machine code (lint_failed / unresolved_comments)
 // without regexing lock.Lock's message.
 //
 // The evaluation order below mirrors lock.Lock's exactly — lint, then hub
@@ -2064,8 +2133,7 @@ type lockGate struct {
 	// refusal and the preview both name the rule; see lockLintFindingData.
 	LintFindings []lint.Finding
 
-	UnlockedDoctrineDep string
-	OpenThreads         []string
+	OpenThreads []string
 }
 
 // lockLintFindingData projects the gate's error-severity findings into the same
@@ -2121,8 +2189,6 @@ func (g lockGate) code() cliout.Code {
 	switch {
 	case g.LintErrors > 0:
 		return cliout.CodeLintFailed
-	case g.UnlockedDoctrineDep != "":
-		return cliout.CodeDependencyNotLocked
 	case len(g.OpenThreads) > 0:
 		return cliout.CodeUnresolvedComments
 	default:
@@ -2170,19 +2236,6 @@ func evaluateLockGates(claim model.Claim, claims []model.Claim, cfg *config.Conf
 		}
 		g.LintErrors++
 		g.LintFindings = append(g.LintFindings, f)
-	}
-	if cfg != nil && cfg.HubGatingEnabled() {
-		deps := append([]string(nil), claim.RestsOn...)
-		for _, dep := range deps {
-			depClaim, ok := loader.FindByID(claims, dep)
-			if !ok {
-				continue
-			}
-			if depClaim.Facet == cfg.DoctrineFacet && depClaim.Status != model.StatusLocked {
-				g.UnlockedDoctrineDep = dep
-				break
-			}
-		}
 	}
 	g.OpenThreads = claim.OpenThreadIDs()
 	return g
@@ -2253,7 +2306,7 @@ func newLockRefusedData(id string, g lockGate) lockRefusedData {
 		LintErrors:         g.LintErrors,
 		LintFindings:       g.lockLintFindingData(),
 		OpenThreads:        emptyIfNil(g.OpenThreads),
-		UnlockedDependency: g.UnlockedDoctrineDep,
+		UnlockedDependency: "",
 	}
 }
 
@@ -2265,7 +2318,7 @@ func lockRefusalDetails(g lockGate) map[string]any {
 		"lint_errors":         g.LintErrors,
 		"lint_findings":       g.lockLintFindingData(),
 		"open_threads":        g.OpenThreads,
-		"unlocked_dependency": g.UnlockedDoctrineDep,
+		"unlocked_dependency": "",
 	}
 }
 
@@ -2337,6 +2390,9 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 	// standing record and no block — the preview must not manufacture a refusal
 	// out of evidence it could not load, and the real run fails that case
 	// loudly on its own.
+	// The roof gate, previewed the way the real run asks it (NIT-26).
+	constitutionPrecondition(dr, constitutionVerdict(cfg))
+
 	if store, err := lock.LoadStore(storePath(cfg)); err == nil {
 		if rec, standing, _ := standingLedgerRecord(store, claim); standing {
 			dr.Require("no_standing_ledger_record", false, fmt.Sprintf(
@@ -2381,13 +2437,6 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 	// `check --validate` cannot report (they key off the locked form of a claim
 	// that is still draft), so there was nowhere else to look.
 	dr.Require("lint_clean", g.LintErrors == 0, g.lintBlockerDetail())
-	if cfg != nil && cfg.HubGatingEnabled() {
-		detail := "no unlocked doctrine dependency"
-		if g.UnlockedDoctrineDep != "" {
-			detail = fmt.Sprintf("dependency %q is in doctrine facet %q and is not yet locked", g.UnlockedDoctrineDep, cfg.DoctrineFacet)
-		}
-		dr.Require("doctrine_dependencies_locked", g.UnlockedDoctrineDep == "", detail)
-	}
 	dr.Require("no_open_comment_threads", len(g.OpenThreads) == 0,
 		fmt.Sprintf("%d unresolved thread(s) %v", len(g.OpenThreads), g.OpenThreads))
 
@@ -2526,6 +2575,13 @@ func newLockCmd() *cobra.Command {
 			store, err := lock.LoadStore(storePath(cfg))
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
+			}
+			// THE ROOF GATE (NIT-26), before any per-claim gate: no module
+			// claim locks while the constitution is missing, draft or edited
+			// after its lock. Project-level, so it is not an offender on a
+			// claim; it refuses the whole write.
+			if err := constitutionGate("lock", constitutionVerdictWith(cfg, store)); err != nil {
+				return cmdResult{}, err
 			}
 
 			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
@@ -3115,6 +3171,19 @@ func newReauditCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "reaudit: %w", err)
 			}
+			// THE ROOF GATE (NIT-26), on the WRITING path only and before any
+			// store write: a confirmed reaudit records an approval in the lock
+			// ledger, which is module work, and no module work happens while
+			// the constitution is missing, draft, unrecorded or edited after
+			// its lock. It is the same refusal `claim lock` makes, from the
+			// same helper, so the envelope an agent recovers from is one
+			// shape. A bare reaudit is a preview and stays open: the agent
+			// can still show the human what a confirm would write.
+			if confirm {
+				if err := constitutionGate("reaudit", constitutionVerdictWith(cfg, store)); err != nil {
+					return cmdResult{}, err
+				}
+			}
 			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
 			// from current content — see lock.MigrateLegacyStore. Persisted here
 			// (not only on the --confirm path below) so a mere propose still
@@ -3364,6 +3433,11 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeInternal, "reaudit: %w", err)
 	}
+	// The roof gate, previewed the way the confirm asks it (NIT-26): a
+	// preview that did not name the roof would send an agent to its human for
+	// a yes the real run then refuses.
+	constitutionPrecondition(dr, constitutionVerdictWith(cfg, store))
+
 	flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeInternal, "reaudit: %w", err)

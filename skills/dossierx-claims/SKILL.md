@@ -24,7 +24,7 @@ the five rules are there and are not repeated here.
 
 | you want to | run |
 |---|---|
-| author a claim | `dossierx claim new <id> --body "..."` |
+| author a claim | `dossierx claim new <id> --body "..." --rests-on-none-reason "..."` |
 | check your work, writing nothing | `dossierx check --validate` |
 | build everything (catalog, viewer, code-link scan, ledger gate) | `dossierx check` |
 | know everything about one claim | `dossierx claim show <id>` |
@@ -45,7 +45,7 @@ it out.
   (lowercase alphanumerics, single hyphens). The viewer's card title is derived from the slug, so
   `retry-policy` renders as "Retry Policy" — you never write a title.
 - `status: draft | locked` — **only** `dossierx claim lock` / `unlock` may change this. Editing it
-  by hand walks past the lint gate, the doctrine gate and the open-thread gate as though all three
+  by hand walks past the lint gate, the roof gate and the open-thread gate as though all three
   had passed, and the lock ledger will report it as `integrity_failed` on the next check.
 - `body` (prose) and/or `rows` (a table; every cell must be an authored **string**, so quote
   numbers and booleans). A claim needs at least one. `body` gets the wider **block** ceiling —
@@ -60,9 +60,12 @@ it out.
   before a claim can lock** once a module uses the feature. It classifies a claim for
   implementation reading (schema before behavior, and so on) and has nothing to do with `section`/`order`, which are the
   human's reading order in the viewer.
-- Edges: `rests_on` (semantic dependency; the target must exist) is the one claim-to-claim edge.
-  It is a **drift** edge (a target's content changing under a locked claim flags `review_pending`)
-  and the edge hub-gating walks. `governed_by` is gone as of v0.7.21 — a claim file that still
+- Edges: required `rests_on` — either a list of claim ids or `{none: true, reason: "..."}`. Targets
+  are claim ids only: `project.<slug>`, any module's `*.contract.*`, and this module's own
+  `*.internals.*`; a foreign module's `*.internals.*` is refused (`rests-on-target`). Never the
+  constitution — it is not a target, not a node, not a ref grammar (see **Project claims and the
+  constitution** below). Targets are **drift** edges (a target's content changing under a locked
+  claim flags `review_pending`). `governed_by` is gone as of v0.7.21 — a claim file that still
   carries it fails to load; the router's "governed_by is gone" section says what to do.
 - **A `rests_on` loop is refused** at ERROR (`cycle`).
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
@@ -74,11 +77,11 @@ it out.
 ## Authoring — `dossierx claim new`, not a text editor
 
 Hand-writing claim YAML is the thing this design gates. Author through the command: it enforces
-the id grammar and the body requirement **before** it writes, then lints
+the id grammar, the body requirement and the required `rests_on` rule **before** it writes, then lints
 the project with the new claim in it — an `orphan` warning on a claim with no edges yet is a
 warning, not a refusal.
 
-`--rests-on` / `--build-role` / `--section` / `--layout` are all
+`--rests-on` / `--rests-on-none-reason` / `--build-role` / `--section` / `--layout` are all
 available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks
 nothing else, so a claim written outside it reports success and is then invisible). After creation
 the claim is a **draft** — edit its file freely.
@@ -89,6 +92,40 @@ Run the full `dossierx check` when you want the viewer rebuilt and code links sc
 run proves a locked claim is linked to code (`--validate` reports `code_links` but never gates on it).
 Report the envelope, never your belief: "it is synced" in chat is not a certificate, and an exit code
 you did not see is one you do not have — stop and say what is missing.
+
+## Project claims and the constitution
+
+Three classes of thing, and you author two of them:
+
+- **The constitution** — one `constitution.yaml` beside `project.config.yaml`: the critical brief for
+  the whole system, sections `invariants` / `glossary` / `decisions`, each entry a `slug`, an optional
+  `title` and a plain-text `body`, **under 800 words** in total (`dossierx constitution show` prints
+  the words, the meter and the lock state). It is not a module, not a claim, and **never a
+  `rests_on` target**: every claim builds toward it by definition, so nothing cites it. You draft it
+  and show it; the **human** locks it — `dossierx constitution lock --dry-run`, then
+  `--reason "<their words>"` — and until they do, `claim lock`, `claim reaudit --confirm` and plain `check` refuse
+  `CONSTITUTION_NOT_LOCKED` (the bare reaudit preview stays open). An edit after the lock stops module work the same way until they re-lock;
+  the edited file is what everyone reads meanwhile.
+- **Project claims** — project-wide facts that are not roof law. `dossierx claim new project.<slug>
+  --body "..." --rests-on ...` writes `project-claims/<slug>.yaml` with `scope: project`, no `module`
+  and no `facet`. No cap, no manifest: `manifest show` carries a generated index (id + summary) of the
+  whole store. Their `rests_on` may name other `project.*` ids and any module's `*.contract.*`, never
+  `*.internals.*`. Until the `summary` field lands (NIT-8) the index line is the first non-blank line
+  of `body`, so write the gist first.
+- **Module claims** — everything under `claims/`, as below.
+
+**Read in this order and stop as early as you can:** the constitution → the project-claims index →
+the catalog's module blurbs → a module's `provides` → the summaries of the claims it provides →
+`dossierx claim show <id>` only when a summary is not enough. Never a claim body on a first pass, and
+never a foreign module's `*.internals.*` — the one `rests_on` target the lint refuses.
+
+**Upgrading a doctrine-hub corpus** (the router's "`governed_by` is gone" section has the four steps):
+a former doctrine claim goes exactly one way. Critical system law becomes a constitution entry — never
+cited, so every `rests_on` that named it is simply dropped. Anything else becomes a project claim:
+`dossierx claim new project.<slug> --body "..."` with `--rests-on` or `--rests-on-none-reason`, then
+carry the old body across; its `rests_on` may name `project.*` and `*.contract.*` ids only. Every
+`<hub>.doctrine.<slug>` reference elsewhere becomes `project.<slug>` or goes. The hub module, its
+`doctrine` facet and its claim files are deleted; a module left over is a normal module, never the roof.
 
 ## Citing your evidence — `sources`
 
@@ -195,9 +232,9 @@ The window between the two ends is not a steady state. If any source file carrie
 and `claim is not locked (status "draft")` — the tag is fine, the claim is mid-edit. Finish the
 relock; never touch the tag or leave the claim unlocked to silence it.
 
-`dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
+`dossierx claim lock` refuses on three gates, each with its own `error.code`: `lint_failed` (fix
 the findings), `unresolved_comments` (reply, and let the human click Resolve),
-`dependency_not_locked` (a doctrine dependency is still draft), and `already_locked` — a claim
+and `already_locked` — a claim
 that is *already* `locked` is not re-locked, because re-locking a drifted or flagged claim would
 sign whatever the file now says and clear `review_pending` with no diff shown. `unlock` → fix →
 `lock`, or restore the file from git.
@@ -251,5 +288,5 @@ so**, do not confirm.
 
 ## Portability
 
-Facets, modules, claims dir, source dirs, doctrine facet and template overrides all come from
+Facets, modules, claims dir, source dirs and template overrides all come from
 `project.config.yaml` — never patch the engine.

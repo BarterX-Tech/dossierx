@@ -6,3 +6,6 @@ layout: card
 body: |
   5. Fifth
   6. Sixth
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - <ol start> is emitted when the first item's number is not 1

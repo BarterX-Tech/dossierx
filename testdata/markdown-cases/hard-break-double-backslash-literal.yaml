@@ -6,3 +6,6 @@ layout: card
 body: |
   First line\\
   Second line.
+rests_on:
+  none: true
+  reason: markdown renderer test fixture - escapes resolve first - a trailing \\ is a literal backslash, not a break
