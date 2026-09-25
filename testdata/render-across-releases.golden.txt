@@ -145,7 +145,7 @@ testdata/fixture-basic/build/viewer/index.html  (+644 -656)
                     testdata/fixture-basic/claims/widget-fields.yaml
                     testdata/fixture-basic/claims/widget-overview.yaml
                     testdata/fixture-basic/constitution.yaml
-    size            23276 lines / 1234179 bytes -> 23264 lines / 1229417 bytes
+    size            23276 lines / 1234179 bytes -> 23264 lines / 1229408 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -1280,9 +1280,9 @@ testdata/fixture-basic/build/viewer/index.html  (+644 -656)
            });
          });
 -        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
-+        // The server picks the peer tab a module opens on (the first one that
-+        // holds claims, so an empty Manifest tab never hides Contract) and
-+        // stamps it on the module's sec-tab. Prefer it over DOM order.
++        // The server picks the peer tab a module opens on (always Contract,
++        // never the Manifest tab that comes first in DOM order) and stamps it
++        // on the module's sec-tab. Prefer it over DOM order.
 +        moduleTabs.forEach(function (tab) {
 +          var modID = (tab.dataset.target || '').replace(/^#/, '');
 +          var defID = (tab.dataset.defaultTarget || '').replace(/^#/, '');
@@ -2204,7 +2204,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+658 -659)
                     testdata/fixture-conformance-v1/claims/uncheckable.yaml
                     testdata/fixture-conformance-v1/constitution.yaml
                     testdata/fixture-conformance-v1/project.config.yaml
-    size            23601 lines / 1288309 bytes -> 23600 lines / 1284737 bytes
+    size            23601 lines / 1288309 bytes -> 23600 lines / 1284728 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -3369,9 +3369,9 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+658 -659)
            });
          });
 -        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
-+        // The server picks the peer tab a module opens on (the first one that
-+        // holds claims, so an empty Manifest tab never hides Contract) and
-+        // stamps it on the module's sec-tab. Prefer it over DOM order.
++        // The server picks the peer tab a module opens on (always Contract,
++        // never the Manifest tab that comes first in DOM order) and stamps it
++        // on the module's sec-tab. Prefer it over DOM order.
 +        moduleTabs.forEach(function (tab) {
 +          var modID = (tab.dataset.target || '').replace(/^#/, '');
 +          var defID = (tab.dataset.defaultTarget || '').replace(/^#/, '');
@@ -6939,7 +6939,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
                     testdata/fixture-graph-demo/claims/viewer-scope-filter.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
-    size            23990 lines / 1496790 bytes -> 23799 lines / 1487680 bytes
+    size            23990 lines / 1496790 bytes -> 23799 lines / 1487671 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -9029,9 +9029,9 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
            });
          });
 -        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
-+        // The server picks the peer tab a module opens on (the first one that
-+        // holds claims, so an empty Manifest tab never hides Contract) and
-+        // stamps it on the module's sec-tab. Prefer it over DOM order.
++        // The server picks the peer tab a module opens on (always Contract,
++        // never the Manifest tab that comes first in DOM order) and stamps it
++        // on the module's sec-tab. Prefer it over DOM order.
 +        moduleTabs.forEach(function (tab) {
 +          var modID = (tab.dataset.target || '').replace(/^#/, '');
 +          var defID = (tab.dataset.defaultTarget || '').replace(/^#/, '');
@@ -10041,7 +10041,7 @@ testdata/fixture-portability/build/viewer/index.html  (+658 -670)
                     testdata/fixture-portability/claims/beacon-why.yaml
                     testdata/fixture-portability/constitution.yaml
                     testdata/fixture-portability/project.config.yaml
-    size            23267 lines / 1238682 bytes -> 23255 lines / 1233673 bytes
+    size            23267 lines / 1238682 bytes -> 23255 lines / 1233663 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -11098,7 +11098,7 @@ testdata/fixture-portability/build/viewer/index.html  (+658 -670)
              <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">1</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
              <div class="system-nav-group__body">
 -                <button class="sec-tab" data-target="#beacon" data-default-target="#beacon-spec"><span class="sec-tab__label">Beacon</span><span class="sec-tab__count">3</span></button>
-+                <button class="sec-tab" data-target="#beacon" data-default-target="#beacon-internals"><span class="sec-tab__label">Beacon</span><span class="sec-tab__count">3</span></button>
++                <button class="sec-tab" data-target="#beacon" data-default-target="#beacon-contract"><span class="sec-tab__label">Beacon</span><span class="sec-tab__count">3</span></button>
              </div>
            </details>
            </div>
@@ -11208,9 +11208,9 @@ testdata/fixture-portability/build/viewer/index.html  (+658 -670)
            });
          });
 -        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
-+        // The server picks the peer tab a module opens on (the first one that
-+        // holds claims, so an empty Manifest tab never hides Contract) and
-+        // stamps it on the module's sec-tab. Prefer it over DOM order.
++        // The server picks the peer tab a module opens on (always Contract,
++        // never the Manifest tab that comes first in DOM order) and stamps it
++        // on the module's sec-tab. Prefer it over DOM order.
 +        moduleTabs.forEach(function (tab) {
 +          var modID = (tab.dataset.target || '').replace(/^#/, '');
 +          var defID = (tab.dataset.defaultTarget || '').replace(/^#/, '');
@@ -12438,7 +12438,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
                     testdata/fixture-theme-flat/claims/widget-walkthrough.yaml
                     testdata/fixture-theme-flat/constitution.yaml
                     testdata/fixture-theme-flat/project.config.yaml
-    size            27403 lines / 4877586 bytes -> 23405 lines / 1273599 bytes
+    size            27403 lines / 4877586 bytes -> 23405 lines / 1273590 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it

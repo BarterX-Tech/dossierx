@@ -1034,3 +1034,24 @@ func TestRender_ClaimBodyAppearsOncePerClaim(t *testing.T) {
 		t.Fatalf("claim body appears %d times, want 1 (no facet-tab injection):\n%s", got, out)
 	}
 }
+
+func TestBuildModuleGroups_OpensOnContractEvenWhenEmpty(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.i", "widget", "internals", model.StatusDraft),
+	}
+	cfg := &config.Config{
+		Modules: []string{"widget"},
+		Facets:  []string{"contract", "internals"},
+	}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, map[string]template.HTML{"w.i": "I"}))
+	if len(moduleGroups) != 1 {
+		t.Fatalf("got %d module groups, want 1: %#v", len(moduleGroups), moduleGroups)
+	}
+	if got := moduleGroups[0].FirstFacetID; got != "widget-contract" {
+		t.Errorf("FirstFacetID = %q, want widget-contract: a module always opens on Contract, even with only internals claims", got)
+	}
+}

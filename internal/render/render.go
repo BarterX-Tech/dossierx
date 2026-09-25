@@ -290,7 +290,7 @@ type ModuleGroup struct {
 	// Manifest | Contract | Internals. Always three — empty tabs stay
 	// peers so Manifest is never a banner above the other two.
 	Facets []Group
-	// FirstFacetID is Facets[0].ID — the Manifest section that should render
+	// FirstFacetID is the Contract section's ID — the section that renders
 	// visible-by-default when this module's sec-tab is chosen, whether by
 	// click or by a bare "#module" hash with no facet suffix.
 	FirstFacetID string
@@ -355,15 +355,16 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 }
 
 // defaultPeerTabID picks the section that should be visible when a module
-// is chosen. The strip order is Manifest | Contract | Internals. An empty
-// Manifest stub is still a peer tab, but it is not a banner and must not
-// hide the first tab that actually holds claims.
+// is chosen: always the Contract tab. The strip order is Manifest |
+// Contract | Internals, but a module is read through its contract first,
+// so Contract opens by default even when it is empty. A module with no
+// Contract tab (the ungrouped bucket) falls back to its first tab.
 func defaultPeerTabID(facets []Group) string {
 	if len(facets) == 0 {
 		return ""
 	}
 	for _, f := range facets {
-		if f.ClaimCount > 0 {
+		if f.Facet == config.FacetContract {
 			return f.ID
 		}
 	}

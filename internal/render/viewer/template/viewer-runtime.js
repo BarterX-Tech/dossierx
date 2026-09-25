@@ -57,9 +57,9 @@
             if (i === 0) { moduleDefaultFacet[sec.id] = g.id; }
           });
         });
-        // The server picks the peer tab a module opens on (the first one that
-        // holds claims, so an empty Manifest tab never hides Contract) and
-        // stamps it on the module's sec-tab. Prefer it over DOM order.
+        // The server picks the peer tab a module opens on (always Contract,
+        // never the Manifest tab that comes first in DOM order) and stamps it
+        // on the module's sec-tab. Prefer it over DOM order.
         moduleTabs.forEach(function (tab) {
           var modID = (tab.dataset.target || '').replace(/^#/, '');
           var defID = (tab.dataset.defaultTarget || '').replace(/^#/, '');
