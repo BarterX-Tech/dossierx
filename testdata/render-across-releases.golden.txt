@@ -4808,7 +4808,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+727 -767)
    // ------------------------------------------------------------------
    // Auto-collapse above AUTO_COLLAPSE_ABOVE claims
 
-testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
+testdata/fixture-graph-demo/build/catalog/catalog.json  (+533 -1562)
     inputs changed  testdata/fixture-graph-demo/build/ledger/comment-digest.json
                     testdata/fixture-graph-demo/build/ledger/flag-store.json
                     testdata/fixture-graph-demo/build/ledger/lock-store.json
@@ -4877,7 +4877,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
                     testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
-    size            2182 lines / 65184 bytes -> 1130 lines / 36870 bytes
+    size            2182 lines / 65184 bytes -> 1153 lines / 36286 bytes
 @@ -1,88 +1,6 @@
  {
    "claims": [
@@ -4967,19 +4967,19 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
        "id": "cli.contract.check-noun",
        "facet": "contract",
        "module": "cli",
-@@ -91,17 +9,12 @@
+@@ -91,17 +9,13 @@
        "kind": "fact",
        "edges": {
          "rests_on": [
 -          "engine.contract.check-is-fail-fast",
 -          "cli.behavior.exit-codes"
--        ],
++          "engine.contract.check-is-fail-fast"
+         ],
 -        "governed_by": {
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
-+          "engine.contract.check-is-fail-fast"
-+        ]
++        "rests_on_internals_omitted": 1
        },
        "readiness": {
          "claim_id": "cli.contract.check-noun",
@@ -4988,7 +4988,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -110,11 +23,40 @@
+@@ -110,13 +24,42 @@
          "review_causes": [
            {
              "kind": "upstream_dependency_review",
@@ -4996,8 +4996,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "cli.contract.check-noun",
-+              "cli.internals.exit-codes",
-+              "cli.internals.json-envelope",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5011,8 +5011,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "path": [
 +              "cli.contract.check-noun",
 +              "engine.contract.check-is-fail-fast",
-+              "engine.internals.lint-runs-before-catalog",
-+              "engine.internals.edge-kinds",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5026,11 +5026,14 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
                "cli.contract.check-noun",
                "engine.contract.check-is-fail-fast",
 -              "engine.behavior.lint-runs-before-catalog"
-+              "engine.internals.lint-runs-before-catalog"
++              "(internals)"
              ],
-             "detail": "c-2e8875",
+-            "detail": "c-2e8875",
++            "detail": "withheld: authored on an internals claim",
              "direct": false,
-@@ -124,11 +66,40 @@
+             "inherited": true
+           }
+@@ -124,13 +67,42 @@
          "causes": [
            {
              "kind": "upstream_dependency_review",
@@ -5038,8 +5041,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "cli.contract.check-noun",
-+              "cli.internals.exit-codes",
-+              "cli.internals.json-envelope",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5053,8 +5056,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "path": [
 +              "cli.contract.check-noun",
 +              "engine.contract.check-is-fail-fast",
-+              "engine.internals.lint-runs-before-catalog",
-+              "engine.internals.edge-kinds",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5068,23 +5071,25 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
                "cli.contract.check-noun",
                "engine.contract.check-is-fail-fast",
 -              "engine.behavior.lint-runs-before-catalog"
-+              "engine.internals.lint-runs-before-catalog"
++              "(internals)"
              ],
-             "detail": "c-2e8875",
+-            "detail": "c-2e8875",
++            "detail": "withheld: authored on an internals claim",
              "direct": false,
-@@ -144,22 +115,45 @@
-       "status": "locked",
+             "inherited": true
+           }
+@@ -145,21 +117,46 @@
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "cli.schema.json-envelope"
 -        ],
 -        "governed_by": {
 -          "type": "engine.decision.single-source-of-truth"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
          "claim_id": "cli.contract.noun-list-is-fixed",
 -        "policy_version": 0,
@@ -5103,7 +5108,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "cli.contract.noun-list-is-fixed",
-+              "cli.internals.json-envelope",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5118,7 +5123,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "cli.contract.noun-list-is-fixed",
-+              "cli.internals.json-envelope",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5129,11 +5134,10 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
        }
      },
      {
-@@ -169,72 +163,43 @@
-       "status": "draft",
+@@ -170,71 +167,44 @@
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "cli.schema.json-envelope"
 -        ],
@@ -5141,8 +5145,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
          "claim_id": "cli.contract.serve-noun",
 -        "policy_version": 0,
@@ -5194,7 +5198,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "cli.decision.agent-operates-human-reviews",
 -              "cli.contract.serve-noun"
 +              "cli.contract.serve-noun",
-+              "cli.internals.json-envelope",
++              "(internals)",
 +              "engine.contract.claim-shape"
              ],
 -            "detail": "required dependency is not locally approved"
@@ -5215,7 +5219,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "cli.decision.agent-operates-human-reviews",
 -              "cli.contract.serve-noun"
 +              "cli.contract.serve-noun",
-+              "cli.internals.json-envelope",
++              "(internals)",
 +              "engine.contract.claim-shape"
              ],
 -            "detail": "required dependency is not locally approved"
@@ -5225,7 +5229,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
            }
          ],
          "local_reasons": [
-@@ -244,59 +209,51 @@
+@@ -244,59 +214,53 @@
        }
      },
      {
@@ -5238,7 +5242,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -      "layout": "card",
 +      "layout": "banner",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "cli.contract.noun-list-is-fixed"
 -        ],
@@ -5246,8 +5250,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "cli.decision.no-new-noun-for-the-graph",
 -        "policy_version": 0,
@@ -5268,7 +5272,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "cli.contract.six-nouns",
-+              "cli.internals.json-envelope",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5296,7 +5300,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "cli.contract.six-nouns",
-+              "cli.internals.json-envelope",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5320,7 +5324,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_reasons": [
            "claim status \"draft\" is not locally approved"
          ],
-@@ -304,136 +261,72 @@
+@@ -304,136 +268,72 @@
        }
      },
      {
@@ -5499,7 +5503,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -441,24 +334,28 @@
+@@ -441,24 +341,28 @@
          "review_pending": true,
          "review_causes": [
            {
@@ -5536,7 +5540,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
              "direct": true,
              "inherited": false
            }
-@@ -466,76 +363,16 @@
+@@ -466,58 +370,6 @@
        }
      },
      {
@@ -5595,10 +5599,10 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
        "id": "engine.contract.check-is-fail-fast",
        "facet": "contract",
        "module": "engine",
-       "status": "locked",
+@@ -525,17 +377,11 @@
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "engine.behavior.lint-runs-before-catalog"
 -        ],
@@ -5606,8 +5610,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
          "claim_id": "engine.contract.check-is-fail-fast",
 -        "policy_version": 0,
@@ -5615,7 +5619,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -544,10 +381,24 @@
+@@ -544,12 +390,26 @@
          "review_causes": [
            {
              "kind": "upstream_dependency_review",
@@ -5623,8 +5627,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "engine.contract.check-is-fail-fast",
-+              "engine.internals.lint-runs-before-catalog",
-+              "engine.internals.edge-kinds",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5637,11 +5641,14 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
              "path": [
                "engine.contract.check-is-fail-fast",
 -              "engine.behavior.lint-runs-before-catalog"
-+              "engine.internals.lint-runs-before-catalog"
++              "(internals)"
              ],
-             "detail": "c-2e8875",
+-            "detail": "c-2e8875",
++            "detail": "withheld: authored on an internals claim",
              "direct": false,
-@@ -557,10 +408,24 @@
+             "inherited": true
+           }
+@@ -557,12 +417,26 @@
          "causes": [
            {
              "kind": "upstream_dependency_review",
@@ -5649,8 +5656,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "engine.contract.check-is-fail-fast",
-+              "engine.internals.lint-runs-before-catalog",
-+              "engine.internals.edge-kinds",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -5663,11 +5670,14 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
              "path": [
                "engine.contract.check-is-fail-fast",
 -              "engine.behavior.lint-runs-before-catalog"
-+              "engine.internals.lint-runs-before-catalog"
++              "(internals)"
              ],
-             "detail": "c-2e8875",
+-            "detail": "c-2e8875",
++            "detail": "withheld: authored on an internals claim",
              "direct": false,
-@@ -570,76 +435,19 @@
+             "inherited": true
+           }
+@@ -570,76 +444,19 @@
        }
      },
      {
@@ -5750,7 +5760,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -648,154 +456,19 @@
+@@ -648,154 +465,19 @@
        }
      },
      {
@@ -5911,7 +5921,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": true,
-@@ -808,105 +481,19 @@
+@@ -808,105 +490,19 @@
        }
      },
      {
@@ -6023,7 +6033,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -915,24 +502,20 @@
+@@ -915,24 +511,20 @@
        }
      },
      {
@@ -6055,7 +6065,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": true,
-@@ -945,59 +528,51 @@
+@@ -945,59 +537,53 @@
        }
      },
      {
@@ -6068,7 +6078,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -      "layout": "card",
 +      "layout": "banner",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "lock.schema.ledger-record"
 -        ],
@@ -6076,8 +6086,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "lock.decision.no-migration-command",
 -        "policy_version": 0,
@@ -6098,7 +6108,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "lock.contract.ledger-first",
-+              "lock.internals.lock-store",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -6126,7 +6136,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +            "dependency_id": "engine.contract.claim-shape",
 +            "path": [
 +              "lock.contract.ledger-first",
-+              "lock.internals.lock-store",
++              "(internals)",
 +              "engine.contract.claim-shape"
 +            ],
 +            "detail": "dependency content differs from the reviewed baseline",
@@ -6150,7 +6160,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_reasons": [
            "claim status \"draft\" is not locally approved"
          ],
-@@ -1005,183 +580,105 @@
+@@ -1005,183 +591,109 @@
        }
      },
      {
@@ -6162,7 +6172,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
        "status": "locked",
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "lock.schema.lock-store"
 -        ],
@@ -6170,8 +6180,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "lock.schema.ledger-record",
 -        "policy_version": 0,
@@ -6277,9 +6287,9 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "telemetry.behavior.counter-increment",
 -              "telemetry.schema.counter-shape"
 +              "lock.contract.lock-is-human-approved",
-+              "lock.internals.lock-gates",
-+              "lock.internals.ledger-record",
-+              "lock.internals.lock-store",
++              "(internals)",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
              ],
 -            "detail": "required dependency is not locally approved"
@@ -6300,9 +6310,9 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "telemetry.behavior.counter-increment",
 -              "telemetry.schema.counter-shape"
 +              "lock.contract.lock-is-human-approved",
-+              "lock.internals.lock-gates",
-+              "lock.internals.ledger-record",
-+              "lock.internals.lock-store",
++              "(internals)",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
              ],
 -            "detail": "required dependency is not locally approved"
@@ -6328,7 +6338,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
        "status": "draft",
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "telemetry.schema.counter-shape"
 -        ],
@@ -6336,8 +6346,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "telemetry.behavior.flush-on-exit",
 -        "policy_version": 0,
@@ -6362,9 +6372,9 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "telemetry.behavior.flush-on-exit",
 -              "telemetry.schema.counter-shape"
 +              "lock.contract.review-pending-is-engine-managed",
-+              "lock.internals.lock-gates",
-+              "lock.internals.ledger-record",
-+              "lock.internals.lock-store",
++              "(internals)",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
              ],
 -            "detail": "required dependency is not locally approved"
@@ -6385,9 +6395,9 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "telemetry.behavior.flush-on-exit",
 -              "telemetry.schema.counter-shape"
 +              "lock.contract.review-pending-is-engine-managed",
-+              "lock.internals.lock-gates",
-+              "lock.internals.ledger-record",
-+              "lock.internals.lock-store",
++              "(internals)",
++              "(internals)",
++              "(internals)",
 +              "engine.contract.claim-shape"
              ],
 -            "detail": "required dependency is not locally approved"
@@ -6397,7 +6407,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
            }
          ],
          "local_reasons": [
-@@ -1200,15 +697,11 @@
+@@ -1200,15 +712,11 @@
        "edges": {
          "rests_on": [
            "telemetry.contract.no-egress"
@@ -6415,7 +6425,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": false,
-@@ -1217,31 +710,31 @@
+@@ -1217,31 +725,31 @@
          "dependency_conditions": [
            {
              "kind": "dependency_unapproved",
@@ -6432,30 +6442,30 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.contract.no-egress",
-+            "dependency_id": "telemetry.internals.counter-shape",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.disabled-by-default",
 -              "telemetry.contract.no-egress"
 +              "telemetry.contract.no-egress",
-+              "telemetry.internals.flush-on-exit",
-+              "telemetry.internals.counter-shape"
++              "(internals)",
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            },
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.schema.counter-shape",
-+            "dependency_id": "telemetry.internals.flush-on-exit",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.disabled-by-default",
                "telemetry.contract.no-egress",
 -              "telemetry.behavior.flush-on-exit",
 -              "telemetry.schema.counter-shape"
-+              "telemetry.internals.flush-on-exit"
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            }
-@@ -1249,31 +742,31 @@
+@@ -1249,31 +757,31 @@
          "conditions": [
            {
              "kind": "dependency_unapproved",
@@ -6472,42 +6482,41 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.contract.no-egress",
-+            "dependency_id": "telemetry.internals.counter-shape",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.disabled-by-default",
 -              "telemetry.contract.no-egress"
 +              "telemetry.contract.no-egress",
-+              "telemetry.internals.flush-on-exit",
-+              "telemetry.internals.counter-shape"
++              "(internals)",
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            },
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.schema.counter-shape",
-+            "dependency_id": "telemetry.internals.flush-on-exit",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.disabled-by-default",
                "telemetry.contract.no-egress",
 -              "telemetry.behavior.flush-on-exit",
 -              "telemetry.schema.counter-shape"
-+              "telemetry.internals.flush-on-exit"
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            }
-@@ -1291,17 +784,10 @@
-       "status": "draft",
+@@ -1292,16 +800,11 @@
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "telemetry.behavior.flush-on-exit"
 -        ],
 -        "governed_by": {
 -          "type": "telemetry.decision.counters-are-local"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
          "claim_id": "telemetry.contract.no-egress",
 -        "policy_version": 0,
@@ -6515,59 +6524,59 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": false,
-@@ -1310,20 +796,20 @@
+@@ -1310,20 +813,20 @@
          "dependency_conditions": [
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.behavior.flush-on-exit",
-+            "dependency_id": "telemetry.internals.counter-shape",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.no-egress",
 -              "telemetry.behavior.flush-on-exit"
-+              "telemetry.internals.flush-on-exit",
-+              "telemetry.internals.counter-shape"
++              "(internals)",
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            },
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.schema.counter-shape",
-+            "dependency_id": "telemetry.internals.flush-on-exit",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.no-egress",
 -              "telemetry.behavior.flush-on-exit",
 -              "telemetry.schema.counter-shape"
-+              "telemetry.internals.flush-on-exit"
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            }
-@@ -1331,20 +817,20 @@
+@@ -1331,20 +834,20 @@
          "conditions": [
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.behavior.flush-on-exit",
-+            "dependency_id": "telemetry.internals.counter-shape",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.no-egress",
 -              "telemetry.behavior.flush-on-exit"
-+              "telemetry.internals.flush-on-exit",
-+              "telemetry.internals.counter-shape"
++              "(internals)",
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            },
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.schema.counter-shape",
-+            "dependency_id": "telemetry.internals.flush-on-exit",
++            "dependency_id": "(internals)",
              "path": [
                "telemetry.contract.no-egress",
 -              "telemetry.behavior.flush-on-exit",
 -              "telemetry.schema.counter-shape"
-+              "telemetry.internals.flush-on-exit"
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            }
-@@ -1356,63 +842,28 @@
+@@ -1356,63 +859,30 @@
        }
      },
      {
@@ -6580,13 +6589,13 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -      "layout": "card",
 +      "layout": "banner",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "governed_by": {
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "telemetry.decision.counters-are-local",
 -        "policy_version": 0,
@@ -6631,30 +6640,30 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.schema.counter-shape",
-+            "dependency_id": "telemetry.internals.counter-shape",
++            "dependency_id": "(internals)",
              "path": [
 -              "telemetry.overview.what-this-module-is",
 -              "telemetry.schema.counter-shape"
 +              "telemetry.contract.what-this-module-is",
-+              "telemetry.internals.counter-shape"
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            }
-@@ -1420,10 +871,10 @@
+@@ -1420,10 +890,10 @@
          "conditions": [
            {
              "kind": "dependency_unapproved",
 -            "dependency_id": "telemetry.schema.counter-shape",
-+            "dependency_id": "telemetry.internals.counter-shape",
++            "dependency_id": "(internals)",
              "path": [
 -              "telemetry.overview.what-this-module-is",
 -              "telemetry.schema.counter-shape"
 +              "telemetry.contract.what-this-module-is",
-+              "telemetry.internals.counter-shape"
++              "(internals)"
              ],
              "detail": "required dependency is not locally approved"
            }
-@@ -1435,21 +886,19 @@
+@@ -1435,21 +905,19 @@
        }
      },
      {
@@ -6683,7 +6692,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": true,
-@@ -1462,215 +911,101 @@
+@@ -1462,215 +930,105 @@
        }
      },
      {
@@ -6697,7 +6706,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 +      "status": "locked",
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "telemetry.schema.counter-shape"
 -        ],
@@ -6705,8 +6714,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "telemetry.schema.event-names",
 -        "policy_version": 0,
@@ -6733,7 +6742,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "telemetry.schema.event-names",
 -              "telemetry.schema.counter-shape"
 +              "viewer.contract.no-network-at-runtime",
-+              "viewer.internals.payload-shape",
++              "(internals)",
 +              "engine.contract.catalog-shape",
 +              "engine.contract.claim-shape"
              ],
@@ -6755,7 +6764,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "telemetry.schema.event-names",
 -              "telemetry.schema.counter-shape"
 +              "viewer.contract.no-network-at-runtime",
-+              "viewer.internals.payload-shape",
++              "(internals)",
 +              "engine.contract.catalog-shape",
 +              "engine.contract.claim-shape"
              ],
@@ -6876,7 +6885,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -      "layout": "card",
 +      "layout": "banner",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "viewer.behavior.representative-node-rule"
 -        ],
@@ -6884,8 +6893,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -          "type": "none",
 -          "reason": "a demo corpus claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
 -        "claim_id": "viewer.behavior.gap-rules-run-in-the-browser",
 -        "policy_version": 0,
@@ -6910,7 +6919,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "viewer.behavior.gap-rules-run-in-the-browser",
 -              "viewer.behavior.representative-node-rule"
 +              "viewer.contract.read-me-first",
-+              "viewer.internals.payload-shape",
++              "(internals)",
 +              "engine.contract.catalog-shape",
 +              "engine.contract.claim-shape"
              ],
@@ -6942,7 +6951,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
 -              "viewer.behavior.gap-rules-run-in-the-browser",
 -              "viewer.behavior.representative-node-rule"
 +              "viewer.contract.read-me-first",
-+              "viewer.internals.payload-shape",
++              "(internals)",
 +              "engine.contract.catalog-shape",
 +              "engine.contract.claim-shape"
              ],
@@ -6963,7 +6972,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1581)
            }
          ],
          "local_reasons": [
-@@ -1680,503 +1015,116 @@
+@@ -1680,503 +1038,116 @@
        }
      },
      {
@@ -13307,7 +13316,7 @@ testdata/fixture-portability/build/viewer/index.html  (+727 -778)
    // ------------------------------------------------------------------
    // Auto-collapse above AUTO_COLLAPSE_ABOVE claims
 
-testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
+testdata/fixture-theme-flat/build/catalog/catalog.json  (+47 -238)
     inputs changed  testdata/fixture-theme-flat/README.md
                     testdata/fixture-theme-flat/build/build-order/panel.json
                     testdata/fixture-theme-flat/build/ledger/comment-digest.json
@@ -13326,7 +13335,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
                     testdata/fixture-theme-flat/claims/widget/manifest.yaml
                     testdata/fixture-theme-flat/constitution.yaml
                     testdata/fixture-theme-flat/project.config.yaml
-    size            436 lines / 11807 bytes -> 241 lines / 6630 bytes
+    size            436 lines / 11807 bytes -> 245 lines / 6652 bytes
 @@ -10,15 +10,11 @@
        "edges": {
          "rests_on": [
@@ -13345,11 +13354,10 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -33,18 +29,10 @@
-       "status": "locked",
+@@ -34,17 +30,11 @@
        "layout": "card",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "panel.internals.state"
 -        ],
@@ -13357,8 +13365,8 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
 -          "type": "none",
 -          "reason": "fixture claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "readiness": {
          "claim_id": "panel.contract.behavior",
 -        "policy_version": 0,
@@ -13366,7 +13374,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
          "local_approved": true,
          "locally_approved": true,
          "dependency_ready": true,
-@@ -53,81 +41,6 @@
+@@ -53,81 +43,6 @@
        }
      },
      {
@@ -13448,7 +13456,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
        "id": "widget.contract.overview",
        "facet": "contract",
        "module": "widget",
-@@ -135,10 +48,8 @@
+@@ -135,10 +50,8 @@
        "layout": "card",
        "kind": "fact",
        "edges": {
@@ -13461,7 +13469,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
        },
        "tracks": [
          {
-@@ -148,7 +59,7 @@
+@@ -148,7 +61,7 @@
        ],
        "readiness": {
          "claim_id": "widget.contract.overview",
@@ -13470,7 +13478,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": true,
-@@ -164,17 +75,13 @@
+@@ -164,17 +77,13 @@
        "id": "widget.contract.reviewed",
        "facet": "contract",
        "module": "widget",
@@ -13490,7 +13498,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
        },
        "tracks": [
          {
-@@ -184,9 +91,9 @@
+@@ -184,9 +93,9 @@
        ],
        "readiness": {
          "claim_id": "widget.contract.reviewed",
@@ -13503,7 +13511,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
          "dependency_ready": true,
          "ready": false,
          "review_pending": true,
-@@ -200,6 +107,16 @@
+@@ -200,6 +109,16 @@
              "detail": "c-7e728a",
              "direct": true,
              "inherited": false
@@ -13520,7 +13528,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
            }
          ],
          "causes": [
-@@ -212,8 +129,22 @@
+@@ -212,8 +131,22 @@
              "detail": "c-7e728a",
              "direct": true,
              "inherited": false
@@ -13544,11 +13552,10 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
        }
      },
      {
-@@ -223,15 +154,7 @@
-       "status": "draft",
+@@ -224,13 +157,7 @@
        "layout": "steps",
        "kind": "fact",
--      "edges": {
+       "edges": {
 -        "rests_on": [
 -          "widget.internals.fields"
 -        ],
@@ -13556,12 +13563,11 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
 -          "type": "none",
 -          "reason": "fixture claim, not backed by any real doctrine"
 -        }
--      },
-+      "edges": {},
++        "rests_on_internals_omitted": 1
+       },
        "tracks": [
          {
-           "id": "checkout",
-@@ -240,7 +163,7 @@
+@@ -240,7 +167,7 @@
        ],
        "readiness": {
          "claim_id": "widget.contract.walkthrough",
@@ -13570,7 +13576,49 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
          "local_approved": false,
          "locally_approved": false,
          "dependency_ready": false,
-@@ -293,110 +216,6 @@
+@@ -252,17 +179,17 @@
+             "dependency_id": "widget.contract.overview",
+             "path": [
+               "widget.contract.walkthrough",
+-              "widget.internals.fields",
++              "(internals)",
+               "widget.contract.overview"
+             ],
+             "detail": "required dependency is not locally approved"
+           },
+           {
+             "kind": "dependency_unapproved",
+-            "dependency_id": "widget.internals.fields",
++            "dependency_id": "(internals)",
+             "path": [
+               "widget.contract.walkthrough",
+-              "widget.internals.fields"
++              "(internals)"
+             ],
+             "detail": "required dependency is not locally approved"
+           }
+@@ -273,17 +200,17 @@
+             "dependency_id": "widget.contract.overview",
+             "path": [
+               "widget.contract.walkthrough",
+-              "widget.internals.fields",
++              "(internals)",
+               "widget.contract.overview"
+             ],
+             "detail": "required dependency is not locally approved"
+           },
+           {
+             "kind": "dependency_unapproved",
+-            "dependency_id": "widget.internals.fields",
++            "dependency_id": "(internals)",
+             "path": [
+               "widget.contract.walkthrough",
+-              "widget.internals.fields"
++              "(internals)"
+             ],
+             "detail": "required dependency is not locally approved"
+           }
+@@ -293,110 +220,6 @@
          ],
          "local_approval_issue": "claim status \"draft\" is not locally approved"
        }
@@ -13681,7 +13729,7 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+41 -236)
      }
    ],
    "by_facet": {
-@@ -406,31 +225,17 @@
+@@ -406,31 +229,17 @@
        "widget.contract.overview",
        "widget.contract.reviewed",
        "widget.contract.walkthrough"

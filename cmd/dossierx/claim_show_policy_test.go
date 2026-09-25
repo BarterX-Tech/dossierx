@@ -320,12 +320,23 @@ func snapshotFiles(t *testing.T, root string) map[string]string {
 }
 
 func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
-	scaleCap := 10000
-	// The module's manifest rides in the overlay tree: a module with no valid
-	// manifest.yaml has no lockable claims, and this test measures the graph,
-	// not the harness file.
-	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}, MaxClaimsPerModule: &scaleCap,
-		ManifestTree: map[string][]byte{"shape/manifest.yaml": manifesttest.MinimalYAML("shape")}}
+	// Each shape is spread over modules of at most 30 claims, so every module
+	// stays inside its isolation budget (a module-manifest refusal otherwise)
+	// and the evaluator is measured on the graph alone. Module boundaries do
+	// not change the rests_on graph. Each module's manifest rides in the
+	// overlay tree: a module with no valid manifest.yaml has no lockable
+	// claims, and this test measures the graph, not the harness file.
+	scaleCap := 30
+	cfgFor := func(claims []model.Claim) *config.Config {
+		cfg := &config.Config{Facets: []string{"contract"}, MaxClaimsPerModule: &scaleCap, ManifestTree: map[string][]byte{}}
+		for _, c := range claims {
+			if _, ok := cfg.ManifestTree[c.Module+"/manifest.yaml"]; !ok {
+				cfg.Modules = append(cfg.Modules, c.Module)
+				cfg.ManifestTree[c.Module+"/manifest.yaml"] = manifesttest.MinimalYAML(c.Module)
+			}
+		}
+		return cfg
+	}
 	store := &lock.Store{PolicyVersion: lock.PolicyLocalApprovalV1}
 	type shape struct {
 		name           string
@@ -338,16 +349,16 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		if len(deps) > 0 {
 			ro = model.RestsOnIDs(deps...)
 		}
-		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "bounded fixture", Body: "bounded fixture", RestsOn: ro}
+		return model.Claim{ID: id, Facet: "contract", Module: strings.SplitN(id, ".", 2)[0], Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "bounded fixture", Body: "bounded fixture", RestsOn: ro}
 	}
 
 	makeChain := func(size int) shape {
 		claims := make([]model.Claim, size)
 		for i := range claims {
-			id := fmt.Sprintf("shape.contract.chain%03d", i)
+			id := fmt.Sprintf("shape%d.contract.chain%03d", i/30, i)
 			deps := []string{}
 			if i+1 < len(claims) {
-				deps = []string{fmt.Sprintf("shape.contract.chain%03d", i+1)}
+				deps = []string{fmt.Sprintf("shape%d.contract.chain%03d", (i+1)/30, i+1)}
 			}
 			claims[i] = claim(id, deps...)
 		}
@@ -362,7 +373,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 	wide := []model.Claim{claim("shape.contract.wideroot")}
 	var wideIDs []string
 	for i := 0; i < 100; i++ {
-		id := fmt.Sprintf("shape.contract.wide%03d", i)
+		id := fmt.Sprintf("shape%d.contract.wide%03d", i/30, i)
 		wideIDs = append(wideIDs, id)
 		wide = append(wide, claim(id))
 	}
@@ -373,11 +384,11 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 			deps := []string{}
 			if layer+1 < layers {
 				for node := 0; node < width; node++ {
-					deps = append(deps, fmt.Sprintf("shape.contract.dense%02d%02d", layer+1, node))
+					deps = append(deps, fmt.Sprintf("shape%d.contract.dense%02d%02d", (layer+1)/5, layer+1, node))
 				}
 			}
 			for node := 0; node < width; node++ {
-				claims = append(claims, claim(fmt.Sprintf("shape.contract.dense%02d%02d", layer, node), deps...))
+				claims = append(claims, claim(fmt.Sprintf("shape%d.contract.dense%02d%02d", layer/5, layer, node), deps...))
 			}
 		}
 		return shape{fmt.Sprintf("dense-%dx%d", layers, width), claims, claims[0].ID, width}
@@ -391,6 +402,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 	}
 	for _, s := range shapes {
 		t.Run(s.name, func(t *testing.T) {
+			cfg := cfgFor(s.claims)
 			start := time.Now()
 			evaluation := lock.EvaluateSetWithSemanticConflicts(s.claims, []string{s.root}, cfg, store, nil)
 			verdict := evaluation.Verdicts[0]

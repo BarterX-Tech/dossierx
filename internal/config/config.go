@@ -203,6 +203,12 @@ type Config struct {
 	Viewer       Viewer            `yaml:"viewer,omitempty"`
 	Conformance  Conformance       `yaml:"conformance,omitempty"`
 
+	// ConstitutionIndex, when non-nil, is constitution.yaml as the git index
+	// carries it. StatusStaged sets it so a lint that reads the roof's text
+	// (shared-context-budget) judges the commit, not the working tree: the
+	// same copy the constitution gate reads. Not a config field.
+	ConstitutionIndex *IndexedFile `yaml:"-"`
+
 	// BuildDir is the directory every runtime-generated file lives under —
 	// the code-links artifacts, the three ledger stores, the
 	// catalog and the viewer — one subdirectory per kind (see paths.go for the
@@ -676,6 +682,13 @@ func contains(ss []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// IndexedFile is one file as the git index holds it. Tracked false means the
+// index has no such file, which readers treat exactly like an absent file.
+type IndexedFile struct {
+	Tracked bool
+	Raw     []byte
 }
 
 // ConstitutionPath is the resolved constitution.yaml path.

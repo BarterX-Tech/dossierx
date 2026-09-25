@@ -41,10 +41,13 @@ func conformanceCapacityCLIProject(t *testing.T) (root, cfgPath string) {
 		t.Fatal(err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"
+	// 64 claims in four modules of 16: each module stays inside its
+	// isolation budget, so the only refusal left is the projection capacity.
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [m0, m1, m2, m3]\nclaims_dir: claims\nmax_claims_per_module: 16\nconformance:\n  observations: observations.json\n"
 	writeProjectConfigFile(t, cfgPath, cfg)
 	for i := 0; i < 64; i++ {
-		claim := fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
+		module := fmt.Sprintf("m%d", i/16)
+		claim := fmt.Sprintf("id: %s.contract.c%03d\nfacet: contract\nmodule: %s\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", module, i, module)
 		if err := os.WriteFile(filepath.Join(claimsDir, fmt.Sprintf("c%03d.yaml", i)), []byte(claim), 0o644); err != nil {
 			t.Fatal(err)
 		}
