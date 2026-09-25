@@ -1,0 +1,62 @@
+# go test -count=1 -v -p 2 <graph packages>  (see v0.7.21-release.md)
+
+real	2m13.976s
+user	3m1.436s
+sys	0m27.116s
+ok  	github.com/BarterX-Tech/dossierx/internal/readiness	3.629s
+ok  	github.com/BarterX-Tech/dossierx/internal/lock	0.477s
+ok  	github.com/BarterX-Tech/dossierx/internal/graph	1.456s
+ok  	github.com/BarterX-Tech/dossierx/internal/catalog	1.712s
+ok  	github.com/BarterX-Tech/dossierx/internal/visibility	0.004s
+ok  	github.com/BarterX-Tech/dossierx/internal/reaudit	0.012s
+ok  	github.com/BarterX-Tech/dossierx/internal/constitution	0.008s
+ok  	github.com/BarterX-Tech/dossierx/internal/lint	8.597s
+ok  	github.com/BarterX-Tech/dossierx/internal/model	0.009s
+ok  	github.com/BarterX-Tech/dossierx/internal/manifest	0.191s
+?   	github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest	[no test files]
+ok  	github.com/BarterX-Tech/dossierx/internal/projectclaims	0.005s
+ok  	github.com/BarterX-Tech/dossierx/internal/check	40.156s
+ok  	github.com/BarterX-Tech/dossierx/internal/render	58.878s
+ok  	github.com/BarterX-Tech/dossierx/internal/render/components	0.040s
+ok  	github.com/BarterX-Tech/dossierx/internal/render/markdown	76.667s
+?   	github.com/BarterX-Tech/dossierx/internal/render/markdown/generate-goldens	[no test files]
+ok  	github.com/BarterX-Tech/dossierx/internal/serve	20.339s
+ok  	github.com/BarterX-Tech/dossierx/internal/conformance	2.630s
+FAIL
+FAIL	github.com/BarterX-Tech/dossierx/internal/comments	10.407s
+FAIL
+top-level+subtest PASS lines: 2705  FAIL: 2  SKIP: 3
+--- SKIP: TestAcquireFileLockCreatesTheSentinelDirectory (0.00s)
+--- SKIP: TestOverrideFile_UnreadableFileIsHardError (0.00s)
+--- SKIP: TestClaimAsset_AnUnreadableTreeKeepsThePreviousIndex (0.00s)
+--- FAIL: TestEdge_ReadOnlyClaimFile_CleanError_NoPartialWrite (0.00s)
+--- FAIL: TestReadOnlyProjectDirWritesNothingOnEitherAttempt (0.00s)
+
+# TestAuditScale / TestConformanceEndToEndGraphScaleBounds lines
+    scale_audit_test.go:118: V=32 E=31 facts=496 witnessIDs=5952 catalogBytes=613050 htmlBytes=1661164 compute=2.213409ms allocatedBytes=991392 allocations=6990
+    scale_audit_test.go:118: V=64 E=63 facts=2016 witnessIDs=45696 catalogBytes=3771802 htmlBytes=3448428 compute=26.501281ms allocatedBytes=5826640 allocations=26731
+    scale_audit_test.go:118: V=128 E=127 facts=8128 witnessIDs=357632 catalogBytes=25852762 htmlBytes=15254499 compute=189.184699ms allocatedBytes=37777016 allocations=103716
+    scale_audit_test.go:118: V=40 E=175 facts=700 witnessIDs=2800 catalogBytes=517042 htmlBytes=1768586 compute=2.26514ms allocatedBytes=1076992 allocations=10190
+    scale_audit_test.go:118: V=80 E=375 facts=3000 witnessIDs=20000 catalogBytes=2632042 htmlBytes=3217454 compute=28.350015ms allocatedBytes=5188504 allocations=41494
+    scale_audit_test.go:118: V=120 E=575 facts=6900 witnessIDs=64400 catalogBytes=7137442 htmlBytes=5948897 compute=82.139773ms allocatedBytes=13077800 allocations=93478
+    scale_audit_test.go:118: V=40 E=175 facts=3540 witnessIDs=15440 catalogBytes=3305822 htmlBytes=3387074 compute=20.109892ms allocatedBytes=7078448 allocations=77430
+    scale_audit_test.go:118: V=80 E=375 facts=16580 witnessIDs=117080 catalogBytes=18270702 htmlBytes=12170782 compute=208.427898ms allocatedBytes=41570232 allocations=366064
+    conformance_scale_test.go:110: claims=32 declarations=15 checks=16 status_bytes=7900 catalog_bytes=660657 viewer_bytes=1795426 elapsed=78.042304ms TotalAlloc=24895608
+    conformance_scale_test.go:110: claims=64 declarations=30 checks=34 status_bytes=16169 catalog_bytes=4076554 viewer_bytes=3905599 elapsed=157.956525ms TotalAlloc=71928360
+    conformance_scale_test.go:110: claims=128 declarations=60 checks=68 status_bytes=32048 catalog_bytes=28084213 viewer_bytes=17767132 elapsed=841.338556ms TotalAlloc=324599736
+    conformance_scale_test.go:110: claims=40 declarations=19 checks=22 status_bytes=10499 catalog_bytes=550634 viewer_bytes=1923227 elapsed=74.1385ms TotalAlloc=27202008
+    conformance_scale_test.go:110: claims=80 declarations=37 checks=42 status_bytes=19896 catalog_bytes=2794034 viewer_bytes=3591144 elapsed=137.67817ms TotalAlloc=61006896
+    conformance_scale_test.go:110: claims=120 declarations=56 checks=64 status_bytes=30106 catalog_bytes=7601529 viewer_bytes=6720868 elapsed=403.898103ms TotalAlloc=120492680
+    conformance_graph_scale_test.go:75: graph=chain-24 claims=24 declarations=24 checks=48 status_bytes=237135 viewer_bytes=1730672 elapsed=118.173961ms TotalAlloc=49029904
+    conformance_graph_scale_test.go:75: graph=dense-6x4 claims=24 declarations=24 checks=48 status_bytes=131025 viewer_bytes=1687459 elapsed=80.500248ms TotalAlloc=46482216
+
+# consumer subsets
+cmd: exit=0 top-PASS=94 all-PASS=160 FAIL=0 SKIP=0
+tests: exit=0 top-PASS=35 all-PASS=43 FAIL=0 SKIP=1
+/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/tests.txt:--- SKIP: TestCatalogUnwritableTargetDirFailsLoudly (0.00s)
+
+# cross-version differential outputs (sha256; identical after mapping policy 0 -> 1)
+a8722cfeeb73d08f78dd762099d9a82c84b95409961b78f7e13d2f7b41624990  xver-cand.jsonl
+b0d5d102c900393257441e5038d96c0884a1387d2eeb9c4ad58db23c1177c9e0  xver-0720.jsonl
+rows=16454 policy0-rows-in-v0.7.20=5465
+normalized diff: empty

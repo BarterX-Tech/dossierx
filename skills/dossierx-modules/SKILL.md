@@ -92,13 +92,20 @@ Never raise a value in the same change that hits the cap, and never pad, merge o
 | summary: one plain line, 200 characters | `summary-required` / `summary-oversize` | rewrite it as one standalone assertion; if it will not fit, it is two claims | `max_claim_summary_chars` |
 | `body` + `steps` + `rows` cells: 2000 characters (`raw_html` exempt) | `body-oversize` | cut the walkthrough, move evidence to `sources`, or split into two facts | `max_claim_body_chars` |
 | manifest: 4096 bytes, summary 280 | `module-manifest` | trim the summary to the why; drop ids nobody pins | none |
-| isolation, module part: 6144 bytes | `view_too_large` from `manifest show --isolation` | shorten claim summaries or the manifest, or split the module | none |
+| isolation, module part: 6144 bytes | `view_too_large` from `manifest show --isolation`; plain `check` reports the same overflow | shorten claim summaries or the manifest, or split the module | none |
 | isolation, shared part: 10240 bytes | `shared-context-budget` on the project claim that crosses it (project-wide if the constitution alone does) | shorten project claim summaries, retire project claims, or trim the constitution | none |
 | constitution: 800 words (warning from 720) | `CONSTITUTION_OVER_CAP` / `constitution-near-cap` | trim it with the human — `dossierx-constitution` | none |
 
 Characters are Unicode code points. The lint caps block `check` and `claim lock` like any ERROR;
 `view_too_large` refuses only the view. Caps apply to drafts and locked claims alike, so a locked
 claim can start failing when a sibling draft pushes the module over.
+
+**The summary cap counts characters; the isolation budget counts bytes.** A CJK or accented
+character is two to four bytes, so ten claims whose summaries each pass the 200-character cap can
+still overflow the module's 6144-byte part of the view. Plain `check` reports that overflow for the
+module, not only `manifest show --isolation`. Recover the same loud way: shorten summaries, trim the
+manifest, or split the module. Do not switch a summary to ASCII to squeeze under the byte count;
+write it in the language the project uses.
 
 **Splitting a module** is a structural change the human should agree to: a new entry in
 `modules:` in project.config.yaml, a new `manifest.yaml`, and claims re-authored under the new

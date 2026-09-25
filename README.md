@@ -42,12 +42,16 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.20`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.21`,
    then run `dossierx version` and show me the output.
 2. If `project.config.yaml` and the claims directory do not exist yet,
    propose a title and the modules, write `facets: [contract, internals]`
    (engine-fixed; do not offer other facet names), and WAIT for me to confirm
-   before writing anything.
+   before writing anything. Then write one `claims/<module>/manifest.yaml`
+   per module (a one-line `summary`, `provides: []`, `depends_on: []`) and
+   draft `constitution.yaml` beside the config. Show me the constitution;
+   once I approve it, run `dossierx constitution lock --reason "<my words>"`.
+   Step 6 cannot pass without the manifests and the locked constitution.
 3. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Run it AFTER
    step 2, never before: the export finds the project root through
@@ -58,7 +62,7 @@ Set up DossierX in this repository.
    not this message, are the contract.
 4. ASK ME before installing the git pre-commit hook. My answer decides the
    hook alone, never CI — CI is the authority either way. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.20/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.21/scripts/install-git-hook.sh
    to a file, show me what it does, run `sh install-git-hook.sh --yes`, then
    add the CI workflow as well. If I say no, skip the hook and
    add the CI workflow alone, and tell me so. Either answer ends with the
@@ -86,7 +90,8 @@ is unlock -> fix -> lock:
 
     dossierx claim unlock <id> --reason "<my words>"
     ...make the edit...
-    dossierx claim lock   <id> --reason "<my words>"
+    dossierx claim lock   <id> --dry-run      # show me this; it prints a snapshot
+    dossierx claim lock   <id> --reason "<my words>" --proposal "<snapshot>"
 
 Never hand-edit a locked claim's YAML, and never lock, unlock, flag or
 reaudit anything without my explicit yes. `reaudit` is the drift tool, not
@@ -131,6 +136,7 @@ check                    lint, bounded projections, code-link scan and the ledge
 
 claim        show · list · new · lock · unlock · flag · reaudit · link · recover-approved-content
 comment      inbox · list · add · reply
+constitution show · lock             the project-root constitution.yaml
 track        list · show · status
 manifest     show · list             module harness file; --isolation / --integration
 
@@ -156,9 +162,9 @@ Upgrading from v0.2.x? Twelve commands were removed and four moved in v0.3.0, an
 
 `error.code` is a stable snake_case token — `lint_failed`, `claim_not_found`, `rights_denied`, `integrity_failed`, `unresolved_comments`, `pre_ledger_unadopted`, and so on. Branch on it. `message` and `hint` are prose and will be reworded; `code` is the promise. Successful runs carry their payload in `data`, non-blocking findings in `warnings`, and `check` reports how far it got in `stopped_at`.
 
-Mutating commands take `--dry-run`, which reports what *would* change and writes nothing. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`).
+The mutating `claim`, `comment` and `constitution` commands take `--dry-run`, which reports what *would* change and writes nothing. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`). `check --validate` is the write-free `check`, and `skills export --check` compares instead of writing (exit 1, `skills_drift`, when anything differs).
 
-`--reason` is required on `claim lock`, `claim unlock`, `claim reaudit --confirm`, and `claim flag`. Under the two-role split the human never types these, so `--reason` is where their approving words enter the record.
+`--reason` is required on `claim lock`, `claim unlock`, `claim reaudit --confirm`, `claim flag`, `claim recover-approved-content` and `constitution lock`. `claim lock` also requires `--proposal`, the `snapshot` its `--dry-run` returned for the same ids. Under the two-role split the human never types these, so `--reason` is where their approving words enter the record.
 
 ### Exit codes
 
@@ -324,8 +330,8 @@ provider's `provides`. The file is capped at 4096 bytes. `check` and
 `claim lock` refuse a missing, oversize or invalid file (`module-manifest`),
 and a module with no valid manifest has no lockable claims. `claim new` writes
 an empty stub that fails until an agent drafts it from
-`dossierx manifest show <module> --isolation`; do not paste claim bodies, and
-do not write overview or orientation-note claims as the module start-here.
+`dossierx manifest show <module> --isolation`; do not paste claim bodies.
+The manifest summary is where the module start-here lives.
 See [FORMAT.md](FORMAT.md).
 
 **Claims.** A claim is one atomic, YAML-authored fact about a system: a field table, a sequence of steps, a paragraph of prose, a piece of hand-authored mockup HTML. One claim per file, under the project's `claims_dir`.
@@ -352,17 +358,17 @@ tracks:                          # optional: cross-cutting membership
     role: cites                  # owns | cites
 ```
 
-Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project claim), a `status`, a required one-line plain-text `summary`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) and a required `rests_on` — a list of claim ids, or `{none: true, reason}` for a claim that rests on nothing. Module claims also carry a `facet` and a `module`; project claims carry neither. Claims name other claims they `rests_on`, forming a graph the engine walks and validates; the constitution is never a target. The full schema is in [FORMAT.md](FORMAT.md). (The `governed_by` block is gone as of v0.7.21; a claim file that still carries one fails to load — see the CHANGELOG for the migration.)
+Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project claim), a `status`, a required one-line plain-text `summary`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) and a required `rests_on` — a list of claim ids, or `{none: true, reason}` for a claim that rests on nothing. Module claims also carry a `facet` and a `module`; project claims carry neither. Claims name other claims they `rests_on`, forming a graph the engine walks and validates; the constitution is never a target. The full schema is in [FORMAT.md](FORMAT.md). A claim file carrying a retired field (`governed_by`, `build_role`, `mirrors`) fails to load; the `dossierx-upgrading` skill folds it.
 
 **Sources and tracks** are the two optional axes, both added in v0.6.0 and both no-ops for a project that does not use them. `sources` carries a claim's evidence *inside* the claim — cited from the body with `[n]` markers, anchored by an access date when the source is a page that can change under you and by a content hash when it is a file the engine can read, and signed by the lock ledger so a citation cannot be rewritten after approval. `tracks` is a second ownership axis: `module` answers "who guarantees this?", and a track answers "what does the user get, and is it finished?" — a feature assembled from claims across many modules, with `dossierx track status <id>` reporting whether every claim it owns and cites is locked.
 
-**`check` is the pipeline.** One command runs lint → catalog/readiness projection → conformance evaluation → bounded viewer projection and generated writes → code-link scan → the ledger gate → the code-link gate, and stops at the first failure. The code-link gate applies once `source_dirs` is set: every locked `schema`/`behavior`/`api`/`verification` claim must carry a link in source, and a claim with `steps:` must be tagged on every step, or `check` exits 1 (`unlinked_claims`, `stopped_at: links`) after the viewer was regenerated. `--validate` is the read-only form for the authoring loop. A project with no `embodiment` declarations retains the established lint and ledger checks and does not build a catalog or viewer in memory. Once any claim declares `embodiment`, validation also evaluates its named set/scalar checks and the bounded catalog/readiness and viewer projections in memory so those three views agree, while still writing nothing — no claim files, no lock store, no `build/catalog/catalog.json`, no conformance status and no viewer. A compare declaration is implementation-ready only when all of its checks match. With optional `conformance.blocking: true`, any owed, mismatch, or uncheckable check fails `check`; this is a checker gate only and does not approve, lock, unlock, or change dependency readiness. Plain `check` still writes the inspectable conformance outputs before returning that failure, while `--validate` and `--staged` remain write-free. It does not reconcile `review_pending` or scan source for code links. Run plain `check` before trusting what is on disk.
+**`check` is the pipeline.** One command runs lint → catalog/readiness projection → conformance evaluation → bounded viewer projection and generated writes → code-link scan → the ledger gate → the code-link gate, and stops at the first failure. The code-link gate applies once `source_dirs` is set: every locked module claim must carry a link in source (project claims, and a claim declaring `embodiment: {mode: none, reason}`, are exempt), and a claim with `steps:` must be tagged on every step, or `check` exits 1 (`unlinked_claims`, `stopped_at: links`) after the viewer was regenerated. `--validate` is the read-only form for the authoring loop. A project with no `embodiment` declarations retains the established lint and ledger checks and does not build a catalog or viewer in memory. Once any claim declares `embodiment`, validation also evaluates its named set/scalar checks and the bounded catalog/readiness and viewer projections in memory so those three views agree, while still writing nothing — no claim files, no lock store, no `build/catalog/catalog.json`, no conformance status and no viewer. A compare declaration is implementation-ready only when all of its checks match. With optional `conformance.blocking: true`, any owed, mismatch, or uncheckable check fails `check`; this is a checker gate only and does not approve, lock, unlock, or change dependency readiness. Plain `check` still writes the inspectable conformance outputs before returning that failure, while `--validate` and `--staged` remain write-free. It does not reconcile `review_pending` or scan source for code links. Run plain `check` before trusting what is on disk.
 
 **Proof or stop.** Only admitted evidence counts: a `dossierx check` that exited 0, a lint or ledger finding, a conformance result, the code-link coverage report in `data.code_links`, a human's Resolve click, or a human's own words in `--reason`. An agent's statement in chat that "the code matches the claim" or "it is synced" is not a certificate and closes no loop — it is the thing this tool exists to replace. When the evidence is missing, the agent stops and says what is missing rather than filling the gap with an opinion. A model drafts claims, tags and code; it is never the judge.
 
-**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused while the project's constitution is not locked (`CONSTITUTION_NOT_LOCKED`: missing, `status: draft`, or edited since its lock), if lint has any error, or if the claim still carries an unresolved comment thread. There is no doctrine hub-gating. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag; it writes to the lock ledger, so it is refused `CONSTITUTION_NOT_LOCKED` at the same roof gate as `claim lock`), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
+**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused while the project's constitution is not locked (`CONSTITUTION_NOT_LOCKED`: missing, `status: draft`, or edited since its lock), if lint has any error, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag; it writes to the lock ledger, so it is refused `CONSTITUTION_NOT_LOCKED` at the same roof gate as `claim lock`), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
 
-**Local approval and dependency readiness.** Every project uses lock policy v1; the legacy policy 0 was retired in v0.7.21. A store that still records policy 0 reads as v1 and records the carry-over on its next write; no approval, baseline or review cause changes. Under v1, `claim lock` evaluates one requested set whether it contains one claim or many. `--dry-run` returns every member's local verdict, dependency conditions and a request-bound `snapshot`; the matching `--proposal` is mandatory on the write, and an omitted, invalid, stale, or wrong-set token refuses before approval storage changes. A locally approved claim may depend on a readable draft, but it reports `dependency_unapproved` and is not dependency-ready. A missing, retired, unreadable, or cyclic required dependency refuses approval before any claim or approval storage changes. Local approval, dependency readiness and integrated evidence are different statements. The lock store retains the reviewed dependency content and comparable hash for each new local approval; a hash detects a difference and never proves semantic compatibility.
+**Local approval and dependency readiness.** Every project uses lock policy v1. A lock store written under the older policy loads as v1 and records the carry-over on its next write; no approval, baseline or review cause changes. Under v1, `claim lock` evaluates one requested set whether it contains one claim or many. `--dry-run` returns every member's local verdict, dependency conditions and a request-bound `snapshot`; the matching `--proposal` is mandatory on the write, and an omitted, invalid, stale, or wrong-set token refuses before approval storage changes. A locally approved claim may depend on a readable draft, but it reports `dependency_unapproved` and is not dependency-ready. A missing, retired, unreadable, or cyclic required dependency refuses approval before any claim or approval storage changes. Local approval, dependency readiness and integrated evidence are different statements. The lock store retains the reviewed dependency content and comparable hash for each new local approval; a hash detects a difference and never proves semantic compatibility.
 
 **`reaudit` is the drift tool, not the general edit tool.** It refuses a claim that is not already `review_pending`, it rewrites only `body`, and it refuses a claim whose only trigger is an open thread (there is no diff to confirm — resolve the thread instead). To change anything else about a locked claim, the path is `unlock → fix → lock`.
 
@@ -374,13 +380,15 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | `facets` | []string | yes | Engine-fixed: must be exactly `[contract, internals]`. No other facet names are legal. Other modules may cite only `contract`. |
 | `modules` | []string | yes | The non-empty, deduplicated list of module names this project documents. |
 | `claims_dir` | string | yes | Directory of claim YAML files, resolved relative to `project.config.yaml`'s own directory (never the process's current working directory). |
+| `build_dir` | string | no | Where every generated file goes — the three ledger stores, code-link records, the catalog and the viewer (default `build`, resolved relative to the config). It may not be the config's own directory, and may not sit inside `claims_dir` or contain it. The ledger stores under it are committed; see [Where DossierX writes](#where-dossierx-writes). |
+| `tracks` | list | no | The registry of cross-cutting features claims may join: each entry an `id` and a `title`, with an optional one-line `summary`. Ids must be unique. A claim naming an undeclared track fails `track-unknown`. Omitted, there are no tracks and the viewer shows no Tracks group. |
 | `conformance.observations` | string | no | One literal, project-owned normalized observation JSON file, resolved relative to the config and required to stay outside `build_dir`. DossierX reads it only when a claim declares `embodiment`; it never runs an adapter. |
 | `conformance.blocking` | bool | no | Defaults to `false`. When true, any owed, mismatch, or uncheckable named check makes `check` fail after write-mode outputs are generated; approval and locking remain unchanged. |
 | `title` | string | no | The viewer's display name — used in `<title>`, the header, and the sidebar heading. Defaults to a generic fallback when unset. |
 | `eyebrow` | string | no | A one-line subtitle rendered under the title in the sidebar header. No line is rendered when unset. |
 | `constitution` | string | no | Path to the project-root `constitution.yaml` roof (default `constitution.yaml`, outside `claims_dir`). Not a module and never a `rests_on` target; `check`, `claim lock` and `claim reaudit --confirm` refuse `CONSTITUTION_NOT_LOCKED` until `dossierx constitution lock` has recorded it. |
 | `project_claims_dir` | string | no | The project-claims store (default `project-claims`, a sibling of `claims_dir`): `project.<slug>` claims with `scope: project`, no module, no facet, no cap and no manifest. They do not count toward a per-module cap. |
-| `source_dirs` | []string | no | Directories (relative to the config file) scanned for `dossierx-claim: <id>` and `dossierx-step: <id> #<n> <sha256-hex>` source comments — the code side of claim-to-code linking. Unset means "do not scan" and no code-link gate; set, plain `check` refuses on a locked code-producing claim with no link (`unlinked_claims`). |
+| `source_dirs` | []string | no | Directories (relative to the config file) scanned for `dossierx-claim: <id>` and `dossierx-step: <id> #<n> <sha256-hex>` source comments — the code side of claim-to-code linking. Unset means "do not scan" and no code-link gate; set, plain `check` refuses on any locked module claim with no link (`unlinked_claims`); project claims and `embodiment: {mode: none}` claims are exempt. |
 | `mockup_modules` | []string | no | The allowlist of modules permitted to author `raw_html` (on any layout, including `layout: mockup`). Every entry must also appear in `modules`. Unset/empty means no module may. |
 | `max_claim_body_chars` | int | no | Project-wide ceiling on `body` + `steps` + `rows` cells, counted as Unicode code points. Omitted, the default is **2000**. `check` fails with `body-oversize` when a claim is over, and `claim lock` refuses. `raw_html` is exempt. Values below 1 are refused at config load. |
 | `max_claim_summary_chars` | int | no | Project-wide ceiling on `summary`, counted as Unicode code points. Omitted, the default is **200**. `check` fails with `summary-oversize` when over. Values below 1 are refused at config load. |
@@ -396,9 +404,9 @@ The skills are one source written in three forms, because no two agent harnesses
 
 | Form | Where | Notes |
 | --- | --- | --- |
-| `SKILL.md` tree | the `[dir]` you name, else `.claude/skills` if `.claude` already exists | verbatim bundles, frontmatter intact |
+| `SKILL.md` tree | the `[dir]` you name; otherwise every skills tree the repo already has — `.claude/skills` if `.claude/` exists and `.agents/skills` if `.agents/` exists — each with its own `dossierx-skills.lock` | verbatim bundles, frontmatter intact |
 | `AGENTS.md` section | an existing `AGENTS.md` only — never created | marker-delimited and idempotent; carries the router only, since this text is resident on every turn |
-| `dossierx-agent-guide.md` | `docs/` under the project root; `[dir]` itself when there is no project to root it in | always written — all five bundles inline, self-contained, no loader or plugin needed |
+| `dossierx-agent-guide.md` | `docs/` under the project root; `[dir]` itself when there is no project to root it in | always written — all seven bundles inline, self-contained, no loader or plugin needed |
 
 Both derived forms are regenerated by re-running the export, so they are committed artifacts like the ledger: re-export to pick up a new release, and commit the result.
 

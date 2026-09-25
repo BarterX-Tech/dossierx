@@ -52,11 +52,14 @@ modules:
 claims_dir: claims
 `
 
-// graphClaim writes a claim in module widget, optionally resting on another.
+// graphClaim writes a claim, optionally resting on another. Its module is the
+// id's first segment, the one the id-shape lint holds it to (widget for every
+// caller but the label corpus, which spreads over four modules).
 func graphClaim(id, facet, restsOn string) string {
+	module, _, _ := strings.Cut(id, ".")
 	body := "id: " + id + `
 facet: ` + facet + `
-module: widget
+module: ` + module + `
 status: draft
 summary: Fixture claim used by the engine test corpus.
 `
@@ -635,19 +638,19 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 // and collapse it to modules. Every claim is now the default at every size;
 // aggregation remains available as an explicit Granularity choice.
 func TestGraphPaneLargeCorpusDefaultsToClaims(t *testing.T) {
-	const total = 301
-	p := newProjectRaw(t, `schema_version: 1
-facets:
-  - contract
-  - internals
-modules:
-  - m1
-  - m2
-  - m3
-claims_dir: claims
-`)
+	// 301 claims over 11 modules of at most 28: check refuses a module whose
+	// isolation view is over its 6,144-byte budget (about 38 claims with this
+	// summary), and the corpus size is the thing under test, not one module's.
+	const total, modules = 301, 11
+	var config strings.Builder
+	config.WriteString("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n")
+	for m := 1; m <= modules; m++ {
+		fmt.Fprintf(&config, "  - m%d\n", m)
+	}
+	config.WriteString("claims_dir: claims\n")
+	p := newProjectRaw(t, config.String())
 	for i := 0; i < total; i++ {
-		module := fmt.Sprintf("m%d", i%3+1)
+		module := fmt.Sprintf("m%d", i%modules+1)
 		id := fmt.Sprintf("%s.contract.c%03d", module, i)
 		p.writeClaim(fmt.Sprintf("c%03d.yaml", i), "id: "+id+`
 facet: contract

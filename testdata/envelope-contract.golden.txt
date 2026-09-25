@@ -147,7 +147,8 @@ claim show / a draft claim
     ok            true
     envelope      command data ok
     command       claim show
-    data          claim_id:string
+    data          body:string
+                  claim_id:string
                   comments:{open:number,open_thread_ids:[],replies:number,resolved:number,threads:number}
                   edges:{depended_on_by:[],rests_on:[],rests_on_none:bool,rests_on_reason:string}
                   facet:string
@@ -163,6 +164,7 @@ claim show / a draft claim
                   source_path:string
                   sources:[]
                   status:string
+                  summary:string
                   title:string
                   tracks:[]
 

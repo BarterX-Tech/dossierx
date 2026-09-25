@@ -1,0 +1,5 @@
+package readiness
+
+import "github.com/BarterX-Tech/dossierx/internal/model"
+
+func xverSetRests(c *model.Claim, ids []string) { c.RestsOn = model.RestsOnIDs(ids...) }

@@ -1,0 +1,18 @@
+== lock -run 'TestAcquireFileLockCreatesTheSentinelDirectory'
+=== RUN   TestAcquireFileLockCreatesTheSentinelDirectory
+--- PASS: TestAcquireFileLockCreatesTheSentinelDirectory (0.00s)
+PASS
+== comments -run 'TestEdge_ReadOnlyClaimFile_CleanError_NoPartialWrite|TestReadOnlyProjectDirWritesNothingOnEitherAttempt'
+=== RUN   TestEdge_ReadOnlyClaimFile_CleanError_NoPartialWrite
+--- PASS: TestEdge_ReadOnlyClaimFile_CleanError_NoPartialWrite (0.00s)
+=== RUN   TestReadOnlyProjectDirWritesNothingOnEitherAttempt
+--- PASS: TestReadOnlyProjectDirWritesNothingOnEitherAttempt (0.00s)
+PASS
+== serve -run 'TestClaimAsset_AnUnreadableTreeKeepsThePreviousIndex'
+=== RUN   TestClaimAsset_AnUnreadableTreeKeepsThePreviousIndex
+--- PASS: TestClaimAsset_AnUnreadableTreeKeepsThePreviousIndex (0.04s)
+PASS
+== render_components -run 'TestOverrideFile_UnreadableFileIsHardError'
+=== RUN   TestOverrideFile_UnreadableFileIsHardError
+--- PASS: TestOverrideFile_UnreadableFileIsHardError (0.00s)
+PASS

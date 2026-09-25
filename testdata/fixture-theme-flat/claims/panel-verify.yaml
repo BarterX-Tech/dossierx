@@ -7,7 +7,6 @@ layout: card
 section: How the panel is proven
 body: |
   Every claim above is proven by the browser suite, not by reading the
-  source. This claim carries the verification build_role so the module's
-  build-order artifact covers every phase.
+  source.
 rests_on:
   - panel.contract.api

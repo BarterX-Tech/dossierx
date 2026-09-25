@@ -119,6 +119,41 @@ func TestClaimShowCarriesEverySourceWithItsAnchor(t *testing.T) {
 	}
 }
 
+// TestClaimShowCarriesTheClaimsOwnWords: the isolation view and the skills send
+// an agent to "claim show <id>" to read a neighbor's contract, so show must
+// carry the summary and the body exactly as authored (the body's trailing
+// newline and its "[n]" markers included), in both the envelope and the text.
+func TestClaimShowCarriesTheClaimsOwnWords(t *testing.T) {
+	cfgPath := writeSourcedClaimFixture(t)
+	const wantBody = "requests retry three times with backoff [1], and the ceiling is fixed [2].\n"
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.retry-policy")
+	if err != nil {
+		t.Fatalf("claim show: %v (%+v)", err, env)
+	}
+	var data claimShowData
+	envData(t, env, &data)
+	if data.Summary != "Fixture claim used by the engine test corpus." {
+		t.Fatalf("summary must be the authored summary, got %q", data.Summary)
+	}
+	if data.Body != wantBody {
+		t.Fatalf("body must be exactly as authored, got %q", data.Body)
+	}
+
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "show", "widget.contract.retry-policy")
+	if err != nil {
+		t.Fatalf("claim show --format text: %v (out %q)", err, out)
+	}
+	for _, want := range []string{
+		"summary:            Fixture claim used by the engine test corpus.",
+		"body:\n    " + wantBody,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the text rendering must carry %q, got:\n%s", want, out)
+		}
+	}
+}
+
 // TestClaimShowTextRendersSourcesReadably: the JSON is the contract and the
 // prose is the courtesy, but the prose has to carry the same two things — the
 // marker a reader matches against the body, and the anchor that makes the

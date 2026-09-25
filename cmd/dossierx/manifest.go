@@ -71,8 +71,9 @@ func newManifestShowCmd() *cobra.Command {
 				if manifest.IsIsolationOversize(err) {
 					return cmdResult{}, cliout.Errorf(cliout.CodeViewTooLarge, "manifest show: %s", err.Error()).
 						WithDetails(manifest.IsolationOversizeDetails(err)).
-						WithHint("shorten this module's claim summaries or manifest, or split the module; " +
-							"a max_claims_per_module override above 10 or a manifest near its 4096-byte cap can outgrow the module budget")
+						WithHint("trim this module's claim summaries or manifest, or split the module; error.details has module_bytes against module_budget. " +
+							"The module budget counts bytes, so multibyte (e.g. CJK) summaries overflow it long before max_claim_summary_chars; " +
+							"raising max_claims_per_module or max_claim_summary_chars only makes room for more, and is the human's call, never a fix")
 				}
 				return cmdResult{}, err
 			}

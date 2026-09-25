@@ -603,27 +603,56 @@ rests_on:
 	}
 }
 
-// TestLoadClaims_RetiredMirrorsField_StillParses: leftover mirrors: must
-// still decode so LockedClaimHash of a claim that never declared it stays
-// byte-identical. The field is not walked.
-func TestLoadClaims_RetiredMirrorsField_StillParses(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", `id: widget.contract.a
+// TestLoadClaims_RetiredClaimKeys_FailStrictDecode: governed_by (NIT-29),
+// build_role (NIT-32) and mirrors left model.Claim with no shadow field, so a
+// claim file still carrying any of them must fail strict decode naming the
+// key (the error the upgrading skill's hand folds start from) rather than
+// load with the key silently dropped.
+func TestLoadClaims_RetiredClaimKeys_FailStrictDecode(t *testing.T) {
+	for _, tc := range []struct{ key, yaml string }{
+		{"governed_by", "governed_by:\n  type: none\n  reason: fixture\n"},
+		{"build_role", "build_role: api\n"},
+		{"mirrors", "mirrors:\n  - widget.contract.b\n"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a.yaml", `id: widget.contract.a
 facet: contract
 module: widget
 status: draft
 body: claim a
-mirrors:
-  - widget.contract.b
-rests_on:
+`+tc.yaml+`rests_on:
   none: true
   reason: fixture
 `)
-	got, err := LoadClaims(dir)
-	if err != nil {
-		t.Fatalf("leftover mirrors: must still parse: %v", err)
+			_, err := LoadClaims(dir)
+			if err == nil {
+				t.Fatalf("a claim carrying retired %s must fail strict decode, got nil", tc.key)
+			}
+			if want := "field " + tc.key + " not found in type model.Claim"; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error must contain %q, got: %v", want, err)
+			}
+		})
 	}
-	if len(got) != 1 || len(got[0].Mirrors) != 1 || got[0].Mirrors[0] != "widget.contract.b" {
-		t.Fatalf("parsed claim = %#v", got)
+}
+
+// TestLoadClaims_RestsOnNoneMappingIsStrict: the {none, reason} mapping is
+// decoded by RestsOn's own UnmarshalYAML, which the claim decoder's
+// KnownFields does not reach. A misspelled reason must fail the load rather
+// than decode to a blank one, and ids beside none: true must fail rather than
+// be silently dropped, leaving a claim that rests on nothing.
+func TestLoadClaims_RestsOnNoneMappingIsStrict(t *testing.T) {
+	for _, tc := range []struct{ name, restsOn, want string }{
+		{"misspelled reason", "  none: true\n  reson: fixture\n", "rests_on: field reson not found"},
+		{"none beside ids", "  none: true\n  reason: fixture\n  ids:\n    - widget.contract.b\n", "rests_on: none: true cannot also name targets"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n"+tc.restsOn)
+			_, err := LoadClaims(dir)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("load error = %v, want one containing %q", err, tc.want)
+			}
+		})
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
@@ -231,7 +233,7 @@ func newConstitutionLockCmd() *cobra.Command {
 					current.Detail())
 				dr.Require("under_word_cap", true, fmt.Sprintf("%d of %d words", current.Words, current.WordCap))
 				storesArePrecondition(dr, cfg)
-				dr.Effect("constitution.yaml is rewritten with status: locked")
+				dr.Effect("constitution.yaml's status is set to locked; every other byte, comments included, stays as written")
 				dr.Effect("the lock store records the file's content hash and your --reason; every later edit is detectable and stops module work until a human re-locks")
 				dr.Propose("reason", reason)
 				return dryRunResult(cmd, "constitution lock", dr), nil
@@ -250,11 +252,37 @@ func newConstitutionLockCmd() *cobra.Command {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteConflict, "constitution lock: %w", err)
 			}
 			defer release()
+			// The read above only chose the refusal; what is signed and
+			// written is the file as it stands under the sentinel, so an
+			// edit that landed in between is either signed or refused, never
+			// overwritten by bytes read before it.
+			path := cfg.ConstitutionPath()
+			info, err := os.Stat(path)
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeInvalidConfig, "constitution lock: %w", err)
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeInvalidConfig, "constitution lock: %w", err)
+			}
+			if f, err = constitution.Parse(raw, path); err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeInvalidConfig, "constitution lock: %w", err)
+			}
 			store, err := lock.LoadStore(storePath(cfg))
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "constitution lock: %w", err)
 			}
-			verdict := constitution.Evaluate(cfg.ConstitutionPath(), f, nil, store.Constitution)
+			verdict := constitution.Evaluate(path, f, nil, store.Constitution)
+			if constitution.OverCap(f) {
+				return cmdResult{}, cliout.Errorf(cliout.CodeConstitutionOverCap,
+					"constitution lock: refused, %d of %d words", constitution.WordCount(f), constitution.WordCap).
+					WithDetails(verdictDetails(verdict)).
+					WithHint("trim constitution.yaml under the cap, then lock again")
+			}
+			locked, err := constitution.LockedBytes(raw, path)
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeInvalidConfig, "constitution lock: %w", err)
+			}
 			if verdict.State == constitution.StateLocked {
 				// Locked and unchanged: a second lock would stamp a fresh
 				// approval over content nobody re-approved. An EDITED roof
@@ -280,14 +308,15 @@ func newConstitutionLockCmd() *cobra.Command {
 					adopted, _ = lock.SweepCommentDigests(store, claims, false)
 				}
 			}
+			// Only the status value changes; comments, order and indentation
+			// are the human's. A re-lock of an edited roof already reads
+			// status: locked and leaves the file untouched.
+			if !bytes.Equal(locked, raw) {
+				if err := atomicfile.Write(path, locked, info.Mode().Perm()); err != nil {
+					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "constitution lock: %w", err)
+				}
+			}
 			f.Status = model.StatusLocked
-			raw, err := constitution.Marshal(f)
-			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "constitution lock: %w", err)
-			}
-			if err := os.WriteFile(f.SourcePath, raw, 0o644); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "constitution lock: %w", err)
-			}
 			rec := lock.LockConstitution(store, f, reason, time.Now())
 			if err := store.Save(); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "constitution lock: %w", err)

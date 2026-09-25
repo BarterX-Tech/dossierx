@@ -1,6 +1,8 @@
 package model
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -28,7 +30,8 @@ const ScopeProject = "project"
 // module's internals). The constitution is never a target: it is the brief
 // every claim already builds toward, so there is no ref grammar for it and
 // nothing here knows it exists. A claim with neither shape is refused by
-// rests-on-required; a claim with both is refused by the same rule.
+// rests-on-required; a mapping that says none: true and also names ids, or
+// carries any key but none and reason, fails the load (see UnmarshalYAML).
 //
 // The zero value is "not declared". It is what a claim file without the key
 // decodes to, and it marshals back to an absent key (see IsZero), so the
@@ -84,9 +87,30 @@ func (r *RestsOn) UnmarshalYAML(value *yaml.Node) error {
 	}
 	switch value.Kind {
 	case yaml.MappingNode:
-		var raw restsNoneYAML
+		// Node.Decode does not inherit the claim decoder's KnownFields, so
+		// the mapping's keys are checked here: a misspelled key must fail
+		// the load rather than decode to a blank reason, and ids beside
+		// none: true must fail rather than be silently dropped.
+		hasIDs := false
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			switch key := value.Content[i].Value; key {
+			case "none", "reason":
+			case "ids":
+				hasIDs = true
+			default:
+				return fmt.Errorf("rests_on: field %s not found; the mapping form is {none: true, reason: ...}", key)
+			}
+		}
+		var raw struct {
+			None   bool      `yaml:"none"`
+			Reason string    `yaml:"reason"`
+			IDs    yaml.Node `yaml:"ids"`
+		}
 		if err := value.Decode(&raw); err != nil {
 			return fmt.Errorf("rests_on: %w", err)
+		}
+		if raw.None && hasIDs {
+			return fmt.Errorf("rests_on: none: true cannot also name targets; keep {none: true, reason: ...} alone, or drop none and reason and write rests_on as a list of claim ids")
 		}
 		if !raw.None {
 			return fmt.Errorf("rests_on: a mapping must be {none: true, reason: ...}; targets are a list of claim ids")
@@ -122,6 +146,38 @@ func (r RestsOn) MarshalYAML() (interface{}, error) {
 	out := make([]string, len(r.IDs))
 	copy(out, r.IDs)
 	return out, nil
+}
+
+// UnmarshalJSON reads the approved-content snapshots a lock store embeds.
+// This binary writes RestsOn there as the struct ({"None","Reason","IDs"});
+// v0.7.20 and earlier wrote rests_on as a plain []string. Both must load, or
+// a store carried across the upgrade becomes unreadable: every approval
+// vanishes and every write refuses. A plain list is read as targets.
+func (r *RestsOn) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*r = RestsOn{}
+		return nil
+	}
+	if trimmed[0] == '[' {
+		var ids []string
+		if err := json.Unmarshal(trimmed, &ids); err != nil {
+			return fmt.Errorf("rests_on: %w", err)
+		}
+		if len(ids) == 0 {
+			*r = RestsOn{}
+			return nil
+		}
+		*r = RestsOn{IDs: ids}
+		return nil
+	}
+	type plain RestsOn // drops this method, so the struct form decodes normally
+	var out plain
+	if err := json.Unmarshal(trimmed, &out); err != nil {
+		return fmt.Errorf("rests_on: %w", err)
+	}
+	*r = RestsOn(out)
+	return nil
 }
 
 // IsProjectClaimID reports the project-claim id grammar: project.<slug>,

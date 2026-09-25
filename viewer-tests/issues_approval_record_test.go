@@ -20,7 +20,9 @@ import (
 
 func TestIssuesApprovalRecordSortsFirstWithRedBorder(t *testing.T) {
 	p := newReadinessProject(t)
-	ctx := newLiveTab(t, p)
+	// The served verdict must have landed before the synthetic one is painted,
+	// or it arrives afterwards and replaces it.
+	ctx := newLiveTabWithStatus(t, p)
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
 
 	evalVoid(t, ctx, `window.dossierxRenderStatusStrip({

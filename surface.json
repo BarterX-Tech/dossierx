@@ -514,44 +514,44 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:3d4de113a20f2aec8ac141b5ebcfd2e333a6fc94873bef7b2c08194de2df5598",
+  "render_fingerprint": "sha256:61ae667343bebb2c3b4f4ec2550998f526c2b4e6ec8ad561c053b0b33fe2861c",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:7feaa03fdde16d6eb82e321abbcc9a2319565964f4852fa0a200027dcf085def",
+    "cmd/dossierx": "sha256:bf5800e444c844dfc6fe5ad45d9a506f140482c3b554319c86c000d80a8caf96",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/catalog": "sha256:58bf0a93299f57669bdd5bd1819f6f6663536bc598040a1304741a7fabe7bb0e",
-    "internal/check": "sha256:a15d8f3751a3d5a543b7b7451e60a0e7271c46cd1c9d21b37be404262b240a06",
-    "internal/cliout": "sha256:36b207a0bdefd5a8523b27161b12ab36e5a9b0f8390715a33764589b231faa25",
+    "internal/catalog": "sha256:1567a5b113d3e896827c4d3223701a025be1e54893d62a680f3c856e1ca2ac75",
+    "internal/check": "sha256:2375b93295cfcdf78510a031da12825df5d7b42d7636e537b7c70113d9969700",
+    "internal/cliout": "sha256:f4e017acd833a9d6440c5c96856185781731c3046ee2ef4e37714e3c5b16fff4",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:94b016cea5313478cad46e5a9ee891355522e47d7df82e5814e1efaed834aa6a",
+    "internal/config": "sha256:796aa83831a8794042ae64ca63462f3f3b983de099b1b277ad5dc025542ebad8",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
-    "internal/constitution": "sha256:ba5923ce926d26df5c6d769d7096966ce182fb1f7dcd5f3e285a028cbdcfc443",
-    "internal/constitution/constitutiontest": "sha256:28596097488b51d4b10d39d3ecc217d8eabcb0fada712cad61c2434272c6ae99",
+    "internal/constitution": "sha256:1b0cfa30ba70ba12a5f01d67018b7aa0e73b01fe773f596678b692b0a86eb1f6",
+    "internal/constitution/constitutiontest": "sha256:c1b3b79e4b7e7626ec10f17bf9937df4485c2b3c1c2762e0bcca298fd319d294",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
-    "internal/graph": "sha256:b9c74d9040d5f27a0470c6fd3704b091642b2a15b768b4a64f402333f9cd8153",
-    "internal/implink": "sha256:fcd3d4ff7e5425ec4f5c533448f2ba5b901ced18703d796ac1c6410a278f049d",
+    "internal/graph": "sha256:7ac3b4676c2585147dfafabcbb2458a6ce4b8aa4178217c960d77610172a4ff8",
+    "internal/implink": "sha256:eeed3cbd1ac99ec2844290f02554ba0599b7127fcf877be886b3231dbda83d65",
     "internal/layout": "sha256:6f2f699218c8402eccffef20eb46c7e30b08a39529381ff68bdc8b70e42ad07d",
-    "internal/lint": "sha256:a293dcdd8834d18ab8709c8efca6f1b0b9faf95a5fd785ccec9207c851aa5555",
+    "internal/lint": "sha256:9c31e24795a61707aac604fcf7259b111a9405e08821dab159e4f56868ac2dba",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
-    "internal/lock": "sha256:32c839a9b2173e4a690139f0828f0971568ca5dbf4953773da4dae620a959677",
-    "internal/manifest": "sha256:ddd2d2324984620ab314256d17cab37e2206fed078b17b620aded95bc46afb57",
+    "internal/lock": "sha256:4e5b29685a1cc1371a31fd3e6c6bd43a0d81e14a2ae24ad83655496667841883",
+    "internal/manifest": "sha256:b38a67f193608f0f3e16da7f5270da47640870f25f0b30d098aee89d12b4cd25",
     "internal/manifest/manifesttest": "sha256:9923dd2e327d0d8238fe3ec4b2de74e8ae0fd7a1d7efc8eb6cc638a19f990f94",
-    "internal/model": "sha256:4cef78619e8293a4c1c60d2b33f1d801bbfa4aa61d87da0775d3969695778bbd",
+    "internal/model": "sha256:4f24ac12463b19af4476079f69da2e589bbad2cef776a88155d3d8530da4fe9a",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:fd8f2e38f17b14fe00e54edd8c98392c2578c689e492923a58f8272fd523f49b",
-    "internal/render/components": "sha256:2d8bc4872cafba5bf95ff0ef9e5308517cfdd7dda08b12320ab699353af8c034",
+    "internal/render": "sha256:f4a4bbe5c1644ed179c8807d9c0307297d7cf836a6626f439d824d4f999e0ea0",
+    "internal/render/components": "sha256:fad82dfd25248d4622b30be03d4e7302fd3614582b5217baf35a2b5bb2a5b798",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:ceb4c156ec60d24ade931bb8efae5c87abd488cd1651c299ebb79929d15f32da",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:c8f90dd79938e47a240d4a4edd1294a56f342cfb69342fa72a3f828db680c006"
+    "skills": "sha256:6ee760eae016a0859c4a78f9113ab0b0aa1e8c691914191602486b8c1ff6935a"
   },
   "envelope": {
     "keys": [
@@ -676,6 +676,7 @@
         "status"
       ],
       "claimShowData": [
+        "body",
         "claim_id",
         "comments",
         "edges",
@@ -696,6 +697,7 @@
         "source_path",
         "sources",
         "status",
+        "summary",
         "title",
         "tracks"
       ],
@@ -918,23 +920,23 @@
   "version_pins": [
     {
       "file": "README.md",
-      "pin": "dossierx/cmd/dossierx@v0.7.20",
-      "version": "v0.7.20"
+      "pin": "dossierx/cmd/dossierx@v0.7.21",
+      "version": "v0.7.21"
     },
     {
       "file": "README.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.20",
-      "version": "v0.7.20"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.21",
+      "version": "v0.7.21"
     },
     {
       "file": "scripts/ci/dossierx-check.yml",
-      "pin": "dossierx/cmd/dossierx@v0.7.20",
-      "version": "v0.7.20"
+      "pin": "dossierx/cmd/dossierx@v0.7.21",
+      "version": "v0.7.21"
     },
     {
       "file": "skills/dossierx/SKILL.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.20",
-      "version": "v0.7.20"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.21",
+      "version": "v0.7.21"
     }
   ],
   "counts": {

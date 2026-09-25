@@ -1,0 +1,181 @@
+package readiness
+
+// Cross-release differential harness (graph-safety evidence v0.7.21).
+// This identical file is dropped into the v0.7.20 tree and the candidate tree;
+// only zz_xver_adapter_test.go differs (RestsOn []string vs model.RestsOn).
+// Output: one JSON line per (seed, claim) with the four truth values, the
+// normalized independent identities and every witness path. Every witness is
+// also checked against the input edges.
+
+import (
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+	"sort"
+	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/reaudit"
+)
+
+type xverRow struct {
+	Seed            int64    `json:"seed"`
+	ID              string   `json:"id"`
+	Policy          int      `json:"policy"`
+	LocalApproved   bool     `json:"local_approved"`
+	DependencyReady bool     `json:"dependency_ready"`
+	ReviewPending   bool     `json:"review_pending"`
+	Ready           bool     `json:"ready"`
+	Identities      []string `json:"identities"`
+	Witnesses       []string `json:"witnesses"`
+}
+
+func TestZZCrossVersionDifferential(t *testing.T) {
+	out := os.Getenv("DX_XVER_OUT")
+	if out == "" {
+		t.Fatal("DX_XVER_OUT unset: harness must not silently skip")
+	}
+	f, err := os.Create(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	rows, badWitness, witnesses := 0, 0, 0
+	const seeds = 3000
+	for seed := int64(0); seed < seeds; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		n := 2 + rng.Intn(8) // 2..9 nodes
+		cyclic := seed%2 == 1
+		claims := []model.Claim{}
+		flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{}}
+		edges := map[string]map[string]bool{}
+		for i := 0; i < n; i++ {
+			id := fmt.Sprintf("n%d", i)
+			c := lockedClaim(id)
+			switch rng.Intn(6) {
+			case 0, 1:
+				c.Status = model.StatusDraft
+			case 2:
+				if rng.Intn(4) == 0 {
+					c.Status = model.Status("retired")
+				}
+			}
+			if rng.Intn(5) == 0 {
+				c.Comments = []model.Comment{{ID: fmt.Sprintf("thread%d", i), Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "review"}}
+			}
+			if rng.Intn(4) == 0 {
+				reason := ""
+				if rng.Intn(2) == 0 {
+					reason = "flag"
+				}
+				flags.Flags[id] = reaudit.PendingFlag{Reason: reason}
+			}
+			var deps []string
+			for j := 0; j < n; j++ {
+				if !cyclic && j <= i {
+					continue
+				}
+				if rng.Intn(3) == 0 {
+					deps = append(deps, fmt.Sprintf("n%d", j))
+				}
+			}
+			if rng.Intn(10) == 0 {
+				deps = append(deps, "ghost")
+			}
+			if len(deps) > 0 && rng.Intn(8) == 0 {
+				deps = append(deps, deps[0]) // duplicate entry
+			}
+			xverSetRests(&c, deps)
+			edges[id] = map[string]bool{}
+			for _, d := range deps {
+				edges[id][d] = true
+			}
+			claims = append(claims, c)
+		}
+		s := standingStore(claims...)
+		if seed%3 == 0 {
+			s.PolicyVersion = 0 // retired policy-0 store
+		}
+		for _, c := range claims {
+			for _, dep := range lock.BaselineDependencyIDs(c) {
+				if rng.Intn(5) == 0 {
+					continue // unknown historical baseline
+				}
+				for _, d := range claims {
+					if dep == d.ID {
+						recordBaseline(s, c.ID, d)
+					}
+				}
+				if rng.Intn(4) == 0 {
+					if s.Hashes[c.ID] == nil {
+						s.Hashes[c.ID] = map[string]string{}
+					}
+					s.Hashes[c.ID][dep] = "stale"
+				}
+			}
+			if rng.Intn(12) == 0 {
+				delete(s.Ledger, c.ID) // approval-integrity failure
+			}
+		}
+		for i, c := range claims {
+			if c.Status != model.StatusDraft {
+				if c.Status == model.StatusLocked && rng.Intn(12) == 0 {
+					c.Body += " edited-after-lock"
+					claims[i] = c
+				}
+				continue
+			}
+			r, ok := s.Ledger[c.ID]
+			if !ok || rng.Intn(2) != 0 {
+				continue
+			}
+			r.ReleasedAt = "2026-09-04T00:00:00Z"
+			r.ReleasedBy = "maintainer"
+			r.ReleasedReason = "rewrite"
+			s.Ledger[c.ID] = r
+			if rng.Intn(2) == 0 {
+				c.Body += " rewritten"
+				claims[i] = c
+			}
+		}
+		got := Compute(claims, s, flags)
+		ids := make([]string, 0, len(got))
+		for id := range got {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			a := got[id]
+			row := xverRow{Seed: seed, ID: id, Policy: int(a.PolicyVersion), LocalApproved: a.LocalApproved, DependencyReady: a.DependencyReady, ReviewPending: a.ReviewPending, Ready: a.Ready, Identities: auditIdentities(a)}
+			check := func(kind string, p Path) {
+				witnesses++
+				row.Witnesses = append(row.Witnesses, fmt.Sprintf("%s:%v", kind, []string(p)))
+				if len(p) == 0 || p[0] != id {
+					badWitness++
+					t.Errorf("seed=%d id=%s %s witness %v does not start at claim", seed, id, kind, p)
+					return
+				}
+				for k := 0; k+1 < len(p); k++ {
+					if !edges[p[k]][p[k+1]] {
+						badWitness++
+						t.Errorf("seed=%d id=%s %s witness %v uses non-edge %s->%s", seed, id, kind, p, p[k], p[k+1])
+					}
+				}
+			}
+			for _, c := range a.Conditions {
+				check("cond/"+string(c.Kind), c.Path)
+			}
+			for _, c := range a.Causes {
+				check("cause/"+string(c.SourceKind), c.Path)
+			}
+			if err := enc.Encode(row); err != nil {
+				t.Fatal(err)
+			}
+			rows++
+		}
+	}
+	t.Logf("seeds=%d rows=%d witnesses=%d bad_witness=%d", seeds, rows, witnesses, badWitness)
+}

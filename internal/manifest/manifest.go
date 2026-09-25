@@ -190,6 +190,8 @@ func checkTree(claims []model.Claim, cfg *config.Config, tree map[string][]byte,
 		}
 	}
 
+	findings = append(findings, moduleBudgetFindings(claims, cfg.Modules, parsed)...)
+
 	for _, rel := range extras {
 		if required[rel] {
 			continue

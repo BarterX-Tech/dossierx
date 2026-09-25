@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -117,6 +118,82 @@ func newLiveTab(t *testing.T, p *project) context.Context {
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live')`)
+	return ctx
+}
+
+// liveStatusProbeScript counts the served viewer's /api/status verdicts AFTER
+// the page has painted them. The runtime asks for /api/status once, right
+// after its reachability probe mounts the live controls, and renders the
+// answer into the status strip whenever it lands; until then the strip shows
+// the offline verdict the graph payload carries. A test that reads the strip,
+// or paints a synthetic verdict of its own through
+// window.dossierxRenderStatusStrip, before that answer lands races it: the
+// late answer silently replaces what the test is asserting on.
+//
+// The probe wraps fetch and, for /api/status only, the response's json(). The
+// runtime's renderStatusStrip is chained on that json() promise, so the
+// counter's setTimeout runs after the synchronous render has finished. It
+// changes no data and no page state.
+const liveStatusProbeScript = `(function () {
+  var nativeFetch = window.fetch;
+  window.__dxStatusApplied = 0;
+  if (typeof nativeFetch !== 'function') { return; }
+  window.fetch = function (input) {
+    var p = nativeFetch.apply(this, arguments);
+    var url = typeof input === 'string' ? input : ((input && input.url) || '');
+    if (url.indexOf('/api/status') < 0) { return p; }
+    return p.then(function (res) {
+      var json = res.json.bind(res);
+      res.json = function () {
+        return json().then(function (data) {
+          setTimeout(function () { window.__dxStatusApplied++; }, 0);
+          return data;
+        });
+      };
+      return res;
+    });
+  };
+})();`
+
+// instantScrollScript turns the page's `html { scroll-behavior: smooth }` into
+// instant scrolling for every document this tab loads, by the inline style a
+// reader's own stylesheet would need to win. A test that navigates to a
+// fragment and then clicks has otherwise been clicking a page that is still
+// sliding: navigating to "#widget" smooth-scrolls to <section id="widget"> for
+// a few hundred milliseconds, chromedp reads the target's box once, and the
+// press lands where the link used to be. Nothing the tests below assert is
+// about the animation; each asserts where a click takes the reader.
+const instantScrollScript = `document.addEventListener('DOMContentLoaded', function () {
+  document.documentElement.style.scrollBehavior = 'auto';
+});`
+
+// withInstantScroll installs instantScrollScript on ctx's tab. Call it before
+// the tab's first Navigate.
+func withInstantScroll(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	runCDP(t, ctx, chromedp.ActionFunc(func(c context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(instantScrollScript).Do(c)
+		return err
+	}))
+	return ctx
+}
+
+// newLiveTabWithStatus is newLiveTab for a test that reads or replaces the
+// status strip: it returns only once the served /api/status verdict has been
+// painted, so nothing the test does can be overwritten by it afterwards.
+func newLiveTabWithStatus(t *testing.T, p *project) context.Context {
+	t.Helper()
+	base := p.ensureServe()
+	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.ActionFunc(func(c context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(liveStatusProbeScript).Do(c)
+		return err
+	}))
+	runCDP(t, ctx,
+		chromedp.Navigate(base+"/"),
+		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
+	)
+	pollTrue(t, ctx, `document.body.classList.contains('comments-live') && window.__dxStatusApplied >= 1`)
 	return ctx
 }
 

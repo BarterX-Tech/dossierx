@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -446,7 +447,7 @@ func loadConfig() (*config.Config, error) {
 		if errors.Is(err, config.ErrNotFound) {
 			code = cliout.CodeConfigNotFound
 		}
-		return nil, cliout.Errorf(code, "load config: %w", err)
+		return nil, withRetiredFieldHint(cliout.Errorf(code, "load config: %w", err), err)
 	}
 	// Every verb refuses a legacy root layout BEFORE reading anything: the
 	// stores, the artifacts, the catalog and the viewer all moved under the
@@ -481,11 +482,6 @@ func refuseLegacyLayout(cfg *config.Config) error {
 	return layout.RefuseMoves(cfg, moves, buildDirIgnored)
 }
 
-// loadClaims loads every claim under cfg's claims_dir. The "load claims:"
-// prefix is load-bearing and pinned (check_parity_test.go asserts a claims-load
-// failure is reported unprefixed by "check:", since it precedes the pipeline);
-// cliout.Errorf reproduces fmt.Errorf's string exactly, so attaching the code
-// changes no byte of the message.
 // lintErrorCode is the code a lint stop reports. The roof's two findings
 // (internal/check.ConstitutionFindings) get their own codes so an agent
 // branches on the constitution rather than on "fix the claims": over-cap
@@ -530,10 +526,15 @@ func lintStopError(res check.Result) error {
 	return cliout.Errorf(lintErrorCode(res.ClaimLintErrors()), "check: lint: %d error-level finding(s)", len(res.LintErrors))
 }
 
+// loadClaims loads every claim under cfg's claims_dir. The "load claims:"
+// prefix is load-bearing and pinned (check_parity_test.go asserts a claims-load
+// failure is reported unprefixed by "check:", since it precedes the pipeline);
+// cliout.Errorf reproduces fmt.Errorf's string exactly, so attaching the code
+// changes no byte of the message. A retired claim field gets the upgrade hint.
 func loadClaims(cfg *config.Config) ([]model.Claim, error) {
 	claims, err := loader.LoadAll(cfg)
 	if err != nil {
-		return nil, cliout.Errorf(cliout.CodeInvalidClaim, "load claims: %w", err)
+		return nil, withRetiredFieldHint(cliout.Errorf(cliout.CodeInvalidClaim, "load claims: %w", err), err)
 	}
 	return claims, nil
 }
@@ -1642,7 +1643,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		// A real git failure is not a verdict either way, so it must not be
 		// reported as a clean run. CodeInternal rather than a check-step code:
 		// nothing about the project was judged.
-		return cmdResult{StoppedAt: "load"}, cliout.Errorf(cliout.CodeInternal, "%w", err)
+		return cmdResult{StoppedAt: "load"}, withRetiredFieldHint(cliout.Errorf(cliout.CodeInternal, "%w", err), err)
 	}
 
 	res := check.StatusStaged(sp, cfg)
@@ -2127,6 +2128,14 @@ func newLockCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest, "lock: %w", err)
 			}
+			// A conflict on a claim this call does not lock would refuse
+			// nothing, and the lock it was meant to stop would go ahead.
+			for _, c := range conflicts {
+				if !slices.Contains(args, c.ClaimID) {
+					return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
+						"lock: --semantic-conflict names %q, which is not among the claims being locked; it would refuse nothing", c.ClaimID)
+				}
+			}
 			// --dry-run answers a question; it never writes and never takes a
 			// sentinel. One claim and a group take the same route: the set
 			// evaluator previews exactly what the write path will enforce.
@@ -2515,7 +2524,7 @@ func newReauditCmd() *cobra.Command {
 
 			claims, err = loadClaims(cfg)
 			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeInvalidClaim, "reaudit: %w", err)
+				return cmdResult{}, withRetiredFieldHint(cliout.Errorf(cliout.CodeInvalidClaim, "reaudit: %w", err), err)
 			}
 			claim, ok = loader.FindByID(claims, id)
 			if !ok {

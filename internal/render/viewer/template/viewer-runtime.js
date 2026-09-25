@@ -81,10 +81,13 @@
         // claimToFacet maps every individual claim card's own id (the full claim
         // id, e.g. "widget.doctrine.foo") to its owning .claim-group (facet) id,
         // so an edges-footer link (`href="#<claim-id>"`) resolves to a specific
-        // card instead of the unknown-hash fallback. Overview claims render N
-        // times but only the canonical copy keeps its id (render.stripOverviewIDs
-        // strips the rest), so only that copy is indexed here — consistent with
-        // the comment JS keying off data-claim-id (never id) for state fan-out.
+        // card instead of the unknown-hash fallback. A claim a track owns
+        // renders twice, but only its module's copy keeps the id
+        // (render.stripDuplicateClaimIDs strips the track copy's), so only that
+        // copy is indexed here — consistent with the comment JS keying off
+        // data-claim-id (never id) for state fan-out. A project claim's one
+        // copy sits under the constitution's Project claims tab, which is a
+        // .claim-group like any facet, so a RESTS ON link to it resolves here.
         claimToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
           // Index both live-mounted cards and inert <template> payloads so a
@@ -109,8 +112,8 @@
         // reader clicking a citation would be moved to a different module
         // entirely, which is both wrong and hard to attribute to the click.
         // Only the canonical copy of a claim carries these ids
-        // (render.stripDuplicateClaimIDs removes them from an overview note's
-        // repeated copies and from a track's inline copy), so this map is
+        // (render.stripDuplicateClaimIDs removes them from a track's inline
+        // copy), so this map is
         // one-to-one for the same reason claimToFacet is.
         sourceToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
