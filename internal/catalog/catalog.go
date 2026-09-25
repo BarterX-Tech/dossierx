@@ -387,6 +387,22 @@ func (cat *Catalog) Document() *Document {
 	return doc
 }
 
+// ExportedCount is the number of entries Document writes to catalog.json:
+// every claim except internals. It is what a "wrote N claim(s)" report must
+// say, since catalog.json holds only these. O(V), no allocation.
+func (cat *Catalog) ExportedCount() int {
+	if cat == nil {
+		return 0
+	}
+	n := 0
+	for _, c := range cat.Claims {
+		if visibility.IntegrationIncludes(c) {
+			n++
+		}
+	}
+	return n
+}
+
 // MarshalJSON deterministically serializes cat by delegating to Document,
 // so json.Marshal(cat) and cat.WriteJSON both round-trip through the same
 // sorted projection.

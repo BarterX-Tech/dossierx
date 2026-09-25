@@ -1,6 +1,7 @@
 package check_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -137,6 +138,9 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 			"body: |\n  start here.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/one.yaml": draftClaim("widget.contract.one"),
+		"claims/queue.yaml": "id: widget.internals.queue\nfacet: internals\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: |\n  an internals claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -165,11 +169,20 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 	if res.CatalogPath == "" || res.RenderPath == "" {
 		t.Fatalf("expected catalog+render paths to be set, got %q / %q", res.CatalogPath, res.RenderPath)
 	}
-	if res.CatalogCount != len(claims) {
-		t.Fatalf("expected CatalogCount=%d, got %d", len(claims), res.CatalogCount)
+	// catalog_count reports what catalog.json holds, and catalog.json omits
+	// internals: 2 of the 3 claims.
+	raw, readErr := os.ReadFile(res.CatalogPath)
+	if readErr != nil {
+		t.Fatalf("catalog not written at %s: %v", res.CatalogPath, readErr)
 	}
-	if _, statErr := os.Stat(res.CatalogPath); statErr != nil {
-		t.Fatalf("catalog not written at %s: %v", res.CatalogPath, statErr)
+	var written struct {
+		Claims []json.RawMessage `json:"claims"`
+	}
+	if err := json.Unmarshal(raw, &written); err != nil {
+		t.Fatal(err)
+	}
+	if len(claims) != 3 || res.CatalogCount != 2 || len(written.Claims) != res.CatalogCount {
+		t.Fatalf("CatalogCount=%d, catalog.json entries=%d, loaded claims=%d; want 2, 2, 3", res.CatalogCount, len(written.Claims), len(claims))
 	}
 	if _, statErr := os.Stat(res.RenderPath); statErr != nil {
 		t.Fatalf("render not written at %s: %v", res.RenderPath, statErr)
@@ -184,7 +197,7 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 
 	foundDraftHint := false
 	for _, h := range res.NextSteps {
-		if h == "2 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)" {
+		if h == "3 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)" {
 			foundDraftHint = true
 		}
 	}
