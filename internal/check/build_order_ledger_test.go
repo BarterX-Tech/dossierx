@@ -73,10 +73,9 @@ func lockBuildOrder(t *testing.T, cfg *config.Config, _ []model.Claim, module st
 	writeLeftoverBuildOrder(t, cfg, module, true)
 }
 
-// orderedClaim is a locked claim carrying the build_role a build order needs.
+// orderedClaim is a locked claim beside a leftover build-order artifact.
 func orderedClaim(id string) string {
 	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-		"build_role: behavior\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 }
@@ -443,16 +442,14 @@ func TestNextSteps_StaleLockedBuildOrderIsReported(t *testing.T) {
 		t.Fatalf("leftover build orders are not a check surface, got %+v", res.BuildOrders)
 	}
 
-	// The sanctioned change: the claim's build_role moves (unlock -> edit ->
-	// lock, compressed here to the edit the approval path would have written).
-	// A derivation input, not prose: since issue #58 a body edit alone leaves
-	// the order current.
+	// The sanctioned change: a signed field moves (unlock -> edit -> lock,
+	// compressed here to the edit the approval path would have written).
 	path := filepath.Join(cfg.ClaimsDir, "a.yaml")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read claim: %v", err)
 	}
-	edited := strings.Replace(string(raw), "build_role: behavior\n", "build_role: schema\n", 1)
+	edited := strings.Replace(string(raw), "layout: card\n", "layout: card\nsection: moved\n", 1)
 	if edited == string(raw) {
 		t.Fatalf("fixture precondition: the edit did not apply")
 	}

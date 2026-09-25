@@ -48,7 +48,6 @@ status: draft | locked
 summary: string                # REQUIRED; one-line plain text, no markdown
 layout: card | table | list | steps | tree | banner | mockup  # optional
 kind: fact                     # optional, default fact; any other value is refused
-build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
 # CONTENT — at least one of the next four is REQUIRED (see "Content is required"):
 body: markdown string          # optional on its own, illustrative prose
 rows: [ { ... } ]              # optional on its own, table rows; each cell must be a string
@@ -198,7 +197,7 @@ claims_dir/<module>/manifest.yaml
 ```
 
 It is YAML only, it is **not a claim**, and the loader never decodes it as one.
-Do not use `build_role: orientation` as the module's "why / start here". An
+The manifest is the module's "why / start here". An
 **agent** drafts the manifest from the module's claims (contract-surface first)
 plus a short note on how neighbors / the product use this module — not a
 freestyle essay and not a paste of claim bodies. The CLI never drafts it: it
@@ -293,9 +292,6 @@ module, verbatim, and the copyable `dossierx manifest show <module>
 --isolation` command; none of the broken file is rendered. There is no
 editing in the viewer.
 
-`build_role: orientation` remains a claim field; it is not a substitute for the
-manifest.
-
 ### `kind`
 
 `kind` is optional and defaults to `fact`: a claim stating something about the
@@ -373,7 +369,7 @@ constructs below; the only thing that differs between them is images (see
   `_italic_` both become `<em>`, and `~~strike~~` becomes `<del>`, under
   strict CommonMark left/right-flanking delimiter rules. In particular, an
   **intraword** underscore can neither open nor close emphasis, so ordinary
-  identifier-shaped prose (`claims_dir`, `rests_on`, `build_role`) never
+  identifier-shaped prose (`claims_dir`, `rests_on`, `raw_html`) never
   italicizes by accident — a run of underscores that is genuinely flanked on
   both sides (e.g. `__init__` as a whole word) does still pair and italicize.
   Strikethrough is exactly two tildes; one tilde or three-or-more is literal.
@@ -721,7 +717,7 @@ joins no cycle walk.
 
 | Lint | Severity | What it catches |
 |---|---|---|
-| `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` and `build_role` are: a third value invented by a typo would be a membership nothing reads. |
+| `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` is: a third value invented by a typo would be a membership nothing reads. |
 | `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary for tracks, exactly as it is for `modules[]` (facets are engine-fixed: `contract` \| `internals`); a typo that created a track would put a claim in a feature nobody is looking at. |
 | `track-multi-owner` | ERROR | two claims claiming `role: owns` on the same track. The one-owner-per-axis invariant, enforced. |
 | `track-empty` | WARNING | a track declared in config that no claim references. Nothing a reader is told is wrong; the track page is empty, and the human decides whether the track is premature or the claims are missing. |
@@ -799,16 +795,14 @@ decoding never rejects it.
 `agent`), not an identity — the same axis as the CLI's `--as` flag. A banner
 (`layout: banner`) claim is decorative and cannot carry comment threads.
 
-### `build_role`
+### `build_role` (removed)
 
-`build_role` is an optional leftover field on a claim. It is not a
-sequencing product: there is no command, skill, viewer tab, or lint that
-derives or enforces an implementation order from it. Viewer reading order
-is still `order` / `section`. What to implement next is locked claims,
-module `depends_on`, and claim `rests_on`.
-
-The six values, if set, are `orientation`, `schema`, `behavior`, `api`,
-`verification`, and `out-of-scope`. Unset (`""`) is allowed on any status.
+`build_role` is gone as of v0.7.21 (NIT-32), with no alias. A claim file
+that still carries it fails strict decode at `load`. Delete the key from
+every claim; a locked claim that carried it moves its lock hash, so it goes
+through `unlock` → `lock` once, like every locked claim in this release.
+What to implement next is locked claims, module `depends_on`, and claim
+`rests_on`; viewer reading order is `order` / `section`.
 
 ### `section` and in-content headings
 
@@ -1114,7 +1108,7 @@ persists except three engine-managed fields:
 Everything else is signed, **including any field added to the schema later**.
 This is deliberately not the same hash as the dependency-drift `ContentHash`,
 which covers a hand-picked eleven fields and must stay byte-identical
-forever: `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
+forever: `raw_html_reviewed`, `kind`, `section`, `order`,
 `emphasis`, `migrated_from`, `sources`, `tracks`, and `audit_notes` are
 invisible to it —
 `raw_html` was in that blind list through v0.4.0, but as of v0.4.1 a
@@ -1130,7 +1124,7 @@ cannot see, and
 `LockedClaimHash` is the net for all of them regardless of what
 `ContentHash` tracks: it signs everything a claim persists except `status`,
 `review_pending`, and `comments` (above), so a swapped `raw_html` payload —
-or a swapped `raw_html_reviewed`, `build_role`, or any other field —
+or a swapped `raw_html_reviewed`, `section`, or any other field —
 still fails the lock ledger's check even on a claim with no dependent to
 notice the drift. A ledger built on `ContentHash` alone would have
 certified exactly the edit that most needed a signature; it is built on
@@ -1257,7 +1251,7 @@ read the sentence above as covering the file byte for byte.
 
 | The tampering | Named by |
 |---|---|
-| a locked claim's content edited — including `raw_html`, `build_role`, `section`, `order`, `sources`, `tracks` | `lock-content-drift` |
+| a locked claim's content edited — including `raw_html`, `section`, `order`, `sources`, `tracks` | `lock-content-drift` |
 | `status: draft` flipped to `locked` by hand, with no approval record | `lock-ledger-missing` |
 | a record deleted from a claim this engine locked | `lock-ledger-deleted` |
 | `status:` edited back to `locked` over a record `unlock` already released | `lock-ledger-released` |
@@ -1569,6 +1563,12 @@ source_dirs: [path, ...]         # optional; directories scanned for
                                   # existed, and the engine never guesses where
                                   # the code is. Without it, a code link can
                                   # only be recorded by `dossierx claim link`.
+                                  # Set, plain `check` refuses unlinked_claims
+                                  # while any locked module claim has no code
+                                  # link (a stepped claim: on every step).
+                                  # Project claims are exempt; a claim with no
+                                  # code behind it declares
+                                  # embodiment: {mode: none, reason: "..."}.
 mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
                                   # to author layout: mockup claims — the module
                                   # allowlist leg of raw-html-scope's gate. Every

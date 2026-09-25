@@ -4,7 +4,6 @@ facet: internals
 module: viewer
 status: draft
 layout: card
-build_role: behavior
 body: |
   Facts and heuristics are rendered in visually separate blocks, and the heuristics are labelled as guesses. A guess that looks like a finding is worse than no guess.
 rests_on:

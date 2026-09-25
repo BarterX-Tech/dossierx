@@ -83,26 +83,6 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 		crossIn[to]++
 	}
 
-	// Which build phases each module has any claim in, and whether it has an
-	// approved claim at all — the two inputs the missing-phase heuristic
-	// takes.
-	phasesSeen := map[string]map[string]bool{}
-	hasLocked := map[string]bool{}
-	for _, n := range p.Nodes {
-		if phasesSeen[n.Module] == nil {
-			phasesSeen[n.Module] = map[string]bool{}
-		}
-		if n.BuildRole != "" {
-			phasesSeen[n.Module][n.BuildRole] = true
-		}
-		if n.Status == "locked" {
-			hasLocked[n.Module] = true
-		}
-	}
-	// The five real phases. "out-of-scope" is excluded by definition: it
-	// means "deliberately not in any phase", so its absence is not a gap.
-	phases := []string{"orientation", "schema", "behavior", "api", "verification"}
-
 	// ---- one named case per gap class ----
 
 	cases := []struct {
@@ -196,28 +176,11 @@ func TestDemoFixtureSeedsEveryGapClass(t *testing.T) {
 		},
 		{
 			class: "a locked node",
-			why:   "the solid ring, and the precondition for the missing-phase heuristic",
+			why:   "the solid ring",
 			found: func() (string, bool) {
 				for _, n := range p.Nodes {
 					if n.Status == "locked" {
 						return n.ID, true
-					}
-				}
-				return "", false
-			},
-		},
-		{
-			class: "a module with an approved claim and no claim in some build phase",
-			why:   "the missing_build_phase heuristic; verification is the usual absentee",
-			found: func() (string, bool) {
-				for _, m := range p.Groups.Modules {
-					if !hasLocked[m] {
-						continue
-					}
-					for _, ph := range phases {
-						if !phasesSeen[m][ph] {
-							return m + " has no " + ph + " claim", true
-						}
 					}
 				}
 				return "", false

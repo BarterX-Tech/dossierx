@@ -240,16 +240,16 @@ func TestTrackLessPayloadIsByteIdenticalToPreTracks(t *testing.T) {
 	p := buildFrom(t, cfg,
 		model.Claim{
 			ID: "widget.contract.one", Module: "widget", Facet: "contract",
-			Status: model.StatusLocked, BuildRole: model.BuildRoleAPI,
+			Status: model.StatusLocked,
 		},
 	)
 	b, err := Encode(p)
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	const want = `{"schema":2,"generated_at":"","nodes":[{"id":"widget.contract.one",` +
+	const want = `{"schema":3,"generated_at":"","nodes":[{"id":"widget.contract.one",` +
 		`"title":"One","module":"widget","facet":"contract","status":"locked","kind":"fact",` +
-		`"build_role":"api","emphasis":false,"review_pending":false,"open_comments":0,` +
+		`"emphasis":false,"review_pending":false,"open_comments":0,` +
 		`"in_degree":0,"out_degree":0}],"edges":[],` +
 		`"groups":{"modules":["widget"],"facets":["contract"]},"dropped":{"unresolved_edges":0}}`
 	if string(b) != want {

@@ -4,7 +4,6 @@ facet: contract
 module: telemetry
 status: draft
 layout: card
-build_role: api
 body: |
   Measurement is opt-in. A project that never asks for it pays nothing and has no file appear beside its configuration.
 rests_on:

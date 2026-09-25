@@ -105,7 +105,6 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  the approved body.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})

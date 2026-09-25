@@ -43,14 +43,13 @@ func implinkTestConfig(t *testing.T, module string) *config.Config {
 
 func implinkTestClaim(module string) model.Claim {
 	return model.Claim{
-		ID:        module + ".contract.main",
-		Module:    module,
-		Facet:     "contract",
-		Status:    model.StatusLocked,
-		Layout:    model.LayoutCard,
-		Body:      "main claim",
-		BuildRole: model.BuildRoleBehavior,
-		RestsOn:   model.RestsNone("test fixture"),
+		ID:      module + ".contract.main",
+		Module:  module,
+		Facet:   "contract",
+		Status:  model.StatusLocked,
+		Layout:  model.LayoutCard,
+		Body:    "main claim",
+		RestsOn: model.RestsNone("test fixture"),
 	}
 }
 
@@ -219,12 +218,12 @@ func TestRender_NotLinkedRow_PresentForGatedUnlinkedClaim(t *testing.T) {
 	claim := implinkTestClaim(module)
 	orientation := implinkTestClaim(module)
 	orientation.ID = module + ".contract.context"
-	orientation.BuildRole = model.BuildRoleOrientation
+	orientation.Embodiment = &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: "orientation, no code expected"}
 	orientation.Body = "orientation, no code expected"
 
 	out := renderClaims(t, []model.Claim{claim, orientation}, cfg)
 	if n := strings.Count(out, `class="claim-unlinked`); n != 1 {
-		t.Fatalf("expected exactly one unlinked row (the behavior claim, not the orientation one), got %d in:\n%s", n, out)
+		t.Fatalf("expected exactly one unlinked row (the ordinary claim, not the code-free one), got %d in:\n%s", n, out)
 	}
 	if !strings.Contains(out, `<span class="pill pw">not linked to code</span>`) {
 		t.Fatalf("expected the not-linked pill, got:\n%s", out)

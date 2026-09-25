@@ -206,7 +206,6 @@
     open_threads: 'open comment threads',
     sink_group: 'group nothing links into',
     orphan_group: 'group with no outside edges',
-    missing_build_phase: 'module missing a build phase',
     density_outlier: 'facet thin in one module'
   };
 

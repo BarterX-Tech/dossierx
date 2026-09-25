@@ -36,9 +36,8 @@
   //   GHOST_PREFIX         "ghost:" — id prefix of an out-of-scope endpoint
   //   FACET_SLOT_COUNT     20 — the categorical palette's slot count
   //   FACT_RULE_IDS        the eight fact rule ids, in emission order
-  //   HINT_RULE_IDS        the two heuristic rule ids, in emission order
+  //   HINT_RULE_IDS        the heuristic rule ids, in emission order
   //   OVERLAYS             the closed overlay set — five, plus "none"
-  //   BUILD_PHASES         the build roles missing_build_phase looks for
   //
   // Helpers:
   //   groupId(groupType, name)            -> "module:engine" / "facet:contract"
@@ -120,7 +119,7 @@
     'sink_group',
     'orphan_group'
   ]);
-  var HINT_RULE_IDS = Object.freeze(['missing_build_phase', 'density_outlier']);
+  var HINT_RULE_IDS = Object.freeze(['density_outlier']);
 
   // ------------------------------------------------------------------
   // Internal helpers — none of these cross the exported boundary.
@@ -970,12 +969,6 @@
   // endpoints in scope, which is also why aggregation inside this function
   // can never produce a ghost.
 
-  // BUILD_PHASES is the ordered set of real build phases a module is expected
-  // to cover. model.BuildRole also defines "out-of-scope", which is
-  // deliberately NOT here: it marks a deferred claim, not a phase whose
-  // absence is a gap.
-  var BUILD_PHASES = Object.freeze(['orientation', 'schema', 'behavior', 'api', 'verification']);
-
   function finding(rule, nodeIds, kind) {
     return { rule: rule, node_ids: nodeIds, kind: kind };
   }
@@ -994,65 +987,17 @@
   }
 
   // ------------------------------------------------------------------
-  // The two heuristics (design section 5)
+  // The heuristic (design section 5)
   // ------------------------------------------------------------------
   //
   // These are GUESSES and they are kept in their own array for that reason.
-  // False positives here are guaranteed, not merely possible: a module that
-  // legitimately has no verification phase will be listed every single time.
-  // A separate array is what stops the panel rendering a guess in the same
+  // False positives here are guaranteed, not merely possible. A separate array is what stops the panel rendering a guess in the same
   // block as a fact by accident — the wording and the visual separation are
   // the only things that keep a heuristic honest rather than annoying, and a
   // shared array would eventually lose both.
   //
-  // Both emit the same {rule, node_ids, kind} shape with kind "hint", and
-  // both always appear, with an empty node_ids when they found nothing.
-
-  // missingBuildPhase: a module with at least one LOCKED claim and zero
-  // claims in some build phase. The locked precondition is what keeps this
-  // from firing on every module a project has merely started — a module with
-  // nothing locked is not missing a phase, it is unfinished, and the reader
-  // already knows that. Verification is the usual absentee.
-  //
-  // Grouping is always by module regardless of the rail's groupBy: the phase
-  // vocabulary is a property of a module's build, and a facet has no build.
-  function missingBuildPhase(nodes) {
-    var lockedIn = new Set();
-    var phasesIn = new Map(); // module -> Set of build roles present
-    var moduleNames = [];
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i] || {};
-      var mod = asString(n.module);
-      moduleNames.push(mod);
-      if (asString(n.status) === 'locked') {
-        lockedIn.add(mod);
-      }
-      var seen = phasesIn.get(mod);
-      if (!seen) {
-        seen = new Set();
-        phasesIn.set(mod, seen);
-      }
-      var role = asString(n.build_role);
-      if (role !== '') {
-        seen.add(role);
-      }
-    }
-    var hits = [];
-    var names = sortedUnique(moduleNames);
-    for (var j = 0; j < names.length; j++) {
-      if (!lockedIn.has(names[j])) {
-        continue;
-      }
-      var present = phasesIn.get(names[j]) || new Set();
-      for (var k = 0; k < BUILD_PHASES.length; k++) {
-        if (!present.has(BUILD_PHASES[k])) {
-          hits.push(groupId('module', names[j]));
-          break;
-        }
-      }
-    }
-    return hits;
-  }
+  // Each emits the {rule, node_ids, kind} shape with kind "hint", and always
+  // appears, with an empty node_ids when it found nothing.
 
   // densityOutlier: a facet whose claim count in one module sits far below its
   // median across the other modules — the shape of "this module forgot to
@@ -1346,14 +1291,12 @@
     facts.push(finding('sink_group', sinks.sort(cmpStr), 'fact'));
     facts.push(finding('orphan_group', orphans.sort(cmpStr), 'fact'));
 
-    // Heuristics, in their own array. Both take the scoped CLAIM nodes only —
-    // no edges, no representatives — and both always appear. They are
-    // deliberately granularity-independent: a build phase is a property of a
-    // module's build whatever the canvas is currently collapsed to, and the
-    // ids they emit are module group ids at every granularity. Their labels
-    // say "module" out loud for exactly that reason.
+    // Heuristics, in their own array. They take the scoped CLAIM nodes only —
+    // no edges, no representatives — and always appear. They are
+    // deliberately granularity-independent: the ids they emit are module
+    // group ids at every granularity, and their labels say "module" out loud
+    // for exactly that reason.
     var hints = [
-      finding('missing_build_phase', missingBuildPhase(scopedNodes), 'hint'),
       finding('density_outlier', densityOutlier(scopedNodes), 'hint')
     ];
 
@@ -1617,7 +1560,6 @@
     FACT_RULE_IDS: FACT_RULE_IDS,
     HINT_RULE_IDS: HINT_RULE_IDS,
     OVERLAYS: OVERLAYS,
-    BUILD_PHASES: BUILD_PHASES,
 
     groupId: groupId,
     edgeKey: edgeKey,

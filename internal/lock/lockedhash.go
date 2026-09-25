@@ -16,10 +16,10 @@
 //
 //   - LockedClaimHash answers "is THIS locked claim still the bytes a human
 //     approved?" That question has no allowlist: every field a claim persists
-//     is part of what was approved. model.Claim persists twenty-four
-//     yaml-tagged fields; ContentHash covers ten. The eleven it cannot see —
-//     raw_html_reviewed, build_role, kind, embodiment, section, order,
-//     emphasis, migrated_from, audit_notes, sources, tracks — are all signed
+//     is part of what was approved. model.Claim persists twenty-three
+//     yaml-tagged fields; ContentHash covers ten. The ten it cannot see —
+//     raw_html_reviewed, kind, embodiment, section, order, emphasis,
+//     migrated_from, audit_notes, sources, tracks — are all signed
 //     here, as are the three no hash covers (status, review_pending,
 //     comments; see lockedClaimHashExcluded for why the engine's own
 //     bookkeeping is left out).
@@ -456,7 +456,7 @@ func PersistedYAMLName(sf reflect.StructField) (string, bool) {
 // diff; when a claim's hash has changed and its body has not, a panel with an
 // empty diff in it is worse than no panel — it asserts a change and then shows
 // nothing. This is what fills that gap: "the wording is unchanged; rests_on
-// and build_role moved".
+// and section moved".
 //
 // It reuses lockedClaimHashExcluded rather than restating it. A field the hash
 // does not sign cannot be the reason the hash changed, and a second hand-kept

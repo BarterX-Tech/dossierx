@@ -4,7 +4,6 @@ facet: contract
 module: cli
 status: locked
 layout: card
-build_role: api
 body: |
   One command runs review, grouping, rendering and the integrity gate, stopping at the first failure.
 rests_on:

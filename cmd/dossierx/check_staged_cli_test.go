@@ -51,7 +51,7 @@ func stagedProject(t *testing.T) (cfgPath, root, claimPath string) {
 	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "one.yaml")
-	src := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: schema\n" +
+	src := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the approved body.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(src), 0o644); err != nil {
@@ -140,7 +140,7 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 	cfgPath, root, _ := stagedProject(t)
 
 	second := filepath.Join(root, "claims", "two.yaml")
-	src := "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: schema\n" +
+	src := "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a second claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(second, []byte(src), 0o644); err != nil {

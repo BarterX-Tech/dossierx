@@ -46,9 +46,9 @@ modules:
 claims_dir: claims
 `
 
-func boClaim(id, facet, module, role string, restsOn ...string) string {
+func boClaim(id, facet, module, _ string, restsOn ...string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "id: %s\nfacet: %s\nmodule: %s\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: %s\n", id, facet, module, role)
+	fmt.Fprintf(&b, "id: %s\nfacet: %s\nmodule: %s\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n", id, facet, module)
 	if len(restsOn) > 0 {
 		b.WriteString("rests_on:\n")
 		for _, r := range restsOn {

@@ -8,7 +8,7 @@ import (
 )
 
 func lockedStepsClaim(id, module string, steps []string) model.Claim {
-	c := lockedClaim(id, module, model.BuildRoleBehavior)
+	c := lockedClaim(id, module)
 	c.Steps = steps
 	c.Layout = model.LayoutSteps
 	return c
@@ -123,7 +123,7 @@ func TestScan_StepOutOfRange_IsAScanError(t *testing.T) {
 
 func TestScan_StepOnClaimWithNoSteps_IsAScanError(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	want := StepContentHash("nope")
 	writeScanFile(t, srcDir, "main.go", "// dossierx-step: widget.contract.main #1 "+want+"\nfunc Foo() {}\n")
 

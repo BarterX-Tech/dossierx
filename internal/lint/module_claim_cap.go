@@ -74,7 +74,7 @@ func (moduleClaimCapLint) Check(claims []model.Claim, cfg *config.Config) []Find
 				LintName: "module-claim-cap",
 				ClaimID:  id,
 				Severity: SeverityError,
-				Message:  fmt.Sprintf("module %q has %d claims, over the project cap of %d; split the module, retire claims, or raise max_claims_per_module in project.config.yaml", mod, g.n, limit),
+				Message:  fmt.Sprintf("module %q has %d claims, over the project cap of %d; split the module or retire claims; raising max_claims_per_module in project.config.yaml is the human's call, only on their explicit approval", mod, g.n, limit),
 			})
 		}
 	}

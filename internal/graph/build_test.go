@@ -59,7 +59,6 @@ func TestBuildNodes(t *testing.T) {
 				Facet:         "contract",
 				Status:        model.StatusLocked,
 				Kind:          model.KindFact,
-				BuildRole:     model.BuildRoleAPI,
 				Emphasis:      true,
 				ReviewPending: true,
 				Comments: []model.Comment{
@@ -70,7 +69,7 @@ func TestBuildNodes(t *testing.T) {
 			want: Node{
 				ID: "widget.contract.retry-policy", Title: "Retry Policy",
 				Module: "widget", Facet: "contract",
-				Status: "locked", Kind: "fact", BuildRole: "api",
+				Status: "locked", Kind: "fact",
 				Emphasis: true, ReviewPending: true, OpenComments: 1,
 			},
 		},
@@ -94,18 +93,6 @@ func TestBuildNodes(t *testing.T) {
 			want: Node{
 				ID: "widget.contract.no-facet", Title: "No Facet",
 				Module: "widget", Facet: "", Status: "draft", Kind: "fact",
-			},
-		},
-		{
-			name: "empty build_role is emitted as empty, not omitted",
-			claim: model.Claim{
-				ID: "widget.contract.unphased", Module: "widget",
-				Facet: "contract", Status: model.StatusDraft,
-			},
-			want: Node{
-				ID: "widget.contract.unphased", Title: "Unphased",
-				Module: "widget", Facet: "contract",
-				Status: "draft", Kind: "fact", BuildRole: "",
 			},
 		},
 		{
@@ -183,7 +170,7 @@ func TestBuildNodes(t *testing.T) {
 			t.Fatalf("json.Unmarshal(node): %v", err)
 		}
 		want := []string{
-			"id", "title", "module", "facet", "status", "kind", "build_role",
+			"id", "title", "module", "facet", "status", "kind",
 			"emphasis", "review_pending", "open_comments", "in_degree", "out_degree",
 		}
 		if len(keys) != len(want) {

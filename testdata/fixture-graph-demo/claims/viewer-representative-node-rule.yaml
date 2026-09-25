@@ -4,7 +4,6 @@ facet: internals
 module: viewer
 status: draft
 layout: card
-build_role: behavior
 body: |
   Every claim resolves to a representative: itself when its group is expanded, its group otherwise. Edges map through the representative, aggregate, and drop the loops that produces.
 rests_on:

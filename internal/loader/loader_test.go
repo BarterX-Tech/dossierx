@@ -463,7 +463,6 @@ func TestLoadClaims_CommentsRoundTrip(t *testing.T) {
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim a
 comments:
   - id: c-8f3a2b

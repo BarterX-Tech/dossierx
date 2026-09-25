@@ -55,14 +55,20 @@ func writeSourceFile(t *testing.T, cfg *config.Config, rel, content string) stri
 	return rel
 }
 
-func lockedClaim(id, module string, role model.BuildRole) model.Claim {
+func lockedClaim(id, module string) model.Claim {
 	return model.Claim{
-		ID:        id,
-		Module:    module,
-		Facet:     "contract",
-		Status:    model.StatusLocked,
-		BuildRole: role,
+		ID:     id,
+		Module: module,
+		Facet:  "contract",
+		Status: model.StatusLocked,
 	}
+}
+
+// codeFree marks c as having no software embodiment — the one way a locked
+// module claim opts out of the code-link gate.
+func codeFree(c model.Claim) model.Claim {
+	c.Embodiment = &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: "no code embodies this claim"}
+	return c
 }
 
 func fixedNow(t *testing.T, ts time.Time) {
@@ -85,7 +91,7 @@ func TestSet_RefusesUnknownClaim(t *testing.T) {
 
 func TestSet_RefusesWrongModule(t *testing.T) {
 	cfg := testConfig(t, "widget", "gadget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	rel := writeSourceFile(t, cfg, "main.go", "package widget")
 
 	if _, err := Set(claims, cfg, "gadget", "widget.contract.main", rel, ""); err == nil {
@@ -95,7 +101,7 @@ func TestSet_RefusesWrongModule(t *testing.T) {
 
 func TestSet_RefusesDraftClaim(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{{ID: "widget.contract.main", Module: "widget", Status: model.StatusDraft, BuildRole: model.BuildRoleBehavior}}
+	claims := []model.Claim{{ID: "widget.contract.main", Module: "widget", Status: model.StatusDraft}}
 	rel := writeSourceFile(t, cfg, "main.go", "package widget")
 
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", rel, ""); err == nil {
@@ -105,7 +111,7 @@ func TestSet_RefusesDraftClaim(t *testing.T) {
 
 func TestSet_RefusesMissingFile(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", "does-not-exist.go", ""); err == nil {
 		t.Fatalf("expected an error linking a file that does not exist on disk")
@@ -114,7 +120,7 @@ func TestSet_RefusesMissingFile(t *testing.T) {
 
 func TestSet_RefusesAbsolutePath(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	abs := filepath.Join(cfg.Dir(), "main.go")
 	if err := os.WriteFile(abs, []byte("package widget"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
@@ -127,7 +133,7 @@ func TestSet_RefusesAbsolutePath(t *testing.T) {
 
 func TestSet_RefusesPathTraversalOutsideProjectDir(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 
 	// A real file that exists, but outside cfg.Dir() — reached via a
 	// relative path that climbs out with "..".
@@ -148,7 +154,7 @@ func TestSet_RefusesPathTraversalOutsideProjectDir(t *testing.T) {
 
 func TestSet_AppendsNewFileForSameClaim(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	fileA := writeSourceFile(t, cfg, "a.go", "package widget // a")
 	fileB := writeSourceFile(t, cfg, "b.go", "package widget // b")
 
@@ -170,7 +176,7 @@ func TestSet_AppendsNewFileForSameClaim(t *testing.T) {
 
 func TestSet_UpsertsExistingFileEntryInPlace(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	file := writeSourceFile(t, cfg, "a.go", "package widget // v1")
 
 	fixedNow(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -205,8 +211,8 @@ func TestSet_UpsertsExistingFileEntryInPlace(t *testing.T) {
 func TestSet_SameFileLinkedFromMultipleClaims(t *testing.T) {
 	cfg := testConfig(t, "widget")
 	claims := []model.Claim{
-		lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior),
-		lockedClaim("widget.contract.other", "widget", model.BuildRoleAPI),
+		lockedClaim("widget.contract.main", "widget"),
+		lockedClaim("widget.contract.other", "widget"),
 	}
 	file := writeSourceFile(t, cfg, "shared.go", "package widget")
 
@@ -225,7 +231,7 @@ func TestSet_SameFileLinkedFromMultipleClaims(t *testing.T) {
 
 func TestSet_VerificationClaimWithMultipleFiles(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.checklist", "widget", model.BuildRoleVerification)}
+	claims := []model.Claim{lockedClaim("widget.contract.checklist", "widget")}
 	test1 := writeSourceFile(t, cfg, "widget_test.go", "package widget_test // 1")
 	test2 := writeSourceFile(t, cfg, "widget_extra_test.go", "package widget_test // 2")
 
@@ -248,7 +254,7 @@ func TestSet_VerificationClaimWithMultipleFiles(t *testing.T) {
 
 func TestSet_WriteLoadRoundTrip(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	file := writeSourceFile(t, cfg, "a.go", "package widget")
 
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", file, "Func"); err != nil {

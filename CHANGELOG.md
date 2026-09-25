@@ -127,6 +127,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`dossierx skills export` prunes retired bundles (NIT-33).** Before writing a
+  tree, the export removes every bundle directory that tree's previous
+  `dossierx-skills.lock` listed and this binary no longer ships (a client that
+  exported v0.7.20 still had `dossierx-build-order`), and reports it as
+  `pruned` on that tree's form. Only `dossierx` / `dossierx-*` names are ever
+  removed, whatever the lock says. `skills export --check` reports every
+  `dossierx-*` directory in a checked tree that this binary does not ship as
+  `data.retired[]` and refuses `skills_drift`.
+- **Three new skill bundles; the router and claims skills slimmed (NIT-34,
+  NIT-35).** `dossierx-modules` (the reading order, `manifest show
+  --isolation` / `--integration`, `manifest list`, drafting `manifest.yaml`,
+  and every cap with its recovery: split or trim by default, raise a config
+  value only on the human's explicit yes), `dossierx-constitution` (what
+  belongs in the 800-word roof, the human-gated lock and re-lock, project
+  claims) and `dossierx-upgrading` (re-exporting skills, `layout_legacy`, the
+  pre-ledger crossing, `claim recover-approved-content`, and the
+  `governed_by` / doctrine-hub / `build_role` folds). The content moved out of
+  the router and `dossierx-claims`, which now carries a claim-writing guide
+  (one fact per claim, a summary that stands alone in `--isolation`,
+  `contract` vs `internals`, choosing `rests_on`); `dossierx-code-links`
+  gains "implement from a locked module, then tag". No skill teaches
+  `build_role` except as a key to delete.
 - **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list
   exactly `contract` and `internals`; any other name, a missing one or a
   duplicate is refused at config load. `contract` is the only surface another
@@ -141,6 +163,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`build_role` is gone (NIT-32).** The claim field, `claim new
+  --build-role`, `claim show`'s `build_role`, the graph payload's
+  `build_role` node key and the graph pane's `missing_build_phase` hint are
+  deleted with no alias; the graph payload schema is now 3. A claim file
+  that still carries `build_role:` fails strict decode at `load`: delete the
+  key, then unlock and re-lock each locked claim, since its lock hash moves
+  (as it already does for every claim this release, after `governed_by`).
+  **The code-link gate no longer reads it:** with `source_dirs` set, every
+  locked module claim must be linked to code. Project claims are exempt, and
+  a claim that genuinely has no code behind it declares `embodiment: {mode:
+  none, reason: "..."}`, which the human approves at lock.
+
 - **The doctrine hub (NIT-23).** The `doctrine_facet` config key, hub-gating
   (a doctrine dependency still draft refusing a lock), its
   `dependency_not_locked` error code (dead once the gate went, and deleted —
@@ -154,11 +188,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   propose/status/lock/show leaves are deleted, not stubbed. A locked
   implementation sequence is not a product once module `depends_on` exists
   (NIT-15). There is no replacement sequencer. Implement from locked
-  claims, module `depends_on`, and claim `rests_on` / `build_role`.
+  claims, module `depends_on`, and claim `rests_on`.
   Leftover artifact files and leftover ledger rows must not refuse `check`.
   The viewer has no Build order tab and no Mermaid bundle. The consumer
-  skill `dossierx-build-order` is not embedded. `build_role` remains a
-  claim field.
+  skill `dossierx-build-order` is not embedded.
 - The lock-policy adoption CLI leaf is deleted. Existing lock stores stay on
   their recorded policy; a new project still starts on lock policy v1. Policy
   evaluation, approvals, and baselines are unchanged. The surface is now
@@ -170,8 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the viewer no longer injects those claims onto every tab. `check` no
   longer prints an orientation-notes summary. Module “why / start here”
   belongs on ordinary declared-facet claims (and, once it exists, a
-  module `manifest.yaml` `summary` — NIT-7). `build_role: orientation` is
-  unchanged.
+  module `manifest.yaml` `summary` — NIT-7).
 - The `mirrors` edge is gone. `claim new --mirrors` is gone; `claim show`
   no longer reports `mirrors`/`mirrored_by`; catalog, graph payload, and
   the viewer no longer draw that relation (`EDGE_TYPES` is `rests_on`

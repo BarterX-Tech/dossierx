@@ -127,7 +127,7 @@ func TestClaimShowCorruptStoreCannotClaimReadinessAndWritesNothing(t *testing.T)
 func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 	const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	claimYAML := func(id, facet, status string, rests []string) string {
-		body := "id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: " + status + "\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: behavior\nbody: |\n  fixture claim.\n"
+		body := "id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: " + status + "\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  fixture claim.\n"
 		if len(rests) > 0 {
 			body += "rests_on:\n"
 			for _, dep := range rests {
@@ -288,7 +288,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		if len(deps) > 0 {
 			ro = model.RestsOnIDs(deps...)
 		}
-		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, BuildRole: model.BuildRoleBehavior, Summary: "bounded fixture", Body: "bounded fixture", RestsOn: ro}
+		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "bounded fixture", Body: "bounded fixture", RestsOn: ro}
 	}
 
 	makeChain := func(size int) shape {

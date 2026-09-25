@@ -66,7 +66,6 @@
       "short": "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
       "flags": [
         "--body",
-        "--build-role",
         "--config",
         "--dry-run",
         "--file",
@@ -361,8 +360,11 @@
   "skills": [
     "dossierx",
     "dossierx-claims",
+    "dossierx-modules",
+    "dossierx-constitution",
     "dossierx-comments",
-    "dossierx-code-links"
+    "dossierx-code-links",
+    "dossierx-upgrading"
   ],
   "http_routes": [
     "DELETE /api/claims/{id}/comments/{tid}",
@@ -513,9 +515,9 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:eed03ce91eb09de1f3a37676cf8590af32d4f4488d90c1c57a4faa4a023048a6",
+  "render_fingerprint": "sha256:61f0ce95f0b0e5dc483aac5f5721257e048e2e70ba2b8077c9e2c2c5593291c5",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:60720d3fdc085ba00ebc8345708e426ad693d29e3e6f7e09f102700ef8cf413b",
+    "cmd/dossierx": "sha256:3a9704ca71586cfb9802988cc8ffa46e69551464c90fe399fc688aa51e3326f4",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -528,19 +530,19 @@
     "internal/constitution": "sha256:d40d8ae4bb547e32a9c04fbae73cd887f290bab08e669f1355fbe196af8ccc31",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
-    "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
-    "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
+    "internal/graph": "sha256:b9c74d9040d5f27a0470c6fd3704b091642b2a15b768b4a64f402333f9cd8153",
+    "internal/implink": "sha256:e297341a131db9778df9fe76802251dbb307e4b468d60fd7693618eef313dd86",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:133bd97c345a179cc8d16c0d27c14956f652e47a12671055380ffb5e6e049624",
+    "internal/lint": "sha256:bfdc947895fabadc29e377e263cb1d53dd963bccb701424343741180e6278b94",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
-    "internal/lock": "sha256:9c8cc7d212cde4a538fcaa17b44c1d1d99719fd7fa54b998dfbc0f5b5793d115",
+    "internal/lock": "sha256:608240e56f5778b8e094a7dc882c72b59d4162d387d0c553b7c0657dbe5cd326",
     "internal/manifest": "sha256:75a080fbc1bc8128845b86f52019f16fd81685854ee198f6f0bb208627346514",
-    "internal/model": "sha256:1b248b01289a60091b67cd5336761319981e6f681dabe2b959adb78a23277029",
+    "internal/model": "sha256:8bd651c90729969d5daf5b4240956f1ff9e26a552bf0c8d3c33fd9c066432897",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
     "internal/reaudit": "sha256:cfa9ca71f387eac1ec8ce841cf80a59d2acd14f20a001820987d7cde7ccf5852",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:21a0e9e84b902aecfaa1ddc4af34a3358dc0c6d37aba6c37ae03cd9e4c0f2a46",
+    "internal/render": "sha256:5f9c0fc6d877799ce234c5996e5c8e2f5d19b3668edead32f443f7cc240b9c70",
     "internal/render/components": "sha256:6e4977a2925f33a1b9d2ff6754db7ebad62b9bf77a8cd5989a24c5b8aff71dae",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
@@ -548,7 +550,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
-    "skills": "sha256:6fa7d482f3934a2f5494cd5ca90b6dbb7330906efb81a3246f9181f16dfd2fb8"
+    "skills": "sha256:54211b30eb631951e2f0a5f40fb419412ad5d9c9f3b9ef11c66845098282b9e1"
   },
   "envelope": {
     "keys": [
@@ -684,7 +686,6 @@
         "status"
       ],
       "claimShowData": [
-        "build_role",
         "claim_id",
         "comments",
         "edges",
@@ -875,6 +876,7 @@
         "hand_edited",
         "missing",
         "no_lock",
+        "retired",
         "stale",
         "trees",
         "unverified"
