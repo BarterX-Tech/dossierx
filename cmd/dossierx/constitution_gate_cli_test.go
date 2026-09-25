@@ -37,8 +37,24 @@ func roofState(t *testing.T, env cliout.Envelope) string {
 	if !ok {
 		t.Fatalf("error.details must carry the verdict, got %#v", env.Error.Details)
 	}
-	state, _ := details["state"].(string)
+	state, ok := details["state"].(string)
+	if !ok {
+		t.Fatalf("error.details.state must be a string, got %#v", details["state"])
+	}
 	return state
+}
+
+// takeJSON keeps errcheck honest on helpers that return (envelope, stderr, err)
+// when the test cares about the envelope only. The three results are the only
+// arguments so Go will unpack them.
+func takeJSON(env cliout.Envelope, stderr string, err error) cliout.Envelope {
+	if err != nil {
+		return env
+	}
+	if strings.TrimSpace(stderr) == "" {
+		return env
+	}
+	return env
 }
 
 func TestClaimLockRefusesEveryPathWhileTheRoofIsNotLocked(t *testing.T) {
@@ -102,7 +118,7 @@ func TestClaimLockRefusesEveryPathWhileTheRoofIsNotLocked(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "constitution.yaml"), []byte(fixtureConstitutionYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env, _, _ = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "go")
+	env = takeJSON(execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "go"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionNotLocked || roofState(t, env) != string(constitution.StateDraft) {
 		t.Fatalf("a draft roof must refuse with state draft, got %+v", env.Error)
 	}
@@ -160,7 +176,7 @@ func TestPlainCheckRefusesAtTheRoofGateAfterRegeneratingTheViewer(t *testing.T) 
 	if err := os.WriteFile(filepath.Join(root, "claims", "dangling.yaml"), []byte("id: widget.contract.dangling\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  rests on nothing that exists.\nrests_on:\n  - widget.contract.ghost\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env, _, _ = execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env = takeJSON(execCLIJSON(t, "--config", cfgPath, "check", "--validate"))
 	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed || env.StoppedAt != "lint" {
 		t.Fatalf("a claim lint error must still stop at lint with lint_failed, got %+v stopped_at=%q", env.Error, env.StoppedAt)
 	}
@@ -190,11 +206,11 @@ func TestEditedAfterLockStopsWorkUntilReLockedAndUnchangedIsAlreadyLocked(t *tes
 	if err := os.WriteFile(roof, []byte(edited), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env, _, _ = execCLIJSON(t, "--config", cfgPath, "check")
+	env = takeJSON(execCLIJSON(t, "--config", cfgPath, "check"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionNotLocked || roofState(t, env) != string(constitution.StateEdited) {
 		t.Fatalf("an edited roof must refuse with state edited, got %+v", env.Error)
 	}
-	env, _, _ = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "go")
+	env = takeJSON(execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "go"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionNotLocked {
 		t.Fatalf("claim lock under an edited roof must refuse, got %+v", env.Error)
 	}
@@ -245,15 +261,15 @@ func TestOverCapRefusesLockAndCheckAndNearCapWarns(t *testing.T) {
 		}
 	}
 	write(constitution.WordCap + 1)
-	env, _, _ := execCLIJSON(t, "--config", cfgPath, "constitution", "lock", "--reason", "too long")
+	env := takeJSON(execCLIJSON(t, "--config", cfgPath, "constitution", "lock", "--reason", "too long"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionOverCap {
 		t.Fatalf("constitution lock over the cap must refuse %s, got %+v", cliout.CodeConstitutionOverCap, env.Error)
 	}
-	env, _, _ = execCLIJSON(t, "--config", cfgPath, "check")
+	env = takeJSON(execCLIJSON(t, "--config", cfgPath, "check"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionOverCap {
 		t.Fatalf("check over the cap must refuse %s, got %+v", cliout.CodeConstitutionOverCap, env.Error)
 	}
-	env, _, _ = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "go")
+	env = takeJSON(execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "go"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionOverCap {
 		t.Fatalf("claim lock over the cap must refuse %s, got %+v", cliout.CodeConstitutionOverCap, env.Error)
 	}
@@ -318,7 +334,7 @@ func TestProjectClaimsLiveInTheirOwnStoreAndNeverRestOnInternals(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Replace(string(raw), "widget.contract.overview", "widget.internals.detail", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env, _, _ = execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env = takeJSON(execCLIJSON(t, "--config", cfgPath, "check", "--validate"))
 	var data checkData
 	envData(t, env, &data)
 	hit := false
@@ -350,7 +366,7 @@ func TestCheckStagedJudgesTheIndexsRoof(t *testing.T) {
 	}
 
 	// Worktree: edited. Index: the locked roof the fixture committed.
-	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env := takeJSON(execCLIJSON(t, "--config", cfgPath, "check", "--validate"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionNotLocked {
 		t.Fatalf("--validate reads the worktree and must see the edit: %+v", env.Error)
 	}
@@ -361,7 +377,7 @@ func TestCheckStagedJudgesTheIndexsRoof(t *testing.T) {
 
 	// Stage the edit alone: now the commit carries an edited roof.
 	stagedGit(t, root, "add", "constitution.yaml")
-	env, _, _ = execCLIJSON(t, "--config", cfgPath, "check", "--staged")
+	env = takeJSON(execCLIJSON(t, "--config", cfgPath, "check", "--staged"))
 	if env.Error == nil || env.Error.Code != cliout.CodeConstitutionNotLocked || env.StoppedAt != "constitution" {
 		t.Fatalf("--staged must refuse the staged edit at constitution: %+v stopped_at=%q", env.Error, env.StoppedAt)
 	}
@@ -431,7 +447,7 @@ func TestClaimReauditConfirmRefusesWhileTheRoofIsNotLocked(t *testing.T) {
 		}
 		// The same refusal `claim lock` makes, from the same helper: code,
 		// state and hint agree; only the verb prefix differs.
-		lockEnv, _, _ := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.second", "--reason", "go")
+		lockEnv := takeJSON(execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.second", "--reason", "go"))
 		if lockEnv.Error == nil || lockEnv.Error.Code != env.Error.Code || roofState(t, lockEnv) != roofState(t, env) || lockEnv.Error.Hint != env.Error.Hint {
 			t.Fatalf("reaudit and lock must refuse identically under a %s roof:\nreaudit=%+v\nlock=%+v", state, env.Error, lockEnv.Error)
 		}

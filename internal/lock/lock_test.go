@@ -2,7 +2,6 @@ package lock
 
 import (
 	"errors"
-	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -1289,7 +1289,7 @@ func TestGovernanceDriftPropagationIsStaged(t *testing.T) {
 // TestHubGatingIgnoresGovernedBy is the behavioural half of "hub gating is
 // byte-for-byte unchanged" (D-6, branch (a)): governance is a DRIFT edge, not a
 // GATING edge. A child naming an UNLOCKED doctrine-facet claim only through
-// governed_by.type still locks. Widening dependencyIDs instead of adding
+// governed_by.type still locks. Widening the lock-refusal rests_on walk instead of adding
 // BaselineDependencyIDs is exactly what this test refuses, and it is a refusal
 // documented in internal/lint/governed_cycle.go and FORMAT.md.
 func TestConstitutionRefCreatesNoGraphBaseline(t *testing.T) {

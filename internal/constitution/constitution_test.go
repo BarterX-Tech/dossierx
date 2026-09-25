@@ -33,6 +33,15 @@ func write(t *testing.T, dir, name, body string) string {
 	return p
 }
 
+func mustParse(t *testing.T, body, name string) *File {
+	t.Helper()
+	f, err := Parse([]byte(body), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
 func TestParseAcceptsTheThreeSectionsAndDefaultsToDraft(t *testing.T) {
 	f, err := Parse([]byte(sample), "constitution.yaml")
 	if err != nil {
@@ -78,7 +87,7 @@ func TestLoadDistinguishesMissingFromUnreadable(t *testing.T) {
 }
 
 func TestWordCountCountsTitlesAndBodiesNotSlugs(t *testing.T) {
-	f, _ := Parse([]byte(sample), "c")
+	f := mustParse(t, sample, "c")
 	// "One roof" (2) + "Every module builds toward this file." (6) +
 	// "One reviewable fact, in one file." (6) +
 	// "Claims never cite the constitution" (5) + "It is unsaid context for every claim." (7)
@@ -112,12 +121,12 @@ func TestCapsAndNearCapBand(t *testing.T) {
 }
 
 func TestHashIgnoresStatusAndMovesOnContent(t *testing.T) {
-	a, _ := Parse([]byte(sample), "c")
-	b, _ := Parse([]byte(strings.Replace(sample, "status: draft", "status: locked", 1)), "c")
+	a := mustParse(t, sample, "c")
+	b := mustParse(t, strings.Replace(sample, "status: draft", "status: locked", 1), "c")
 	if Hash(a) != Hash(b) {
 		t.Fatal("status must not move the content hash: the lock flips it")
 	}
-	c, _ := Parse([]byte(strings.Replace(sample, "One roof", "Two roofs", 1)), "c")
+	c := mustParse(t, strings.Replace(sample, "One roof", "Two roofs", 1), "c")
 	if Hash(a) == Hash(c) {
 		t.Fatal("editing a title must move the hash")
 	}
@@ -127,7 +136,7 @@ func TestHashIgnoresStatusAndMovesOnContent(t *testing.T) {
 }
 
 func TestTextIsTheWordsInSectionOrder(t *testing.T) {
-	f, _ := Parse([]byte(sample), "c")
+	f := mustParse(t, sample, "c")
 	text := Text(f)
 	for _, want := range []string{"# Invariants", "## One roof (single-roof)", "Every module builds toward this file.", "# Glossary", "## claim", "# Decisions", "## Claims never cite the constitution (no-refs)"} {
 		if !strings.Contains(text, want) {
@@ -163,7 +172,7 @@ func TestEvaluateStates(t *testing.T) {
 	if v := EvaluateAt(path, nil); v.State != StateUnrecorded {
 		t.Fatalf("locked file, no record: %+v", v)
 	}
-	f, _ := Parse([]byte(locked), path)
+	f := mustParse(t, locked, path)
 	rec := &LockRecord{Hash: Hash(f), Reason: "yes", LockedAt: "2026-09-24T00:00:00Z"}
 	v = EvaluateAt(path, rec)
 	if v.State != StateLocked || !v.Locked() || v.StoredHash != rec.Hash || v.Reason != "yes" {
@@ -186,7 +195,7 @@ func TestOverCapIsReportedOnALockedRoofToo(t *testing.T) {
 	path := filepath.Join(dir, "constitution.yaml")
 	big := "status: locked\ninvariants:\n  - slug: x\n    body: " + strings.Repeat("word ", WordCap+1) + "\n"
 	write(t, dir, "constitution.yaml", big)
-	f, _ := Parse([]byte(big), path)
+	f := mustParse(t, big, path)
 	v := EvaluateAt(path, &LockRecord{Hash: Hash(f)})
 	if v.State != StateLocked || !v.OverCap {
 		t.Fatalf("a locked roof over the cap is locked AND over cap: %+v", v)

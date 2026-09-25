@@ -28,11 +28,11 @@ package check
 import (
 	"errors"
 	"fmt"
-	"github.com/BarterX-Tech/dossierx/internal/constitution"
-	"github.com/BarterX-Tech/dossierx/internal/lint"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"

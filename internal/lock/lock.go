@@ -1379,18 +1379,14 @@ func LockConstitution(store *Store, f *constitution.File, reason string, now tim
 	return rec
 }
 
-func dependencyIDs(c model.Claim) []string {
-	return append([]string(nil), c.RestsOn.IDs...)
-}
-
 // BaselineDependencyIDs is the dependency set whose CONTENT a locked claim is
 // baselined against: its rests_on targets, each recorded once.
 //
-// It is kept distinct from dependencyIDs even though both read rests_on today.
-// dependencyIDs feeds a lock REFUSAL; this feeds a drift baseline. The retired
-// governed_by edge was the one input that sat in this set and not the other
-// (NIT-29); keeping the seam means a later drift-only edge kind is added here,
-// not to the gate. RESTS ON NONE contributes nothing: a stated absence is not
+// Lock refusal walks claim.RestsOn.IDs directly (internal/lock/policy.go).
+// This helper feeds a drift baseline. The retired governed_by edge was the
+// one input that sat in this set and not the refusal walk (NIT-29); keeping
+// the exported helper means a later drift-only edge kind is added here, not
+// to the gate. RESTS ON NONE contributes nothing: a stated absence is not
 // an edge and has no content to baseline (NIT-24).
 //
 // Exported because internal/comments and cmd/dossierx used to keep hand-copied
