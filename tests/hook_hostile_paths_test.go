@@ -314,6 +314,7 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 	mustRun(repo, "git config user.name", "git", "config", "user.name", "hostile path corpus")
 	mustRun(repo, "git config commit.gpgsign", "git", "config", "commit.gpgsign", "false")
 	mustRun(project, "claim new", binPath, "--format", "text", "claim", "new", hostileClaimID,
+		"--summary", "Fixture claim used by the engine test corpus.",
 		"--body", "the widget answers within 200ms.",
 		"--rests-on-none-reason", "hostile-path fixture, not backed by any doctrine claim")
 	mustRun(project, "check", binPath, "--format", "text", "check")

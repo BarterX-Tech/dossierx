@@ -1,4 +1,5 @@
 id: dangmod.contract.main
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: dangmod
 status: draft

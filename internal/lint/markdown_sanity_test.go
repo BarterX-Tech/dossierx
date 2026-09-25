@@ -330,15 +330,17 @@ func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
 			Module:  "widget",
 			Status:  model.StatusDraft,
 			Layout:  model.LayoutCard,
+			Summary: "An anchor claim with nothing wrong with it.",
 			Body:    "An anchor claim with nothing wrong with it.",
 			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 		{
-			ID:     "widget.contract.crafty",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusDraft,
-			Layout: model.LayoutCard,
+			ID:      "widget.contract.crafty",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusDraft,
+			Layout:  model.LayoutCard,
+			Summary: "Crafted markdown-sanity findings stay warnings.",
 			Body: "## a reserved heading\n\n" +
 				"a ` that never closes, an *opener with no partner, and a line\n" +
 				"that ends in a break marker with nothing to break to\\\n\n" +

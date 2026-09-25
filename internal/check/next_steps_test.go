@@ -21,7 +21,7 @@ import (
 // draftWithOpenThread is a draft claim carrying an unresolved comment thread —
 // the lock gate's third refusal, and one the "still draft" hint cannot see.
 func draftWithOpenThread(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
@@ -127,7 +127,7 @@ func TestNextSteps_FixturePreconditions(t *testing.T) {
 // one command that could not work.
 func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.aaa\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.aaa\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  rests on a still-draft sibling.\n" +
 			"rests_on:\n  - widget.contract.zzz\n",
 		"claims/z.yaml": draftClaim("widget.contract.zzz"),
@@ -148,7 +148,7 @@ func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 // lockedWithOpenThread is a LOCKED claim carrying an unresolved thread. It is
 // review_pending because an open thread is one of the three triggers.
 func lockedWithOpenThread(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +

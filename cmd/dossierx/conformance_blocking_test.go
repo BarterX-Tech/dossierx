@@ -15,6 +15,7 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Neutral conformance gate fixture.
 body: neutral conformance gate fixture
 rests_on:
   none: true

@@ -32,6 +32,7 @@ rests_on:
   reason: fixture claim, not backed by any real doctrine
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this fixture project documents.
   It is described in prose, not in rows.

@@ -53,6 +53,7 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 			}}},
 		}
 	}},
+	"summary":           {hashed: true, mutate: func(c *model.Claim) { c.Summary = "a different one-line summary" }},
 	"body":              {hashed: true, mutate: func(c *model.Claim) { c.Body = "a different body" }},
 	"rows":              {hashed: true, mutate: func(c *model.Claim) { c.Rows = []model.Row{{"col": "changed"}} }},
 	"section":           {hashed: true, mutate: func(c *model.Claim) { c.Section = "9 - elsewhere" }},
@@ -107,6 +108,7 @@ func fullyPopulatedClaim() model.Claim {
 		Layout:          model.LayoutMockup,
 		Kind:            model.KindFact,
 		BuildRole:       model.BuildRoleSchema,
+		Summary:         "the approved one-line summary",
 		Body:            "the approved body",
 		Rows:            []model.Row{{"col": "value", "other": 2}},
 		Section:         "1 - orientation",
@@ -300,6 +302,19 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 	if LockedClaimHash(swapped) == LockedClaimHash(base) {
 		t.Errorf("LockedClaimHash does not cover \"raw_html\" — the ledger would sign off on a swapped " +
 			"unescaped-HTML payload as unchanged, which is the one edit that most needs a signature")
+	}
+
+	// summary (NIT-8): both hashes move when a present summary is edited.
+	// ContentHash gates empty the same way as raw_html so a claim that never
+	// had the field keeps its recorded baseline; LockedClaimHash signs it
+	// unconditionally because it is persisted author content.
+	rewritten := fullyPopulatedClaim()
+	rewritten.Summary = "a different one-line summary"
+	if ContentHash(rewritten) == ContentHash(base) {
+		t.Errorf("ContentHash does not cover \"summary\" — editing a locked claim's summary would leave dependents unflagged")
+	}
+	if LockedClaimHash(rewritten) == LockedClaimHash(base) {
+		t.Errorf("LockedClaimHash does not cover \"summary\" — the ledger would sign off on that edit as unchanged")
 	}
 }
 
@@ -632,6 +647,11 @@ func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
 	empty.Tracks = []model.TrackRef{}
 	if got := LockedClaimHash(empty); got != lockedClaimHashNoOptionalFields {
 		t.Errorf("LockedClaimHash with explicitly empty sources/tracks = %s, want the unchanged %s", got, lockedClaimHashNoOptionalFields)
+	}
+	withSummary := base
+	withSummary.Summary = "one line about the claim"
+	if LockedClaimHash(withSummary) == lockedClaimHashNoOptionalFields {
+		t.Fatal("a present summary must move LockedClaimHash")
 	}
 
 	// Gaining either field must move the hash, and the two must move it

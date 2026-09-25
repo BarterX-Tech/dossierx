@@ -148,6 +148,7 @@ var lockedClaimHashOmitWhenEmpty = map[string]bool{
 	"sources":    true,
 	"tracks":     true,
 	"scope":      true,
+	"summary":    true,
 }
 
 // LockedClaimHash returns a deterministic hash over every persisted field of c

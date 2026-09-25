@@ -60,6 +60,7 @@ func facetClaim(id, facet string) string {
 facet: ` + facet + `
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim in the ` + facet + ` facet.
 rests_on:
@@ -73,7 +74,7 @@ rests_on:
 // so one of these cards is NOT by itself taller than a desktop viewport.
 func longBodyClaim(id, facet string, paragraphs int) string {
 	var b strings.Builder
-	b.WriteString("id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: draft\nbody: |\n")
+	b.WriteString("id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n")
 	for i := 0; i < paragraphs; i++ {
 		b.WriteString("  Paragraph " + strconv.Itoa(i) + " lorem ipsum dolor sit amet consectetur adipiscing.\n\n")
 	}

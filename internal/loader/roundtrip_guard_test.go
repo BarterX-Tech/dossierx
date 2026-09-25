@@ -80,7 +80,7 @@ func TestSaveClaimIfUnchanged_RefusesStoreBrickingBody(t *testing.T) {
 			path := filepath.Join(dir, "a.yaml")
 			// Seed a valid, loadable claim file first so we can prove the refused
 			// overwrite leaves the ORIGINAL good bytes intact (not a brick).
-			good := []byte("id: widget.contract.a\nfacet: contract\nstatus: draft\nbody: good\n")
+			good := []byte("id: widget.contract.a\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: good\n")
 			if err := os.WriteFile(path, good, 0o644); err != nil {
 				t.Fatalf("seed: %v", err)
 			}

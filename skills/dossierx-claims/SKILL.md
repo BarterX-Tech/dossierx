@@ -24,7 +24,7 @@ the five rules are there and are not repeated here.
 
 | you want to | run |
 |---|---|
-| author a claim | `dossierx claim new <id> --body "..." --rests-on-none-reason "..."` |
+| author a claim | `dossierx claim new <id> --summary "..." --body "..." --rests-on-none-reason "..."` |
 | check your work, writing nothing | `dossierx check --validate` |
 | build everything (catalog, viewer, code-link scan, ledger gate) | `dossierx check` |
 | know everything about one claim | `dossierx claim show <id>` |
@@ -47,13 +47,15 @@ it out.
 - `status: draft | locked` — **only** `dossierx claim lock` / `unlock` may change this. Editing it
   by hand walks past the lint gate, the roof gate and the open-thread gate as though all three
   had passed, and the lock ledger will report it as `integrity_failed` on the next check.
+- `summary` — **required** on every claim, project claims too: one plain-text line ≤ `max_claim_summary_chars` (200), else `summary-required`/`-oversize`.
 - `body` (prose) and/or `rows` (a table; every cell must be an authored **string**, so quote
   numbers and booleans). A claim needs at least one. `body` gets the wider **block** ceiling —
   paragraphs, fenced code, lists, GFM pipe tables, images (claim `body`/`steps` only, `src`
   confined to that claim's own `assets/`), headings `###`–`######` only, one level of blockquote,
   and every inline construct. Every `rows` cell gets the narrower **inline-only** ceiling: no block
   construct and no image. See FORMAT.md's "`body` and the markdown ceiling" section for the full
-  construct-by-surface account — do not reach past either ceiling.
+  construct-by-surface account — do not reach past either ceiling. `body`+`steps`+`rows` share
+  `max_claim_body_chars` (2000 code points; `raw_html` exempt); over is `body-oversize`.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required
@@ -67,10 +69,8 @@ it out.
   constitution** below). Targets are **drift** edges (a target's content changing under a locked
   claim flags `review_pending`). `governed_by` is gone as of v0.7.21 — a claim file that still
   carries it fails to load; the router's "governed_by is gone" section says what to do.
-- **Facets are hard law:** exactly `contract` and `internals`, engine-fixed. Only `contract` may be
-  read or cited by another module; a foreign module's `internals` is refused (`rests-on-target`) and
-  never appears in integration output (catalog, `manifest show --integration`). Doctrine is not a
-  third facet — it belongs in the constitution or a contract claim.
+- **Facets are hard law:** exactly `contract` and `internals`. Another module may cite only `contract`;
+  foreign `internals` is refused (`rests-on-target`) and never exported (catalog, integration).
 - **A `rests_on` loop is refused** at ERROR (`cycle`).
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
@@ -81,9 +81,9 @@ it out.
 ## Authoring — `dossierx claim new`, not a text editor
 
 Hand-writing claim YAML is the thing this design gates. Author through the command: it enforces
-the id grammar, the body requirement and the required `rests_on` rule **before** it writes, then lints
-the project with the new claim in it — an `orphan` warning on a claim with no edges yet is a
-warning, not a refusal.
+the id grammar, the body and `--summary` requirements and the required `rests_on` rule **before**
+it writes, then lints the project with the new claim in it — an `orphan` warning on a claim with no
+edges yet is a warning, not a refusal.
 
 `--rests-on` / `--rests-on-none-reason` / `--build-role` / `--section` / `--layout` are all
 available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks

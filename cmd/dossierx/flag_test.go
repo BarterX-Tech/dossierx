@@ -95,7 +95,7 @@ func TestFlagRefusesARawHTMLCardEndToEnd(t *testing.T) {
 	lockFixtureConstitution(t, cfgPath)
 	const id = "widget.contract.card"
 	claimPath := filepath.Join(claimsDir, "card.yaml")
-	claim := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	claim := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a card claim that also renders markup.\n" +
 		"raw_html: \"<div>a rendered mock</div>\"\nraw_html_reviewed: true\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"

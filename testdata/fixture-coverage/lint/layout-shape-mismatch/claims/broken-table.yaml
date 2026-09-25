@@ -1,4 +1,5 @@
 id: layoutmod.contract.broken-table
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: layoutmod
 status: draft

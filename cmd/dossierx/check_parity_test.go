@@ -86,10 +86,10 @@ const parityConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nm
 func TestCheckParity_DraftClaims(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  fixture start-here claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"claims/c1.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/c1.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  fixture claim one.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -112,7 +112,7 @@ func TestCheckParity_DraftClaims(t *testing.T) {
 func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a locked claim with an open comment thread.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
@@ -138,7 +138,7 @@ func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 func TestCheckParity_LintErrorFailsFast(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  broken fixture.\n" +
 			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})
@@ -160,7 +160,7 @@ func TestCheckParity_LintErrorFailsFast(t *testing.T) {
 func TestCheckParity_FullyLocked(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a fully locked claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -180,7 +180,7 @@ func TestCheckParity_FullyLocked(t *testing.T) {
 func TestCheckParity_ImplinkScanAndStatus(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig+"source_dirs:\n  - src\n", map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a locked claim linked from code.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
@@ -205,7 +205,7 @@ func TestCheckParity_ImplinkScanAndStatus(t *testing.T) {
 func TestCheckParity_RawHTMLFailsAtLint(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a claim.\nraw_html: \"<b>hi</b>\"\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -227,7 +227,7 @@ func TestCheckParity_RawHTMLFailsAtLint(t *testing.T) {
 func TestCheckParity_ScanErrorFailsAtScan(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig+"source_dirs:\n  - src\n", map[string]string{
-		"claims/draft.yaml": "id: widget.contract.draft\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/draft.yaml": "id: widget.contract.draft\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-claim: widget.contract.draft\nfunc Foo() {}\n",
@@ -250,7 +250,7 @@ func TestCheckParity_ScanErrorFailsAtScan(t *testing.T) {
 func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a locked claim to flag.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -280,13 +280,13 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 // trigger-partition would drop the claim from next-steps entirely.
 func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 	root := t.TempDir()
-	baseV1 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	baseV1 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  base body, version one.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
-	baseV2 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	baseV2 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 		"body: |\n  base body, version TWO — changed to drift the dependent.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
-	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 		"body: |\n  the dependent claim.\n" +
 		"rests_on:\n  - widget.contract.base\n"
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
@@ -369,13 +369,13 @@ func TestCheckParity_MalformedClaimLoadErrorPrefix(t *testing.T) {
 func TestCheckParity_ProjectClaimsStagedAndValidateAgree(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/overview.yaml": "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/overview.yaml": "id: widget.contract.overview\nsummary: A locked module claim resting on a project claim.\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a locked module claim resting on a project claim.\n" +
 			"rests_on:\n  - project.scope\n",
-		"project-claims/scope.yaml": "id: project.scope\nscope: project\nstatus: locked\nlayout: card\n" +
+		"project-claims/scope.yaml": "id: project.scope\nsummary: A locked project claim.\nscope: project\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a locked project claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
-		"project-claims/retention.yaml": "id: project.retention\nscope: project\nstatus: locked\nlayout: card\n" +
+		"project-claims/retention.yaml": "id: project.retention\nsummary: A locked project claim resting on a module contract claim.\nscope: project\nstatus: locked\nlayout: card\n" +
 			"body: |\n  a locked project claim resting on a module contract claim.\n" +
 			"rests_on:\n  - widget.contract.overview\n",
 	})

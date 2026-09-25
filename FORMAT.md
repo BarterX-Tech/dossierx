@@ -45,6 +45,7 @@ facet: contract | internals    # engine-fixed; module claims only. Any other nam
 scope: project                 # project claims only (id project.<slug>, no module, no facet); module claims omit it
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
+summary: string                # REQUIRED; one-line plain text, no markdown
 layout: card | table | list | steps | tree | banner | mockup  # optional
 kind: fact                     # optional, default fact; any other value is refused
 build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
@@ -159,6 +160,22 @@ the ERROR that refuses a foreign module's internals on check and lock (see
 internals. Integration (including `catalog.json`) never includes internals.
 The viewer strip is three peer tabs — Manifest | Contract | Internals — in
 that order. Manifest is not a banner and not a claim facet.
+
+### `summary`
+
+`summary` is required on every claim: one line of plain text, no markdown,
+with its own ceiling `max_claim_summary_chars` (omit → 200 Unicode code
+points). Missing, whitespace-only, multiline, or markdown-shaped values are
+`summary-required`. A present summary over the ceiling is `summary-oversize`.
+Both are ERROR on draft and locked claims alike; `claim lock` refuses.
+`dossierx claim list` prints the summary. A non-empty summary is part of
+the dependency-drift `ContentHash`. There is no exemption: mockup claims
+and project claims need one too.
+
+`body` + `steps` + `rows` cells share `max_claim_body_chars` (omit → 2000
+Unicode code points). Over is `body-oversize` (ERROR). `raw_html` is exempt.
+The engine refuses; it does not truncate. Zero and negatives on either
+config key are config-load errors.
 
 ### Content is required
 
@@ -888,9 +905,9 @@ node — with three differences:
 - **No cap and no manifest.** Every module may rest on every project claim, so
   there is no export boundary to curate; project claims do not count toward a
   per-module cap. The tier-1 read is the system-generated **project claims
-  index** — one line per claim, id plus summary (the first non-blank body line
-  until NIT-8's `summary` field lands) — that `manifest show --isolation` and
-  `--integration` carry; `claim show project.<slug>` is the body on demand.
+  index** — one line per claim, id plus its own required `summary` — that
+  `manifest show --isolation` and `--integration` carry; `claim show
+  project.<slug>` is the body on demand.
 
 A project claim's `rests_on` may name other `project.*` ids and any module's
 `*.contract.*`; never any module's `*.internals.*` (`rests-on-target`). The
@@ -1451,6 +1468,16 @@ mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
                                   # entry must also appear in modules[]. An
                                   # unset/empty list means NO module may author
                                   # one; it is not a vacuous pass.
+max_claim_body_chars: int        # optional; omit → 2000. Unicode code-point
+                                  # ceiling on body + steps + rows cells.
+                                  # check reports body-oversize (ERROR) when
+                                  # over, and claim lock refuses. raw_html is
+                                  # exempt. Values below 1 are a config-load
+                                  # error.
+max_claim_summary_chars: int     # optional; omit → 200. Unicode code-point
+                                  # ceiling on summary. check reports
+                                  # summary-oversize (ERROR) when over.
+                                  # Values below 1 are a config-load error.
 viewer:
   template_overrides: path        # optional override dir; resolved relative
                                     # to this file's own directory. Eligible

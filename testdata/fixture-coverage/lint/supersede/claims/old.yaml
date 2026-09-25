@@ -1,4 +1,5 @@
 id: supersedemod.contract.old
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: supersedemod
 status: draft

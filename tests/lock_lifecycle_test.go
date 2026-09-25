@@ -68,6 +68,7 @@ func llWriteClaim(t *testing.T, root string, spec llClaimSpec) string {
 	if spec.reviewPending {
 		b.WriteString("review_pending: true\n")
 	}
+	b.WriteString("summary: Fixture claim used by the engine test corpus.\n")
 	b.WriteString("body: |\n  " + spec.body + "\n")
 	if len(spec.restsOn) > 0 {
 		b.WriteString("rests_on:\n")

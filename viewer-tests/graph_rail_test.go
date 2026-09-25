@@ -46,6 +46,7 @@ func railClaim(id, facet, module, restsOn string) string {
 facet: ` + facet + `
 module: ` + module + `
 status: draft
+summary: Fixture claim used by the engine test corpus.
 `
 	if restsOn != "" {
 		body += "rests_on:\n  - " + restsOn + "\n"

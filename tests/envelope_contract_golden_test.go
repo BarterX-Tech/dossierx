@@ -291,17 +291,17 @@ func envTracked(t *testing.T, dir string) map[string]string {
 	lockFixtureConstitution(t, dir)
 	claims := map[string]string{
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
 			"rests_on:\n  none: true\n  reason: fixture claim\n",
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
 			"rests_on:\n  none: true\n  reason: fixture claim\n",
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
-			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
 			"tracks:\n  - id: guest-checkout\n" +
 			"rests_on:\n  none: true\n  reason: fixture claim\n",
@@ -414,7 +414,7 @@ func envDangling(t *testing.T, dir string) map[string]string {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
 	lockFixtureConstitution(t, dir)
-	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 		"body: |\n  a claim resting on an id nothing declares.\n" +
 		"rests_on:\n  - widget.contract.ghost\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
@@ -466,7 +466,7 @@ func envelopeCases() []envelopeCase {
 		{"claim show / a draft claim", envFresh, []string{"claim", "show", "widget.contract.overview"}},
 		{"claim show / an id no claim carries", envFresh, []string{"claim", "show", "widget.contract.ghost"}},
 		{"claim list / every claim", envFresh, []string{"claim", "list"}},
-		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--body", "another fact", "--rests-on-none-reason", "fixture"}},
+		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--summary", "Fixture claim used by the engine test corpus.", "--body", "another fact", "--rests-on-none-reason", "fixture"}},
 
 		{"claim lock / approved", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},

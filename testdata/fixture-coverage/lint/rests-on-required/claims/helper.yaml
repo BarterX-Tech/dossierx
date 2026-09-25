@@ -1,4 +1,5 @@
 id: restreq.contract.helper
+summary: A helper claim so the bare claim below is not also an orphan.
 facet: contract
 module: restreq
 status: draft

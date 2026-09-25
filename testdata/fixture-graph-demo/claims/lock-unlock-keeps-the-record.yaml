@@ -1,4 +1,5 @@
 id: lock.internals.unlock-keeps-the-record
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: lock
 status: locked

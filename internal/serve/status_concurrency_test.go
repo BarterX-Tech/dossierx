@@ -20,7 +20,7 @@ func TestStatusConcurrentGETAndHEADCoalesceAndRemainFresh(t *testing.T) {
 		large[i] = 'x'
 	}
 	for i := 0; i < 32; i++ {
-		claim := fmt.Sprintf("id: widget.contract.c%02d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: %s\nrests_on:\n  none: true\n  reason: fixture\n", i, large)
+		claim := fmt.Sprintf("id: widget.contract.c%02d\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: %s\nrests_on:\n  none: true\n  reason: fixture\n", i, large)
 		if i == 0 {
 			claim += "embodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://state\n      expectation:\n        shape: set\n        value: [new]\n"
 		}

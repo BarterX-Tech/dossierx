@@ -128,7 +128,7 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "claim", "list"},
 		{"--config", cfgPath, "claim", "list", "--review-pending"},
 		{"--config", cfgPath, "claim", "list", "--migrated"},
-		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--body", "a new fact", "--rests-on-none-reason", "fixture"},
+		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--summary", "Fixture claim used by the engine test corpus.", "--body", "a new fact", "--rests-on-none-reason", "fixture"},
 		{"--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "unlock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "flag", "widget.contract.overview", "--dry-run"},
@@ -248,7 +248,7 @@ func TestEnvelope_CheckSuccess(t *testing.T) {
 func TestEnvelope_CheckFailsAtLint(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  broken fixture.\n" +
 			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})
@@ -423,7 +423,7 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 
 func TestEnvelope_BuildOrderStatusIsRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
@@ -588,7 +588,7 @@ func TestLockGateCodes(t *testing.T) {
 	// A dangling rests_on => lint_failed.
 	broken := t.TempDir()
 	brokenCfg := writeCheckFixture(t, broken, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  a claim.\n" +
 			"rests_on:\n  - widget.contract.nope\n",
 	})
@@ -782,7 +782,7 @@ func buildOrderFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: schema\n" +
 			"body: |\n  a locked claim with a build role.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
@@ -792,7 +792,7 @@ func buildOrderFixture(t *testing.T) string {
 
 func TestEnvelope_BuildOrderVerbsAreRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
@@ -890,7 +890,7 @@ func TestTextModeErrorLineMatchesCobra(t *testing.T) {
 func TestEnvelopeKeysAreSnakeCase(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  broken fixture.\n" +
 			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})

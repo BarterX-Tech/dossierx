@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "flags": {
+    "cli.schema.json-envelope": {
+      "claim_says": "the wording above is still current",
+      "now_does": "the implementation moved since this was approved and the claim needs a second look",
+      "reason": "demo fixture: seeded review-pending after the NIT-8 summary re-lock",
+      "flagged_at": "2026-09-25T08:50:17.613945Z"
+    },
+    "engine.behavior.lint-runs-before-catalog": {
+      "claim_says": "the wording above is still current",
+      "now_does": "the implementation moved since this was approved and the claim needs a second look",
+      "reason": "demo fixture: seeded review-pending after the NIT-8 summary re-lock",
+      "flagged_at": "2026-09-25T08:50:17.784592Z"
+    },
+    "engine.behavior.loader-walks-claims-dir": {
+      "claim_says": "the wording above is still current",
+      "now_does": "the implementation moved since this was approved and the claim needs a second look",
+      "reason": "demo fixture: seeded review-pending after the NIT-8 summary re-lock",
+      "flagged_at": "2026-09-25T08:50:17.840753Z"
+    },
+    "engine.schema.catalog-shape": {
+      "claim_says": "the wording above is still current",
+      "now_does": "the implementation moved since this was approved and the claim needs a second look",
+      "reason": "demo fixture: seeded review-pending after the NIT-8 summary re-lock",
+      "flagged_at": "2026-09-25T08:50:17.670485Z"
+    },
+    "engine.schema.edge-kinds": {
+      "claim_says": "the wording above is still current",
+      "now_does": "the implementation moved since this was approved and the claim needs a second look",
+      "reason": "demo fixture: seeded review-pending after the NIT-8 summary re-lock",
+      "flagged_at": "2026-09-25T08:50:17.727738Z"
+    },
+    "lock.schema.lock-store": {
+      "claim_says": "the wording above is still current",
+      "now_does": "the implementation moved since this was approved and the claim needs a second look",
+      "reason": "demo fixture: seeded review-pending after the NIT-8 summary re-lock",
+      "flagged_at": "2026-09-25T08:50:17.899594Z"
+    }
+  }
+}

@@ -1,4 +1,5 @@
 id: project.foreign
+summary: A project claim resting on a foreign module's internals.
 scope: project
 status: draft
 layout: card

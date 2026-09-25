@@ -623,7 +623,7 @@ func TestStaged_ErasedReviewIsUndetected(t *testing.T) {
 // commentedDraftClaim is a DRAFT claim carrying a human's OPEN thread — the
 // state that blocks `claim lock`, and therefore the state worth erasing.
 func commentedDraftClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +

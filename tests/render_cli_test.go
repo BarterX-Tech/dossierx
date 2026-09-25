@@ -34,6 +34,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	// data, not a shape error.
 	claim := "id: emptyrowsmod.internals.empty-table\n" +
 		"facet: internals\nmodule: emptyrowsmod\nstatus: draft\nlayout: table\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"rows: []\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "empty-table.yaml"), []byte(claim), 0o644); err != nil {
@@ -161,6 +162,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 	}
 	claim := "id: widget.internals.console-mockup\n" +
 		"facet: internals\nmodule: widget\nstatus: " + status + "\nlayout: mockup\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: A console mockup.\n" +
 		"raw_html: '" + rawHTML + "'\n" +
 		"raw_html_reviewed: " + boolStr(reviewed) + "\n" +

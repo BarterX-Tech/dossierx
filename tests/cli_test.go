@@ -159,7 +159,7 @@ func writeFixtureProject(t *testing.T, root, module string) {
 	}
 
 	claim := "id: " + module + ".contract.overview\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  fixture claim for CLI tests.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
@@ -403,7 +403,7 @@ func TestLintFailureExitsNonZeroInBothFormats(t *testing.T) {
 	// A claim with a dangling rests_on reference: guaranteed error-severity
 	// "dangling" lint finding.
 	claim := "id: brokenmod.contract.overview\n" +
-		"facet: contract\nmodule: brokenmod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: brokenmod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  broken fixture claim.\n" +
 		"rests_on:\n  - brokenmod.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {

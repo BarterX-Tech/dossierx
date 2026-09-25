@@ -74,7 +74,8 @@
         "--layout",
         "--rests-on",
         "--rests-on-none-reason",
-        "--section"
+        "--section",
+        "--summary"
       ]
     },
     {
@@ -252,6 +253,7 @@
     "ambiguous",
     "asset-scope",
     "body-edge-hint",
+    "body-oversize",
     "code-orphan",
     "comments-unresolved",
     "cycle",
@@ -274,6 +276,8 @@
     "source-ref-unused",
     "source-shape",
     "status-shape",
+    "summary-oversize",
+    "summary-required",
     "supersede",
     "track-empty",
     "track-multi-owner",
@@ -489,7 +493,7 @@
   ],
   "render_fingerprint": "sha256:e25eab638bca6196254a3afdc30e2b54a7e9e3e9e3a31b602a3e6ce5ace45110",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:5628ec2f86d4c9d707ea71b6d717d9335d272d07f345770c71a5cd6c46a6fcfd",
+    "cmd/dossierx": "sha256:e734b393679062a16e3d690f08a9a8bc709a7716df350cd1ac86ab0d6260e432",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -497,7 +501,7 @@
     "internal/check": "sha256:a4ebfbed6312721aad86b1f192c19443a078b5fcff3d8f3ac55384a9800eebb0",
     "internal/cliout": "sha256:bbd11a5f3a2b24aee4d557280f470f971f2124402dbabb5d1a8cac678bce1bfe",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:ef1db45a465b68b7d17e4478e979acbfa2170364f1262489ff00e380aec3ffe9",
+    "internal/config": "sha256:89aefc6ca6dd23ca13da08e8fb8cde361932d605dfda181f51b992145f7f081a",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:d40d8ae4bb547e32a9c04fbae73cd887f290bab08e669f1355fbe196af8ccc31",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
@@ -505,11 +509,11 @@
     "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:a197dad8aaac12ff16b21c58062b1e836ec257ee67c85980ff05fb1b2815cd5a",
+    "internal/lint": "sha256:b6761e9d73221e4f482b025569b35997919465db969d75592b400ca920be9b34",
     "internal/loader": "sha256:3f016bec4118c24d48427e7ed085288b5df5ae8f4040dafabcfda907becda39a",
-    "internal/lock": "sha256:e192569b38c5968faa5e8b9079e815e62569bd0de679424a5e62bb7db8861fa4",
-    "internal/model": "sha256:0fd89e250d483bda6ef3d3b642627b29d8b1fe281370d2b888664379c1bf588c",
-    "internal/projectclaims": "sha256:95004afec9f9248fb6adfc32c911713555204b6bf530e4259993e5b3169924f5",
+    "internal/lock": "sha256:9ec21d80696bf11fe83e1559de80fded994e4237c32f8b23d434448642d147b9",
+    "internal/model": "sha256:1b248b01289a60091b67cd5336761319981e6f681dabe2b959adb78a23277029",
+    "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
     "internal/reaudit": "sha256:cfa9ca71f387eac1ec8ce841cf80a59d2acd14f20a001820987d7cde7ccf5852",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
@@ -521,7 +525,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
-    "skills": "sha256:cf0295802190774336e2cb0506df33b407876f5de157b3431239cf2e57a3a85f"
+    "skills": "sha256:b0c655704077f758ea7d4200a6b0ffac307e1c1f920a8a88c2df9000876cd8c8"
   },
   "envelope": {
     "keys": [
@@ -901,7 +905,7 @@
     "commands": 22,
     "error_codes": 49,
     "http_routes": 14,
-    "lint_rules": 31,
+    "lint_rules": 34,
     "nouns": 8
   }
 }

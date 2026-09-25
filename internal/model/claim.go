@@ -8,6 +8,8 @@ package model
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -268,6 +270,11 @@ type Claim struct {
 	// the project-owned adapter that emits observations.
 	Embodiment *Embodiment `yaml:"embodiment,omitempty"`
 
+	// Summary is the required one-line plain-text description of the claim.
+	// check ERRORs when it is missing, multiline, markdown-shaped, or over
+	// max_claim_summary_chars. It is part of lock.ContentHash when non-empty.
+	Summary string `yaml:"summary,omitempty"`
+
 	Body string `yaml:"body,omitempty"`
 	Rows []Row  `yaml:"rows,omitempty"`
 
@@ -407,4 +414,38 @@ func (c Claim) EffectiveKind() Kind {
 // IsProjectClaim reports a project-claims store node.
 func (c Claim) IsProjectClaim() bool {
 	return c.Scope == ScopeProject || IsProjectClaimID(c.ID)
+}
+
+// ClaimProseChars is the Unicode code-point count of body + steps + rows
+// cells. raw_html is excluded: NIT-8 caps authored prose, not markup.
+func ClaimProseChars(c Claim) int {
+	n := utf8.RuneCountInString(c.Body)
+	for _, step := range c.Steps {
+		n += utf8.RuneCountInString(step)
+	}
+	for _, row := range c.Rows {
+		for key, value := range row {
+			if key == rowOrderKey {
+				continue
+			}
+			n += utf8.RuneCountInString(rowCellText(value))
+		}
+	}
+	return n
+}
+
+func rowCellText(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+// SummaryIsMissing reports a blank or whitespace-only summary.
+func SummaryIsMissing(summary string) bool {
+	return strings.TrimSpace(summary) == ""
 }

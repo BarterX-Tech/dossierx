@@ -3,6 +3,7 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is read and written through one accessor pair.
 rests_on:

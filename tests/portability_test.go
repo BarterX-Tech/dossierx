@@ -133,23 +133,24 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 
 	claims := map[string]string{
 		"sprocket-contract.yaml": "id: sprocket.contract.overview\n" +
-			"facet: contract\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: sprocket\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: sprocket contract overview.\n" +
 			"rests_on:\n  - gizmo.contract.overview\n",
 		"gizmo-contract.yaml": "id: gizmo.contract.overview\n" +
-			"facet: contract\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: gizmo\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: gizmo contract overview.\n" +
 			"rests_on:\n  none: true\n  reason: toy project fixture\n",
 		"gizmo-internals.yaml": "id: gizmo.internals.overview\n" +
-			"facet: internals\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
+			"facet: internals\nmodule: gizmo\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: gizmo internals overview.\n" +
 			"rests_on:\n  - gizmo.contract.overview\n",
 		"sprocket-steps.yaml": "id: sprocket.internals.steps\n" +
 			"facet: internals\nmodule: sprocket\nstatus: draft\n" +
+			"summary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - unbox the sprocket\n  - attach to the gizmo\n" +
 			"rests_on:\n  - sprocket.contract.overview\n",
 		"sprocket-retire.yaml": "id: sprocket.internals.retire\n" +
-			"facet: internals\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
+			"facet: internals\nmodule: sprocket\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: sprocket retirement overview.\n" +
 			"rests_on:\n  - sprocket.internals.steps\n",
 	}
@@ -843,7 +844,7 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 	}
 	lockFixtureConstitution(t, root)
 	claim := "id: offlinemod.contract.overview\n" +
-		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: offline fixture claim.\n" +
 		"rests_on:\n  none: true\n  reason: offline fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
@@ -918,7 +919,7 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 	}
 	lockFixtureConstitution(t, projectRoot)
 	claim := "id: collidemod.contract.overview\n" +
-		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: fixture claim exercised from a colliding-parent-path build.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {

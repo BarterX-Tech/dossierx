@@ -1,4 +1,5 @@
 id: project.roof
+summary: A project claim usable as a rests_on target by any module claim.
 scope: project
 status: draft
 layout: card

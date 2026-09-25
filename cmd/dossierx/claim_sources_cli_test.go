@@ -31,7 +31,7 @@ func writeSourcedClaimFixture(t *testing.T) string {
 	}
 	lockFixtureConstitution(t, cfgPath)
 
-	sourced := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	sourced := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  requests retry three times with backoff [1], and the ceiling is fixed [2].\n" +
 		"sources:\n" +
 		"  - ref: 1\n    kind: external\n    title: Vendor retry guidance\n" +
@@ -46,7 +46,7 @@ func writeSourcedClaimFixture(t *testing.T) string {
 		t.Fatalf("write sourced claim: %v", err)
 	}
 
-	bare := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	bare := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the total time budget across retries.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "timeout.yaml"), []byte(bare), 0o644); err != nil {

@@ -3,6 +3,7 @@ facet: contract
 module: statusmod
 status: published
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   A claim whose status is neither draft nor locked -- "published" was
   borrowed from some other system. This is the exact case the status-shape

@@ -1,4 +1,5 @@
 id: lock.contract.ledger-first
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: lock
 status: draft

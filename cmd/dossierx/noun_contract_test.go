@@ -218,7 +218,7 @@ func TestThreadLastActivityTracksTheReopen(t *testing.T) {
 func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  the original approved body.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})

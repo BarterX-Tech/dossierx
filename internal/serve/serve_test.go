@@ -29,7 +29,7 @@ const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmod
 // draftClaim is a lint-clean draft card used as the target for "add" (adding a
 // thread to a draft never sets review_pending, so the file stays predictable).
 func draftClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 }
@@ -37,7 +37,7 @@ func draftClaim(id string) string {
 // lockedClaimWithOpenThread is a locked card carrying one open thread c-aaaaaa,
 // the target for reply/resolve/reopen/edit/delete in the admission matrix.
 func lockedClaimWithOpenThread(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
@@ -554,7 +554,7 @@ func TestPing_Shape(t *testing.T) {
 // =============================================================================
 
 func TestRoot_RendersBrokenProjectsNotBlank(t *testing.T) {
-	danglingRef := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	danglingRef := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  rests on a ghost.\n" +
 		"rests_on:\n  - widget.contract.ghost\n"
 
@@ -857,7 +857,7 @@ func assertErrorCode(t *testing.T, data []byte, want string) {
 
 func TestListComments_OpenFilter(t *testing.T) {
 	files := map[string]string{
-		"claims/mixed.yaml": "id: widget.contract.mixed\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/mixed.yaml": "id: widget.contract.mixed\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  mixed threads.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +

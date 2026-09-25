@@ -1,4 +1,5 @@
 id: widget.internals.fields
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: widget
 status: draft

@@ -1,4 +1,5 @@
 id: project.scope
+summary: Every widget is kept under one roof; no module redefines it.
 scope: project
 status: draft
 layout: card

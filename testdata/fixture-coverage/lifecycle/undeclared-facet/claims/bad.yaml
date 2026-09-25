@@ -1,4 +1,5 @@
 id: udfmod.ghostfacet.claim
+summary: Fixture claim used by the engine test corpus.
 facet: ghostfacet
 module: udfmod
 status: draft

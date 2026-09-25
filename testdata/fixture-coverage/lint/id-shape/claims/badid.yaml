@@ -1,4 +1,5 @@
 id: idshapemod.badid
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: idshapemod
 status: draft

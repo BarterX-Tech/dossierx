@@ -60,6 +60,7 @@ func readingScaleProject(t *testing.T) (p *project, totalClaims int) {
 facet: %s
 module: mod%02d
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   scale fixture claim %s — body text for layout cost.
 rests_on:

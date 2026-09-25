@@ -1,4 +1,5 @@
 id: beacon.internals.why-simple
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: beacon
 status: draft

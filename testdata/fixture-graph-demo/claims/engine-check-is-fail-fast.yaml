@@ -1,4 +1,5 @@
 id: engine.contract.check-is-fail-fast
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: engine
 status: locked
