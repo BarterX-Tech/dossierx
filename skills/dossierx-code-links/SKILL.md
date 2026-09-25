@@ -1,8 +1,9 @@
 ---
 name: dossierx-code-links
 description: >-
-  Grounding finished code in the DossierX claims it implements, and what to do
-  when a later code change means a locked claim is no longer true. Use this
+  Implementing code from a locked DossierX module, grounding it in the claims it
+  implements, and what to do when a later code change means a locked claim is no
+  longer true. Use this WHENEVER you are about to implement code from locked claims,
   WHENEVER you finish implementing or modifying code against a locked claim,
   whenever you add a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
   comment to source, whenever dossierx check reports a drifted or unlinked claim,
@@ -27,11 +28,29 @@ Two deliberately separate channels close the loop from spec back to code:
 | Gate | **fully yours**, no human gate | human, via `dossierx claim flag` → reaudit |
 | Trigger | code finished, or a linked file moved with identical meaning | the code's *meaning* changed relative to what the claim states |
 
+## Implement from a locked module, then tag
+
+There is no sequencer: the order comes from the claims themselves.
+
+1. **Read the module, not the tree.** `dossierx manifest show <module> --isolation` gives the
+   constitution, the project claims index, the manifest and every claim's summary. Implement from
+   **locked** claims; a draft can still change under you.
+2. **Follow the edges.** The manifest's `depends_on` names the neighbor contracts this module
+   consumes — `manifest show <module> --integration` gives their summaries. A claim's `rests_on`
+   (`dossierx claim show <id>`) names what must already hold for it to be true: build or confirm
+   those first. Read a body with `claim show` only when the summary is not enough.
+3. **Tag as you finish each claim** (Channel B below), then run plain `dossierx check`. When the
+   project sets `source_dirs`, every locked module claim must end up linked to real code. One that
+   genuinely has no code behind it is the human's call, not a file to tag around: on their yes it
+   declares `embodiment: {mode: none, reason: "…"}` through unlock → fix → lock.
+4. **When the code cannot honor a claim**, stop: that is a comment or a flag for the human (Channel
+   A), never a quiet deviation and never a tag on code that does something else.
+
 ## Channel B — tag it, `dossierx check` does the rest
 
 The everyday case, and the only thing most implementation work needs.
 
-1. Immediately after finishing a claim's code (or, for a `verification` claim, its test), put a
+1. Immediately after finishing a claim's code (or, for a claim a test proves, that test), put a
    comment next to the relevant function or type. Any comment syntax works — the engine searches
    for the literal marker string:
 
@@ -87,8 +106,8 @@ and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write 
 `build/code-links/<module>.json` — never hand-edit it.
 
 **Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
-refuses (`unlinked_claims`, `stopped_at: links`) when any locked `schema`/`behavior`/`api`/
-`verification` claim has no linked file, or a claim with `steps:` is not tagged on every step — a
+refuses (`unlinked_claims`, `stopped_at: links`) when any locked module claim (project claims and
+claims declaring `embodiment: {mode: none}` are exempt) has no linked file, or a claim with `steps:` is not tagged on every step — a
 `dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
 The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
 claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
@@ -146,13 +165,11 @@ Meaning changed, body-only claim → Channel A:
   flag having changed nothing. After flagging, tell the human the store needs committing.
 
   `dossierx claim flag` works only on claims whose content really is **just `body`**. The test is
-  on CONTENT, not on the layout name — since v0.4.1 the two are different questions. A claim is
-  refused with `structured_layout` when it carries `rows` or `steps` (whether or not `layout:` says
-  `table`/`steps` — an omitted layout is inferred from exactly those fields), when its layout is
-  `mockup`, **or when it carries `raw_html` at all, on any layout including `card`, `banner`,
-  `list` and `tree`**. `raw_html` became an attachment legal on every layout in v0.4.1, and the
-  refusal moved with it: a `card` claim bearing markup the viewer renders is refused, and there is
-  no layout that is flaggable by name.
+  on CONTENT, not on the layout name. A claim is refused with `structured_layout` when it carries
+  `rows` or `steps` (whether or not `layout:` says `table`/`steps` — an omitted layout is inferred
+  from exactly those fields), when its layout is `mockup`, **or when it carries `raw_html` at all, on
+  any layout including `card`, `banner`, `list` and `tree`**: a `card` claim bearing markup the
+  viewer renders is refused, and there is no layout that is flaggable by name.
 
   The reason is one sentence: a flag-sourced reaudit rewrites `body` and nothing else, so accepting
   it on any of those would clear `review_pending` while the `rows`, `steps` or `raw_html` a reader

@@ -127,6 +127,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`dossierx skills export` prunes retired bundles (NIT-33).** Before writing a
+  tree, the export removes every bundle directory that tree's previous
+  `dossierx-skills.lock` listed and this binary no longer ships (a client that
+  exported v0.7.20 still had `dossierx-build-order`), and reports it as
+  `pruned` on that tree's form. Only `dossierx` / `dossierx-*` names are ever
+  removed, whatever the lock says. `skills export --check` reports every
+  `dossierx-*` directory in a checked tree that this binary does not ship as
+  `data.retired[]` and refuses `skills_drift`.
+- **Three new skill bundles; the router and claims skills slimmed (NIT-34,
+  NIT-35).** `dossierx-modules` (the reading order, `manifest show
+  --isolation` / `--integration`, `manifest list`, drafting `manifest.yaml`,
+  and every cap with its recovery: split or trim by default, raise a config
+  value only on the human's explicit yes), `dossierx-constitution` (what
+  belongs in the 800-word roof, the human-gated lock and re-lock, project
+  claims) and `dossierx-upgrading` (re-exporting skills, `layout_legacy`, the
+  pre-ledger crossing, `claim recover-approved-content`, and the
+  `governed_by` / doctrine-hub / `build_role` folds). The content moved out of
+  the router and `dossierx-claims`, which now carries a claim-writing guide
+  (one fact per claim, a summary that stands alone in `--isolation`,
+  `contract` vs `internals`, choosing `rests_on`); `dossierx-code-links`
+  gains "implement from a locked module, then tag". No skill teaches
+  `build_role` except as a key to delete.
 - **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list
   exactly `contract` and `internals`; any other name, a missing one or a
   duplicate is refused at config load. `contract` is the only surface another

@@ -34,7 +34,7 @@ func (bodyOversizeLint) Check(claims []model.Claim, cfg *config.Config) []Findin
 			LintName: "body-oversize",
 			ClaimID:  c.ID,
 			Severity: SeverityError,
-			Message:  fmt.Sprintf("body+steps+rows is %d characters, over the project cap of %d; shorten the prose or raise max_claim_body_chars in project.config.yaml", n, limit),
+			Message:  fmt.Sprintf("body+steps+rows is %d characters, over the project cap of %d; shorten the prose or split the claim; raising max_claim_body_chars in project.config.yaml is the human's call, only on their explicit approval", n, limit),
 		})
 	}
 	return findings

@@ -38,7 +38,7 @@ func (summaryOversizeLint) Check(claims []model.Claim, cfg *config.Config) []Fin
 			LintName: "summary-oversize",
 			ClaimID:  c.ID,
 			Severity: SeverityError,
-			Message:  fmt.Sprintf("summary is %d characters, over the project cap of %d; shorten it or raise max_claim_summary_chars in project.config.yaml", n, limit),
+			Message:  fmt.Sprintf("summary is %d characters, over the project cap of %d; shorten it or split the claim; raising max_claim_summary_chars in project.config.yaml is the human's call, only on their explicit approval", n, limit),
 		})
 	}
 	return findings
