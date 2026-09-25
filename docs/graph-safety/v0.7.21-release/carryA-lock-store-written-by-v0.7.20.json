@@ -1,0 +1,414 @@
+{
+  "version": 3,
+  "hashes": {
+    "widget.contract.b": {
+      "widget.contract.a": "8d905ec6f278c8e04592a1d149237de7d2a05474a9678d5fd79b4e7f54aff486"
+    },
+    "widget.contract.c": {
+      "widget.contract.b": "cdff3e597ec3a9c2945e56793a8ce69b8b4625a2bfbf9b2e645c4a71ff0c2381"
+    },
+    "widget.contract.d": {
+      "widget.contract.c": "6d59afd52d38c3eaa1a1d1bc022198772f72cb8e08651d5c790b82a65d06b63f"
+    },
+    "widget.contract.e": {
+      "widget.contract.b": "cdff3e597ec3a9c2945e56793a8ce69b8b4625a2bfbf9b2e645c4a71ff0c2381",
+      "widget.contract.c": "6d59afd52d38c3eaa1a1d1bc022198772f72cb8e08651d5c790b82a65d06b63f"
+    }
+  },
+  "receipts": {
+    "widget.contract.b": {
+      "widget.contract.a": {
+        "hash": "8d905ec6f278c8e04592a1d149237de7d2a05474a9678d5fd79b4e7f54aff486",
+        "content": {
+          "ID": "widget.contract.a",
+          "Facet": "contract",
+          "Module": "widget",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "BuildRole": "",
+          "Embodiment": null,
+          "Body": "Claim a states one fact.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "Mirrors": null,
+          "RestsOn": null,
+          "Governed": {
+            "Type": "none",
+            "Reason": "carry-over fixture"
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/a.yaml"
+        }
+      }
+    },
+    "widget.contract.c": {
+      "widget.contract.b": {
+        "hash": "cdff3e597ec3a9c2945e56793a8ce69b8b4625a2bfbf9b2e645c4a71ff0c2381",
+        "content": {
+          "ID": "widget.contract.b",
+          "Facet": "contract",
+          "Module": "widget",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "BuildRole": "",
+          "Embodiment": null,
+          "Body": "Claim b states one fact.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "Mirrors": null,
+          "RestsOn": [
+            "widget.contract.a"
+          ],
+          "Governed": {
+            "Type": "none",
+            "Reason": "carry-over fixture"
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/b.yaml"
+        }
+      }
+    },
+    "widget.contract.d": {
+      "widget.contract.c": {
+        "hash": "6d59afd52d38c3eaa1a1d1bc022198772f72cb8e08651d5c790b82a65d06b63f",
+        "content": {
+          "ID": "widget.contract.c",
+          "Facet": "contract",
+          "Module": "widget",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "BuildRole": "",
+          "Embodiment": null,
+          "Body": "Claim c states one fact.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "Mirrors": null,
+          "RestsOn": [
+            "widget.contract.b"
+          ],
+          "Governed": {
+            "Type": "none",
+            "Reason": "carry-over fixture"
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/c.yaml"
+        }
+      }
+    },
+    "widget.contract.e": {
+      "widget.contract.b": {
+        "hash": "cdff3e597ec3a9c2945e56793a8ce69b8b4625a2bfbf9b2e645c4a71ff0c2381",
+        "content": {
+          "ID": "widget.contract.b",
+          "Facet": "contract",
+          "Module": "widget",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "BuildRole": "",
+          "Embodiment": null,
+          "Body": "Claim b states one fact.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "Mirrors": null,
+          "RestsOn": [
+            "widget.contract.a"
+          ],
+          "Governed": {
+            "Type": "none",
+            "Reason": "carry-over fixture"
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/b.yaml"
+        }
+      },
+      "widget.contract.c": {
+        "hash": "6d59afd52d38c3eaa1a1d1bc022198772f72cb8e08651d5c790b82a65d06b63f",
+        "content": {
+          "ID": "widget.contract.c",
+          "Facet": "contract",
+          "Module": "widget",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "BuildRole": "",
+          "Embodiment": null,
+          "Body": "Claim c states one fact.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "Mirrors": null,
+          "RestsOn": [
+            "widget.contract.b"
+          ],
+          "Governed": {
+            "Type": "none",
+            "Reason": "carry-over fixture"
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/c.yaml"
+        }
+      }
+    }
+  },
+  "locked_at": {
+    "widget.contract.a": "2026-09-25T19:07:40.668406389Z",
+    "widget.contract.b": "2026-09-25T19:07:40.574874203Z",
+    "widget.contract.c": "2026-09-25T19:07:40.593580509Z",
+    "widget.contract.d": "2026-09-25T19:07:40.617116908Z",
+    "widget.contract.e": "2026-09-25T19:07:40.637739486Z"
+  },
+  "ledger": {
+    "widget.contract.a": {
+      "subject": "claim",
+      "hash": "2c658a81b600ac0cacb152fae82f06000128063008fa13420ab89522a2966eb5",
+      "at": "2026-09-25T19:07:40.668441697Z",
+      "actor": "unknown",
+      "reason": "re-approve revised a",
+      "content": {
+        "ID": "widget.contract.a",
+        "Facet": "contract",
+        "Module": "widget",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "",
+        "Embodiment": null,
+        "Body": "Claim a states one fact, now revised.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": null,
+        "Governed": {
+          "Type": "none",
+          "Reason": "carry-over fixture"
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/a.yaml"
+      }
+    },
+    "widget.contract.b": {
+      "subject": "claim",
+      "hash": "7ef6fed5d4bf9e6dfe9ce25cdc9c5e41e7be5f283db7f2fc1a745b82889a758e",
+      "at": "2026-09-25T19:07:40.574899453Z",
+      "actor": "unknown",
+      "reason": "carry-over fixture approval",
+      "content": {
+        "ID": "widget.contract.b",
+        "Facet": "contract",
+        "Module": "widget",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "",
+        "Embodiment": null,
+        "Body": "Claim b states one fact.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": [
+          "widget.contract.a"
+        ],
+        "Governed": {
+          "Type": "none",
+          "Reason": "carry-over fixture"
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/b.yaml"
+      }
+    },
+    "widget.contract.c": {
+      "subject": "claim",
+      "hash": "ecc4dfb3a047a602e4182c3dad3e60a0082b2ceccae76046ea1855dd7dfefc9b",
+      "at": "2026-09-25T19:07:40.593608437Z",
+      "actor": "unknown",
+      "reason": "carry-over fixture approval",
+      "content": {
+        "ID": "widget.contract.c",
+        "Facet": "contract",
+        "Module": "widget",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "",
+        "Embodiment": null,
+        "Body": "Claim c states one fact.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": [
+          "widget.contract.b"
+        ],
+        "Governed": {
+          "Type": "none",
+          "Reason": "carry-over fixture"
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/c.yaml"
+      }
+    },
+    "widget.contract.d": {
+      "subject": "claim",
+      "hash": "22ff4fa22b95a04ce0a67f87aebadf30d726a3795bbfd03cfd9872142b96d339",
+      "at": "2026-09-25T19:07:40.617190812Z",
+      "actor": "unknown",
+      "reason": "carry-over fixture approval",
+      "content": {
+        "ID": "widget.contract.d",
+        "Facet": "contract",
+        "Module": "widget",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "",
+        "Embodiment": null,
+        "Body": "Claim d states one fact.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": [
+          "widget.contract.c"
+        ],
+        "Governed": {
+          "Type": "none",
+          "Reason": "carry-over fixture"
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/d.yaml"
+      }
+    },
+    "widget.contract.e": {
+      "subject": "claim",
+      "hash": "1360774ef661cbbea148742edf678748e4b815386935913aded9a35919f56ba9",
+      "at": "2026-09-25T19:07:40.637785259Z",
+      "actor": "unknown",
+      "reason": "carry-over fixture approval",
+      "content": {
+        "ID": "widget.contract.e",
+        "Facet": "contract",
+        "Module": "widget",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "BuildRole": "",
+        "Embodiment": null,
+        "Body": "Claim e states one fact.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": [
+          "widget.contract.b",
+          "widget.contract.c"
+        ],
+        "Governed": {
+          "Type": "none",
+          "Reason": "carry-over fixture"
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/tmp/claude-0/-home-claude-dossierx/af1a85f0-622e-5ae6-be49-0e33bb124333/scratchpad/r0721/carryA/claims/e.yaml"
+      }
+    }
+  }
+}

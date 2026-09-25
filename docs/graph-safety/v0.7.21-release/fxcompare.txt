@@ -1,0 +1,31 @@
+fixture-basic: v0.7.20 claims=2 candidate exported=1 shared=1 booleans equal=1 differ=0
+  v0.7.20 policy_version values: {'1': 2}; candidate: {'1': 1}
+  only in v0.7.20: 1 by facet {'internals': 1}
+fixture-conformance-v1: v0.7.20 claims=5 candidate exported=5 shared=5 booleans equal=5 differ=0
+  v0.7.20 policy_version values: {'1': 5}; candidate: {'1': 5}
+fixture-graph-demo: v0.7.20 claims=58 candidate exported=21 shared=11 booleans equal=4 differ=7
+  v0.7.20 policy_version values: {'0': 58}; candidate: {'1': 21}
+  only in v0.7.20: 47 by facet {'behavior': 16, 'decision': 10, 'overview': 5, 'schema': 11, 'verification': 5}
+  only in candidate: ['cli.contract.six-nouns', 'engine.contract.catalog-shape', 'engine.contract.claim-shape', 'engine.contract.facts-not-verdicts', 'engine.contract.single-source-of-truth', 'engine.contract.start-here', 'lock.contract.ledger-first', 'telemetry.contract.what-this-module-is', 'viewer.contract.facts-not-verdicts', 'viewer.contract.read-me-first']
+    cli.contract.noun-list-is-fixed: v0.7.20 locked (True, True, False, True) {} edges={'rests_on': ['cli.schema.json-envelope'], 'governed_by': {'type': 'engine.decision.single-source-of-truth'}}
+      cand   locked (True, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on_internals_omitted': 1}
+    cli.contract.serve-noun: v0.7.20 draft (False, True, False, False) {} edges={'rests_on': ['cli.schema.json-envelope'], 'governed_by': {'type': 'none', 'reason': 'a demo corpus claim, not backed by any real doctrine'}}
+      cand   draft (False, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on_internals_omitted': 1}
+    engine.contract.build-is-pure: v0.7.20 locked (True, True, False, True) {} edges={'rests_on': ['engine.schema.catalog-shape'], 'governed_by': {'type': 'none', 'reason': 'a demo corpus claim, not backed by any real doctrine'}}
+      cand   locked (True, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on': ['engine.contract.catalog-shape']}
+    lock.contract.lock-is-human-approved: v0.7.20 locked (True, True, False, True) {} edges={'rests_on': ['lock.behavior.lock-gates'], 'governed_by': {'type': 'engine.decision.single-source-of-truth'}}
+      cand   locked (True, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on_internals_omitted': 1}
+    lock.contract.review-pending-is-engine-managed: v0.7.20 draft (False, True, False, False) {} edges={'rests_on': ['lock.behavior.lock-gates'], 'governed_by': {'type': 'none', 'reason': 'a demo corpus claim, not backed by any real doctrine'}}
+      cand   draft (False, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on_internals_omitted': 1}
+    viewer.contract.no-network-at-runtime: v0.7.20 locked (True, True, False, True) {} edges={'rests_on': ['viewer.schema.payload-shape'], 'governed_by': {'type': 'none', 'reason': 'a demo corpus claim, not backed by any real doctrine'}}
+      cand   locked (True, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on_internals_omitted': 1}
+    viewer.contract.render-is-pure: v0.7.20 locked (True, True, False, True) {} edges={'rests_on': ['engine.contract.build-is-pure'], 'governed_by': {'type': 'engine.decision.single-source-of-truth'}}
+      cand   locked (True, True, True, False) {'review_causes:upstream_dependency_review/direct_dependency_change': 1, 'causes:upstream_dependency_review/direct_dependency_change': 1} edges={'rests_on': ['engine.contract.build-is-pure']}
+fixture-portability: v0.7.20 claims=3 candidate exported=0 shared=0 booleans equal=0 differ=0
+  v0.7.20 policy_version values: {'1': 3}; candidate: {}
+  only in v0.7.20: 3 by facet {'rationale': 1, 'spec': 2}
+fixture-theme-flat: v0.7.20 claims=10 candidate exported=5 shared=5 booleans equal=4 differ=1
+  v0.7.20 policy_version values: {'0': 10}; candidate: {'1': 5}
+  only in v0.7.20: 5 by facet {'decision': 2, 'internals': 3}
+    widget.contract.reviewed: v0.7.20 locked (True, True, True, False) {'review_causes:own_thread/own_thread': 1, 'causes:own_thread/own_thread': 1} edges={'rests_on': ['panel.contract.api'], 'governed_by': {'type': 'none', 'reason': 'fixture claim, not backed by any real doctrine'}}
+      cand   draft (False, True, True, False) {'review_causes:own_thread/own_thread': 1, 'review_causes:unapproved_edit/unapproved_edit': 1, 'causes:own_thread/own_thread': 1, 'causes:unapproved_edit/unapproved_edit': 1} edges={'rests_on': ['panel.contract.api']}
