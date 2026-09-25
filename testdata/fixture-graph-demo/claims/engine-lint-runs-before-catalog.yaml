@@ -4,7 +4,6 @@ facet: internals
 module: engine
 status: locked
 layout: card
-build_role: behavior
 body: |
   A single error-severity finding stops the pipeline above the catalog and render stages. No corpus that fails review ever produces a rendered artifact.
 rests_on:

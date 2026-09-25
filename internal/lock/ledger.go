@@ -18,7 +18,7 @@
 //	                                       marks a DEPENDENT stale; being stale
 //	                                       is not being tampered with, and this
 //	                                       row still holds.)
-//	flip build_role/section/order/emphasis ContentHash covers none of them
+//	flip section/order/emphasis            ContentHash covers none of them
 //	flip locked -> draft to dodge review   the claim simply looks like a draft
 //
 // The ledger closes all five by recording, at every legitimate approval, the

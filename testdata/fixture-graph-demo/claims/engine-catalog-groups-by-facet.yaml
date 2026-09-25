@@ -4,7 +4,6 @@ facet: internals
 module: engine
 status: locked
 layout: card
-build_role: behavior
 body: |
   Grouping is built by an explicit sort rather than by ranging over a map, so two builds over the same input are byte-identical.
 rests_on:

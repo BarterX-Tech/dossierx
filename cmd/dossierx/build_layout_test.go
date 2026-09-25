@@ -374,8 +374,8 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		t.Helper()
 		root = t.TempDir()
 		cfgPath, _ = icWriteFixtureProject(t, root, "widget")
-		blWrite(t, filepath.Join(root, "claims", "one.yaml"), "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: schema\nbody: |\n  one.\nrests_on:\n  none: true\n  reason: fixture\n")
-		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: orientation\nbody: |\n  fixture claim.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "one.yaml"), "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  one.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nembodiment:\n  mode: none\n  reason: context only, no code\nbody: |\n  fixture claim.\nrests_on:\n  none: true\n  reason: fixture\n")
 		blGitInit(t, root)
 		for _, id := range []string{"widget.contract.one", "widget.contract.overview"} {
 			if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
@@ -401,7 +401,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	}
 	t.Run("claim lock", func(t *testing.T) {
 		root, cfgPath := seed(t)
-		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: schema\nbody: |\n  three.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  three.\nrests_on:\n  none: true\n  reason: fixture\n")
 		refusedAndBlocked(t, cfgPath,
 			[]string{"claim", "lock", "widget.contract.three", "--dry-run", "--reason", "ok"},
 			[]string{"claim", "lock", "widget.contract.three", "--reason", "ok"})
@@ -421,7 +421,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	t.Run("batch claim lock preview and refusal before the sentinel", func(t *testing.T) {
 		root, cfgPath := seed(t)
 		for _, id := range []string{"a", "b"} {
-			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: schema\nbody: |\n  "+id+".\nrests_on:\n  none: true\n  reason: fixture\n")
+			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  "+id+".\nrests_on:\n  none: true\n  reason: fixture\n")
 		}
 		dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--dry-run", "--reason", "ok")
 		if !dr.Blocked || !hasPrecondition(dr, "stores_are_tracked", false) {

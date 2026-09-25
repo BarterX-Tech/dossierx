@@ -112,15 +112,13 @@ func rollUpDeadlockFixture(t *testing.T, bannerStatus string) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/banner.yaml": "id: widget.contract.banner\nfacet: contract\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: orientation\n" +
+			"embodiment:\n  mode: none\n  reason: context only, no code\n" +
 			"body: |\n  read the contract claims below in order.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
-			"build_role: schema\n" +
 			"body: |\n  the first draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
-			"build_role: behavior\n" +
 			"body: |\n  the second draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})

@@ -806,25 +806,20 @@ func envelopeOf(t *testing.T, args ...string) (cliout.Envelope, error) {
 // a lock refusal has to name the rule, not count it
 // ---------------------------------------------------------------------
 
-// buildRoleAdoptedFixture is a module that has ADOPTED build_role — one locked
-// claim carries it — plus a draft claim that does not.
-//
-// That combination is the whole point. build-role-required-for-locked fires
-// only against a LOCKED claim in an adopted module, so against the project as it
-// stands (b still draft) it reports nothing at all: `check --validate` is
-// ok:true with lint_error_count 0. The rule nonetheless refuses `claim lock b`,
-// because the lock gate lints the about-to-be-locked form. Every claim-status
-// lint has this shape — rest-on-locked and roll-up too — which is why "go run
-// check --validate to see the finding" was never an answer.
+// restOnUnlockedFixture is a draft claim beside a draft banner. A claim-status
+// lint (rest-on-locked, roll-up) fires only against a LOCKED claim, so against
+// the project as it stands it reports nothing at all: `check --validate` is
+// ok:true with lint_error_count 0. The rule nonetheless refuses the lock,
+// because the lock gate lints the about-to-be-locked form — which is why "go
+// run check --validate to see the finding" was never an answer.
 func restOnUnlockedFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/banner.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: banner\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: orientation\n" +
+			"embodiment:\n  mode: none\n  reason: context only, no code\n" +
 			"body: |\n  read the contract claims below in order.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  the first draft claim.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -835,9 +830,8 @@ func restOnUnlockedFixture(t *testing.T) string {
 // data.lint_findings", which this envelope did not have; `check --validate`
 // reported zero findings; `claim show`'s next_action pointed at that same
 // command; and `check`'s next_steps offered three candidate causes, none of them
-// the real one. The word the agent needed — build_role — was reachable from no
-// command in the surface, and adding `build_role: behavior` made the identical
-// lock succeed. That is an unbreakable loop, and the findings were computed and
+// the real one. The rule the agent needed was reachable from no command in the
+// surface. That is an unbreakable loop, and the findings were computed and
 // discarded one line above the refusal.
 func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 	cfgPath := restOnUnlockedFixture(t)

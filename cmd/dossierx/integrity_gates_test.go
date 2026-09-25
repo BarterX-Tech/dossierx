@@ -151,7 +151,6 @@ func TestReauditDryRunPreviewsTheIntegrityGate(t *testing.T) {
 func TestBuildOrderProposeRefusesToDiscardALockedOrder(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -167,7 +166,6 @@ func TestBuildOrderProposeRefusesToDiscardALockedOrder(t *testing.T) {
 func TestBuildOrderProposeStillRecomputesAStaleOrder(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -558,14 +556,12 @@ func restsOnPairProject(t *testing.T, root string) (cfgPath, alphaPath, betaPath
 	lockFixtureConstitution(t, cfgPath)
 	alphaPath = filepath.Join(claimsDir, "alpha.yaml")
 	if err := os.WriteFile(alphaPath, []byte("id: widget.contract.alpha\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
-		"build_role: schema\n"+
 		"body: |\n  the alpha body.\n"+
 		"rests_on:\n  none: true\n  reason: fixture\n"), 0o644); err != nil {
 		t.Fatalf("write alpha: %v", err)
 	}
 	betaPath = filepath.Join(claimsDir, "beta.yaml")
 	if err := os.WriteFile(betaPath, []byte("id: widget.contract.beta\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
-		"build_role: behavior\n"+
 		"body: |\n  the beta body.\n"+
 		"rests_on:\n  - widget.contract.alpha\n"), 0o644); err != nil {
 		t.Fatalf("write beta: %v", err)
@@ -666,7 +662,7 @@ func hasPrecondition(dr cliout.DryRun, name string, ok bool) bool {
 // The refusal itself already existed; only its classification was wrong, and
 // that is not cosmetic. Every recovery skills/dossierx-build-order/SKILL.md
 // documents for build_order_refused is a repair to the CLAIMS — lock the ones
-// still draft, reply to an open thread, set a missing build_role, break a
+// still draft, reply to an open thread, break a
 // rests_on cycle. Here the claims are all fine and the ARTIFACT is what was
 // tampered with, so an agent following any of them inspects correct claims,
 // finds nothing to fix, and loops. The test drives the documented recovery
@@ -674,7 +670,6 @@ func hasPrecondition(dr cliout.DryRun, name string, ok bool) bool {
 func TestBuildOrderLockHandEditReportsItsOwnCode(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -751,7 +746,6 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -767,7 +761,6 @@ func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -783,7 +776,6 @@ func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *te
 func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -799,7 +791,6 @@ func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
 func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -815,7 +806,6 @@ func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
 func TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})

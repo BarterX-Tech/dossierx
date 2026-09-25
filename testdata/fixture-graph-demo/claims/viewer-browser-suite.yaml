@@ -4,7 +4,6 @@ facet: internals
 module: viewer
 status: draft
 layout: card
-build_role: verification
 body: |
   One page load, many table cases. A case in that shape costs nothing; a page load per case costs about a second each.
 rests_on:

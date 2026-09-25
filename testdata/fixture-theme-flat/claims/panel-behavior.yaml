@@ -3,7 +3,6 @@ summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: panel
 status: locked
-build_role: behavior
 layout: card
 section: What the panel does
 body: |

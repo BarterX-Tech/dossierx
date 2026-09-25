@@ -4,7 +4,6 @@ facet: internals
 module: cli
 status: draft
 layout: card
-build_role: orientation
 body: |
   The graph rides in rendered output. Adding a command for it would have bought a second way to ask a question already answered.
 rests_on:

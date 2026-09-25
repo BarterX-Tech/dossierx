@@ -38,12 +38,11 @@ type claimFieldDecision struct {
 // The three exclusions exist only because the ENGINE itself rewrites those
 // fields as routine bookkeeping — see lockedClaimHashExcluded's doc comment.
 var claimFieldDecisions = map[string]claimFieldDecision{
-	"id":         {hashed: true, mutate: func(c *model.Claim) { c.ID = "widget.contract.other" }},
-	"facet":      {hashed: true, mutate: func(c *model.Claim) { c.Facet = "internals" }},
-	"module":     {hashed: true, mutate: func(c *model.Claim) { c.Module = "gadget" }},
-	"layout":     {hashed: true, mutate: func(c *model.Claim) { c.Layout = model.LayoutTable }},
-	"kind":       {hashed: true, mutate: func(c *model.Claim) { c.Kind = model.Kind("other") }},
-	"build_role": {hashed: true, mutate: func(c *model.Claim) { c.BuildRole = model.BuildRoleAPI }},
+	"id":     {hashed: true, mutate: func(c *model.Claim) { c.ID = "widget.contract.other" }},
+	"facet":  {hashed: true, mutate: func(c *model.Claim) { c.Facet = "internals" }},
+	"module": {hashed: true, mutate: func(c *model.Claim) { c.Module = "gadget" }},
+	"layout": {hashed: true, mutate: func(c *model.Claim) { c.Layout = model.LayoutTable }},
+	"kind":   {hashed: true, mutate: func(c *model.Claim) { c.Kind = model.Kind("other") }},
 	"embodiment": {hashed: true, mutate: func(c *model.Claim) {
 		c.Embodiment = &model.Embodiment{
 			Mode: model.EmbodimentModeCompare,
@@ -107,7 +106,6 @@ func fullyPopulatedClaim() model.Claim {
 		Status:          model.StatusLocked,
 		Layout:          model.LayoutMockup,
 		Kind:            model.KindFact,
-		BuildRole:       model.BuildRoleSchema,
 		Summary:         "the approved one-line summary",
 		Body:            "the approved body",
 		Rows:            []model.Row{{"col": "value", "other": 2}},
@@ -192,7 +190,7 @@ func TestDenyListMatchesTheRecordedDecisions(t *testing.T) {
 // The ones that matter most, because nothing in the engine signed them before
 // this hash existed: raw_html (swapping the payload on a locked, reviewed,
 // allowlisted mockup — the only unescaped render path in the engine) and
-// build_role/section/order/emphasis. ContentHash covers none of those except
+// section/order/emphasis. ContentHash covers none of those except
 // raw_html, which it took on in v0.4.1 as a STALENESS baseline once raw_html
 // became legal on any layout — a different job from certifying that a locked
 // claim still holds the bytes a human approved, which is why every one of them
@@ -260,7 +258,6 @@ func TestLockedClaimHashIsIndependentOfStatus(t *testing.T) {
 func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 	blindSpots := map[string]func(*model.Claim){
 		"raw_html_reviewed": func(c *model.Claim) { c.RawHTMLReviewed = false },
-		"build_role":        func(c *model.Claim) { c.BuildRole = model.BuildRoleOutOfScope },
 		"kind":              func(c *model.Claim) { c.Kind = model.Kind("other") },
 		"section":           func(c *model.Claim) { c.Section = "somewhere else entirely" },
 		"order":             func(c *model.Claim) { c.Order = 1000 },
@@ -608,7 +605,11 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // tracks existed, and TestCommittedFixtureViewersAreNotStale re-validates
 // them through the current hasher on every run. That fixture is the real
 // proof; this constant is the fast, local statement of it.
-const lockedClaimHashNoOptionalFields = "af7e9909502ab2f32e38ff8196f3d10fef7c3a286c67629e3bce7228b6f0da3c"
+//
+// v0.7.21 moves it on purpose, twice in one release: governed_by (NIT-29) and
+// build_role (NIT-32) both left model.Claim with no shadow key, so every
+// locked claim re-locks once on upgrade, with no migration tooling by decision.
+const lockedClaimHashNoOptionalFields = "39da0ed6b837cc07c88cbf8dfd04cb506c2564354edb460b5354883ee429e77b"
 
 // TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
 // the lockedClaimHashOmitWhenEmpty gate, because each half guards a different

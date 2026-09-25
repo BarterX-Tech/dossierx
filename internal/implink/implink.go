@@ -12,17 +12,13 @@
 //
 // The only gate Set enforces is that the claim being linked must already
 // be status: locked — you cannot ground a link to a claim that might still
-// change out from under it. This applies identically regardless of the
-// claim's build_role: a verification (test-checklist) claim links to the
-// real test file(s)/function(s) that implement its checklist items via the
-// exact same call shape as a schema/behavior/api claim linking to its own
-// implementation.
+// change out from under it. A claim whose truth is proven by a test links to
+// the real test file(s)/function(s) via the exact same call shape as a claim
+// linking to its own implementation.
 //
-// Like internal/buildorder, the on-disk artifact is one JSON file per
-// module (ArtifactPath), generated and only ever rewritten by Set, never
-// hand-edited; the sibling status.go recomputes drift against it on
-// demand, mirroring buildorder.Status's read-only-recompute-on-load
-// contract.
+// The on-disk artifact is one JSON file per module (ArtifactPath),
+// generated and only ever rewritten by Set, never hand-edited; the sibling
+// status.go recomputes drift against it on demand and never writes.
 package implink
 
 import (
@@ -188,9 +184,9 @@ func WriteArtifact(a *Artifact, path string) error {
 // applied to file bytes instead of claim fields) as the new drift
 // baseline, writes the updated artifact back to disk, and returns it.
 //
-// Set applies identically to a claim of any build_role, including
-// verification: a test-checklist claim links to the real test file(s) that
-// implement its checklist items via this exact same call.
+// Set applies identically to every claim: a test-checklist claim links to
+// the real test file(s) that implement its checklist items via this exact
+// same call.
 func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol string) (*Artifact, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("implink: cfg must not be nil")

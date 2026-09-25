@@ -1886,11 +1886,11 @@ func joinStepIndexes(ns []int) string {
 
 // codeLinkRecoveryHint is the one line an agent acts on when the code-link
 // gate refuses. The two recoveries are both in it because the wrong one is
-// tempting: a claim that genuinely produces no code is mis-roled, not
-// untagged, and tagging an unrelated file to clear the gate is the false
-// link the gate exists to refuse.
+// tempting: a claim that genuinely has no code behind it is a question for
+// the human, not a missing tag, and tagging an unrelated file to clear the
+// gate is the false link the gate exists to refuse.
 func codeLinkRecoveryHint(res check.Result) string {
-	return fmt.Sprintf("read data.code_links.modules[].unlinked and .partial: add a dossierx-claim: or dossierx-step: tag in a source_dirs file (or dossierx claim link) for each named claim — every step of a stepped claim — or, if the claim produces no code, unlock → set build_role to orientation or out-of-scope → lock; %d claim(s) are not linked", res.CodeLinks.Incomplete())
+	return fmt.Sprintf("read data.code_links.modules[].unlinked and .partial: add a dossierx-claim: or dossierx-step: tag in a source_dirs file (or dossierx claim link) for each named claim — every step of a stepped claim — or, if the claim genuinely has no code behind it, ask the human, then unlock → add embodiment: {mode: none, reason: \"…\"} → lock; %d claim(s) are not linked", res.CodeLinks.Incomplete())
 }
 
 func conformanceBlockingRecoveryHint(res check.Result) string {
@@ -2122,12 +2122,12 @@ type lockGate struct {
 	// documented recovery for lint_failed is "read data.lint_findings", which
 	// this envelope did not have. `claim show`'s next_action pointed at
 	// `dossierx check --validate`, which reports ZERO findings for the whole
-	// class of lints that key off a claim's own status (build-role-required-
-	// for-locked, rest-on-locked, roll-up): the claim is still DRAFT on disk, so
+	// class of lints that key off a claim's own status (rest-on-locked,
+	// roll-up): the claim is still DRAFT on disk, so
 	// the rule that will refuse the lock does not fire against the project as it
 	// stands. And `check`'s next_steps offered three candidate causes, none of
-	// them the real one. The word the agent needed — build_role — was reachable
-	// from no command in the surface.
+	// them the real one. The rule the agent needed was reachable from no
+	// command in the surface.
 	//
 	// The findings were already computed here (RunAll runs against the
 	// ABOUT-TO-BE-LOCKED form, which is exactly why they are the only correct

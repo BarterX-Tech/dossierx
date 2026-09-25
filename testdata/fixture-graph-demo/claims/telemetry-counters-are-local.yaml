@@ -4,7 +4,6 @@ facet: internals
 module: telemetry
 status: draft
 layout: card
-build_role: orientation
 body: |
   Nothing is ever sent anywhere. A counter that leaves the machine is a different feature with a different review.
 rests_on:

@@ -69,7 +69,6 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 			Facet:         c.Facet,
 			Status:        string(c.Status),
 			Kind:          string(c.EffectiveKind()),
-			BuildRole:     string(c.BuildRole),
 			Emphasis:      c.Emphasis,
 			ReviewPending: c.ReviewPending,
 			OpenComments:  len(c.OpenThreadIDs()),

@@ -433,7 +433,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := newBareFixture(t)
 	f.WriteProjectConfig()
-	f.NewClaim(defaultClaimID, "the widget answers within 200ms.", "")
+	f.NewClaim(defaultClaimID, "the widget answers within 200ms.")
 	return f
 }
 
@@ -644,16 +644,11 @@ func (f *fixture) Enact(step string, do func()) {
 // state builders
 // ---------------------------------------------------------------------------
 
-// NewClaim creates a claim through the binary. buildRole may be "" — several
-// scenarios specifically need claims that never adopted build_role.
-func (f *fixture) NewClaim(id, body, buildRole string) {
+// NewClaim creates a claim through the binary.
+func (f *fixture) NewClaim(id, body string) {
 	f.t.Helper()
 	tmpl := "dossierx claim new <id> --summary <summary> --body <body> --rests-on-none-reason <why>"
 	bind := map[string]string{"id": id, "summary": "Fixture claim used by the procedure test suite.", "body": body, "why": "procedure-suite fixture, not backed by any doctrine claim"}
-	if buildRole != "" {
-		tmpl += " --build-role <role>"
-		bind["role"] = buildRole
-	}
 	f.Setup(tmpl, bind)
 }
 
@@ -756,25 +751,6 @@ func (f *fixture) RewriteClaimBody(id, from, to string) {
 	}
 	if err := os.WriteFile(path, []byte(strings.ReplaceAll(head, from, to)+tail), 0o644); err != nil {
 		f.t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-// SetBuildRoleByHand appends build_role to a claim FILE — there is no command
-// that sets it after creation, which is why the build-order skill's recovery
-// row routes through unlock first. On a DRAFT claim this is the ordinary
-// workshop edit, and that is where the recovery scenario now calls it; on a
-// LOCKED one it would be the edit the ledger exists to catch, which the old
-// "set it, then re-propose" row instructed verbatim until it was fixed.
-func (f *fixture) SetBuildRoleByHand(id, role string) {
-	f.t.Helper()
-	path := f.claimFile(id)
-	fh, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		f.t.Fatalf("open %s: %v", path, err)
-	}
-	defer fh.Close()
-	if _, err := fmt.Fprintf(fh, "build_role: %s\n", role); err != nil {
-		f.t.Fatalf("append build_role to %s: %v", path, err)
 	}
 }
 
@@ -975,8 +951,8 @@ func (f *fixture) DocumentedSuccess(inv *invocation, doc string) {
 }
 
 // RequireFailure asserts a step fails with a specific error.code — used only
-// where the DOCUMENT itself promises the refusal (a premise, like "propose
-// refuses a claim with no build_role"). The code named by the test is first
+// where the DOCUMENT itself promises the refusal (a premise, like "lock
+// refuses a claim with an open thread"). The code named by the test is first
 // checked against surface.json's vocabulary and the expected exit status is
 // READ from surface.json, never typed: if the vocabulary drops or renames the
 // code, this fails naming the inventory, not with a mysterious mismatch.

@@ -23,7 +23,7 @@ import (
 // sentinel provided no mutual exclusion whatsoever.
 func TestScan_WaitsForTheArtifactSentinelInsteadOfWritingThroughIt(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	writeScanFile(t, srcDir, "impl.go", "// dossierx-claim: widget.contract.main\nfunc Widget() {}\n")
 
 	path := ArtifactPath(cfg, "widget")
@@ -72,8 +72,8 @@ func TestScan_WaitsForTheArtifactSentinelInsteadOfWritingThroughIt(t *testing.T)
 func TestScan_BatchesEveryTagIntoOneArtifactWrite(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{
-		lockedClaim("widget.contract.one", "widget", model.BuildRoleBehavior),
-		lockedClaim("widget.contract.two", "widget", model.BuildRoleBehavior),
+		lockedClaim("widget.contract.one", "widget"),
+		lockedClaim("widget.contract.two", "widget"),
 	}
 	writeScanFile(t, srcDir, "a.go", "// dossierx-claim: widget.contract.one\nfunc One() {}\n")
 	writeScanFile(t, srcDir, "b.go", "// dossierx-claim: widget.contract.two\nfunc Two() {}\n")

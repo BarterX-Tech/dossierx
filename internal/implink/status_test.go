@@ -19,7 +19,7 @@ func TestStatus_MissingArtifact_WrapsErrNoArtifact(t *testing.T) {
 
 func TestStatus_ReportsLinkedCountAndNoDriftWhenFileUnchanged(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	file := writeSourceFile(t, cfg, "a.go", "package widget")
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", file, ""); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -39,7 +39,7 @@ func TestStatus_ReportsLinkedCountAndNoDriftWhenFileUnchanged(t *testing.T) {
 
 func TestStatus_DetectsDriftAfterFileMutates(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	file := writeSourceFile(t, cfg, "a.go", "package widget // v1")
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", file, ""); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -68,7 +68,7 @@ func TestStatus_DetectsDriftAfterFileMutates(t *testing.T) {
 
 func TestStatus_DetectsDriftWhenFileDeleted(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	file := writeSourceFile(t, cfg, "a.go", "package widget")
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", file, ""); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -91,18 +91,18 @@ func TestStatus_DetectsDriftWhenFileDeleted(t *testing.T) {
 // Unlinked counting
 // ---------------------------------------------------------------------
 
-func TestStatus_UnlinkedCounting_OnlyCodeProducingPhasesCount(t *testing.T) {
+func TestStatus_UnlinkedCounting_CodeFreeAndProjectClaimsNeverCount(t *testing.T) {
 	cfg := testConfig(t, "widget")
 	claims := []model.Claim{
-		lockedClaim("widget.contract.orientation", "widget", model.BuildRoleOrientation),
-		lockedClaim("widget.contract.outofscope", "widget", model.BuildRoleOutOfScope),
-		lockedClaim("widget.contract.schema", "widget", model.BuildRoleSchema),
-		lockedClaim("widget.contract.behavior", "widget", model.BuildRoleBehavior),
-		lockedClaim("widget.contract.api", "widget", model.BuildRoleAPI),
-		lockedClaim("widget.contract.verify", "widget", model.BuildRoleVerification),
+		codeFree(lockedClaim("widget.contract.orientation", "widget")),
+		{ID: "project.outofscope", Scope: model.ScopeProject, Status: model.StatusLocked},
+		lockedClaim("widget.contract.schema", "widget"),
+		lockedClaim("widget.contract.behavior", "widget"),
+		lockedClaim("widget.contract.api", "widget"),
+		lockedClaim("widget.contract.verify", "widget"),
 	}
-	// Link only the schema claim; everything else in a code-producing phase
-	// stays unlinked.
+	// Link only the schema claim; every other module claim that does not
+	// declare itself code-free stays unlinked.
 	file := writeSourceFile(t, cfg, "schema.go", "package widget")
 	if _, err := Set(claims, cfg, "widget", "widget.contract.schema", file, ""); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -112,15 +112,15 @@ func TestStatus_UnlinkedCounting_OnlyCodeProducingPhasesCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	// behavior, api, verify are unlinked; orientation and out-of-scope must
-	// never count even though they too have no linked file.
+	// behavior, api, verify are unlinked; the code-free claim and the
+	// project claim must never count even though they have no linked file.
 	if report.UnlinkedCount != 3 {
-		t.Fatalf("expected 3 unlinked code-producing-phase claims, got %d (%v)", report.UnlinkedCount, report.UnlinkedIDs)
+		t.Fatalf("expected 3 unlinked claims, got %d (%v)", report.UnlinkedCount, report.UnlinkedIDs)
 	}
-	for _, id := range []string{"widget.contract.orientation", "widget.contract.outofscope"} {
+	for _, id := range []string{"widget.contract.orientation", "project.outofscope"} {
 		for _, u := range report.UnlinkedIDs {
 			if u == id {
-				t.Fatalf("did not expect %q counted as unlinked (not a code-producing phase)", id)
+				t.Fatalf("did not expect %q counted as unlinked (code-free or project claim)", id)
 			}
 		}
 	}
@@ -129,10 +129,10 @@ func TestStatus_UnlinkedCounting_OnlyCodeProducingPhasesCount(t *testing.T) {
 func TestStatus_UnlinkedCounting_DraftClaimsNeverCount(t *testing.T) {
 	cfg := testConfig(t, "widget")
 	claims := []model.Claim{
-		{ID: "widget.contract.draft", Module: "widget", Status: model.StatusDraft, BuildRole: model.BuildRoleBehavior},
+		{ID: "widget.contract.draft", Module: "widget", Status: model.StatusDraft},
 	}
 	file := writeSourceFile(t, cfg, "a.go", "package widget")
-	locked := []model.Claim{lockedClaim("widget.contract.locked", "widget", model.BuildRoleSchema)}
+	locked := []model.Claim{lockedClaim("widget.contract.locked", "widget")}
 	if _, err := Set(locked, cfg, "widget", "widget.contract.locked", file, ""); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestViewsByClaim_MissingArtifact_WrapsErrNoArtifact(t *testing.T) {
 
 func TestViewsByClaim_MarksDriftedFilePerEntry(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	fileA := writeSourceFile(t, cfg, "a.go", "package widget // a")
 	fileB := writeSourceFile(t, cfg, "b.go", "package widget // b")
 	if _, err := Set(claims, cfg, "widget", "widget.contract.main", fileA, "FuncA"); err != nil {
@@ -226,7 +226,7 @@ func TestStepCoverage_CountsDistinctInRangeIndexes(t *testing.T) {
 
 func TestStatus_ClaimTagOnSteppedClaim_IsPartialZeroOfN(t *testing.T) {
 	cfg := testConfig(t, "widget")
-	c := lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)
+	c := lockedClaim("widget.contract.main", "widget")
 	c.Steps = []string{"alpha", "beta"}
 	c.Layout = model.LayoutSteps
 	claims := []model.Claim{c}
@@ -258,11 +258,11 @@ func TestStatus_ClaimTagOnSteppedClaim_IsPartialZeroOfN(t *testing.T) {
 func TestCoverage_NoArtifact_ListsEveryExpectedClaimAsUnlinked(t *testing.T) {
 	cfg := testConfig(t, "widget")
 	claims := []model.Claim{
-		lockedClaim("widget.contract.a", "widget", model.BuildRoleBehavior),
-		lockedClaim("widget.contract.b", "widget", model.BuildRoleAPI),
-		lockedClaim("widget.contract.ctx", "widget", model.BuildRoleOrientation),
+		lockedClaim("widget.contract.a", "widget"),
+		lockedClaim("widget.contract.b", "widget"),
+		codeFree(lockedClaim("widget.contract.ctx", "widget")),
 	}
-	draft := lockedClaim("widget.contract.d", "widget", model.BuildRoleSchema)
+	draft := lockedClaim("widget.contract.d", "widget")
 	draft.Status = model.StatusDraft
 	claims = append(claims, draft)
 
@@ -279,25 +279,29 @@ func TestCoverage_NoArtifact_ListsEveryExpectedClaimAsUnlinked(t *testing.T) {
 		t.Fatalf("an empty artifact links nothing: %+v", report)
 	}
 	if report.UnlinkedCount != 2 || len(report.UnlinkedIDs) != 2 || report.UnlinkedIDs[0] != "widget.contract.a" || report.UnlinkedIDs[1] != "widget.contract.b" {
-		t.Fatalf("expected the two locked code-producing claims, sorted, as unlinked; orientation and draft excluded: %+v", report.UnlinkedIDs)
+		t.Fatalf("expected the two locked claims, sorted, as unlinked; code-free and draft excluded: %+v", report.UnlinkedIDs)
 	}
 }
 
-func TestExpects_LockedCodeProducingOnly(t *testing.T) {
-	c := lockedClaim("widget.contract.a", "widget", model.BuildRoleVerification)
+func TestExpects_EveryLockedModuleClaimUnlessCodeFree(t *testing.T) {
+	c := lockedClaim("widget.contract.a", "widget")
 	if !Expects(c) {
-		t.Fatal("a locked verification claim is expected to be linked")
+		t.Fatal("a locked module claim is expected to be linked")
 	}
-	c.BuildRole = model.BuildRoleOutOfScope
-	if Expects(c) {
-		t.Fatal("an out-of-scope claim is never expected to be linked")
+	if Expects(codeFree(c)) {
+		t.Fatal("a claim declaring embodiment mode none is never expected to be linked")
 	}
-	c.BuildRole = model.BuildRoleBehavior
+	compare := c
+	compare.Embodiment = &model.Embodiment{Mode: model.EmbodimentModeCompare}
+	if !Expects(compare) {
+		t.Fatal("an embodiment in compare mode still expects a code link")
+	}
+	project := model.Claim{ID: "project.house-rule", Scope: model.ScopeProject, Status: model.StatusLocked}
+	if Expects(project) {
+		t.Fatal("a project claim is never expected to be linked")
+	}
 	c.Status = model.StatusDraft
 	if Expects(c) {
 		t.Fatal("a draft claim is never expected to be linked")
-	}
-	if !CodeProducing(model.BuildRoleSchema) || CodeProducing(model.BuildRoleOrientation) {
-		t.Fatal("CodeProducing must expose the same four-role set Status counts")
 	}
 }

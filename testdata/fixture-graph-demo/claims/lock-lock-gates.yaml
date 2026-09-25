@@ -4,7 +4,6 @@ facet: internals
 module: lock
 status: locked
 layout: card
-build_role: behavior
 emphasis: true
 body: |
   Approval is refused while review findings stand, while a discussion thread is unresolved, or while a dependency has not itself been approved.

@@ -4,7 +4,6 @@ facet: internals
 module: telemetry
 status: draft
 layout: card
-build_role: behavior
 body: |
   Counts are written once, at exit, to a file beside the configuration. There is no background writer.
 rests_on:
