@@ -1,7 +1,7 @@
 // status.go implements the read-only reporting half of this package's
 // contract: Status recomputes drift for every linked file against its
-// stored baseline hash and separately counts a module's locked,
-// code-producing-phase claims that have no linked file at all. It is a
+// stored baseline hash and separately counts a module's locked
+// code-linked claims (see Expects) that have no linked file at all. It is a
 // read-only recompute-on-load over an artifact only ever written elsewhere,
 // by Set.
 package implink
@@ -62,7 +62,7 @@ type PartialEntry struct {
 // StatusReport is Status's full result for one module: how many claims
 // have at least one linked file, which specific linked files have drifted,
 // which stepped claims are linked but not on every step, and how many of
-// the module's locked, code-producing-phase claims have no linked file at
+// the module's claims Expects holds to account have no linked file at
 // all. UnlinkedCount and PartialCount are deliberately always present
 // (never omitted or hidden behind a "no drift, nothing to see" summary) — a
 // project adopting this feature needs to see gaps as loudly as it sees
@@ -88,7 +88,7 @@ func (r *StatusReport) Incomplete() int {
 // print, so the two call sites can never drift apart on phrasing.
 func (r *StatusReport) Summary() string {
 	return fmt.Sprintf(
-		"impl-links: %d linked, %d drifted, %d partial, %d unlinked-in-schema/behavior/api/verification-phases",
+		"impl-links: %d linked, %d drifted, %d partial, %d unlinked locked claims",
 		r.LinkedClaims, len(r.Drifted), r.PartialCount, r.UnlinkedCount,
 	)
 }
@@ -143,7 +143,7 @@ func Status(claims []model.Claim, cfg *config.Config, module string) (*StatusRep
 
 // Coverage is Status for the code-link gate: a module that has never
 // linked anything is not "nothing to report", it is a module in which
-// EVERY locked, code-producing claim is unlinked. Where Status wraps
+// EVERY claim Expects holds to account is unlinked. Where Status wraps
 // ErrNoArtifact for a missing artifact — the right answer for a reporter
 // that must stay silent on projects that never opted in — Coverage
 // evaluates the empty artifact, because the caller has already decided,

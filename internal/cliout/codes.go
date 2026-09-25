@@ -227,8 +227,9 @@ const (
 	CodeImplinkRefused Code = "implink_refused"
 
 	// CodeUnlinkedClaims is "dossierx check"'s code-link gate: the project
-	// names its `source_dirs`, and at least one locked schema/behavior/api/
-	// verification claim has no link in source (no `dossierx-claim:` or
+	// names its `source_dirs`, and at least one locked module claim (project
+	// claims and `embodiment: {mode: none}` claims are exempt; see
+	// implink.Expects) has no link in source (no `dossierx-claim:` or
 	// `dossierx-step:` tag, no `claim link`) or, carrying `steps:`, is not
 	// tagged on every step. The catalog and viewer were regenerated before
 	// the refusal; only the exit status is withheld. data.code_links names

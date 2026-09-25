@@ -190,7 +190,7 @@ func TestCheckParity_ImplinkScanAndStatus(t *testing.T) {
 		"render: wrote " + viewer + "\n" +
 		"impl-links: scanned 1 file(s), found 1 tag(s), reconciled 1 link(s) (0 error(s))\n" +
 		"check: OK\n" +
-		"impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases\n"
+		"impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims\n"
 	assertCheckParity(t, cfgPath, want, "", false)
 }
 
