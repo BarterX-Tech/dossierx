@@ -6,18 +6,18 @@
     },
     "panel.contract.behavior": {
       "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
-      "panel.internals.state": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79"
+      "panel.internals.state": "c62a1d5a4b28798edb51491878200c4fa8d9a265cb9eabac9519eba1952b9688"
     },
-    "panel.decision.mockup": {
+    "panel.internals.mockup": {
       "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582"
     },
     "panel.internals.state": {
       "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
-      "panel.decision.mockup": "2105c525ec87a13818cf725de6f2339bf27ece09149aa11644117808255577fa"
+      "panel.internals.mockup": "14ef0bc66114ed719080942996d29eabb853711dda34ed3c071810d0a3a9362d"
     },
     "panel.internals.verification": {
       "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582",
-      "panel.internals.state": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79"
+      "panel.internals.state": "c62a1d5a4b28798edb51491878200c4fa8d9a265cb9eabac9519eba1952b9688"
     },
     "widget.contract.reviewed": {
       "panel.contract.api": "411232f4aa76e42eb4325e18809cd3719adeda1e7a0fc3d764b15e6b6311c582"
@@ -65,7 +65,7 @@
     },
     "panel.contract.behavior": {
       "panel.internals.state": {
-        "hash": "951733da834ffee114d0b6222e0cde883ec072ce79081fc750404d8491258c79",
+        "hash": "c62a1d5a4b28798edb51491878200c4fa8d9a265cb9eabac9519eba1952b9688",
         "content": {
           "ID": "panel.internals.state",
           "Facet": "internals",
@@ -87,7 +87,7 @@
             "None": false,
             "Reason": "",
             "IDs": [
-              "panel.decision.mockup"
+              "panel.internals.mockup"
             ]
           },
           "Sources": null,
@@ -105,11 +105,11 @@
       }
     },
     "panel.internals.state": {
-      "panel.decision.mockup": {
-        "hash": "2105c525ec87a13818cf725de6f2339bf27ece09149aa11644117808255577fa",
+      "panel.internals.mockup": {
+        "hash": "14ef0bc66114ed719080942996d29eabb853711dda34ed3c071810d0a3a9362d",
         "content": {
-          "ID": "panel.decision.mockup",
-          "Facet": "decision",
+          "ID": "panel.internals.mockup",
+          "Facet": "internals",
           "Module": "panel",
           "Scope": "",
           "Status": "locked",
@@ -184,7 +184,7 @@
   "locked_at": {
     "panel.contract.api": "2026-09-24T15:43:17.811037Z",
     "panel.contract.behavior": "2026-09-24T15:43:17.968334Z",
-    "panel.decision.mockup": "2026-09-24T15:43:18.126896Z",
+    "panel.internals.mockup": "2026-09-24T15:43:18.126896Z",
     "panel.internals.state": "2026-09-24T15:43:18.284302Z",
     "panel.internals.verification": "2026-09-24T15:43:18.445742Z",
     "widget.contract.reviewed": "2026-09-02T10:22:20.174643Z"
@@ -279,15 +279,15 @@
         "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-behavior.yaml"
       }
     },
-    "panel.decision.mockup": {
+    "panel.internals.mockup": {
       "subject": "claim",
-      "hash": "d593d73cd380b945d90c2d4fe902542ea46e464d31de056488a30e10d0dbe630",
+      "hash": "a0a48a6571e300bc93639f7f5457a219edfec958ee182ec4318fa9e355b82569",
       "at": "2026-09-24T15:43:18.126907Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
       "content": {
-        "ID": "panel.decision.mockup",
-        "Facet": "decision",
+        "ID": "panel.internals.mockup",
+        "Facet": "internals",
         "Module": "panel",
         "Scope": "",
         "Status": "locked",
@@ -320,7 +320,7 @@
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "658adb1ca779c6c0485d093360f9c7365f8cc6a6132875f0a01f30d8f7d6292c",
+      "hash": "f390c691e367e97710a80dafec7c49f24585d67f84058ddfcaeefb5593180d4d",
       "at": "2026-09-24T15:43:18.284312Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -345,7 +345,7 @@
           "None": false,
           "Reason": "",
           "IDs": [
-            "panel.decision.mockup"
+            "panel.internals.mockup"
           ]
         },
         "Sources": null,

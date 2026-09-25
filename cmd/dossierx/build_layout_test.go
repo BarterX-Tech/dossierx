@@ -458,7 +458,7 @@ func TestCLI_CheckReportsGitignoreCheckWhenTheGuardCannotApply(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(repo, "claims"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		blWrite(t, filepath.Join(repo, "project.config.yaml"), "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
+		blWrite(t, filepath.Join(repo, "project.config.yaml"), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
 		blWrite(t, filepath.Join(repo, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  fixture.\nrests_on:\n  none: true\n  reason: fixture\n")
 		blGitInit(t, repo)
 		lockFixtureConstitution(t, filepath.Join(repo, "project.config.yaml"))

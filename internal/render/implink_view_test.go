@@ -30,7 +30,7 @@ func implinkTestConfig(t *testing.T, module string) *config.Config {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	writeFile(t, cfgPath, cfgYAML)
 
@@ -140,7 +140,7 @@ func TestRender_ImplementedIn_OtherModuleUnaffected(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	writeFile(t, cfgPath, cfgYAML)
 	cfg, err := config.LoadConfig(cfgPath)
@@ -192,7 +192,7 @@ func implinkGatedConfig(t *testing.T, module string) *config.Config {
 		}
 	}
 	cfgPath := filepath.Join(dir, "project.config.yaml")
-	writeFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - "+module+"\nclaims_dir: claims\nsource_dirs:\n  - src\n")
+	writeFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - "+module+"\nclaims_dir: claims\nsource_dirs:\n  - src\n")
 	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)

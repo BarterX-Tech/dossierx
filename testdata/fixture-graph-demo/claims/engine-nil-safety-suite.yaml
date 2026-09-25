@@ -1,5 +1,5 @@
-id: engine.verification.nil-safety-suite
-facet: verification
+id: engine.internals.nil-safety-suite
+facet: internals
 module: engine
 status: draft
 layout: card

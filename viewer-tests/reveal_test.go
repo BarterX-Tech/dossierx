@@ -409,7 +409,7 @@ func emulatePrint(t *testing.T, ctx context.Context) {
 const twoFacetConfigYAML = `schema_version: 1
 facets:
   - contract
-  - interface
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -424,8 +424,8 @@ claims_dir: claims
 // breaking the "only difference is the facet" symmetry the comment above
 // promises, even though this particular test's own assertions do not
 // depend on that door's open/closed state.
-const printFacetInterfaceBase = `id: widget.interface.base
-facet: interface
+const printFacetInterfaceBase = `id: widget.internals.base
+facet: internals
 module: widget
 status: draft
 body: |
@@ -438,24 +438,24 @@ rests_on:
 // lockPrintFacetInterfaceBase is lockRevealBase's twin for the inactive
 // facet's base claim — see printFacetInterfaceBase's doc comment.
 func lockPrintFacetInterfaceBase(p *project) {
-	p.run("claim", "lock", "widget.interface.base", "--reason", "viewer-test fixture, readiness must not auto-open this claim's own footer")
+	p.run("claim", "lock", "widget.internals.base", "--reason", "viewer-test fixture, readiness must not auto-open this claim's own footer")
 }
 
-const printFacetInterfaceDeep = `id: widget.interface.deep
-facet: interface
+const printFacetInterfaceDeep = `id: widget.internals.deep
+facet: internals
 module: widget
 status: draft
 body: |
   a claim in the facet the reader is NOT looking at; its footer never reaches paper.
 rests_on:
-  - widget.interface.base
+  - widget.internals.base
 `
 
 const (
 	// The facet group ids are slugify("<module>-<facet>") — see render.Group.ID.
 	activeGroupID   = "widget-contract"
-	inactiveGroupID = "widget-interface"
-	inactiveDeepID  = "widget.interface.deep"
+	inactiveGroupID = "widget-internals"
+	inactiveDeepID  = "widget.internals.deep"
 )
 
 // facetFooterState is a WIDER observation than footerState: for a claim inside a

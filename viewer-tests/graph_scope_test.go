@@ -11,7 +11,7 @@ package viewertests
 // expressible and each list short enough to read.
 //
 // Splitting it creates one genuinely new state. An intersection can be EMPTY —
-// module `probe` and facet `design` may both hold claims while no claim is in
+// module `probe` and facet `internals` may both hold claims while no claim is in
 // both — and the pane's response to a zero-node scene is to draw nothing. A
 // blank canvas is exactly what a broken pane looks like, so the empty
 // combination has to be STATED, in words, naming both selections. That is the
@@ -44,7 +44,7 @@ import (
 const scopeConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
   - gadget
@@ -60,7 +60,7 @@ claims_dir: claims
 //	gadget  contract + design
 //	probe   contract ONLY
 //
-// So `probe` alone has a claim, `design` alone has two, and `probe` × `design`
+// So `probe` alone has a claim, `internals` alone has two, and `probe` × `internals`
 // has none — the state a single Scope control could not reach. `contract`
 // alone spans all THREE modules, which is the cross-module facet view the flat
 // list could express only INSTEAD of a module selection, never alongside one.
@@ -71,9 +71,9 @@ func newScopeProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, scopeConfig)
 	p.writeClaim("wc.yaml", railClaim("widget.contract.base", "contract", "widget", ""))
-	p.writeClaim("wd.yaml", railClaim("widget.design.thing", "design", "widget", ""))
+	p.writeClaim("wd.yaml", railClaim("widget.internals.thing", "internals", "widget", ""))
 	p.writeClaim("gc.yaml", railClaim("gadget.contract.core", "contract", "gadget", ""))
-	p.writeClaim("gd.yaml", railClaim("gadget.design.extra", "design", "gadget", ""))
+	p.writeClaim("gd.yaml", railClaim("gadget.internals.extra", "internals", "gadget", ""))
 	p.writeClaim("pc.yaml", railClaim("probe.contract.only", "contract", "probe", ""))
 	return p
 }
@@ -126,7 +126,7 @@ func TestGraphScopeIsTwoIndependentAxesIntersected(t *testing.T) {
 	if fmt.Sprint(modules) != fmt.Sprint([]string{"", "widget", "gadget", "probe"}) {
 		t.Fatalf("module options = %v, want the all-sentinel then the project's three modules", modules)
 	}
-	if fmt.Sprint(facets) != fmt.Sprint([]string{"", "contract", "design"}) {
+	if fmt.Sprint(facets) != fmt.Sprint([]string{"", "contract", "internals"}) {
 		t.Fatalf("facet options = %v, want the all-sentinel then the project's two facets", facets)
 	}
 	labels := evalStrings(t, ctx, `[document.querySelector('#dxgModule option').textContent,
@@ -149,13 +149,13 @@ func TestGraphScopeIsTwoIndependentAxesIntersected(t *testing.T) {
 		{
 			name: "both axes all is the whole project",
 			want: []string{
-				"gadget.contract.core", "gadget.design.extra",
-				"probe.contract.only", "widget.contract.base", "widget.design.thing",
+				"gadget.contract.core", "gadget.internals.extra",
+				"probe.contract.only", "widget.contract.base", "widget.internals.thing",
 			},
 		},
 		{
 			name: "a module alone", module: "widget",
-			want: []string{"widget.contract.base", "widget.design.thing"},
+			want: []string{"widget.contract.base", "widget.internals.thing"},
 		},
 		{
 			// The view the flat control could not express alongside a module.
@@ -164,7 +164,7 @@ func TestGraphScopeIsTwoIndependentAxesIntersected(t *testing.T) {
 			want: []string{"gadget.contract.core", "probe.contract.only", "widget.contract.base"},
 		},
 		{
-			// THE INTERSECTION. widget.design.thing is in the module and not
+			// THE INTERSECTION. widget.internals.thing is in the module and not
 			// the facet; gadget.contract.core is in the facet and not the
 			// module. A filter that ORed the axes would keep both. Only the
 			// claim in BOTH survives.
@@ -174,15 +174,15 @@ func TestGraphScopeIsTwoIndependentAxesIntersected(t *testing.T) {
 		},
 		{
 			name:   "the other intersection, to pin that the first was not a coincidence",
-			module: "gadget", facet: "design",
-			want: []string{"gadget.design.extra"},
+			module: "gadget", facet: "internals",
+			want: []string{"gadget.internals.extra"},
 		},
 		{
 			// Widening one axis while the other stays narrowed: the axes do
 			// not latch, and there is no ordering rule between them.
 			name:  "widening the module axis alone restores the facet-wide view",
-			facet: "design",
-			want:  []string{"gadget.design.extra", "widget.design.thing"},
+			facet: "internals",
+			want:  []string{"gadget.internals.extra", "widget.internals.thing"},
 		},
 	}
 
@@ -228,13 +228,13 @@ func TestGraphEmptyScopeIntersectionIsStatedNotBlank(t *testing.T) {
 	if got := scopedClaimIDs(t, ctx); fmt.Sprint(got) != fmt.Sprint([]string{"probe.contract.only"}) {
 		t.Fatalf("module probe alone = %v, want the one claim it holds", got)
 	}
-	setScopePair(t, ctx, "", "design")
-	if got := scopedClaimIDs(t, ctx); fmt.Sprint(got) != fmt.Sprint([]string{"gadget.design.extra", "widget.design.thing"}) {
+	setScopePair(t, ctx, "", "internals")
+	if got := scopedClaimIDs(t, ctx); fmt.Sprint(got) != fmt.Sprint([]string{"gadget.internals.extra", "widget.internals.thing"}) {
 		t.Fatalf("facet design alone = %v, want the two claims it holds", got)
 	}
 
 	// Now the pair. No claim is in both.
-	setScopePair(t, ctx, "probe", "design")
+	setScopePair(t, ctx, "probe", "internals")
 
 	if got := drawnDiscCount(t, ctx); got != 0 {
 		t.Fatalf("discs drawn for an empty intersection = %d, want 0", got)
@@ -246,7 +246,7 @@ func TestGraphEmptyScopeIntersectionIsStatedNotBlank(t *testing.T) {
 	// THE CANVAS IS BLANK, SO THE WORDS ARE THE ONLY THING BETWEEN THE READER
 	// AND "the graph broke". They must name BOTH selections.
 	notice := noticeText(t, ctx)
-	for _, want := range []string{"probe", "design", "no claim is in", "no claims"} {
+	for _, want := range []string{"probe", "internals", "no claim is in", "no claims"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("empty-scope notice = %q, want it to contain %q — a reader must be able to tell "+
 				"\"this combination has no claims\" from \"the pane broke\", and a blank canvas says neither", notice, want)
@@ -262,7 +262,7 @@ func TestGraphEmptyScopeIntersectionIsStatedNotBlank(t *testing.T) {
 	if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-controls .dxg-ctl').length`); n != 6 {
 		t.Fatalf("control groups = %d on an empty scope, want all 6 still there", n)
 	}
-	if got := evalStrings(t, ctx, `[document.getElementById('dxgModule').value, document.getElementById('dxgFacet').value]`); fmt.Sprint(got) != fmt.Sprint([]string{"probe", "design"}) {
+	if got := evalStrings(t, ctx, `[document.getElementById('dxgModule').value, document.getElementById('dxgFacet').value]`); fmt.Sprint(got) != fmt.Sprint([]string{"probe", "internals"}) {
 		t.Fatalf("the selects read %v after an empty intersection, want the reader's own selection still shown "+
 			"— silently resetting it would hide the combination the notice is naming", got)
 	}
@@ -274,7 +274,7 @@ func TestGraphEmptyScopeIntersectionIsStatedNotBlank(t *testing.T) {
 	// It widens BOTH axes and touches nothing else — the reader's granularity
 	// is not what went wrong.
 	setGranularity(t, ctx, "module")
-	setScopePair(t, ctx, "probe", "design")
+	setScopePair(t, ctx, "probe", "internals")
 	runCDP(t, ctx, chromedp.Click(`.dxg-notices .dxg-notice-action`, chromedp.ByQuery))
 	pollTrue(t, ctx, `document.getElementById('dxgModule').value === '' && document.getElementById('dxgFacet').value === ''`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
@@ -372,7 +372,7 @@ func TestGraphScopeHashRoundTripsBothAxesThroughAReload(t *testing.T) {
 	// An EMPTY intersection survives the same trip, message and all — through a
 	// shared link is the worst place to meet a blank canvas, because it is the
 	// first thing the recipient sees.
-	setScopePair(t, ctx, "probe", "design")
+	setScopePair(t, ctx, "probe", "internals")
 	emptyHash := evalString(t, ctx, `window.location.hash`)
 
 	ctx3 := browserContext(t)
@@ -380,11 +380,11 @@ func TestGraphScopeHashRoundTripsBothAxesThroughAReload(t *testing.T) {
 	pollTrue(t, ctx3, `!!window.dossierxGraphCore`)
 	desktopViewport(t, ctx3)
 	waitVisible(t, ctx3, "#dxgPane .dxg-canvas")
-	if got := evalStrings(t, ctx3, `[document.getElementById('dxgModule').value, document.getElementById('dxgFacet').value]`); fmt.Sprint(got) != fmt.Sprint([]string{"probe", "design"}) {
+	if got := evalStrings(t, ctx3, `[document.getElementById('dxgModule').value, document.getElementById('dxgFacet').value]`); fmt.Sprint(got) != fmt.Sprint([]string{"probe", "internals"}) {
 		t.Fatalf("the selects after reloading an empty-intersection link = %v, want probe and design", got)
 	}
 	notice := evalString(t, ctx3, `document.querySelector('.dxg-notices').textContent`)
-	if !strings.Contains(notice, "probe") || !strings.Contains(notice, "design") {
+	if !strings.Contains(notice, "probe") || !strings.Contains(notice, "internals") {
 		t.Fatalf("notice after reloading an empty-intersection link = %q, want it to name both selections", notice)
 	}
 }
@@ -394,7 +394,7 @@ func TestGraphScopeHashRoundTripsBothAxesThroughAReload(t *testing.T) {
 // ---------------------------------------------------------------------
 
 // Scoping must never hide that a claim reaches outward, and an intersection is
-// a scope like any other. newRailProject's widget.design.thing rests_on
+// a scope like any other. newRailProject's widget.internals.thing rests_on
 // gadget.contract.core, so module=widget × facet=design puts the source in
 // scope and the target outside it along BOTH axes at once — the case a
 // single-axis scope could not construct.
@@ -405,7 +405,7 @@ func TestGraphGhostStubsSurviveAnIntersectionScope(t *testing.T) {
 	openGraphPane(t, ctx)
 	settleFrames(t, ctx)
 
-	setScopePair(t, ctx, "widget", "design")
+	setScopePair(t, ctx, "widget", "internals")
 
 	evalVoid(t, ctx, forceDraw)
 	var f canvasFrame
@@ -422,7 +422,7 @@ func TestGraphGhostStubsSurviveAnIntersectionScope(t *testing.T) {
 		}
 	}
 	if solid != 1 {
-		t.Fatalf("solid nodes under module=widget × facet=design = %d, want 1 (widget.design.thing)", solid)
+		t.Fatalf("solid nodes under module=widget × facet=design = %d, want 1 (widget.internals.thing)", solid)
 	}
 	if ghosts != 1 {
 		t.Fatalf("ghost stubs = %d, want 1 — scoping must never hide that a claim reaches outward, "+

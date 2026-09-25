@@ -25,6 +25,7 @@ import (
 const buildOrderCollidingConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - build-order
   - gamma

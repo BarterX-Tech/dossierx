@@ -15,6 +15,7 @@ const unthemedConfigYAML = `schema_version: 1
 title: Theme Modes Project
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims

@@ -1,5 +1,5 @@
-id: cli.behavior.dry-run-writes-nothing
-facet: behavior
+id: cli.internals.dry-run-writes-nothing
+facet: internals
 module: cli
 status: locked
 layout: card
@@ -7,4 +7,4 @@ build_role: behavior
 body: |
   A dry run reports the transition, the preconditions and the side effects it would have, and writes nothing at all.
 rests_on:
-  - cli.schema.json-envelope
+  - cli.internals.json-envelope

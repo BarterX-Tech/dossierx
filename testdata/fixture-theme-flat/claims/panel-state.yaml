@@ -10,6 +10,6 @@ body: |
   - the scroll position of the reading pane
   - nothing else
 rests_on:
-  - panel.decision.mockup
+  - panel.internals.mockup
 audit_notes:
   - 'stub: ProposeDiff has no real LLM backend yet; dependency "panel.decision.mockup" changed but no proposal was generated'

@@ -1,5 +1,5 @@
-id: beacon.spec.overview
-facet: spec
+id: beacon.internals.overview
+facet: internals
 module: beacon
 status: draft
 layout: card

@@ -30,7 +30,7 @@ func TestCheckExitCode_Parity(t *testing.T) {
 	}
 	writeConfig := func(t *testing.T, root string) {
 		t.Helper()
-		cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+		cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 		if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}

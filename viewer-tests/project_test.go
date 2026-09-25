@@ -89,6 +89,7 @@ func requireBin(t *testing.T) string {
 const defaultConfigYAML = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims

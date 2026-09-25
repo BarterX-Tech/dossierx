@@ -85,7 +85,7 @@ func TestConformanceRealSingletonAndBatchLockLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	cfgText := "schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
+	cfgText := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
 	if err := os.WriteFile(cfgPath, []byte(cfgText), 0o644); err != nil {
 		t.Fatal(err)
 	}

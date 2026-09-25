@@ -50,7 +50,7 @@ func blockingCLIProjectWithPolicy(t *testing.T, policy, claim, observations stri
 		blockingLine = "  blocking: " + policy + "\n"
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n" + blockingLine
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n" + blockingLine
 	for path, data := range map[string]string{
 		cfgPath: cfg,
 		filepath.Join(root, "claims", "state.yaml"): claim,

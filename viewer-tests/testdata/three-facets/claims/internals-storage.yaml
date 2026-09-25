@@ -6,4 +6,4 @@ layout: card
 body: |
   A widget keeps its value in a single field.
 rests_on:
-  - widget.interface.surface
+  - widget.contract.surface

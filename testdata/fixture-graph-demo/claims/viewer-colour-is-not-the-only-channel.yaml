@@ -1,5 +1,5 @@
-id: viewer.decision.colour-is-not-the-only-channel
-facet: decision
+id: viewer.internals.colour-is-not-the-only-channel
+facet: internals
 module: viewer
 status: draft
 layout: card

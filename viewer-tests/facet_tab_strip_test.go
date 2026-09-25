@@ -50,8 +50,8 @@ var threeFacetFacets = []struct {
 	Label   string
 	Count   int
 }{
-	{"widget-contract", "Contract", 2},
-	{"widget-interface", "Interface", 1},
+	{"widget-manifest", "Manifest", 0},
+	{"widget-contract", "Contract", 3},
 	{"widget-internals", "Internals", 1},
 }
 
@@ -200,21 +200,21 @@ func TestThreeFacetTabStripPaintsTheSelectedFacetAndACountPerFacet(t *testing.T)
 
 			var r stripReading
 			evalInto(t, ctx, readStripJS, &r)
-			assertThreeFacetStrip(t, r, scheme, "as rendered", 0)
+			assertThreeFacetStrip(t, r, scheme, "as rendered", 1)
 
 			// Selecting a DIFFERENT facet is what proves the selected-state
 			// rules are about selection and not about position: at this point
-			// the first tab must have gone back to the rest treatment and the
-			// second must have taken the selected one.
+			// the Contract tab must have gone back to the rest treatment and
+			// Internals must have taken the selected one.
 			runCDP(t, ctx, chromedp.Click(
-				`.sub-nav .subtab[data-target="#`+threeFacetFacets[1].GroupID+`"]`, chromedp.ByQuery))
+				`.sub-nav .subtab[data-target="#`+threeFacetFacets[2].GroupID+`"]`, chromedp.ByQuery))
 			pollTrue(t, ctx, fmt.Sprintf(
 				`(document.querySelector('.sub-nav .subtab[data-target="#%s"]') || {classList: {contains: function(){return false;}}}).classList.contains('on')`,
-				threeFacetFacets[1].GroupID))
+				threeFacetFacets[2].GroupID))
 
 			var after stripReading
 			evalInto(t, ctx, readStripJS, &after)
-			assertThreeFacetStrip(t, after, scheme, "after clicking the second facet", 1)
+			assertThreeFacetStrip(t, after, scheme, "after clicking Internals", 2)
 		})
 	}
 }

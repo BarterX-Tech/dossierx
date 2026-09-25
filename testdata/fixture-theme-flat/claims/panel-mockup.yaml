@@ -1,5 +1,5 @@
-id: panel.decision.mockup
-facet: decision
+id: panel.internals.mockup
+facet: internals
 module: panel
 status: locked
 build_role: orientation

@@ -1,6 +1,7 @@
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - orphanmod
 claims_dir: claims

@@ -208,7 +208,7 @@ func TestBuildOrderGate_DroppingTheModuleFromConfigIsLedgerAbandoned(t *testing.
 	// The same project, re-read with a config that no longer declares the
 	// module. The artifact and the record are both still on disk.
 	if err := os.WriteFile(filepath.Join(cfg.Dir(), "project.config.yaml"),
-		[]byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - other\nclaims_dir: claims\n"), 0o644); err != nil {
+		[]byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - other\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("rewrite config: %v", err)
 	}
 	narrowed, err := config.LoadConfig(filepath.Join(cfg.Dir(), "project.config.yaml"))

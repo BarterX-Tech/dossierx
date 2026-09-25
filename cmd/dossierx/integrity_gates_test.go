@@ -446,7 +446,7 @@ func TestClaimShowNeverSuggestsFlaggingAStructuredLayout(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)
@@ -513,10 +513,10 @@ func TestClaimShowNeverSuggestsFlaggingAStructuredLayout(t *testing.T) {
 
 // TestClaimListRefusesAnUndeclaredFacet: --module already refused an unknown
 // value, for the reason cliout states — "an empty report for a typo'd module
-// looks exactly like success" — and --facet, declared in the config the same
-// way, filtered with a bare comparison. A human says "show me the contracts
-// facet", the project declares `contract`, and the agent reports "there are no
-// claims in that facet" at exit 0.
+// looks exactly like success" — and --facet used to filter with a bare
+// comparison. A human says "show me the contracts facet", the engine has
+// `contract`, and the agent reports "there are no claims in that facet" at
+// exit 0.
 func TestClaimListRefusesAnUndeclaredFacet(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
@@ -555,7 +555,7 @@ func restsOnPairProject(t *testing.T, root string) (cfgPath, alphaPath, betaPath
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	lockFixtureConstitution(t, cfgPath)

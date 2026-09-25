@@ -1,5 +1,5 @@
-id: telemetry.verification.offline-suite
-facet: verification
+id: telemetry.internals.offline-suite
+facet: internals
 module: telemetry
 status: draft
 layout: card

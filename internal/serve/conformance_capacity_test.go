@@ -121,20 +121,14 @@ func TestServeLintPrecedesConformanceCapacityLikeEveryCheckMode(t *testing.T) {
 }
 
 func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecovers(t *testing.T) {
-	const facetCount = 600
-	files := make(map[string]string, facetCount+1)
-	facets := make([]string, facetCount)
-	for i := range facets {
-		facet := fmt.Sprintf("f%03d", i)
-		facets[i] = facet
-		files[fmt.Sprintf("claims/f%03d.yaml", i)] = fmt.Sprintf("id: widget.%s.one\nfacet: %s\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\nrests_on:\n  none: true\n  reason: fixture\n", facet, facet)
-	}
-	capacityPath := "claims/f000.yaml"
+	// Facets are engine-fixed. Overflow comes from one oversized embodiment
+	// on a legal contract claim, not from a retired overview injection.
+	capacityPath := "claims/capacity.yaml"
 	capacity := func(reason string) string {
-		return "id: widget.f000.one\nfacet: f000\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
+		return "id: widget.contract.capacity\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
 	}
-	files[capacityPath] = capacity(strings.Repeat("x", 70<<20))
-	cfg := "schema_version: 1\nfacets: [" + strings.Join(facets, ", ") + "]\nmodules: [widget]\nclaims_dir: claims\n"
+	files := map[string]string{capacityPath: capacity(strings.Repeat("x", 70<<20))}
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"
 	_, base, root := startServer(t, cfg, files)
 
 	resp, raw := do(t, http.MethodGet, base+"/api/status", "")

@@ -1,5 +1,5 @@
-id: engine.decision.no-code-nodes
-facet: decision
+id: engine.internals.no-code-nodes
+facet: internals
 module: engine
 status: draft
 layout: card

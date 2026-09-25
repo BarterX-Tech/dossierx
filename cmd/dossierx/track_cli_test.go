@@ -47,7 +47,7 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 	}
 
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - checkout\n  - payments\n" +
 		"claims_dir: claims\n" +
 		"tracks:\n" +

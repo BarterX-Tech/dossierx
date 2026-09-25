@@ -24,6 +24,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
+	"github.com/BarterX-Tech/dossierx/internal/visibility"
 )
 
 // Catalog is the built, render-ready view over a set of claims.
@@ -200,6 +201,23 @@ type Document struct {
 	ByModule map[string][]string `json:"by_module"`
 }
 
+// entryForIntegration is the integration projection of one claim: internals
+// targets are dropped from outgoing edges so a catalog consumer cannot
+// follow a cite into internals.
+func entryForIntegration(c model.Claim, internals map[string]bool) Entry {
+	e := entryFor(c)
+	e.Edges.RestsOn = visibility.DropInternalsTargets(e.Edges.RestsOn, internals)
+	return e
+}
+
+// IsolationClaims is this catalog's isolation surface for module.
+func (cat *Catalog) IsolationClaims(module string) []model.Claim {
+	if cat == nil {
+		return nil
+	}
+	return visibility.IsolationClaims(cat.Claims, module)
+}
+
 // entryFor projects one claim into its Entry form.
 func entryFor(c model.Claim) Entry {
 	e := Entry{
@@ -226,9 +244,9 @@ func entryFor(c model.Claim) Entry {
 	return e
 }
 
-// Document builds the deterministic .catalog.json projection of cat: one
-// Entry per claim, sorted by id (never by Go map order, which is not
-// stable), plus copies of ByFacet/ByModule with each id slice sorted.
+// Document builds the deterministic .catalog.json integration projection:
+// internals claims are omitted, internals-targeting edges are dropped, and
+// remaining entries are sorted by id.
 //
 // Document never panics on an empty catalog: an empty (or nil) Catalog
 // produces a Document with an empty (non-nil) Claims slice and empty
@@ -243,8 +261,12 @@ func (cat *Catalog) Document() *Document {
 		return doc
 	}
 
-	for _, c := range cat.Claims {
-		e := entryFor(c)
+	// catalog.json is the integration export: other modules (and tools) may
+	// read contract, never internals. The in-memory Catalog keeps internals
+	// so isolation (viewer Internals tab, module-local walks) still sees them.
+	internals := visibility.InternalsIDs(cat.Claims)
+	for _, c := range visibility.IntegrationClaims(cat.Claims) {
+		e := entryForIntegration(c, internals)
 		if assessment, ok := cat.Readiness[c.ID]; ok {
 			assessmentCopy := assessment
 			e.Readiness = &assessmentCopy
@@ -258,12 +280,21 @@ func (cat *Catalog) Document() *Document {
 	sort.Slice(doc.Claims, func(i, j int) bool { return doc.Claims[i].ID < doc.Claims[j].ID })
 
 	for facet, ids := range cat.ByFacet {
-		sorted := append([]string(nil), ids...)
+		if facet == config.FacetInternals {
+			continue
+		}
+		sorted := visibility.DropInternalsTargets(ids, internals)
+		if sorted == nil {
+			sorted = []string{}
+		}
 		sort.Strings(sorted)
 		doc.ByFacet[facet] = sorted
 	}
 	for module, ids := range cat.ByModule {
-		sorted := append([]string(nil), ids...)
+		sorted := visibility.DropInternalsTargets(ids, internals)
+		if sorted == nil {
+			sorted = []string{}
+		}
 		sort.Strings(sorted)
 		doc.ByModule[module] = sorted
 	}

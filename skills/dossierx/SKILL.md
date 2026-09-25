@@ -250,9 +250,9 @@ Load one, not all four.
 Only when the human asks, and **in this order** — steps 2 and 3 are not interchangeable.
 
 1. Install the binary if absent, then `dossierx version`.
-2. Propose `project.config.yaml` (title, facets, modules) and `claims/`, and **ask them to confirm
-   the facet list** before writing it. Propose `constitution.yaml` beside it (the critical brief, under
-   800 words); once read, **they** lock it — `dossierx constitution lock --reason "<their words>"`.
+2. Propose `project.config.yaml` (title, modules, and the engine-fixed `facets: [contract, internals]`)
+   and `claims/`. Propose `constitution.yaml` beside it (the critical brief, under 800 words); once
+   read, **they** lock it — `dossierx constitution lock --reason "<their words>"`.
 3. `dossierx skills export .claude/skills` — or whichever directory this harness reads. **Name it
    explicitly** (the harness, not DossierX, decides where skills are read from; with no argument the
    export writes into every `.claude/skills` and `.agents/skills` the repo already has, and a

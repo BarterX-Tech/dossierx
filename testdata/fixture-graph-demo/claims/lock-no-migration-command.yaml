@@ -1,5 +1,5 @@
-id: lock.decision.no-migration-command
-facet: decision
+id: lock.internals.no-migration-command
+facet: internals
 module: lock
 status: draft
 layout: card
@@ -7,4 +7,4 @@ build_role: orientation
 body: |
   A corpus in the shape a new rule rejects was always malformed. Calling that a migration would imply somebody had been relying on it.
 rests_on:
-  - lock.schema.ledger-record
+  - lock.internals.ledger-record

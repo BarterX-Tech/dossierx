@@ -1,5 +1,5 @@
-id: telemetry.decision.counters-are-local
-facet: decision
+id: telemetry.internals.counters-are-local
+facet: internals
 module: telemetry
 status: draft
 layout: card

@@ -36,6 +36,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
+	"github.com/BarterX-Tech/dossierx/internal/visibility"
 )
 
 // The graph and viewer-runtime paths are named individually rather than embedding the
@@ -285,19 +286,16 @@ type ModuleGroup struct {
 	// a single-facet module); resolving a bare "#module" hash to
 	// FirstFacetID's section is the later shell.html step's job.
 	ID string
-	// Facets are this module's facet-level groups, already in the nav
-	// order buildGroups computed for them (declared facets first, then any
-	// remaining present facets alphabetically). Always non-empty — a
-	// ModuleGroup only ever exists because at least one Group produced it.
+	// Facets are this module's peer tabs in engine-fixed order:
+	// Manifest | Contract | Internals. Always three — empty tabs stay
+	// peers so Manifest is never a banner above the other two.
 	Facets []Group
-	// FirstFacetID is Facets[0].ID — the facet section that should render
+	// FirstFacetID is Facets[0].ID — the Manifest section that should render
 	// visible-by-default when this module's sec-tab is chosen, whether by
 	// click or by a bare "#module" hash with no facet suffix.
 	FirstFacetID string
-	// HasSubNav is true only when len(Facets) > 1. A module with exactly
-	// one facet renders no .sub-nav/.subtab strip at all — there is
-	// nothing to switch between — per fix 5's "skip the sub-nav entirely
-	// for a module with exactly 1 facet" requirement.
+	// HasSubNav is true when the module has more than one peer tab. With
+	// engine-fixed Manifest | Contract | Internals that is always true.
 	HasSubNav bool
 	// AllLocked is true only when every facet in Facets has AllLocked ==
 	// true (which itself requires every claim within that facet to be
@@ -340,24 +338,36 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 
 	for i := range out {
 		out[i].HasSubNav = len(out[i].Facets) > 1
-		out[i].FirstFacetID = out[i].Facets[0].ID
+		out[i].FirstFacetID = defaultPeerTabID(out[i].Facets)
 
-		allLocked := true
 		claimCount, lockedCount := 0, 0
 		for _, f := range out[i].Facets {
 			claimCount += f.ClaimCount
 			lockedCount += f.LockedCount
-			if !f.AllLocked {
-				allLocked = false
-			}
 		}
-		out[i].AllLocked = allLocked
+		out[i].AllLocked = claimCount > 0 && lockedCount == claimCount
 		out[i].ClaimCount = claimCount
 		out[i].LockedCount = lockedCount
 		out[i].FacetCount = len(out[i].Facets)
 	}
 
 	return out
+}
+
+// defaultPeerTabID picks the section that should be visible when a module
+// is chosen. The strip order is Manifest | Contract | Internals. An empty
+// Manifest stub is still a peer tab, but it is not a banner and must not
+// hide the first tab that actually holds claims.
+func defaultPeerTabID(facets []Group) string {
+	if len(facets) == 0 {
+		return ""
+	}
+	for _, f := range facets {
+		if f.ClaimCount > 0 {
+			return f.ID
+		}
+	}
+	return facets[0].ID
 }
 
 // ungroupedModuleName is the catch-all bucket's Module value for claims
@@ -878,18 +888,16 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 		return nil
 	}
 
-	var declaredModules, declaredFacets []string
+	var declaredModules []string
 	if cfg != nil {
 		declaredModules = cfg.Modules
-		declaredFacets = cfg.Facets
 	}
-
-	knownModule, knownFacet := newMembershipPredicates(declaredModules, declaredFacets)
+	declaredFacets := visibility.ViewerTabs()
+	knownModule, knownFacet := newMembershipPredicates(declaredModules, config.EngineFacets())
 
 	type groupKey struct{ module, facet string }
 	claimsByKey := map[groupKey][]model.Claim{}
 	moduleSeen := map[string]bool{}
-	facetSeenByModule := map[string]map[string]bool{}
 	var ungrouped []model.Claim
 
 	for _, c := range cat.Claims {
@@ -909,16 +917,18 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 		k := groupKey{c.Module, c.Facet}
 		claimsByKey[k] = append(claimsByKey[k], c)
 		moduleSeen[c.Module] = true
-		if facetSeenByModule[c.Module] == nil {
-			facetSeenByModule[c.Module] = map[string]bool{}
-		}
-		facetSeenByModule[c.Module][c.Facet] = true
 	}
 
 	var groups []Group
 	for _, m := range orderedNames(declaredModules, moduleSeen) {
-		for _, f := range orderedNames(declaredFacets, facetSeenByModule[m]) {
-			groups = append(groups, newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID))
+		// Every seen module gets the three peer tabs. Manifest is empty until
+		// NIT-7 fills it; do not inject retired overview notes onto any tab.
+		for _, f := range declaredFacets {
+			var groupClaims []model.Claim
+			if f != visibility.ViewerTabManifest {
+				groupClaims = claimsByKey[groupKey{m, f}]
+			}
+			groups = append(groups, newGroup(m, f, groupClaims, renderedByID))
 		}
 	}
 
@@ -1079,7 +1089,10 @@ func orderClaims(claims []model.Claim) []model.Claim {
 // metadata as a visible heading between cards.
 func newGroup(module, facet string, claims []model.Claim, renderedByID map[string]template.HTML) Group {
 	claims = orderClaims(claims)
-	htmls := make([]template.HTML, 0, len(claims))
+	htmls := make([]template.HTML, 0, len(claims)+1)
+	if facet == visibility.ViewerTabManifest && len(claims) == 0 {
+		htmls = append(htmls, template.HTML(`<p class="claims-empty">No module manifest yet.</p>`))
+	}
 	allLocked := len(claims) > 0
 	lockedCount := 0
 	for _, c := range claims {

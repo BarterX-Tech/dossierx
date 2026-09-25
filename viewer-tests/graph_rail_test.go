@@ -34,7 +34,7 @@ import (
 const railConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
   - gadget
@@ -64,9 +64,9 @@ status: draft
 // NON-EMPTY answer at both granularities, and a DIFFERENT one at each:
 //
 //	widget.contract.base   no edges at all, and one open comment thread
-//	widget.design.thing    rests_on gadget.contract.core — the one cross-module edge
+//	widget.internals.thing    rests_on gadget.contract.core — the one cross-module edge
 //	gadget.contract.core   two inbound edges
-//	gadget.design.extra    rests_on gadget.contract.core — an intra-module edge
+//	gadget.internals.extra    rests_on gadget.contract.core — an intra-module edge
 //
 // At claims granularity `open_threads` answers "widget.contract.base"; at module
 // granularity it answers "module:widget", because that is the node standing for
@@ -75,9 +75,9 @@ func newRailProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, railConfig)
 	p.writeClaim("base.yaml", railClaim("widget.contract.base", "contract", "widget", ""))
-	p.writeClaim("thing.yaml", railClaim("widget.design.thing", "design", "widget", "gadget.contract.core"))
+	p.writeClaim("thing.yaml", railClaim("widget.internals.thing", "internals", "widget", "gadget.contract.core"))
 	p.writeClaim("core.yaml", railClaim("gadget.contract.core", "contract", "gadget", ""))
-	p.writeClaim("extra.yaml", railClaim("gadget.design.extra", "design", "gadget", "gadget.contract.core"))
+	p.writeClaim("extra.yaml", railClaim("gadget.internals.extra", "internals", "gadget", "gadget.contract.core"))
 	// An open thread is engine-managed state the rail reports on, and the only
 	// one a test can create from the CLI. Without it `open_threads` is empty
 	// at both granularities and proves nothing about which vocabulary it uses.
@@ -184,7 +184,7 @@ func TestGraphRailNamesOnlyNodesTheCanvasDraws(t *testing.T) {
 			granularity: "claims",
 			want: map[string][]string{
 				"isolated":      {"widget.contract.base"},
-				"weakly_linked": {"gadget.design.extra", "widget.design.thing"},
+				"weakly_linked": {"gadget.internals.extra", "widget.internals.thing"},
 				"open_threads":  {"widget.contract.base"},
 			},
 		},
@@ -390,7 +390,7 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 			name:    "no overlay: the facets",
 			overlay: "none",
 			group:   "facets",
-			facets:  []string{"contract", "design"},
+			facets:  []string{"contract", "internals"},
 		},
 		{
 			name:     "an overlay describes what it painted, not the facets",
@@ -414,7 +414,7 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 			name:    "and back",
 			overlay: "none",
 			group:   "facets",
-			facets:  []string{"contract", "design"},
+			facets:  []string{"contract", "internals"},
 		},
 	}
 

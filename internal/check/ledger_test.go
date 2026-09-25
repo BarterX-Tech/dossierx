@@ -208,7 +208,7 @@ func TestRun_LedgerContentDrift(t *testing.T) {
 // payload has to mark it stale). So the precondition is now that the hash DOES
 // move; the assertion that matters, the ledger finding, is unchanged.
 func TestRun_LedgerCatchesSwappedRawHTML(t *testing.T) {
-	cfgBody := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
+	cfgBody := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n" +
 		"mockup_modules:\n  - widget\n"
 	cfg, claims := project(t, cfgBody, map[string]string{
 		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: mockup\n" +

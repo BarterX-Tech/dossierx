@@ -1,5 +1,5 @@
-id: cli.decision.agent-operates-human-reviews
-facet: decision
+id: cli.internals.agent-operates-human-reviews
+facet: internals
 module: cli
 status: draft
 layout: card

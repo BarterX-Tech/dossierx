@@ -533,7 +533,7 @@ func TestGraphCanvasBackingStoreFollowsDevicePixelRatio(t *testing.T) {
 const overlayConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -547,8 +547,8 @@ func newOverlayProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, overlayConfig)
 	p.writeClaim("hub.yaml", graphClaim("widget.contract.hub", "contract", ""))
-	p.writeClaim("leaf1.yaml", graphClaim("widget.design.leaf-one", "design", "widget.contract.hub"))
-	p.writeClaim("leaf2.yaml", graphClaim("widget.design.leaf-two", "design", "widget.contract.hub"))
+	p.writeClaim("leaf1.yaml", graphClaim("widget.internals.leaf-one", "internals", "widget.contract.hub"))
+	p.writeClaim("leaf2.yaml", graphClaim("widget.internals.leaf-two", "internals", "widget.contract.hub"))
 	p.writeClaim("lone.yaml", graphClaim("widget.contract.lone", "contract", ""))
 	return p
 }

@@ -1,5 +1,5 @@
-id: lock.behavior.lock-gates
-facet: behavior
+id: lock.internals.lock-gates
+facet: internals
 module: lock
 status: locked
 layout: card
@@ -8,4 +8,4 @@ emphasis: true
 body: |
   Approval is refused while review findings stand, while a discussion thread is unresolved, or while a dependency has not itself been approved.
 rests_on:
-  - lock.schema.ledger-record
+  - lock.internals.ledger-record

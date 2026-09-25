@@ -1,5 +1,5 @@
-id: telemetry.schema.counter-shape
-facet: schema
+id: telemetry.internals.counter-shape
+facet: internals
 module: telemetry
 status: draft
 layout: card

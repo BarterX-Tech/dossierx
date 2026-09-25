@@ -1,5 +1,5 @@
-id: cli.schema.json-envelope
-facet: schema
+id: cli.internals.json-envelope
+facet: internals
 module: cli
 status: locked
 layout: card
@@ -7,5 +7,5 @@ build_role: schema
 body: |
   Every run emits exactly one envelope carrying a success flag, a data object and, on failure, a stable machine-readable code.
 rests_on:
-  - engine.schema.claim-shape
+  - engine.contract.claim-shape
 review_pending: true

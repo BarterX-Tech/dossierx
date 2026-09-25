@@ -152,7 +152,8 @@ func writeFixtureProject(t *testing.T, root, module string) {
 	}
 
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
+		"facets:\n  - contract\n  - internals\n" +
+		"modules:\n  - " + module + "\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
@@ -394,7 +395,7 @@ func TestLintFailureExitsNonZeroInBothFormats(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - brokenmod\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - brokenmod\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}

@@ -79,7 +79,7 @@ func assertCheckParity(t *testing.T, cfgPath, wantStdout, wantStderr string, wan
 	}
 }
 
-const parityConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+const parityConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 
 // A: two draft claims — exercises the lint-warning block, catalog/render
 // writes, "check: OK", and the "still draft -> claim lock" next step.

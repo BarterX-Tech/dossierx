@@ -7,4 +7,4 @@ build_role: api
 body: |
   No outbound connection is opened. This is asserted by a static scan over the source, not only by review.
 rests_on:
-  - telemetry.behavior.flush-on-exit
+  - telemetry.internals.flush-on-exit

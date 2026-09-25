@@ -18,7 +18,7 @@ func softMountFitProject(t *testing.T) *project {
 	for i := 0; i < 80; i++ {
 		facet := "contract"
 		if i >= 40 {
-			facet = "interface"
+			facet = "internals"
 		}
 		id := fmt.Sprintf("widget.%s.c%02d", facet, i)
 		p.writeClaim(fmt.Sprintf("%s.yaml", id), fmt.Sprintf(`id: %s

@@ -23,7 +23,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - internals\nmodules:\n  - emptyrowsmod\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - emptyrowsmod\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
@@ -146,7 +146,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 
-	cfg := "schema_version: 1\nfacets:\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if allowlisted {
 		cfg += "mockup_modules:\n  - widget\n"
 	}

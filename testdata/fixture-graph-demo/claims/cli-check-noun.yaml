@@ -8,4 +8,4 @@ body: |
   One command runs review, grouping, rendering and the integrity gate, stopping at the first failure.
 rests_on:
   - engine.contract.check-is-fail-fast
-  - cli.behavior.exit-codes
+  - cli.internals.exit-codes

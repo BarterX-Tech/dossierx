@@ -7,4 +7,4 @@ build_role: orientation
 body: |
   This module is a review surface. It renders what the engine produced and never mutates anything.
 rests_on:
-  - viewer.schema.payload-shape
+  - viewer.internals.payload-shape

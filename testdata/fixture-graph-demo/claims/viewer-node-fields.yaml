@@ -1,5 +1,5 @@
-id: viewer.schema.node-fields
-facet: schema
+id: viewer.internals.node-fields
+facet: internals
 module: viewer
 status: locked
 layout: card
@@ -7,4 +7,4 @@ build_role: schema
 body: |
   Every node field is emitted whether or not it is set. An absent key and an empty value are different things to the reader, and one of the gap rules keys off the empty value.
 rests_on:
-  - viewer.schema.payload-shape
+  - viewer.internals.payload-shape

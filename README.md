@@ -45,7 +45,8 @@ Set up DossierX in this repository.
    `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.20`,
    then run `dossierx version` and show me the output.
 2. If `project.config.yaml` and the claims directory do not exist yet,
-   propose a title, the facets, and the modules, and WAIT for me to confirm
+   propose a title and the modules, write `facets: [contract, internals]`
+   (engine-fixed; do not offer other facet names), and WAIT for me to confirm
    before writing anything.
 3. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Run it AFTER
@@ -355,7 +356,7 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `schema_version` | int | yes | Must equal the version this DossierX build understands (currently `1`). |
-| `facets` | []string | yes | The non-empty, deduplicated list of facet names (tabs) this project uses, e.g. `[contract, internals]`. |
+| `facets` | []string | yes | Engine-fixed: must be exactly `[contract, internals]`. No other facet names are legal. Other modules may cite only `contract`. |
 | `modules` | []string | yes | The non-empty, deduplicated list of module names this project documents. |
 | `claims_dir` | string | yes | Directory of claim YAML files, resolved relative to `project.config.yaml`'s own directory (never the process's current working directory). |
 | `conformance.observations` | string | no | One literal, project-owned normalized observation JSON file, resolved relative to the config and required to stay outside `build_dir`. DossierX reads it only when a claim declares `embodiment`; it never runs an adapter. |

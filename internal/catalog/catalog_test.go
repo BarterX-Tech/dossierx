@@ -313,14 +313,14 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 		{
-			ID:     "widget.internals.fields",
-			Facet:  "internals",
+			ID:     "widget.contract.fields",
+			Facet:  "contract",
 			Module: "widget",
 			Status: model.StatusDraft,
 			Rows: []model.Row{
 				{"field": "id", "type": "string"},
 			},
-			RestsOn: model.RestsOnIDs("widget.contract.overview", "widget.contract.sibling"),
+			RestsOn: model.RestsOnIDs("widget.contract.overview", "gadget.contract.api"),
 		},
 	}
 
@@ -359,9 +359,9 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 		t.Errorf("overview rests_on none = %#v, want none with reason", overview.Edges)
 	}
 
-	fields, ok := byID["widget.internals.fields"]
+	fields, ok := byID["widget.contract.fields"]
 	if !ok {
-		t.Fatal("missing widget.internals.fields entry")
+		t.Fatal("missing widget.contract.fields entry")
 	}
 	if fields.Layout != model.LayoutTable {
 		t.Errorf("fields layout = %q, want table (inferred from rows)", fields.Layout)
@@ -374,8 +374,48 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	}
 
 	// Entries must be sorted by id regardless of input order.
-	if doc.Claims[0].ID != "widget.contract.overview" || doc.Claims[1].ID != "widget.internals.fields" {
+	if doc.Claims[0].ID != "widget.contract.fields" || doc.Claims[1].ID != "widget.contract.overview" {
 		t.Errorf("entries not sorted by id: got order %q, %q", doc.Claims[0].ID, doc.Claims[1].ID)
+	}
+}
+
+func TestDocument_IntegrationOmitsInternals(t *testing.T) {
+	claims := []model.Claim{
+		{ID: "widget.contract.api", Facet: "contract", Module: "widget", Status: model.StatusDraft, RestsOn: model.RestsOnIDs("widget.internals.queue", "gadget.contract.api")},
+		{ID: "widget.internals.queue", Facet: "internals", Module: "widget", Status: model.StatusDraft},
+		{ID: "gadget.internals.secret", Facet: "internals", Module: "gadget", Status: model.StatusDraft},
+		{ID: "gadget.contract.api", Facet: "contract", Module: "gadget", Status: model.StatusDraft},
+	}
+	cat, err := Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cat.Claims) != 4 {
+		t.Fatalf("in-memory catalog must keep internals: %d", len(cat.Claims))
+	}
+	iso := cat.IsolationClaims("widget")
+	if len(iso) != 2 {
+		t.Fatalf("isolation widget = %d, want 2", len(iso))
+	}
+	doc := cat.Document()
+	if len(doc.Claims) != 2 {
+		t.Fatalf("integration document = %d, want 2 contract claims", len(doc.Claims))
+	}
+	for _, e := range doc.Claims {
+		if e.Facet == "internals" {
+			t.Fatalf("catalog.json included internals %s", e.ID)
+		}
+		for _, id := range e.Edges.RestsOn {
+			if strings.Contains(id, ".internals.") {
+				t.Fatalf("integration edge still names internals: %s -> %s", e.ID, id)
+			}
+		}
+	}
+	if _, ok := doc.ByFacet["internals"]; ok {
+		t.Fatal("ByFacet must omit internals")
+	}
+	if got := doc.ByModule["widget"]; len(got) != 1 || got[0] != "widget.contract.api" {
+		t.Fatalf("ByModule[widget] = %v, want only contract", got)
 	}
 }
 

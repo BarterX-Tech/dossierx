@@ -1,5 +1,5 @@
-id: widget.interface.surface
-facet: interface
+id: widget.contract.surface
+facet: contract
 module: widget
 status: draft
 layout: card

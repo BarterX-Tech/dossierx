@@ -247,7 +247,7 @@ func TestServe_RefusesWhenOutputsInsideClaimsTree(t *testing.T) {
 	// directories, and that no server ever comes up over such a tree.
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "project.config.yaml"),
-		"schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: .\n")
+		"schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: .\n")
 	cfg, err := config.LoadConfig(filepath.Join(root, "project.config.yaml"))
 	if err == nil {
 		srv := serve.New(cfg, testVersion)
