@@ -235,7 +235,10 @@ longer loads.
 - `constitution lock` keeps the comments in `constitution.yaml` and writes
   the file atomically.
 - `catalog.json` never lists an internals claim id, including in edges, and
-  reports how many edges it dropped. `check`'s catalog count now equals the
+  reports how many edges it dropped. A readiness path or dependency that
+  runs through an internals claim shows `"(internals)"` in place of the id,
+  so a blocked contract claim still says it is blocked; the new
+  `edges.rests_on_internals_omitted` counts the dropped edges. `check`'s catalog count now equals the
   entries actually exported.
 - `manifest list` reports the same findings for a module as `manifest show`.
 - `check --staged` computes the shared isolation budget from the
@@ -243,7 +246,9 @@ longer loads.
 - A module whose isolation view overflows its 6144-byte part is reported by
   `check`, not only by `manifest show --isolation`. The hint says that
   summaries within the character cap can still overflow the byte budget when
-  they use multibyte characters.
+  they use multibyte characters. Because the check is an error on the
+  module, a module no longer fits much beyond about 40 short-summary claims,
+  whatever `max_claims_per_module` allows: split it.
 
 ## [0.7.20] - 2026-09-22
 

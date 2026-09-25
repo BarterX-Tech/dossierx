@@ -156,7 +156,10 @@ module may read, cite (`rests_on`), or pin from a module manifest.
 `internals` may be cited only from the owning module; `rests-on-target` is
 the ERROR that refuses a foreign module's internals on check and lock (see
 *rests_on* below). Isolation of a module may include that module's own
-internals. Integration (including `catalog.json`) never includes internals.
+internals. Integration (including `catalog.json`) never includes internals:
+where a contract claim's readiness runs through an internals claim, the
+catalog writes `"(internals)"` in place of that id and counts the dropped
+edges in `edges.rests_on_internals_omitted`.
 The viewer strip is three peer tabs — Manifest | Contract | Internals — in
 that order. Manifest is not a banner and not a claim facet.
 
