@@ -212,7 +212,9 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 	p.writeClaim("behavior.yaml", behaviorIssueClaimYAML)
 	p.writeClaim("other.yaml", cleanOtherModuleClaimYAML)
 	p.writeClaim("schema.yaml", cleanWidgetFacetClaimYAML)
-	ctx := newLiveTab(t, p)
+	// The strip first shows the offline verdict and is repainted when the
+	// served /api/status lands; the assertions below are about the served one.
+	ctx := newLiveTabWithStatus(t, p)
 
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
 	if !evalBool(t, ctx, `(function(){

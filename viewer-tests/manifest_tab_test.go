@@ -66,9 +66,16 @@ func (p *project) writeManifest(module, body string) {
 
 // openManifestTab loads url, checks the module still opens on Contract with
 // exactly Manifest | Contract | Internals, then clicks its Manifest tab.
+//
+// It always loads a FRESH document. When the tab is already on url, a
+// Navigate to url#module is a same-document fragment change whose hashchange
+// the runtime handles some time later; if the module is already on screen the
+// waits below are satisfied before that, and the late showFromHash then
+// switches the module back to Contract under the Manifest click that
+// followed.
 func openManifestTab(t *testing.T, ctx context.Context, url, module string) {
 	t.Helper()
-	runCDP(t, ctx, chromedp.Navigate(url+"#"+module))
+	runCDP(t, ctx, chromedp.Navigate("about:blank"), chromedp.Navigate(url+"#"+module))
 	// A served page mounts its live controls asynchronously; clicking before
 	// they settle races the runtime's own view restore.
 	pollTrue(t, ctx, `document.readyState === 'complete' && (location.protocol === 'file:' || (document.body.classList.contains('comments-live') && document.body.classList.contains('comments-sse-open')))`)
@@ -92,7 +99,7 @@ func TestManifestTabRendersTheHealthyManifest(t *testing.T) {
 
 	var viewHTML [2]string
 	for i, url := range []string{staticURL, base + "/"} {
-		ctx := browserContext(t)
+		ctx := withInstantScroll(t, browserContext(t))
 		openManifestTab(t, ctx, url, "widget")
 
 		requireAll(t, ctx, "the healthy widget manifest ("+url+")", `var v = document.querySelector('#widget-manifest .manifest-view');
@@ -198,7 +205,7 @@ func TestManifestTabRefusesABrokenManifest(t *testing.T) {
 			}
 
 			base, _ := p.serve()
-			ctx := browserContext(t)
+			ctx := withInstantScroll(t, browserContext(t))
 			openManifestTab(t, ctx, base+"/", "widget")
 
 			const cmd = "dossierx manifest show widget --isolation"
