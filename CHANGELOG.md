@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constitution's Project claims tab; the reading view's `Ungrouped`
   catch-all is for malformed claims and does not adopt it, so the Modules
   group neither counts nor lists a pseudo-module for the project store.
+  `check --staged` reads the store from the git index like `claims/` —
+  index content only, under the staged config, an absent store an empty
+  store — so the pre-commit hook agrees with plain `check` on a project that
+  uses project claims instead of reporting `dangling` on every module claim
+  resting on `project.<slug>` and `lock-ledger-abandoned` on every locked
+  project claim.
 - **`rests_on` is required (NIT-24).** Every claim carries a list of claim ids
   or `{none: true, reason}`; `rests-on-required` refuses neither and both.
   Targets are claim ids only — `project.<slug>`, any module's `*.contract.*`,

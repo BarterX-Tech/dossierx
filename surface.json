@@ -494,7 +494,7 @@
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/catalog": "sha256:377c9fe198f52d3680a163239a3db46392eb4f7c4ba3fe701fd96273f9829093",
-    "internal/check": "sha256:95e22356986b7a86c1f656043957da15995415be8d47f529c99feca6ff0f2ebd",
+    "internal/check": "sha256:a4ebfbed6312721aad86b1f192c19443a078b5fcff3d8f3ac55384a9800eebb0",
     "internal/cliout": "sha256:bbd11a5f3a2b24aee4d557280f470f971f2124402dbabb5d1a8cac678bce1bfe",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
     "internal/config": "sha256:a15827d131e944f626a8a539da72b5b66d5c2fdc08a53208ed6652cd51da6a5a",
@@ -520,7 +520,7 @@
     "internal/serve": "sha256:0ad4bd18550a8d50d5a55b39293549398a62c78379c20b97b9c4969305ea6867",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:0a3c9d51f8ae350595906944ccc593198aba35534f4592c2b2c92dfc2bc2e7e7"
+    "skills": "sha256:bda39a0ec32a014244146b4c7b49107b6937aaf0208f6222d16d63b1b72f7cf7"
   },
   "envelope": {
     "keys": [

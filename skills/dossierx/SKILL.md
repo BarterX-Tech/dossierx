@@ -214,7 +214,7 @@ while locked claims remain (tampering; restore from git).
 
 **2. `check --staged` judges the GIT INDEX** — what the commit will contain — with `git show` instead
 of the worktree, **writing nothing**; that is what makes a pre-commit hook meaningful. It judges **one
-tree**: no git history, no parent comparison, same verdict in every clone.
+tree**: no git history, no parent comparison, same verdict in every clone; it reads `project-claims/` from the index like `claims/`.
 **DossierX detects; the forge enforces** — every rule is evidence production, not prevention, so
 branch protection plus a required CI check is what makes anyone obey it, and is the answer when a
 human asks you to set integrity up.
