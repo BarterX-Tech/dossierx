@@ -3962,7 +3962,7 @@
     clear(el.detail);
     if (!scene || state.selected === '') {
       el.detail.appendChild(
-        h('p', 'dxg-detail-empty', 'select a node for its facet, status, degree and governors')
+        h('p', 'dxg-detail-empty', 'select a node for its module, facet, status and degree')
       );
       return;
     }

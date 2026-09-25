@@ -136,7 +136,7 @@
 {{if .HasSubNav}}
               <div class="sub-nav">
 {{range .Facets}}
-                  <button class="subtab" data-target="#{{.ID}}"><span class="sec-tab__label">{{.TabLabel}}</span><span class="sec-tab__count">{{.ClaimCount}}</span></button>
+                  <button class="subtab" data-target="#{{.ID}}"><span class="sec-tab__label">{{.TabLabel}}</span>{{if .CountsClaims}}<span class="sec-tab__count">{{.ClaimCount}}</span>{{end}}</button>
 {{end}}
               </div>
 {{end}}
@@ -213,7 +213,7 @@
             <button class="subtab" data-target="#constitution-project-claims">Project claims</button>
           </div>
           <section class="claim-group reading-canvas" id="constitution-file" hidden>
-{{if .Constitution.Present}}{{.Constitution.FileHTML}}{{else}}<p class="claims-empty">No constitution.yaml yet.</p>{{end}}
+{{if .Constitution.Present}}<div class="constitution-view">{{.Constitution.FileHTML}}</div>{{else}}<p class="claims-empty">No constitution.yaml yet.</p>{{end}}
           </section>
           <section class="claim-group reading-canvas" id="constitution-project-claims" hidden>
 {{if .Constitution.ProjectClaims}}{{range .Constitution.ProjectClaims}}{{.}}
