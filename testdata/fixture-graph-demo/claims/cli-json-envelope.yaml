@@ -1,13 +1,11 @@
-id: cli.schema.json-envelope
-facet: schema
+id: cli.internals.json-envelope
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: cli
 status: locked
 layout: card
-build_role: schema
 body: |
   Every run emits exactly one envelope carrying a success flag, a data object and, on failure, a stable machine-readable code.
-governed_by:
-  type: none
-  reason: a demo corpus claim, not backed by any real doctrine
 rests_on:
-  - engine.schema.claim-shape
+  - engine.contract.claim-shape
+review_pending: true

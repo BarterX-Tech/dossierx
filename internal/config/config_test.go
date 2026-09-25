@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -36,14 +37,11 @@ claims_dir: claims
 	if cfg.ClaimsDir != want {
 		t.Errorf("ClaimsDir = %q, want %q", cfg.ClaimsDir, want)
 	}
-	if cfg.HubGatingEnabled() {
-		t.Errorf("HubGatingEnabled = true, want false (doctrine_facet unset)")
+	if !strings.HasSuffix(cfg.Constitution, DefaultConstitution) {
+		t.Errorf("Constitution = %q, want default %q", cfg.Constitution, DefaultConstitution)
 	}
-	// doctrine_facet must stay exactly "" — never defaulted to a guess
-	// (e.g. the first facet, or a facet named "doctrine" if one happens
-	// to exist).
-	if cfg.DoctrineFacet != "" {
-		t.Errorf("DoctrineFacet = %q, want \"\" (must not be defaulted when omitted)", cfg.DoctrineFacet)
+	if !strings.HasSuffix(cfg.ProjectClaimsDir, DefaultProjectClaimsDir) {
+		t.Errorf("ProjectClaimsDir = %q, want default %q", cfg.ProjectClaimsDir, DefaultProjectClaimsDir)
 	}
 }
 
@@ -54,7 +52,7 @@ func TestLoadConfig_ClaimsDirResolvedAgainstConfigNotCwd(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 `)
@@ -87,7 +85,7 @@ func TestLoadConfig_UnknownSchemaVersion(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 99
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 `)
@@ -97,6 +95,54 @@ claims_dir: claims
 	}
 	if !strings.Contains(err.Error(), "99") {
 		t.Errorf("expected error to name the offending schema_version 99, got: %v", err)
+	}
+}
+
+func TestLoadConfig_FacetsMustBeEngineFixed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := writeConfig(t, dir, "project.config.yaml", `
+schema_version: 1
+facets: [contract, internals, doctrine]
+modules: [ledger]
+claims_dir: claims
+`)
+	_, err := LoadConfig(p)
+	if err == nil {
+		t.Fatal("expected error for extra facet")
+	}
+	if !strings.Contains(err.Error(), "doctrine") {
+		t.Errorf("expected error to name doctrine, got: %v", err)
+	}
+
+	p2 := writeConfig(t, dir, "only-contract.yaml", `
+schema_version: 1
+facets: [contract]
+modules: [ledger]
+claims_dir: claims
+`)
+	_, err = LoadConfig(p2)
+	if err == nil {
+		t.Fatal("expected error for missing internals")
+	}
+	if !strings.Contains(err.Error(), "internals") {
+		t.Errorf("expected error to require internals, got: %v", err)
+	}
+
+	p3 := writeConfig(t, dir, "reversed.yaml", `
+schema_version: 1
+facets: [internals, contract]
+modules: [ledger]
+claims_dir: claims
+`)
+	cfg, err := LoadConfig(p3)
+	if err != nil {
+		t.Fatalf("reversed engine facets must load: %v", err)
+	}
+	if len(cfg.Facets) != 2 || cfg.Facets[0] != FacetContract || cfg.Facets[1] != FacetInternals {
+		t.Fatalf("Facets normalized = %v, want [contract internals]", cfg.Facets)
 	}
 }
 
@@ -114,6 +160,23 @@ claims_dir: claims
 	}
 	if !strings.Contains(err.Error(), "facets") {
 		t.Errorf("expected error to name facets as the empty field, got: %v", err)
+	}
+}
+
+func TestLoadConfig_OverviewFacetRefused(t *testing.T) {
+	dir := t.TempDir()
+	p := writeConfig(t, dir, "project.config.yaml", `
+schema_version: 1
+facets: [contract, overview]
+modules: [ledger]
+claims_dir: claims
+`)
+	_, err := LoadConfig(p)
+	if err == nil {
+		t.Fatal("expected error for reserved overview facet, got nil")
+	}
+	if !strings.Contains(err.Error(), "overview") || !strings.Contains(err.Error(), "removed") {
+		t.Errorf("expected error to refuse overview as removed, got: %v", err)
 	}
 }
 
@@ -138,7 +201,7 @@ func TestLoadConfig_EmptyModules(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: []
 claims_dir: claims
 `)
@@ -151,7 +214,7 @@ func TestLoadConfig_MissingClaimsDir(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 `)
 	_, err := LoadConfig(p)
@@ -163,60 +226,122 @@ modules: [ledger]
 	}
 }
 
-func TestLoadConfig_UnknownField(t *testing.T) {
+func TestLoadConfig_ClaimCharCapsDefaultAndOverride(t *testing.T) {
 	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract]
-modules: [ledger]
-claims_dir: claims
-totally_unknown_field: true
-`)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected strict-decode error for unknown field, got nil")
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "totally_unknown_field") {
-		t.Errorf("expected error to name the unknown field totally_unknown_field, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), p) {
-		t.Errorf("expected error to name the config file path %q, got: %v", p, err)
-	}
-}
 
-func TestLoadConfig_DoctrineFacetNotInFacets(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
+	omitted := writeConfig(t, dir, "omit.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
-doctrine_facet: doctrine
 `)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected error for doctrine_facet not present in facets, got nil")
-	}
-	if !strings.Contains(err.Error(), "doctrine") {
-		t.Errorf("expected error to name the unknown doctrine_facet value %q, got: %v", "doctrine", err)
-	}
-}
-
-func TestLoadConfig_DoctrineFacetValid(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract, doctrine]
-modules: [ledger]
-claims_dir: claims
-doctrine_facet: doctrine
-`)
-	cfg, err := LoadConfig(p)
+	cfg, err := LoadConfig(omitted)
 	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
+		t.Fatalf("LoadConfig omit: %v", err)
 	}
-	if !cfg.HubGatingEnabled() {
-		t.Errorf("HubGatingEnabled = false, want true")
+	if cfg.MaxClaimBodyChars != nil || cfg.MaxClaimSummaryChars != nil {
+		t.Fatalf("omitted caps must stay nil, body=%v summary=%v", cfg.MaxClaimBodyChars, cfg.MaxClaimSummaryChars)
+	}
+	if got := cfg.ClaimBodyCharLimit(); got != DefaultMaxClaimBodyChars {
+		t.Fatalf("ClaimBodyCharLimit = %d, want %d", got, DefaultMaxClaimBodyChars)
+	}
+	if got := cfg.ClaimSummaryCharLimit(); got != DefaultMaxClaimSummaryChars {
+		t.Fatalf("ClaimSummaryCharLimit = %d, want %d", got, DefaultMaxClaimSummaryChars)
+	}
+	if cfg.MaxClaimsPerModule != nil {
+		t.Fatalf("omitted max_claims_per_module must stay nil, got %v", *cfg.MaxClaimsPerModule)
+	}
+	if got := cfg.ClaimsPerModuleLimit(); got != DefaultMaxClaimsPerModule {
+		t.Fatalf("ClaimsPerModuleLimit = %d, want %d", got, DefaultMaxClaimsPerModule)
+	}
+
+	raised := writeConfig(t, dir, "raised.yaml", `
+schema_version: 1
+facets: [contract, internals]
+modules: [ledger]
+claims_dir: claims
+max_claim_body_chars: 4000
+max_claim_summary_chars: 80
+max_claims_per_module: 40
+`)
+	cfg, err = LoadConfig(raised)
+	if err != nil {
+		t.Fatalf("LoadConfig raised: %v", err)
+	}
+	if cfg.MaxClaimBodyChars == nil || *cfg.MaxClaimBodyChars != 4000 {
+		t.Fatalf("MaxClaimBodyChars = %v, want 4000", cfg.MaxClaimBodyChars)
+	}
+	if cfg.MaxClaimSummaryChars == nil || *cfg.MaxClaimSummaryChars != 80 {
+		t.Fatalf("MaxClaimSummaryChars = %v, want 80", cfg.MaxClaimSummaryChars)
+	}
+	if got := cfg.ClaimBodyCharLimit(); got != 4000 {
+		t.Fatalf("ClaimBodyCharLimit = %d, want 4000", got)
+	}
+	if got := cfg.ClaimSummaryCharLimit(); got != 80 {
+		t.Fatalf("ClaimSummaryCharLimit = %d, want 80", got)
+	}
+	if cfg.MaxClaimsPerModule == nil || *cfg.MaxClaimsPerModule != 40 {
+		t.Fatalf("MaxClaimsPerModule = %v, want 40", cfg.MaxClaimsPerModule)
+	}
+	if got := cfg.ClaimsPerModuleLimit(); got != 40 {
+		t.Fatalf("ClaimsPerModuleLimit = %d, want 40", got)
+	}
+}
+
+func TestLoadConfig_ClaimCharCapsRejectZeroAndNegative(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"max_claim_body_chars", "max_claim_summary_chars", "max_claims_per_module"} {
+		for _, n := range []int{0, -3} {
+			p := writeConfig(t, dir, "bad.yaml", `
+schema_version: 1
+facets: [contract, internals]
+modules: [ledger]
+claims_dir: claims
+`+field+`: `+strconv.Itoa(n)+`
+`)
+			_, err := LoadConfig(p)
+			if err == nil {
+				t.Fatalf("expected error for %s %d", field, n)
+			}
+			if !strings.Contains(err.Error(), field) {
+				t.Fatalf("error must name %s, got: %v", field, err)
+			}
+		}
+	}
+}
+
+// TestLoadConfig_UnknownField: the strict decode refuses any field the schema
+// does not declare, naming the field and the file — including doctrine_facet,
+// the retired setting an upgraded project may still carry.
+func TestLoadConfig_UnknownField(t *testing.T) {
+	for _, field := range []string{"totally_unknown_field: true", "doctrine_facet: doctrine"} {
+		name := strings.SplitN(field, ":", 2)[0]
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := writeConfig(t, dir, "project.config.yaml", `
+schema_version: 1
+facets: [contract, internals]
+modules: [ledger]
+claims_dir: claims
+`+field+`
+`)
+			_, err := LoadConfig(p)
+			if err == nil {
+				t.Fatalf("expected strict-decode error for unknown field %s, got nil", name)
+			}
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("expected error to name the unknown field %s, got: %v", name, err)
+			}
+			if !strings.Contains(err.Error(), p) {
+				t.Errorf("expected error to name the config file path %q, got: %v", p, err)
+			}
+		})
 	}
 }
 
@@ -224,7 +349,7 @@ func TestLoadConfig_TemplateOverridesMissingDirIsHardError(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 viewer:
@@ -242,7 +367,7 @@ func TestLoadConfig_TemplateOverridesValidDir(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 viewer:
@@ -262,7 +387,7 @@ func TestLoadConfig_SourceDirsMissingDirIsHardError(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 source_dirs:
@@ -280,7 +405,7 @@ func TestLoadConfig_SourceDirsValidDirsResolvedAbsolute(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 source_dirs:
@@ -306,7 +431,7 @@ func TestLoadConfig_SourceDirsUnsetIsFine(t *testing.T) {
 	dir := t.TempDir()
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 `)
@@ -323,7 +448,7 @@ func TestLoadConfig_CustomThemesRemoved(t *testing.T) {
 	for _, body := range []string{"{}", "null", "{preset: claude}", "{extends: themes/house.yaml}", "{paper: '#fff'}", "{fonts: []}", "invalid"} {
 		t.Run(body, func(t *testing.T) {
 			dir := t.TempDir()
-			raw := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nviewer:\n  theme: " + body + "\n"
+			raw := "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\nviewer:\n  theme: " + body + "\n"
 			_, err := DecodeConfig([]byte(raw), dir, "project.config.yaml")
 			if err == nil || !strings.Contains(err.Error(), "viewer.theme is no longer supported; remove viewer.theme") {
 				t.Fatalf("legacy theme %s: %v", body, err)
@@ -396,7 +521,7 @@ func TestLoadConfig_BuildDirDefaultsToBuildUnderConfigDir(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 `)
@@ -416,7 +541,7 @@ func TestLoadConfig_BuildDirRelativeResolvesAgainstConfigNotCwd(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
 build_dir: out/dossierx
@@ -456,7 +581,7 @@ func TestLoadConfig_ConformanceObservationCannotAliasGeneratedOutput(t *testing.
 	}
 	for _, observation := range []string{"build/observations.json", "build/catalog/catalog.json", "build/conformance/status.json", "build/viewer/index.html"} {
 		t.Run(observation, func(t *testing.T) {
-			p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: "+observation+"\n")
+			p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: "+observation+"\n")
 			_, err := LoadConfig(p)
 			if err == nil || !strings.Contains(err.Error(), "outside build_dir") {
 				t.Fatalf("error = %v", err)
@@ -479,7 +604,7 @@ func TestLoadConfig_ConformanceObservationsRequiresExplicitYAMLString(t *testing
 	}
 	for name, value := range cases {
 		t.Run(name, func(t *testing.T) {
-			body := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: " + value + "\n"
+			body := "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: " + value + "\n"
 			_, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", body))
 			if err == nil || !strings.Contains(err.Error(), "conformance.observations: expected a string") {
 				t.Fatalf("error = %v", err)
@@ -487,7 +612,7 @@ func TestLoadConfig_ConformanceObservationsRequiresExplicitYAMLString(t *testing
 		})
 	}
 
-	cfg, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: \"123\"\n"))
+	cfg, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: \"123\"\n"))
 	if err != nil {
 		t.Fatalf("quoted string rejected: %v", err)
 	}
@@ -501,7 +626,7 @@ func TestLoadConfig_ConformanceBlockingDefaultsFalseAndAcceptsExplicitBoolean(t 
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	base := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\n"
+	base := "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\n"
 
 	for _, tc := range []struct {
 		name string
@@ -530,7 +655,7 @@ func TestLoadConfig_ConformanceBlockingRequiresExplicitYAMLBoolean(t *testing.T)
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	base := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  blocking: "
+	base := "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  blocking: "
 	for name, value := range map[string]string{
 		"quoted":   `"true"`,
 		"number":   "1",
@@ -552,7 +677,7 @@ func TestLoadConfig_ConformanceKeysRejectDuplicatesIndependently(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	base := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n"
+	base := "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n"
 	for name, fields := range map[string]string{
 		"observations": "  observations: one.json\n  observations: two.json\n",
 		"blocking":     "  blocking: true\n  blocking: false\n",
@@ -595,7 +720,7 @@ func TestLoadConfig_BuildDirInsideClaimsDirIsRefused(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			body := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: " + tc.claimsDir + "\nbuild_dir: " + tc.buildDir + "\n"
+			body := "schema_version: 1\nfacets: [contract, internals]\nmodules: [ledger]\nclaims_dir: " + tc.claimsDir + "\nbuild_dir: " + tc.buildDir + "\n"
 			p := writeConfig(t, dir, "project.config.yaml", body)
 			cfg, err := LoadConfig(p)
 			if !tc.refused {
@@ -612,6 +737,32 @@ func TestLoadConfig_BuildDirInsideClaimsDirIsRefused(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "build_dir") {
 				t.Fatalf("the refusal must name build_dir, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestLoadConfig_ProjectClaimsDirInsideClaimsDirIsRefused: a project-claims
+// store inside claims_dir (or wrapping it) is refused at config load, so the
+// loader can never be handed one — LoadClaims would otherwise walk the project
+// store as module claims, and id-shape would refuse every project.<slug> file
+// it found there.
+func TestLoadConfig_ProjectClaimsDirInsideClaimsDirIsRefused(t *testing.T) {
+	for _, tc := range []struct{ name, projectClaimsDir string }{
+		{"store under claims_dir", "claims/project"},
+		{"store equal to claims_dir", "claims"},
+		{"store wrapping claims_dir", "."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			p := writeConfig(t, dir, "project.config.yaml",
+				"schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nproject_claims_dir: "+tc.projectClaimsDir+"\n")
+			_, err := LoadConfig(p)
+			if err == nil || !strings.Contains(err.Error(), "project_claims_dir") || !strings.Contains(err.Error(), "must sit outside claims_dir") {
+				t.Fatalf("expected the containment refusal, got %v", err)
 			}
 		})
 	}

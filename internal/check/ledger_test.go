@@ -14,6 +14,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution/constitutiontest"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -47,6 +48,18 @@ func armLedger(t *testing.T, cfg *config.Config, claims []model.Claim) {
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("arm ledger: save store: %v", err)
+	}
+}
+
+// armConstitution gives a fixture the locked roof the gate demands (NIT-26):
+// a minimal constitution.yaml beside the config (unless the fixture wrote its
+// own) and the lock-store record `constitution lock` would have left. It is
+// the fixture equivalent of "a human locked the roof" — the same standing
+// armLedger gives hand-written "status: locked" claims.
+func armConstitution(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	if err := constitutiontest.Arm(cfg); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -161,13 +174,13 @@ func TestRun_LedgerContentDrift(t *testing.T) {
 // payload has to mark it stale). So the precondition is now that the hash DOES
 // move; the assertion that matters, the ledger finding, is unchanged.
 func TestRun_LedgerCatchesSwappedRawHTML(t *testing.T) {
-	cfgBody := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
+	cfgBody := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n" +
 		"mockup_modules:\n  - widget\n"
 	cfg, claims := project(t, cfgBody, map[string]string{
 		"claims/mock.yaml": "id: widget.contract.mock\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: mockup\n" +
 			"raw_html: '<div class=\"gcp-row\">approved markup</div>'\nraw_html_reviewed: true\n" +
 			"body: |\n  a locked mockup.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	if got := lock.ContentHash(claims[0]); got == lock.ContentHash(swapRawHTML(claims[0])) {
 		t.Fatalf("precondition failed: since v0.4.1 ContentHash covers raw_html, but it did not move (got %s for both)", got)
@@ -210,9 +223,9 @@ func TestRun_LedgerOrphan(t *testing.T) {
 // just as much.
 func TestRun_CommentLedgerDrift(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -233,10 +246,13 @@ func TestRun_CommentLedgerDrift(t *testing.T) {
 // people learn to ignore, and every project predating the digest store would
 // otherwise light up on upgrade day.
 func TestRun_NoDigestStoreMeansUnknownNotDrifted(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	// Unroofed on purpose: a locked roof is a ledger write, and its Save
+	// creates the digest store beside it — after that, a missing digest
+	// store is a DELETION. "Never had one" is only reachable before the roof.
+	cfg, claims := projectUnroofed(t, baseConfig, map[string]string{
+		"claims/draft.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  a draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -244,14 +260,18 @@ func TestRun_NoDigestStoreMeansUnknownNotDrifted(t *testing.T) {
 	// a digest store. (The claim here is a DRAFT, so nothing armed the lock
 	// ledger either — which is what keeps comment-digest-absent out of it too:
 	// that rule fires only once a project is ledger-covered.)
-	if err := os.Remove(digest.StorePath(cfg)); err != nil {
+	if err := os.Remove(digest.StorePath(cfg)); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("remove digest store: %v", err)
 	}
 	claims[0].Comments = nil
 
 	res, err := check.Run(claims, cfg)
-	if err != nil {
+	if len(res.LedgerFindings) != 0 {
 		t.Fatalf("expected no findings without a digest store, got %v (%v)", err, rulesOf(res.LedgerFindings))
+	}
+	// The only refusal left is the roof's, and it is a gate, not a finding.
+	if !errors.Is(err, check.ErrConstitutionGate) {
+		t.Fatalf("expected only the roof gate to refuse an unroofed project, got %v", err)
 	}
 }
 
@@ -394,7 +414,9 @@ func itoa(n int64) string {
 func TestLintErrorStillReportsTheLedgerGate(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
-		"claims/draft.yaml":  draftClaim("widget.contract.draft") + "rests_on:\n  - widget.contract.nope\n",
+		"claims/draft.yaml": "id: widget.contract.draft\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"body: |\n  a draft claim.\n" +
+			"rests_on:\n  - widget.contract.nope\n",
 	})
 
 	// The hand edit to the LOCKED claim, after the fixture armed its approval.
@@ -443,9 +465,9 @@ func runResult(t *testing.T, claims []model.Claim, cfg *config.Config) check.Res
 func TestRun_DeletingTheDigestStoreIsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
-		"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -529,9 +551,8 @@ func downgradeLockStore(t *testing.T, cfg *config.Config, keepDigestStore bool) 
 // load-bearing as the finding assertion.
 func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
+		"claims/a.yaml": lockedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
 	downgradeLockStore(t, cfg, false)
 
 	res := check.Status(claims, cfg)
@@ -554,51 +575,6 @@ func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing
 	}
 }
 
-// THE STATE THE CLAIMS-ONLY EMITTER CANNOT SEE: a pre-ledger project holding a
-// LOCKED BUILD ORDER and ZERO locked claims.
-//
-// It is reachable, and it was silent. `claim unlock` never touches the
-// build-order artifact and internal/buildorder never clears Locked on unlock, so
-// lock a module, lock its order, then unlock every claim. In that state
-// lock.Audit's claims-only term is zero and buildOrderGate suppresses
-// build-order-ledger-missing under the pre-ledger exemption — while BOTH write
-// paths refuse with pre_ledger_unadopted. A refusal with no finding naming it,
-// and no recovery text reachable from `check`, is exactly what the project-scoped
-// rule exists to prevent.
-//
-// So: exactly ONE lock-ledger-pre-ledger (not one per module, and not two from
-// the two emitters), and still zero build-order-ledger-missing.
-func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
-	})
-	lockBuildOrder(t, cfg, claims, "widget")
-	downgradeLockStore(t, cfg, false)
-
-	// Unlock every claim, leaving the LOCKED artifact in place — the reachable
-	// state described above.
-	for i := range claims {
-		claims[i].Status = model.StatusDraft
-	}
-
-	got := rulesOf(check.Status(claims, cfg).LedgerFindings)
-	preLedger, missing := 0, 0
-	for _, r := range got {
-		switch r {
-		case lock.RuleLockLedgerPreLedger:
-			preLedger++
-		case check.RuleBuildOrderLedgerMissing:
-			missing++
-		}
-	}
-	if preLedger != 1 {
-		t.Fatalf("expected exactly one %s so check and the write path agree, got %d in %v", lock.RuleLockLedgerPreLedger, preLedger, got)
-	}
-	if missing != 0 {
-		t.Fatalf("the pre-ledger exemption still covers the build order itself; got %d %s in %v", missing, check.RuleBuildOrderLedgerMissing, got)
-	}
-}
-
 // The same bytes, with the sibling file that proves this project has already
 // been through a ledger-aware build, are a downgrade — and the read-only path
 // must not extend the pre-ledger exemption to them. Otherwise the fix for the
@@ -606,13 +582,12 @@ func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *test
 // edit one number, and check --staged reports nothing at all.
 func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
+		"claims/a.yaml": lockedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
 	downgradeLockStore(t, cfg, true)
 
 	res := check.Status(claims, cfg)
-	for _, want := range []string{lock.RuleLockLedgerDowngraded, lock.RuleLockLedgerMissing, check.RuleBuildOrderLedgerMissing} {
+	for _, want := range []string{lock.RuleLockLedgerDowngraded, lock.RuleLockLedgerMissing} {
 		if !hasRule(res.LedgerFindings, want) {
 			t.Fatalf("expected %s, got %v", want, rulesOf(res.LedgerFindings))
 		}
@@ -629,9 +604,9 @@ func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
 // unreported. Deleting more had to stop buying more silence: the partial launder
 // was caught and the total one was free.
 func TestRun_DeletingTheOnlyThreadAndTheDigestStoreIsStillReported(t *testing.T) {
-	const commented = "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	const commented = "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n"
 
@@ -676,20 +651,20 @@ func TestRun_DeletingTheOnlyThreadAndTheDigestStoreIsStillReported(t *testing.T)
 // tampered with.
 func TestRun_DigestStoreAbsenceIsSilentWithoutLedgerCoverage(t *testing.T) {
 	t.Run("not yet ledger-covered", func(t *testing.T) {
-		cfg, claims := project(t, baseConfig, map[string]string{
-			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		cfg, claims := projectUnroofed(t, baseConfig, map[string]string{
+			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 				"body: |\n  a draft claim.\n" +
-				"governed_by:\n  type: none\n  reason: fixture\n" +
+				"rests_on:\n  none: true\n  reason: fixture\n" +
 				"comments:\n" +
 				"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 		})
 		// Nothing is locked, so there is no lock store: the shape of a project
 		// that has not yet run a ledger-aware build.
-		if err := os.Remove(digest.StorePath(cfg)); err != nil {
+		if err := os.Remove(digest.StorePath(cfg)); err != nil && !os.IsNotExist(err) {
 			t.Fatalf("remove digest store: %v", err)
 		}
 		res, err := check.Run(claims, cfg)
-		if err != nil {
+		if len(res.LedgerFindings) != 0 || !errors.Is(err, check.ErrConstitutionGate) {
 			t.Fatalf("a project that is not ledger-covered must not be accused: %v (%v)", err, rulesOf(res.LedgerFindings))
 		}
 	})

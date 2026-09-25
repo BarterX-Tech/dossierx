@@ -1,0 +1,10 @@
+id: project.scope
+summary: Every widget is kept under one roof; no module redefines it.
+scope: project
+status: draft
+layout: card
+body: |
+  Every widget this project documents is kept under one roof, and no module redefines what a widget is.
+rests_on:
+  none: true
+  reason: the roof above this claim is the constitution, which is not a claim

@@ -25,9 +25,8 @@ func writeIDsFixtureProject(t *testing.T, root string) (claimsDir string) {
 		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - widget\n" +
 		"claims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, root)
 	return claimsDir
 }
 
@@ -50,8 +49,8 @@ facet: contract
 module: widget
 status: draft
 body: first claim with this id
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 	writeIDsClaim(t, claimsDir, "b.yaml", `id: widget.contract.overview
@@ -59,8 +58,8 @@ facet: contract
 module: widget
 status: draft
 body: second claim with the same id
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 
@@ -86,8 +85,8 @@ facet: contract
 module: widget
 status: draft
 body: id has only one segment, not module.facet.slug
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 
@@ -100,7 +99,7 @@ governed_by:
 	}
 }
 
-// Row 3: claim's facet is not in the project's configured facets ->
+// Row 3: claim's facet is not engine-fixed ->
 // id-shape lint error naming the unknown facet.
 func TestClaimsIDs_UnknownFacet(t *testing.T) {
 	root := t.TempDir()
@@ -110,9 +109,9 @@ func TestClaimsIDs_UnknownFacet(t *testing.T) {
 facet: doctrine
 module: widget
 status: draft
-body: doctrine is not a configured facet
-governed_by:
-  type: none
+body: doctrine is not an engine-fixed facet
+rests_on:
+  none: true
   reason: fixture
 `)
 
@@ -139,8 +138,8 @@ facet: contract
 module: gadget
 status: draft
 body: gadget is not a configured module
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 
@@ -187,8 +186,8 @@ func TestClaimsIDs_NoContentIsInvalid(t *testing.T) {
 facet: contract
 module: widget
 status: draft
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 
@@ -216,6 +215,7 @@ facet: internals
 module: widget
 status: draft
 layout: table
+summary: Fixture claim used by the engine test corpus.
 body: |
   Prose context alongside the structured field table below.
 rows:
@@ -223,8 +223,8 @@ rows:
     type: string
   - field: name
     type: string
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 
@@ -245,8 +245,8 @@ func TestClaimsIDs_UnicodeSlugRejected(t *testing.T) {
 		"module: widget\n"+
 		"status: draft\n"+
 		"body: slug contains an accented character outside [a-z0-9-]\n"+
-		"governed_by:\n"+
-		"  type: none\n"+
+		"rests_on:\n"+
+		"  none: true\n"+
 		"  reason: fixture\n")
 
 	stdout, stderr, code := run(t, root, "check", "--validate")

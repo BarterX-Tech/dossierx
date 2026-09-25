@@ -67,37 +67,36 @@ import (
 // built against an older shape cannot read. It rides on the wire as the
 // payload's "schema" key so the client can refuse a payload it does not
 // understand rather than silently mis-rendering one.
-const SchemaVersion = 1
+//
+// 2 (NIT-29): the governed_by edge type is gone from the wire. A client built
+// against schema 1 would still parse this payload, but it would offer a
+// governed_by toggle, a governance overlay and a GOVERNED BY block that can
+// never light, so the bump is deliberate.
+//
+// 3 (NIT-32): build_role is gone from every node, and with it the
+// missing_build_phase hint that was its only reader.
+const SchemaVersion = 3
 
-// Edge type values. These are the wire strings, matching the three claim
-// edge kinds model.Claim declares (Mirrors, RestsOn, Governed). They are
+// Edge type values. These are the wire strings, matching the claim
+// edge kinds model.Claim declares (RestsOn). They are
 // constants rather than literals because graph-core.js keys its edge-type
 // toggles off them and viewer-tests asserts on them, so they are contract.
 const (
 	// EdgeRestsOn is one entry of model.Claim.RestsOn.
 	EdgeRestsOn = "rests_on"
-	// EdgeMirrors is one entry of model.Claim.Mirrors. Directional in
-	// storage even though reciprocity is a lint rather than a model
-	// invariant — see internal/lint/mirror_reciprocal.go.
-	EdgeMirrors = "mirrors"
-	// EdgeGovernedBy is a claim's single governed_by edge, emitted only
-	// when the type names a real doctrine claim (see Build).
-	EdgeGovernedBy = "governed_by"
 )
 
 // Node is one claim, projected down to the facts the pane draws with.
 //
 // Every SCALAR field is emitted unconditionally. The client reads a fixed
 // shape, and an absent key and a zero value are different things to it:
-// "build_role": "" is the fact the missing_build_phase rule keys off, and a
-// node object that simply lacked the key would make that rule silently unable
-// to fire.
+// "review_pending": false is a fact a client rule reads, and a node object
+// that simply lacked the key would make that rule silently unable to fire.
 //
 // Tracks is the one exception, and it is one for a reason that does not
 // weaken the rule above. It is a LIST, and an absent list and an empty list
 // mean the identical thing here — "this claim joins no track" — so no client
-// rule can key off the difference the way missing_build_phase keys off the
-// empty string. What the difference DOES decide is whether a project that
+// rule can key off the difference the way a scalar's zero value is keyed off. What the difference DOES decide is whether a project that
 // never opted into tracks pays for them: with the key always present, every
 // node in every track-less corpus grows a "tracks":null, and the three
 // tracked fixture viewers this repository commits would all move. Tracks are
@@ -122,15 +121,8 @@ type Node struct {
 	// Status is model.Claim.Status: the closed enum "draft" | "locked".
 	Status string `json:"status"`
 
-	// Kind is model.Claim.EffectiveKind(), never the raw Kind field — the
-	// reserved overview facet implies orientation-note without the author
-	// repeating it, and a client re-deriving that rule would be a second
-	// place to keep it correct.
+	// Kind is model.Claim.EffectiveKind(), never the raw Kind field.
 	Kind string `json:"kind"`
-
-	// BuildRole is model.Claim.BuildRole. Empty is meaningful, not
-	// missing: it is what the client's missing_build_phase hint counts.
-	BuildRole string `json:"build_role"`
 
 	// Emphasis is model.Claim.Emphasis.
 	Emphasis bool `json:"emphasis"`
@@ -192,8 +184,8 @@ type Node struct {
 // NodeTrack is one claim's membership in one track.
 //
 // MEMBERSHIP IS NOT AN EDGE, and this type existing beside Edge rather than
-// inside it is the whole statement. RestsOn, Mirrors and Governed are
-// semantic dependencies between claims and carry cycle lints; a track is a
+// inside it is the whole statement. RestsOn is a
+// semantic dependency between claims and carries a cycle lint; a track is a
 // SET, and a set has no direction to run in a circle. Emitting membership as
 // an Edge would put it into the client's scc() walk and ring every track
 // member red. See model.TrackRef, which decides this for the model, and
@@ -226,7 +218,7 @@ type NodeTrack struct {
 type Edge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
-	// Type is one of EdgeRestsOn, EdgeMirrors, EdgeGovernedBy.
+	// Type is EdgeRestsOn.
 	Type string `json:"type"`
 }
 

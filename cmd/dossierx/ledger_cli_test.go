@@ -23,13 +23,13 @@ func ledgerProject(t *testing.T) (cfgPath, claimPath, storeFile string) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "main.yaml")
-	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +
+	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the approved body.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -102,9 +102,10 @@ func TestCLI_LockUnlockRelockKeepsTheLedgerHonest(t *testing.T) {
 	}
 
 	// Edit while draft — entirely allowed — then re-lock: a NEW approval.
-	edited := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +
+	edited := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the corrected body.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(edited), 0o644); err != nil {
 		t.Fatalf("edit claim: %v", err)
 	}
@@ -136,9 +137,10 @@ func TestCLI_HandEditingALockedClaimIsCaught(t *testing.T) {
 		t.Fatalf("claim lock: %v", err)
 	}
 
-	tampered := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nbuild_role: schema\n" +
+	tampered := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a body nobody approved.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(tampered), 0o644); err != nil {
 		t.Fatalf("tamper: %v", err)
 	}
@@ -212,37 +214,6 @@ func TestCLI_ReauditReSignsTheClaim(t *testing.T) {
 	}
 	if findings := auditProject(t, cfgPath); len(findings) != 0 {
 		t.Fatalf("a confirmed reaudit must leave the gate clean, got %+v", findings)
-	}
-}
-
-// TestCLI_BuildOrderLockIsOnTheRecord: a locked build order is the second class
-// of locked artifact in this engine, and leaving it outside the ledger would
-// make "nothing already locked changes without your approval on the record" an
-// overclaim about half the locked things in a project.
-func TestCLI_BuildOrderLockIsOnTheRecord(t *testing.T) {
-	cfgPath, _, storeFile := ledgerProject(t)
-	const id = "widget.contract.main"
-
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
-		t.Fatalf("claim lock: %v", err)
-	}
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("build-order propose: %v", err)
-	}
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
-		t.Fatalf("build-order lock: %v", err)
-	}
-
-	rec, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]
-	if !ok {
-		t.Fatalf("expected a ledger record for the locked build order")
-	}
-	if rec.Subject != lock.SubjectBuildOrder || rec.Reason != "order approved" || rec.Hash == "" {
-		t.Fatalf("unexpected build-order record: %+v", rec)
-	}
-	// And it must not be mistaken for a claim by the claim rules.
-	if findings := auditProject(t, cfgPath); len(findings) != 0 {
-		t.Fatalf("a build-order record must not disturb the claim rules, got %+v", findings)
 	}
 }
 

@@ -1,4 +1,5 @@
 id: srcextern.internals.cited
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: srcextern
 status: draft
@@ -15,6 +16,3 @@ sources:
     url: https://example.com/docs/rate-limits
 rests_on:
   - srcextern.internals.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

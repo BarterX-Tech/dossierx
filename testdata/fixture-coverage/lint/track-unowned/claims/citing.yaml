@@ -1,4 +1,5 @@
 id: trackmod.contract.citing
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: trackmod
 status: draft
@@ -15,6 +16,3 @@ tracks:
     role: cites
 rests_on:
   - trackmod.contract.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

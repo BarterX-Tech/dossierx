@@ -1,4 +1,5 @@
 id: commentsmod.contract.commented
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: commentsmod
 status: draft
@@ -11,9 +12,6 @@ body: |
   failure. It rests_on the helper claim so neither trips the orphan warning.
 rests_on:
   - commentsmod.contract.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine
 comments:
   - id: c-fix001
     status: open

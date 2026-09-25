@@ -9,6 +9,6 @@ body: |
   ---
 
   Section two content.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests horizontal rule

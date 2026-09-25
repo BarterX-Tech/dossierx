@@ -75,24 +75,22 @@ func runValidateFindings(t *testing.T, fixtureDir, cfgPath string) (findings []l
 // engine design (not an accident of fixture authoring). Two rules overlap
 // on purpose:
 //
-//   - mirror-unanchored: a mirrors[] edge to a nonexistent id is also, by
-//     internal/lint/dangling.go's own doc comment, a "dangling" edge --
-//     dangling covers mirrors/rests_on/governed_by uniformly, and
-//     mirror-unanchored is a strictly more specific rule layered on top
-//     for this one edge kind, not a replacement for it.
-//   - validated-on-missing: the same overlap, for a governed_by.type that
-//     names a doctrine claim id with no matching claim.
+//   - validated-on-missing: a governed_by.type that names a doctrine claim
+//     id with no matching claim is also a dangling edge.
 //   - cycle: its fixture includes the degenerate one-node case (a claim
 //     whose rests_on names itself), which is by construction also a
 //     self-edge. Both rules are telling the truth about that claim -- it is
 //     a self-reference AND a cycle in the dependency graph -- and see
 //     internal/lint/self_edge.go for why neither suppresses the other.
+//   - self-edge: the coverage fixture uses a rests_on self-reference, so
+//     cycle fires alongside it for the same reason.
 //
 // Every other fixture is built to trip its target rule alone.
 var coFiresWith = map[string][]string{
-	"mirror-unanchored":    {"dangling"},
-	"validated-on-missing": {"dangling"},
-	"cycle":                {"self-edge"},
+	"cycle":                 {"self-edge"},
+	"self-edge":             {"cycle"},
+	"constitution-over-cap": {"orphan"},
+	"rests-on-required":     {"orphan"},
 }
 
 // lintFixtureExpectedExit is the exit code "dossierx check --validate" must

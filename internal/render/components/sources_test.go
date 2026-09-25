@@ -41,7 +41,7 @@ func sourcedClaim(sources ...model.Source) model.Claim {
 // segment of the relationships chip's text.
 func TestEdges_NoSourcesRendersPlainTruthfulZeroState(t *testing.T) {
 	c := sourcedClaim()
-	c.RestsOn = []string{"widget.contract.other"}
+	c.RestsOn = model.RestsOnIDs("widget.contract.other")
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
 	if strings.Contains(got, `<details class="claim-sources"`) {
@@ -209,7 +209,7 @@ func TestEdges_SourceFieldsAreEscaped(t *testing.T) {
 
 // TestEdges_SourceNotesRunThroughTheInlineRenderer pins the ceiling the two
 // authored boundary lines are held to: the same code-span-and-link subset
-// governed.reason gets, and no block constructs.
+// every other footer prose field gets, and no block constructs.
 func TestEdges_SourceNotesRunThroughTheInlineRenderer(t *testing.T) {
 	c := sourcedClaim(model.Source{
 		Ref:      1,

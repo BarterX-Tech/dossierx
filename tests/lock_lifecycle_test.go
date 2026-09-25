@@ -17,9 +17,6 @@
 //     "dossierx claim list --review-pending" lists all of them; "dossierx claim reaudit" only ever processes
 //     the one id it was given
 //  9. "dossierx claim list --review-pending" with nothing locked at all -> reports "nothing locked"
-//
-// 10. doctrine facet configured, hub not locked -> hub-gating blocks
-// 11. doctrine facet not configured at all -> hub-gating does not run
 package tests
 
 import (
@@ -29,37 +26,41 @@ import (
 	"testing"
 )
 
-// llWriteConfig writes a project.config.yaml with the given facets/modules
-// (and, if non-empty, doctrine_facet) plus an empty claims/ dir under root.
-func llWriteConfig(t *testing.T, root string, facets, modules []string, doctrineFacet string) string {
+// llWriteConfig writes a project.config.yaml with the engine-fixed facets and
+// the given modules plus an empty claims/ dir under root.
+func llWriteConfig(t *testing.T, root string, modules []string) string {
 	t.Helper()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	var b strings.Builder
-	b.WriteString("schema_version: 1\nfacets:\n")
-	for _, f := range facets {
-		b.WriteString("  - " + f + "\n")
-	}
-	b.WriteString("modules:\n")
+	b.WriteString("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n")
 	for _, m := range modules {
 		b.WriteString("  - " + m + "\n")
 	}
 	b.WriteString("claims_dir: claims\n")
-	if doctrineFacet != "" {
-		b.WriteString("doctrine_facet: " + doctrineFacet + "\n")
-	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(b.String()), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	for _, m := range modules {
+		dest := filepath.Join(claimsDir, m, "manifest.yaml")
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			t.Fatalf("mkdir manifest dir: %v", err)
+		}
+		body := "summary: module " + m + " — fixture module context.\nprovides: []\ndepends_on: []\n"
+		if err := os.WriteFile(dest, []byte(body), 0o644); err != nil {
+			t.Fatalf("write manifest %s: %v", m, err)
+		}
+	}
+	lockFixtureConstitution(t, root)
 	return cfgPath
 }
 
 type llClaimSpec struct {
 	id, facet, module, status, body string
-	restsOn, mirrors                []string
+	restsOn                         []string
 	reviewPending                   bool
 }
 
@@ -73,20 +74,16 @@ func llWriteClaim(t *testing.T, root string, spec llClaimSpec) string {
 	if spec.reviewPending {
 		b.WriteString("review_pending: true\n")
 	}
+	b.WriteString("summary: Fixture claim used by the engine test corpus.\n")
 	b.WriteString("body: |\n  " + spec.body + "\n")
 	if len(spec.restsOn) > 0 {
 		b.WriteString("rests_on:\n")
 		for _, r := range spec.restsOn {
 			b.WriteString("  - " + r + "\n")
 		}
+	} else {
+		b.WriteString("rests_on:\n  none: true\n  reason: lock-lifecycle test fixture, not backed by any doctrine claim\n")
 	}
-	if len(spec.mirrors) > 0 {
-		b.WriteString("mirrors:\n")
-		for _, m := range spec.mirrors {
-			b.WriteString("  - " + m + "\n")
-		}
-	}
-	b.WriteString("governed_by:\n  type: none\n  reason: lock-lifecycle test fixture, not backed by any doctrine claim\n")
 
 	path := filepath.Join(root, "claims", lastSegment(spec.id)+".yaml")
 	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
@@ -115,7 +112,7 @@ func llReadFile(t *testing.T, path string) string {
 
 func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 
 	claimPath := llWriteClaim(t, root, llClaimSpec{
 		id: "widget.contract.broken", facet: "contract", module: "widget", status: "draft",
@@ -145,7 +142,7 @@ func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
 
 func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dependency claim, v1."})
 	mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main claim resting on the dependency.", restsOn: []string{"widget.contract.dep"}})
@@ -196,7 +193,7 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 
 func TestLockLifecycle_ReauditRefusedWhenNotPending(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.stable", facet: "contract", module: "widget", status: "locked", body: "a stable, already-locked claim."})
 	before := llReadFile(t, claimPath)
@@ -220,7 +217,7 @@ func TestLockLifecycle_ReauditRefusedWhenNotPending(t *testing.T) {
 
 func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dependency claim, v1."})
 	_ = depPath
@@ -292,7 +289,7 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 
 func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "shared dependency, v1."})
 	mainAPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.maina", facet: "contract", module: "widget", status: "draft", body: "dependent A.", restsOn: []string{"widget.contract.dep"}})
@@ -351,7 +348,7 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 
 func TestLockLifecycle_ReviewPendingFilterIsEmptyWhenNothingIsLocked(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.draftonly", facet: "contract", module: "widget", status: "draft", body: "never locked."})
 
 	out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
@@ -363,73 +360,5 @@ func TestLockLifecycle_ReviewPendingFilterIsEmptyWhenNothingIsLocked(t *testing.
 	}
 	if strings.Contains(out, "widget.contract.draftonly") {
 		t.Fatalf("a draft claim is never review_pending; it must not be listed, got: %s", out)
-	}
-}
-
-// ---------------------------------------------------------------------
-// Rows 10 & 11: doctrine hub-gating, configured vs. not configured.
-//
-// These use a mirrors[] edge (not rests_on) between hub and child so the
-// unrelated "rest-on-locked" lint can never independently block the lock
-// attempt, isolating hub-gating as the only thing under test.
-// ---------------------------------------------------------------------
-
-func llWriteMirrorPair(t *testing.T, root, hubID, hubFacet, childID string) (hubPath, childPath string) {
-	t.Helper()
-	body := "identical shared content for a reciprocal mirrors pair."
-	hubPath = llWriteClaim(t, root, llClaimSpec{id: hubID, facet: hubFacet, module: "widget", status: "draft", body: body, mirrors: []string{childID}})
-	childPath = llWriteClaim(t, root, llClaimSpec{id: childID, facet: "contract", module: "widget", status: "draft", body: body, mirrors: []string{hubID}})
-	return hubPath, childPath
-}
-
-func TestLockLifecycle_HubGatingBlocksWhenConfigured(t *testing.T) {
-	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract", "doctrine"}, []string{"widget"}, "doctrine")
-	hubPath, childPath := llWriteMirrorPair(t, root, "widget.doctrine.hub", "doctrine", "widget.contract.child")
-
-	// Hub not yet locked: locking child must be refused by hub-gating.
-	_, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
-	if code == 0 {
-		t.Fatalf("expected lock of child to be refused while doctrine hub is still draft")
-	}
-	if !strings.Contains(stderr, "doctrine") {
-		t.Fatalf("expected hub-gating error to mention doctrine, got stderr: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, childPath), "status: draft") {
-		t.Fatalf("expected child to remain draft after refused lock")
-	}
-
-	// Lock the hub, then locking the child succeeds.
-	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.doctrine.hub", "--reason", "test fixture"); code != 0 {
-		t.Fatalf("expected hub to lock successfully: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, hubPath), "status: locked") {
-		t.Fatalf("expected hub to be locked on disk")
-	}
-	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture"); code != 0 {
-		t.Fatalf("expected child lock to succeed once hub is locked: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, childPath), "status: locked") {
-		t.Fatalf("expected child to be locked on disk")
-	}
-}
-
-func TestLockLifecycle_HubGatingSkippedWhenNotConfigured(t *testing.T) {
-	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract", "internals"}, []string{"widget"}, "") // no doctrine_facet
-	hubPath, childPath := llWriteMirrorPair(t, root, "widget.internals.hub", "internals", "widget.contract.child")
-
-	// Hub-gating is not configured at all: locking child must succeed even
-	// though "hub" (not even in a doctrine-designated facet) is still
-	// draft — nothing should gate on it.
-	_, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
-	if code != 0 {
-		t.Fatalf("expected child lock to succeed when hub-gating is not configured: %s", stderr)
-	}
-	if !strings.Contains(llReadFile(t, childPath), "status: locked") {
-		t.Fatalf("expected child to be locked on disk")
-	}
-	if !strings.Contains(llReadFile(t, hubPath), "status: draft") {
-		t.Fatalf("expected hub to remain untouched (still draft); nothing forced it to lock")
 	}
 }

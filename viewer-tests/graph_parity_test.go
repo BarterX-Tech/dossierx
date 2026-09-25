@@ -13,12 +13,12 @@ package viewertests
 //
 // WHY governed_by IS EXCLUDED. The panel's `isolated` rule is defined over
 // the ENABLED edge types, which by default includes governed_by. lint's
-// `orphan` rule builds its incoming/outgoing sets from Mirrors + RestsOn
+// `orphan` rule builds its incoming/outgoing sets from RestsOn
 // only, and does so deliberately: `governed_by: {type: none, reason: …}` is
 // the normal, expected state for a claim with no doctrine backing, so
 // counting governance as an edge would make the rule nearly useless. So the
 // graph's DEFAULT isolated set is a strict subset of lint's orphan set, and
-// the only honest parity claim is the unscoped, rests_on + mirrors-only one
+// the only honest parity claim is the unscoped, rests_on-only one
 // this test pins. The corpus below contains a claim that separates the two —
 // widget.contract.lonely, whose only edge is a governance edge — so the
 // assertion is not accidentally true of every corpus.
@@ -35,6 +35,7 @@ import (
 const parityConfig = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -55,42 +56,44 @@ var parityClaims = map[string]string{
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim with no edges in either direction.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `,
 	"root.yaml": `id: widget.contract.root
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim other claims rest on.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `,
 	"leaf.yaml": `id: widget.contract.leaf
 facet: contract
 module: widget
 status: draft
-rests_on:
-  - widget.contract.root
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim that rests on the root.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
+rests_on:
+  - widget.contract.root
 `,
 	"lonely.yaml": `id: widget.contract.lonely
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
-  a claim whose only edge is a governance edge.
-governed_by:
-  type: widget.contract.root
+  a second orphan; RESTS ON NONE is not a graph edge.
+rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any other claim
 `,
 }
 
@@ -144,11 +147,11 @@ func TestGraphIsolatedMatchesOrphanLintUnscoped(t *testing.T) {
 	ctx := staticGraphTab(t, p)
 
 	// The panel's verdict, computed the way the panel computes it: unscoped
-	// (every node), rests_on + mirrors only. The pane need not even be open —
+	// (every node), rests_on only. The pane need not even be open —
 	// these are pure functions over the payload the document carries.
 	isolated := evalStrings(t, ctx, `(function () {
 		var p = JSON.parse(document.getElementById('dossierx-graph').textContent);
-		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, { enabledTypes: ['rests_on', 'mirrors'] });
+		var gaps = window.dossierxGraphCore.gapRules(p.nodes, p.edges, { enabledTypes: ['rests_on'] });
 		var out = [];
 		for (var i = 0; i < gaps.facts.length; i++) {
 			if (gaps.facts[i].rule === 'isolated') { out = out.concat(gaps.facts[i].node_ids); }
@@ -177,7 +180,7 @@ func TestGraphIsolatedMatchesOrphanLintUnscoped(t *testing.T) {
 		}
 		return out;
 	})()`)
-	if fmt.Sprint(withGovernance) != fmt.Sprint([]string{"widget.contract.base"}) {
-		t.Fatalf("default isolated set = %v, want only widget.contract.base — governed_by counts as an edge there", withGovernance)
+	if fmt.Sprint(withGovernance) != fmt.Sprint(orphans) {
+		t.Fatalf("default isolated set = %v, want the orphan set %v — rests_on is the only edge", withGovernance, orphans)
 	}
 }

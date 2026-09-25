@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -89,9 +90,11 @@ func requireBin(t *testing.T) string {
 const defaultConfigYAML = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
+max_claim_body_chars: 20000
 `
 
 // draftClaimYAML is a single lockable draft claim with a governed_by: none
@@ -100,10 +103,11 @@ const draftClaimYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim under review.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -125,6 +129,12 @@ type project struct {
 
 // newProjectRaw creates a project dir + config with an empty claims/ dir; the
 // caller writes the claim files it needs via writeClaim.
+//
+// Generated viewer-test projects often put more than the research default of
+// 10 claims in one module (readiness scale, reading scale, wide diagrams).
+// When the caller does not set max_claims_per_module, raise the cap so
+// check/lock stay about the fixture under test rather than the module-size
+// lint. An explicit cap in configYAML is left alone.
 func newProjectRaw(t *testing.T, configYAML string) *project {
 	t.Helper()
 	bin := requireBin(t)
@@ -133,11 +143,111 @@ func newProjectRaw(t *testing.T, configYAML string) *project {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims: %v", err)
 	}
+	if !strings.Contains(configYAML, "max_claims_per_module:") {
+		configYAML = strings.TrimRight(configYAML, "\n") + "\nmax_claims_per_module: 10000\n"
+	}
 	cfg := filepath.Join(dir, "project.config.yaml")
 	if err := os.WriteFile(cfg, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	return &project{t: t, bin: bin, dir: dir, config: cfg, claimsDir: claimsDir}
+	p := &project{t: t, bin: bin, dir: dir, config: cfg, claimsDir: claimsDir}
+	p.lockConstitution()
+	p.seedManifests(configYAML)
+	return p
+}
+
+// modulesYAMLLine matches one "  - name" entry under a config's top-level
+// "modules:" key — indented exactly like every configYAML constant in this
+// package writes it (see defaultConfigYAML).
+var modulesYAMLLine = regexp.MustCompile(`(?m)^ {2}- (\S+)\s*$`)
+
+// modulesFromConfigYAML extracts the module list from a project.config.yaml
+// body without a YAML dependency (this module deliberately imports none of
+// the engine's Go packages — see this file's own header comment). It reads
+// only the indented "- name" lines between "modules:" and the next
+// unindented key, which is the one shape every configYAML constant here
+// uses.
+func modulesFromConfigYAML(configYAML string) []string {
+	lines := strings.Split(configYAML, "\n")
+	var modules []string
+	inModules := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "modules:") {
+			inModules = true
+			continue
+		}
+		if !inModules {
+			continue
+		}
+		if m := modulesYAMLLine.FindStringSubmatch(line); m != nil {
+			modules = append(modules, m[1])
+			continue
+		}
+		// Any other line ends the modules: block (either another top-level
+		// key or a blank/differently-indented line).
+		inModules = false
+	}
+	return modules
+}
+
+// seedManifests writes a valid claims_dir/<module>/manifest.yaml for every
+// module the project's config declares (NIT-7: the module-manifest harness
+// refuses "check" and "claim lock" until one exists). "claim new" itself only
+// writes an empty-summary STUB, which is deliberately refused until an agent
+// drafts it — this fixture equivalent drafts one directly, the way every
+// other suite's manifest-seeding helper does.
+func (p *project) seedManifests(configYAML string) {
+	p.t.Helper()
+	for _, module := range modulesFromConfigYAML(configYAML) {
+		dir := filepath.Join(p.claimsDir, module)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			p.t.Fatalf("mkdir manifest dir for %s: %v", module, err)
+		}
+		body := "summary: module " + module + " — viewer-test fixture module context.\nprovides: []\ndepends_on: []\n"
+		if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(body), 0o644); err != nil {
+			p.t.Fatalf("write manifest for %s: %v", module, err)
+		}
+	}
+}
+
+// fixtureConstitutionYAML is the smallest roof a fixture can carry.
+const fixtureConstitutionYAML = "status: draft\n" +
+	"invariants:\n" +
+	"  - slug: one-roof\n" +
+	"    title: One roof\n" +
+	"    body: This fixture has one lockable constitution above every module.\n"
+
+// lockConstitution gives the project the locked roof the gate demands
+// (NIT-26), through the real binary, so its claims can lock and plain check
+// can render the viewer.
+func (p *project) lockConstitution() {
+	p.t.Helper()
+	path := filepath.Join(p.dir, "constitution.yaml")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte(fixtureConstitutionYAML), 0o644); err != nil {
+			p.t.Fatalf("write fixture constitution: %v", err)
+		}
+	}
+	// Idempotent and tolerant, like the other suites' helper: a roof that is
+	// locked and unchanged is done, and a config that cannot load yet (an
+	// override dir the test writes later) has no roof to lock — serve() arms
+	// it again once the layout is complete.
+	out, err := exec.Command(p.bin, "--config", p.config, "--format", "json", "constitution", "lock", "--reason", "fixture roof").CombinedOutput()
+	if err == nil {
+		return
+	}
+	var env struct {
+		Error *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(out, &env) == nil && env.Error != nil {
+		switch env.Error.Code {
+		case "already_locked", "invalid_config", "config_not_found":
+			return
+		}
+	}
+	p.t.Fatalf("lock fixture constitution: %v\n%s", err, out)
 }
 
 func (p *project) writeClaim(name, content string) {
@@ -309,6 +419,10 @@ func (p *project) claimBytes() []byte {
 // registered with t.Cleanup so a failing test never leaks the process.
 func (p *project) serve() (base string, stop func()) {
 	p.t.Helper()
+	// The roof, armed again here: a test that wrote its override directory
+	// after newProjectRaw skipped the lock, and serve renders the gate's
+	// verdict.
+	p.lockConstitution()
 	cmd := exec.Command(p.bin, "--config", p.config, "serve")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

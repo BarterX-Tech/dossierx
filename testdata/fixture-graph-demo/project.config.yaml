@@ -13,8 +13,7 @@
 #
 # THE CORPUS CONTAINS NO CYCLE OF ANY SHAPE, and cannot. "dossierx check"
 # returns above the catalog and render stages on the first error-severity
-# finding, and a rests_on loop, a governed_by loop, a self-edge and a loop
-# that alternates the two are all error severity. So a fixture that must
+# finding, and a rests_on loop and a self-edge are both error severity. So a fixture that must
 # render cannot demonstrate cycle detection; that is proven by unit tests over
 # synthetic edge sets and by a browser test that injects a cycle-carrying
 # payload into the page instead. The gaps rail's cycle block being empty when
@@ -23,8 +22,8 @@
 # doctrine_facet is deliberately NOT set. Setting it turns on hub gating,
 # which refuses to approve a claim whose dependency in that facet is not yet
 # approved — a real feature, but one that would make this corpus's approval
-# order about doctrine rather than about the graph. The "decision" facet is
-# where doctrine-shaped claims live here; it is an ordinary facet.
+# order about doctrine rather than about the graph. Doctrine-shaped claims
+# live in contract here; doctrine is not a third facet.
 #
 # WHAT EACH MODULE SEEDS:
 #
@@ -44,10 +43,7 @@ title: Claims Graph Demo
 eyebrow: the corpus the graph pane was designed against
 facets:
   - contract
-  - schema
-  - behavior
-  - verification
-  - decision
+  - internals
 modules:
   - engine
   - viewer
@@ -55,3 +51,6 @@ modules:
   - lock
   - telemetry
 claims_dir: claims
+# The graph pane needs a dense corpus, so modules here run past the default
+# cap of 10 claims (engine is the largest). Raised on purpose; see NIT-14.
+max_claims_per_module: 15

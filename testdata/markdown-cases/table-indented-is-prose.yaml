@@ -7,6 +7,6 @@ body: |
   Prose, then an indented candidate:
     | a | b |
     | --- | --- |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a table is recognized at indent column zero only, like hr, headings and blockquotes

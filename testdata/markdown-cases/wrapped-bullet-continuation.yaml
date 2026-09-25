@@ -9,6 +9,6 @@ body: |
   - A secondary local sink mirrors every record to disk
     for offline debugging when the network is unavailable.
   - A third bullet with no continuation line at all.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

@@ -1,6 +1,6 @@
 // Package check is the value-returning core of the "dossierx check" pipeline:
 // lint, catalog build+write, viewer render+write, impl-link scan, and the
-// per-module non-blocking reporting (orientation notes, open comments,
+// per-module non-blocking reporting (open comments,
 // impl-link status, and the next-steps advisory). It exists so BOTH the
 // "dossierx check" CLI command and "dossierx serve" can drive the same
 // pipeline without duplicating it — the CLI (cmd/dossierx) formats the
@@ -43,16 +43,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
@@ -105,6 +104,15 @@ type Result struct {
 	LintFindings []lint.Finding
 	LintErrors   []lint.Finding
 	LintWarnings []lint.Finding
+
+	// Constitution is the roof's verdict (NIT-6/NIT-26), read from the same
+	// tree as the ledger. Its findings ride in LintFindings/LintErrors so
+	// every consumer that branches on lint_findings[].lint sees them, but in
+	// Run they do not stop the pipeline at the lint step: the roof gate is a
+	// GATE, evaluated with the ledger gate after the projections are on disk,
+	// so an unlocked roof refuses module work without taking the viewer
+	// offline. ClaimLintErrors is the lint-step count.
+	Constitution constitution.Verdict
 
 	// CatalogPath/CatalogCount and RenderPath record check's two disk writes.
 	// CatalogPath/RenderPath are empty when the run stopped before that write
@@ -163,21 +171,6 @@ type Result struct {
 	// and "check --staged" — test this slice themselves and say so.
 	LedgerFindings []lock.Finding
 
-	// BuildOrders is one entry per module that HAS a build-order artifact,
-	// with staleness recomputed live against the current claims (never read off
-	// the artifact's own persisted "stale" field, which nothing refreshes).
-	//
-	// It exists because check reported nothing at all about build orders, and a
-	// locked one going stale is a NORMAL consequence of the sanctioned lifecycle:
-	// unlock a covered claim, edit it, re-lock it, and the module's approved
-	// implementation sequence no longer matches the claims — `build-order status`
-	// says stale:true while `check`, `check --validate` and `check --staged`ndash;
-	// the loop command, the pre-commit hook and CI — all said ok:true with no
-	// mention of it. The build-order skill tells an agent to act "whenever a
-	// locked build order reports stale"; this is the field that lets it, without
-	// parsing a hint string.
-	BuildOrders []BuildOrderReport
-
 	// GitignoreCheck is the reason the store-gitignored guard gave NO verdict
 	// — "not a work tree", "outside the work tree", "git not available" — and
 	// "" when it ran and answered (a finding, a warning, or nothing). It is
@@ -187,17 +180,6 @@ type Result struct {
 	// envelope's warnings[] without touching the exit status.
 	GitignoreCheck    string
 	GitignoreWarnings []string
-
-	// ViewerWarnings are render-side notes with no severity: the one line
-	// render.StyleOverrideWarnings emits when a style.css override is in
-	// force beside a locked build order (the Build order tab's .bo-* rules
-	// come from the engine's sheet and an override predating the tab has
-	// none), and render.BuildOrderWarnings' one line per locked artifact the
-	// Build order tab skipped rather than drew (the per-module half of
-	// build_order_view.go's load-error policy). Render has no warnings
-	// channel, so Run and Status carry them here and the CLI appends them to
-	// warnings[] beside GitignoreWarnings, never touching the exit status.
-	ViewerWarnings []string
 
 	// CodeLinks is the code-link coverage report: per module, how many
 	// claims are linked, drifted, partially linked (a stepped claim with a
@@ -226,59 +208,16 @@ type Result struct {
 	// "check: OK" line. The reporting fields below are populated only then.
 	OK bool
 
-	// OrientationNotes and NextSteps are fully-composed lines/hints; the
-	// terminal prints each verbatim (NextSteps under a "next steps:" header,
-	// two-space indented). OpenComments maps module -> open-thread count, left
-	// to the caller to sort and format ("open comments: module %q: %d").
-	// ImplinkStatusStdout/Stderr are the impl-link status reporter's stdout and
-	// stderr lines respectively, already formatted.
-	OrientationNotes    []string
+	// NextSteps are fully-composed hints; the terminal prints each verbatim
+	// under a "next steps:" header, two-space indented. OpenComments maps
+	// module -> open-thread count, left to the caller to sort and format
+	// ("open comments: module %q: %d"). ImplinkStatusStdout/Stderr are the
+	// impl-link status reporter's stdout and stderr lines respectively,
+	// already formatted.
 	OpenComments        map[string]int
 	ImplinkStatusStdout []string
 	ImplinkStatusStderr []string
 	NextSteps           []string
-}
-
-// BuildOrderReport is one module's build-order state as check found it: whether
-// an artifact exists, whether it is locked, and whether it is stale RIGHT NOW.
-//
-// Stale/StaleIDs are recomputed from the claims on every run (buildorder.Status,
-// which is read-only), never taken from the artifact's own persisted fields. The
-// artifact writes `"stale": false` at lock time and nothing ever revises it, so
-// the file on disk goes on asserting false while the order is stale — reading it
-// would make this report repeat the lie rather than replace it.
-type BuildOrderReport struct {
-	Module   string   `json:"module"`
-	Locked   bool     `json:"locked"`
-	Stale    bool     `json:"stale"`
-	StaleIDs []string `json:"stale_ids,omitempty"`
-}
-
-// buildOrderReports returns one BuildOrderReport per module in cfg.Modules that
-// HAS an artifact, in cfg.Modules order. A module with no artifact is omitted
-// entirely (that is the ordinary state of most modules, and nextSteps already
-// has its own hint for a fully-locked module that has never proposed one), and a
-// module whose artifact cannot be read is omitted too — the ledger gate reports
-// that as build-order-unreadable, and a report that guessed at its contents
-// would be worse than one that says nothing.
-func buildOrderReports(cfg *config.Config, claims []model.Claim) []BuildOrderReport {
-	if cfg == nil {
-		return nil
-	}
-	var out []BuildOrderReport
-	for _, module := range cfg.Modules {
-		a, err := buildorder.Status(buildorder.ArtifactPath(cfg, module), claims, cfg)
-		if err != nil || a == nil {
-			continue
-		}
-		out = append(out, BuildOrderReport{
-			Module:   module,
-			Locked:   a.Locked,
-			Stale:    a.Stale,
-			StaleIDs: a.StaleIDs,
-		})
-	}
-	return out
 }
 
 // Run executes the check pipeline against claims (already loaded and
@@ -304,7 +243,6 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	gitignoreFindings, gitignoreWarnings, gitignoreReason, gitignoreErr := Gitignored(cfg)
 	res.GitignoreCheck = gitignoreReason
 	res.GitignoreWarnings = gitignoreWarnings
-	res.ViewerWarnings = append(render.StyleOverrideWarnings(cfg), render.BuildOrderWarnings(cfg, claims)...)
 	if gitignoreErr != nil {
 		// A read-only verdict: Run reports the non-verdict and carries on.
 		// The approval verbs, which write, refuse on the same error.
@@ -313,7 +251,8 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
-	res.LintFindings = policyLintFindings(lint.RunAll(claims, cfg), inputs.store)
+	res.Constitution = inputs.constitution
+	res.LintFindings = withConstitutionFindings(inputs.constitution, lint.RunAll(claims, cfg))
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -321,7 +260,10 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.LintErrors = append(res.LintErrors, f)
 		}
 	}
-	if len(res.LintErrors) > 0 {
+	// Only the CLAIMS' findings stop the run here. The roof's finding is
+	// already in LintErrors for the report, but its refusal is the gate at
+	// step 5 — see Result.Constitution.
+	if len(res.ClaimLintErrors()) > 0 {
 		// The gate still runs. A lint error stops the PIPELINE — no catalog, no
 		// viewer, no scan — but it must not stop the ledger REPORT, and the two
 		// used to be the same return: a project with one dangling rests_on in a
@@ -435,7 +377,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			return res, fmt.Errorf("catalog: %w", err)
 		}
 		res.CatalogPath = catPath
-		res.CatalogCount = len(claims)
+		res.CatalogCount = cat.ExportedCount()
 		if err := layout.EnsureBuildGitignoreForConformance(cfg, true); err != nil {
 			res.CatalogError = err.Error()
 			res.ConformanceFailurePhase = "catalog"
@@ -491,7 +433,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			return res, fmt.Errorf("catalog: %w", err)
 		}
 		res.CatalogPath = catPath
-		res.CatalogCount = len(claims)
+		res.CatalogCount = cat.ExportedCount()
 		if !wasConformanceEnabled {
 			if err := layout.EnsureBuildGitignore(cfg); err != nil {
 				res.CatalogError = err.Error()
@@ -556,9 +498,24 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// project's documentation offline. Everything a reader needs in order to
 	// SEE the tampered claim has been regenerated by the time the gate refuses,
 	// and what the refusal costs is the exit status, not the viewer.
-	res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, loadLedgerInputs(cfg)))
+	gateInputs := loadLedgerInputs(cfg)
+	res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, gateInputs))
 	if len(res.LedgerFindings) > 0 {
 		return res, fmt.Errorf("ledger: %d integrity finding(s)", len(res.LedgerFindings))
+	}
+
+	// 5a. The roof gate (NIT-26): no module work — and no green check — until
+	// the constitution is locked and unchanged since. It sits here, beside
+	// the ledger gate and after the projections, for the same reason the
+	// ledger gate does: the human who has to lock or re-lock the roof needs
+	// the viewer that shows it, and a refusal is a verdict on the project's
+	// approval state, not an outage of its documentation. The ledger goes
+	// first because its findings are evidence of an edit outside the approval
+	// path, and "lock the roof again" must never paper over "restore the
+	// store you deleted" — the ledger findings name that recovery.
+	res.Constitution = gateInputs.constitution
+	if !res.Constitution.Locked() || res.Constitution.OverCap {
+		return res, fmt.Errorf("%w: %s", ErrConstitutionGate, res.Constitution.Detail())
 	}
 
 	// 5b. The code-link gate: once a project names its `source_dirs`, every
@@ -595,13 +552,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// derived from the same claims/cfg (and the read-only lock/flag stores),
 	// exactly as check's RunE tail produced it.
 	res.OK = true
-	res.OrientationNotes = orientationNotes(cfg, claims)
 	res.OpenComments = openCommentCounts(claims)
-	res.BuildOrders = buildOrderReports(cfg, claims)
 	stdout, stderr, implinkHints := implinkStatus(cfg, claims)
 	res.ImplinkStatusStdout = stdout
 	res.ImplinkStatusStderr = stderr
-	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints)
 	return res, nil
 }
 
@@ -620,7 +575,7 @@ func conformanceOutputBound(kind string, data []byte) error {
 // impl-link Scan, which mutates link artifacts. Those writers are the "dossierx
 // check" writer's job, gated to the CLI / serve startup — never a read endpoint
 // reachable by a bare, CSRF-exempt GET or HEAD. It reads only (lint in memory,
-// the lock/flag/build-order stores, and the READ-ONLY implink.Status for the
+// the lock/flag stores, and the READ-ONLY implink.Status for the
 // drift/unlinked next-step hints — never implink.Scan), so it can never itself
 // re-trigger the watcher or corrupt a half-written viewer.
 //
@@ -659,8 +614,7 @@ func Status(claims []model.Claim, cfg *config.Config) Result {
 // LintErrors and LedgerFindings and decides the exit status.
 // The config it evaluates against is sp.Config — project.config.yaml AS THE
 // INDEX HOLDS IT — not the caller's worktree config. That is not a detail: cfg
-// supplies the facet and module vocabularies, the doctrine facet, and the hub
-// gating switch, so linting staged claims against a worktree config would let
+// supplies the facet and module vocabularies and the caps, so linting staged claims against a worktree config would let
 // an unstaged config edit change the verdict on a commit that does not contain
 // it. The cfg parameter survives only as the fallback for the case
 // StagedProject documents — a project.config.yaml that is not tracked at all,
@@ -698,7 +652,8 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		res.ConformanceBlockingChecks = conformanceBlockingChecks(res.Conformance)
 	}
 
-	res.LintFindings = policyLintFindings(lint.RunAll(claims, cfg), in.store)
+	res.Constitution = in.constitution
+	res.LintFindings = withConstitutionFindings(in.constitution, lint.RunAll(claims, cfg))
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -734,7 +689,6 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		res.GitignoreCheck = gitignoreReason
 		res.GitignoreWarnings = gitignoreWarnings
 	}
-	res.ViewerWarnings = append(render.StyleOverrideWarnings(cfg), render.BuildOrderWarnings(cfg, claims)...)
 
 	if len(res.LintErrors) > 0 {
 		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
@@ -806,16 +760,11 @@ func conformanceBlockingChecks(report *conformance.Report) int {
 func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	res.OK = true
 	res.OpenComments = openCommentCounts(claims)
-	// Build-order state is recomputed here too, for --validate, --staged and the
-	// serve strip: buildorder.Status is a read (it never writes the artifact
-	// back), so it belongs on the non-writing path exactly as implink.Status
-	// does.
-	res.BuildOrders = buildOrderReports(cfg, claims)
 	// The impl-link hints come from the READ-ONLY implink.Status (drift/unlinked),
 	// the same source Run's nextSteps uses — NOT implink.Scan, which is the
 	// mutating reconcile and stays out of the memory-only status path.
 	_, _, implinkHints := implinkStatus(cfg, claims)
-	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints)
 	// The same coverage the gate reads, but with Scanned and Gated both
 	// false: this path reconciles no tag and refuses nothing, and the
 	// envelope must say so rather than let a read-only green pass for a
@@ -829,49 +778,6 @@ func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	// runs is answerable from the one tree in front of it, so there is no longer
 	// a state in which the gate looked at less than it claims to.
 	return res
-}
-
-// orientationNotes returns one "orientation notes: module %q: %d (…)" line
-// per module (in cfg.Modules order) that has at least one orientation-note
-// claim, broken down by facet (facets sorted for determinism). It is the
-// value form of cmd/dossierx.reportOrientationNotes.
-func orientationNotes(cfg *config.Config, claims []model.Claim) []string {
-	type counts struct {
-		total   int
-		byFacet map[string]int
-	}
-	byModule := map[string]*counts{}
-	for _, c := range claims {
-		if c.EffectiveKind() != model.KindOrientationNote {
-			continue
-		}
-		cnt, ok := byModule[c.Module]
-		if !ok {
-			cnt = &counts{byFacet: map[string]int{}}
-			byModule[c.Module] = cnt
-		}
-		cnt.total++
-		cnt.byFacet[c.Facet]++
-	}
-
-	var lines []string
-	for _, module := range cfg.Modules {
-		cnt, ok := byModule[module]
-		if !ok {
-			continue
-		}
-		facets := make([]string, 0, len(cnt.byFacet))
-		for f := range cnt.byFacet {
-			facets = append(facets, f)
-		}
-		sort.Strings(facets)
-		var parts []string
-		for _, f := range facets {
-			parts = append(parts, fmt.Sprintf("%d in %s", cnt.byFacet[f], f))
-		}
-		lines = append(lines, fmt.Sprintf("orientation notes: module %q: %d (%s)", module, cnt.total, strings.Join(parts, ", ")))
-	}
-	return lines
 }
 
 // openCommentCounts returns module -> number of open comment threads across
@@ -1017,69 +923,44 @@ func joinInts(ns []int) string {
 // then claims pending on an open comment thread (comment first — a thread
 // must be resolved before the claim can lock and reaudit refuses a
 // comment-only pending), then drift/flag review_pending claims, then the
-// caller's implink hints, then a build-order prompt per fully-locked module
-// with no artifact yet. review_pending claims are partitioned by WHY via
+// caller's implink hints. review_pending claims are partitioned by WHY via
 // comments.PendingTriggers, read against the lock and flag stores loaded
 // best-effort (a load error degrades to "no drift/flag"). The value form of
 // cmd/dossierx.reportNextSteps.
-// firstLockableDraft returns the id of the first draft claim in drafts that
-// would survive ALL THREE of lock.Lock's gates, or "" if none would.
 //
-// It evaluates them in lock.Lock's own order — lint, hub gating, open threads —
-// so the claim it names is a claim the real command would accept.
+// firstLockableDraft returns the id of the first draft claim in drafts that
+// would survive both of the lock evaluator's claim gates (open threads and
+// lint), or "" if none would, so the claim it names is a claim the real command
+// would accept.
 //
 // The LINT gate is the one that cannot be skipped, and the reason is that it is
-// evaluated against the ABOUT-TO-BE-LOCKED form, not the current one. Two lints
-// key off a claim's own status: rest-on-locked (a locked claim's rests_on
-// targets must themselves be locked) and roll-up (a locked banner's
-// module-mates must be locked). So a project can pass `check` completely
-// cleanly and still have `claim lock <id>` refuse with lint_failed — which is
-// exactly what happened on a module drafted alongside its own dependencies, the
-// ordinary case, where the first draft in load order rests on a sibling that is
-// also still draft.
+// evaluated against the ABOUT-TO-BE-LOCKED form, not the current one: a lint
+// that keys off a claim's own status (roll-up: a locked banner's module-mates
+// must be locked) can pass `check` cleanly and still refuse `claim lock <id>`.
 //
 // It is evaluated LAZILY, stopping at the first claim that passes, because that
 // is what keeps the cost proportionate: naming an example is an advisory line,
-// and in the common case the answer is the first or second candidate. The two
-// cheap gates are tested first so a full lint pass is only spent on a candidate
+// and in the common case the answer is the first or second candidate. The cheap
+// thread gate is tested first so a full lint pass is only spent on a candidate
 // that could still qualify.
-func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config, store *lock.Store) string {
+func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config) string {
 	for _, c := range drafts {
-		if c.HasOpenThreads() || hasUnlockedDoctrineDep(c, claims, cfg) {
+		if c.HasOpenThreads() {
 			continue
 		}
-		if lintErrorsForCandidate(c, claims, cfg, store) == 0 {
+		if lintErrorsForCandidate(c, claims, cfg) == 0 {
 			return c.ID
 		}
 	}
 	return ""
 }
 
-// hasUnlockedDoctrineDep is lock.Lock's hub-gating refusal as a pure read: a
-// dependency in the doctrine facet must itself be locked first.
-func hasUnlockedDoctrineDep(c model.Claim, claims []model.Claim, cfg *config.Config) bool {
-	if cfg == nil || !cfg.HubGatingEnabled() {
-		return false
-	}
-	deps := make([]string, 0, len(c.Mirrors)+len(c.RestsOn))
-	deps = append(deps, c.Mirrors...)
-	deps = append(deps, c.RestsOn...)
-	for _, dep := range deps {
-		for _, d := range claims {
-			if d.ID == dep && d.Facet == cfg.DoctrineFacet && d.Status != model.StatusLocked {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // lintErrorsForCandidate counts the error-severity findings the lint suite would
 // raise if c were locked RIGHT NOW — the corpus with c's own entry replaced by
-// its locked form, which is precisely what lock.Lock lints. Linting the
+// its locked form, which is precisely what the lock evaluator lints. Linting the
 // still-draft entry instead would report zero for the very claims this is meant
 // to filter out.
-func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config, store *lock.Store) int {
+func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config) int {
 	candidate := c
 	candidate.Status = model.StatusLocked
 	candidate.ReviewPending = false
@@ -1093,7 +974,7 @@ func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Con
 	}
 
 	errs := 0
-	for _, f := range policyLintFindings(lint.RunAll(lintClaims, cfg), store) {
+	for _, f := range lint.RunAll(lintClaims, cfg) {
 		if f.Severity != lint.SeverityWarning {
 			errs++
 		}
@@ -1101,7 +982,7 @@ func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Con
 	return errs
 }
 
-func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, buildOrders []BuildOrderReport) []string {
+func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) []string {
 	var hints []string
 
 	// Best-effort: a load error just degrades the drift/flag partition to "none"
@@ -1123,20 +1004,14 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 	// is what says how to clear it, in the next_steps list an agent reads for its
 	// next move.
 	//
-	// IT IS GATED ON THE SAME UNION THE FINDING IS — at least one locked claim or
-	// one locked build order — and not on the bare predicate. A pre-ledger project
+	// IT IS GATED ON THE SAME CONDITION THE FINDING IS — at least one locked
+	// claim — and not on the bare predicate. A pre-ledger project
 	// holding nothing locked crosses silently and correctly on its next lock, so a
 	// hint firing there would tell a human to fix a state this same run reports as
 	// clean.
-	lockedBuildOrders := 0
-	for _, b := range buildOrders {
-		if b.Locked {
-			lockedBuildOrders++
-		}
-	}
 	if store != nil && store.PreLedgerUnadopted(digestStorePresent(cfg)) &&
-		countLockedClaims(claims)+lockedBuildOrders > 0 {
-		hints = append(hints, "this project's locks predate the lock ledger -> re-propose any locked build order FIRST, then unlock every locked claim, then re-lock only what you still stand behind; the FIRST lock in a project holding nothing crosses the store onto the ledger schema — unlocking alone does not. There is no automatic adoption and no migration command")
+		countLockedClaims(claims) > 0 {
+		hints = append(hints, "this project's locks predate the lock ledger -> unlock every locked claim, then re-lock only what you still stand behind; the FIRST lock in a project holding nothing crosses the store onto the ledger schema — unlocking alone does not. There is no automatic adoption and no migration command")
 	}
 
 	var draftIDs []string
@@ -1201,19 +1076,18 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 	//
 	// The third consequence is the example id. draftIDs[0] is whichever draft
 	// claim happens to sort first, which is not the same thing as a draft claim
-	// that would actually LOCK: all three of lock.Lock's gates can refuse it,
-	// and the lint gate refuses it while the project as a whole lints clean
-	// (rest-on-locked and roll-up are evaluated against the ABOUT-TO-BE-LOCKED
-	// form). Naming such a claim produces a command that exists, reads as
+	// that would actually LOCK: the lock evaluator's gates can refuse it, and
+	// the lint gate refuses it while the project as a whole lints clean
+	// (roll-up is evaluated against the ABOUT-TO-BE-LOCKED form). Naming such a claim produces a command that exists, reads as
 	// recommended, and then exits 1 — and the agent, which the skills tell to
 	// trust next_actions rather than re-derive the lifecycle, acts on it. So the
 	// example is the first draft that passes every gate, and when none does the
 	// hint says so instead of pretending to know where to start.
 	if len(draftIDs) > 0 {
-		if example := firstLockableDraft(drafts, claims, cfg, store); example != "" {
+		if example := firstLockableDraft(drafts, claims, cfg); example != "" {
 			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. %s)", len(draftIDs), example))
 		} else {
-			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (none is lockable yet: every draft is blocked by a lint error, an open comment thread, or an unlocked dependency)", len(draftIDs)))
+			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (none is lockable yet: every draft is blocked by a lint error or an open comment thread)", len(draftIDs)))
 		}
 	}
 	if len(commentPending) > 0 {
@@ -1235,67 +1109,6 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending with no active trigger -> dossierx claim reaudit <id> (e.g. %s)", len(reauditTriggerless), reauditTriggerless[0]))
 	}
 	hints = append(hints, implinkHints...)
-
-	// The build-order hints. There used to be exactly one — "fully locked, no
-	// artifact yet" — reached through a branch that tested only for
-	// ErrNotProposed and discarded every other answer, so the two states a
-	// project actually spends time in were both silent:
-	//
-	//   - a LOCKED order that has gone STALE. That is the ordinary outcome of the
-	//     fully sanctioned lifecycle (unlock a covered claim, edit it, re-lock),
-	//     and it means the approved implementation sequence no longer matches the
-	//     claims. `build-order status` reported stale:true while `check`,
-	//     `check --staged` and therefore the hook and CI said ok:true and named
-	//     only the dependent claim's review_pending. The skill tells an agent to
-	//     act "whenever a locked build order reports stale"; the loop command
-	//     never reported it.
-	//   - an artifact that exists and is UNLOCKED — an abandoned propose->lock
-	//     flow, silent forever, with next_steps null.
-	//
-	// The states come from buildOrders (recomputed live, never from the
-	// artifact's persisted "stale" field), so the hint and Result.BuildOrders can
-	// never disagree.
-	reported := make(map[string]bool, len(buildOrders))
-	for _, bo := range buildOrders {
-		reported[bo.Module] = true
-		switch {
-		case bo.Locked && bo.Stale:
-			hints = append(hints, fmt.Sprintf(
-				"module %q's locked build order is stale (%d claim(s) changed: %s) -> dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"…\"",
-				bo.Module, len(bo.StaleIDs), strings.Join(bo.StaleIDs, ", "), bo.Module, bo.Module))
-		case !bo.Locked:
-			hints = append(hints, fmt.Sprintf(
-				"module %q has a proposed build order that was never locked -> dossierx build-order lock --module %s --reason \"…\"",
-				bo.Module, bo.Module))
-		}
-	}
-
-	byModule := make(map[string][]model.Claim, len(cfg.Modules))
-	for _, c := range claims {
-		byModule[c.Module] = append(byModule[c.Module], c)
-	}
-	for _, module := range cfg.Modules {
-		mClaims := byModule[module]
-		if len(mClaims) == 0 || reported[module] {
-			continue
-		}
-		fullyLocked := true
-		for _, c := range mClaims {
-			// Same predicate as the buildorder Propose gate: an open comment
-			// thread makes a module not build-ready even if every claim is
-			// locked, so it must not be reported "fully locked, propose now".
-			if c.Status != model.StatusLocked || c.ReviewPending || c.HasOpenThreads() {
-				fullyLocked = false
-				break
-			}
-		}
-		if !fullyLocked {
-			continue
-		}
-		if _, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module)); errors.Is(err, buildorder.ErrNotProposed) {
-			hints = append(hints, fmt.Sprintf("module %q is fully locked with no build order yet -> dossierx build-order propose --module %s", module, module))
-		}
-	}
 	return hints
 }
 
@@ -1342,23 +1155,4 @@ func digestStorePresent(cfg *config.Config) bool {
 
 func flagStorePath(cfg *config.Config) string {
 	return cfg.FlagStorePath()
-}
-
-// policyLintFindings keeps the registry authoritative while reconciling the
-// one legacy rule that local-approval v1 explicitly replaces. A v1 approval
-// may rest on a readable draft boundary; readiness reports that condition and
-// withholds integrated readiness. Stores without recorded adoption preserve
-// the old lint result, so upgrading a binary does not relax old projects.
-func policyLintFindings(findings []lint.Finding, store *lock.Store) []lint.Finding {
-	if store == nil || !store.LocalApprovalEnabled() {
-		return findings
-	}
-	out := make([]lint.Finding, 0, len(findings))
-	for _, finding := range findings {
-		if finding.LintName == "rest-on-locked" {
-			continue
-		}
-		out = append(out, finding)
-	}
-	return out
 }

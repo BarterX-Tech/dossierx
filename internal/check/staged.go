@@ -26,14 +26,14 @@
 //
 // WHY THE WHOLE REGISTRY, NOT JUST THE STAGED FILES. Most of the lint suite is
 // whole-corpus by construction — dangling references, cycles, mirror
-// reciprocity, hub gating — so a claim can only be judged against every other
+// reciprocity — so a claim can only be judged against every other
 // claim. Staging one file and linting one file would report a dangling
 // reference for every edge that points outside the commit. So the registry is
 // assembled complete, with the index's content substituted in.
 //
 // ONE THING HERE IS DELIBERATELY NOT FROM THE INDEX. Result.NextSteps —
 // check.Status's non-blocking "what to run next" advisory — reads the flag
-// store and the build-order artifacts off disk, because those are advice about
+// store and the code-links artifacts off disk, because those are advice about
 // what the author should do next, not a verdict on the commit. They cannot
 // change the pass/fail answer (nothing in runCheckStaged consults them), and
 // re-plumbing two more stores through the index to improve the wording of a
@@ -102,7 +102,7 @@
 //	AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE IT.
 //
 // Everything this gate reads — the claim files, the lock store, the digest
-// store, the build-order artifacts — is a tracked file in the tree the committer
+// store — is a tracked file in the tree the committer
 // is editing. So the line falls between UNCOORDINATED and COORDINATED change,
 // not between clumsy and clever:
 //
@@ -157,12 +157,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/gitrepo"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
@@ -211,8 +212,8 @@ var ErrNoIndex = errors.New("no git index to evaluate")
 var ErrUntrackedConfig = errors.New("project.config.yaml is not tracked, but the index holds claims to judge")
 
 // StagedProject is the project exactly as the git index holds it: the config,
-// the full claim registry, the lock ledger, the comment digest store and every
-// locked build order, all read from that one index.
+// the full claim registry, the lock ledger and the comment digest store, all
+// read from that one index.
 type StagedProject struct {
 	// Config is project.config.yaml AS THE INDEX HOLDS IT, and it is what the
 	// rest of this value was assembled against.
@@ -241,11 +242,14 @@ type StagedProject struct {
 	// untracked-config run is refused with ErrUntrackedConfig; see stagedConfig.
 	ConfigFromIndex bool
 
-	// Claims is the complete registry, sorted by SourcePath exactly as
-	// loader.LoadClaims sorts it, with SourcePath pointing at the WORKING-TREE
-	// location of each claim even for content that came out of the index. That
-	// is deliberate: a finding a human has to act on must name a path they can
-	// open, and "the index's copy of claims/foo.yaml" is not a path.
+	// Claims is the complete registry — the module claims under claims_dir AND
+	// the project claims under project_claims_dir, merged exactly as
+	// loader.LoadAll merges them for plain check and sorted by SourcePath as
+	// loader.MergeClaims sorts them — with SourcePath pointing at the
+	// WORKING-TREE location of each claim even for content that came out of
+	// the index. That is deliberate: a finding a human has to act on must name
+	// a path they can open, and "the index's copy of claims/foo.yaml" is not a
+	// path.
 	Claims []model.Claim
 
 	// FromIndex lists, sorted, the paths whose INDEX content differs from the
@@ -378,36 +382,196 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return stagedWithUnreachableClaims(g, cfg, sp)
 	}
 
-	// EVERY claim's content comes from the index. Unconditionally, with no
-	// worktree shortcut for the ones git says are clean.
-	//
-	// There used to be one: "git diff" was asked which paths differed, those
-	// were fetched from the index, and the rest were read off disk as a cheaper
-	// equivalent. It is not an equivalent. "git diff" consults git's stat cache
-	// and honours the per-path skip bits, so a single
-	//
-	//	git update-index --assume-unchanged claims/whatever.yaml
-	//
-	// makes git report a modified file as clean — and the gate then read the
-	// clean WORKTREE copy while the tampered blob sat in the index waiting to be
-	// committed. The refusal disappeared and the commit landed. The same is true
-	// of --skip-worktree, of a racily-clean stat entry, and of anything else
-	// that ever teaches git's cache a lie. A gate whose evidence source is
-	// chosen by a mutable, attacker-writable bit is not a gate.
-	//
-	// The cost is one "git cat-file --batch" for the whole registry, which is a
-	// single subprocess either way.
-	//
-	// indexBlobs is ALSO the authority on WHICH claims exist — the file list and
-	// the content come from one query rather than two that could disagree. That
-	// is what makes three otherwise-invisible cases come out right: a claim
-	// staged for DELETION is gone from the index and so must not be linted; a
-	// claim that is merely UNTRACKED is not part of the commit and must not be
-	// linted either; and a claim staged for ADDITION is in the index before it is
-	// in any commit and must be.
-	blobs, err := g.indexBlobs(claimsSpec)
+	// EVERY claim's content comes from the index — see stagedClaimsUnder for
+	// why there is no worktree shortcut for the files git says are clean, and
+	// why the same query decides WHICH claims exist.
+	moduleClaims, moduleFromIndex, err := stagedClaimsUnder(g, cfg.ClaimsDir, claimsSpec)
 	if err != nil {
 		return StagedProject{}, err
+	}
+
+	// THE PROJECT-CLAIMS STORE, FROM THE SAME INDEX. project_claims_dir is a
+	// second store beside claims_dir — never inside it — and plain check reads
+	// both (loader.LoadAll) before it lints or audits anything. A --staged that
+	// enumerated claims_dir alone judged a registry with a hole in it: every
+	// module claim resting on project.<slug> was `dangling`, every locked
+	// project claim's approval was `lock-ledger-abandoned`, and the pre-commit
+	// hook refused a tree that `check` and `check --validate` accepted — so a
+	// project that adopted project claims could not commit through the hook at
+	// all. The store is read here under exactly the discipline claims_dir gets:
+	// index content only, the same decoder, the same line-ending comparison,
+	// and it merges through loader.MergeClaims so a duplicate id across the two
+	// stores surfaces as the same `ambiguous` finding plain check reports.
+	projectClaims, projectFromIndex, err := stagedProjectClaims(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	sp.Claims = loader.MergeClaims(moduleClaims, projectClaims)
+	fromIndex := moduleFromIndex
+	fromIndex = append(fromIndex, projectFromIndex...)
+	sp.FromIndex = fromIndex
+
+	// THE MODULE MANIFESTS, FROM THE SAME STAGED claims_dir INDEX. Read
+	// alongside moduleClaims (both come from claimsSpec) rather than folded
+	// into stagedClaimsUnder, because stagedProjectClaims reuses that helper
+	// for project-claims_dir, which never carries a module manifest.yaml.
+	// cfg.ManifestTree lets the module-manifest lint judge the staged
+	// manifest instead of the working tree, exactly like every other
+	// --staged rule.
+	manifestBlobs, err := g.indexBlobs(claimsSpec)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	manifests := map[string][]byte{}
+	for rel, raw := range manifestBlobs {
+		if loader.IsManifestFileName(rel) {
+			manifests[relToClaimsDir(claimsSpec, rel)] = raw
+		}
+	}
+
+	sort.Strings(sp.FromIndex)
+	cfg.ManifestTree = manifests
+	sp.Config.ManifestTree = manifests
+
+	// The two stores, from the same index. That
+	// is the LAST thing this function does: everything the gate is evaluated
+	// against now comes from one tree, and nothing here looks at a second one.
+	// See this file's REMOVED section for the comparison that used to sit at
+	// exactly this point and why re-adding it here would be a mistake.
+	sp.ledger, err = stagedLedgerInputs(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	return sp, nil
+}
+
+// stagedWithUnreachableClaims finishes a run whose claims_dir is outside the
+// work tree: the registry is empty, because no commit can carry a file git
+// cannot name, and the verdict is whatever the ledger gate makes of the INDEX's
+// stores standing alone.
+//
+// It is the difference between "this commit contains no claims" and "there is
+// nothing here to evaluate", and only the second is ErrNoIndex. A standing lock
+// ledger whose records name claims that are now unreachable is a refusal
+// (lock-ledger-abandoned) that needs one tree, no history and no claims at all —
+// see the pathspec comment in Staged for the false clean that came of assuming
+// otherwise.
+//
+// The escape hatch survives for the case it was written for and nothing else: a
+// checkout whose claims genuinely live outside the repository AND that carries
+// no lock ledger and no comment digest store either. On
+// that tree the gate really is being asked about content the commit does not
+// have, `check --validate` says nothing either, and refusing would break
+// "run check --staged in CI" for a layout the rest of the product supports.
+//
+// WHAT IT COSTS, stated plainly because it is a real cost: a project whose
+// claims live outside the repository and whose lock ledger lives inside it is
+// now refused by --staged, per unreachable approval. That project's approvals
+// really do cover files no commit carries — its ledger is a record about
+// something this repository does not contain — and the same tree is refused by
+// `check --validate` the moment those claims are not where claims_dir points.
+// The alternative is the false clean above, in the mode that runs in the hook.
+//
+// The registry is empty OF MODULE CLAIMS. The project-claims store is a
+// separate directory with its own pathspec, and one the index may well carry
+// even when claims_dir is unreachable; it is read here exactly as on the main
+// path, so a locked project claim the commit does contain is not reported as
+// abandoned for the sake of a sibling directory it has nothing to do with.
+// Whether there is anything to judge at all is still decided by the STORES
+// alone, as before: a project claim without a ledger is a draft, and a draft
+// is not gate evidence.
+func stagedWithUnreachableClaims(g *gitRunner, cfg *config.Config, sp StagedProject) (StagedProject, error) {
+	in, err := stagedLedgerInputs(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	if !holdsGateEvidence(in) {
+		return StagedProject{}, fmt.Errorf(
+			"%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it — and the index holds no lock ledger and no comment digest store either, so there is nothing in it to judge",
+			ErrNoIndex, cfg.ClaimsDir, g.Dir())
+	}
+	projectClaims, projectFromIndex, err := stagedProjectClaims(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	sp.Claims = loader.MergeClaims(nil, projectClaims)
+	sp.FromIndex = projectFromIndex
+	sort.Strings(sp.FromIndex)
+	sp.ledger = in
+	return sp, nil
+}
+
+// stagedProjectClaims reads the project-claims store (config
+// project_claims_dir) as the INDEX holds it, under the same discipline as the
+// module store: index content only, never os.ReadFile of a claim.
+//
+// Two states need naming, and both follow the working-tree loader rather than
+// inventing a rule of their own:
+//
+//   - A store ABSENT FROM THE INDEX is an empty store, not an error, exactly as
+//     loader.LoadProjectClaims treats a directory that does not exist:
+//     project-claims/ is optional until a project authors one, and most
+//     projects never do.
+//   - A store OUTSIDE THE WORK TREE is likewise empty here, because no commit
+//     can carry it; that is the same reading materializeIndexFile gives a store
+//     path git cannot name, and the same direction as claims_dir's own
+//     out-of-tree case. If the ledger holds approvals for project claims that
+//     only exist off-repository, the single-tree sweep reports them as
+//     lock-ledger-abandoned — a refusal at the keyboard, never a false clean.
+//
+// A store INSIDE claims_dir never reaches here: config.DecodeConfig refuses
+// that layout, and stagedConfig decodes the staged config through it, so the
+// staged run fails to load the config exactly as every other verb does. There
+// is no second containment check to drift from the first.
+func stagedProjectClaims(g *gitRunner, cfg *config.Config) ([]model.Claim, []string, error) {
+	dir := cfg.ProjectClaimsDirPath()
+	if strings.TrimSpace(dir) == "" {
+		return nil, nil, nil
+	}
+	spec, err := g.spec(dir)
+	if err != nil {
+		return nil, nil, nil
+	}
+	return stagedClaimsUnder(g, dir, spec)
+}
+
+// stagedClaimsUnder decodes every claim file the index holds under spec — the
+// git pathspec for the working-tree directory dir — and returns the claims in
+// git's listing order (the caller sorts the merged registry), plus the
+// repository-relative paths whose index content differs from the worktree
+// file, for StagedProject.FromIndex.
+//
+// EVERY claim's content comes from the index. Unconditionally, with no
+// worktree shortcut for the ones git says are clean.
+//
+// There used to be one: "git diff" was asked which paths differed, those
+// were fetched from the index, and the rest were read off disk as a cheaper
+// equivalent. It is not an equivalent. "git diff" consults git's stat cache
+// and honours the per-path skip bits, so a single
+//
+//	git update-index --assume-unchanged claims/whatever.yaml
+//
+// makes git report a modified file as clean — and the gate then read the
+// clean WORKTREE copy while the tampered blob sat in the index waiting to be
+// committed. The refusal disappeared and the commit landed. The same is true
+// of --skip-worktree, of a racily-clean stat entry, and of anything else
+// that ever teaches git's cache a lie. A gate whose evidence source is
+// chosen by a mutable, attacker-writable bit is not a gate.
+//
+// The cost is one "git cat-file --batch" per store, which is a single
+// subprocess either way.
+//
+// indexBlobs is ALSO the authority on WHICH claims exist — the file list and
+// the content come from one query rather than two that could disagree. That
+// is what makes three otherwise-invisible cases come out right: a claim
+// staged for DELETION is gone from the index and so must not be linted; a
+// claim that is merely UNTRACKED is not part of the commit and must not be
+// linted either; and a claim staged for ADDITION is in the index before it is
+// in any commit and must be.
+func stagedClaimsUnder(g *gitRunner, dir, spec string) (claims []model.Claim, fromIndex []string, err error) {
+	blobs, err := g.indexBlobs(spec)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	rels := make([]string, 0, len(blobs))
@@ -420,7 +584,7 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		if !isClaimFile(rel) {
 			continue
 		}
-		abs := worktreePath(cfg.ClaimsDir, claimsSpec, rel)
+		abs := worktreePath(dir, spec, rel)
 		raw := blobs[rel]
 
 		// FromIndex is derived by comparing bytes we already hold, NOT by asking
@@ -447,82 +611,24 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		// normalises line breaks, so hashes and lint agree either way); the report
 		// was.
 		if onDisk, readErr := os.ReadFile(abs); readErr != nil || !bytes.Equal(normalizeLineEndings(onDisk), normalizeLineEndings(raw)) {
-			sp.FromIndex = append(sp.FromIndex, rel)
+			fromIndex = append(fromIndex, rel)
 		}
 
 		c, err := decodeClaim(abs, raw)
 		if err != nil {
-			return StagedProject{}, err
+			return nil, nil, err
 		}
-		sp.Claims = append(sp.Claims, c)
+		claims = append(claims, c)
 	}
-
-	// loader.LoadClaims sorts by SourcePath, and every downstream consumer —
-	// lint's finding order, the catalog, the reporting — inherits that order.
-	// git ls-files already sorts, but it sorts BYTES of slash-separated paths
-	// while loader sorts the platform-separated absolute path, so sort here
-	// rather than assume the two agree.
-	sort.Slice(sp.Claims, func(i, j int) bool { return sp.Claims[i].SourcePath < sp.Claims[j].SourcePath })
-	sort.Strings(sp.FromIndex)
-
-	// The two stores and every build-order artifact, from the same index. That
-	// is the LAST thing this function does: everything the gate is evaluated
-	// against now comes from one tree, and nothing here looks at a second one.
-	// See this file's REMOVED section for the comparison that used to sit at
-	// exactly this point and why re-adding it here would be a mistake.
-	sp.ledger, err = stagedLedgerInputs(g, cfg)
-	if err != nil {
-		return StagedProject{}, err
-	}
-	return sp, nil
-}
-
-// stagedWithUnreachableClaims finishes a run whose claims_dir is outside the
-// work tree: the registry is empty, because no commit can carry a file git
-// cannot name, and the verdict is whatever the ledger gate makes of the INDEX's
-// stores standing alone.
-//
-// It is the difference between "this commit contains no claims" and "there is
-// nothing here to evaluate", and only the second is ErrNoIndex. A standing lock
-// ledger whose records name claims that are now unreachable is a refusal
-// (lock-ledger-abandoned) that needs one tree, no history and no claims at all —
-// see the pathspec comment in Staged for the false clean that came of assuming
-// otherwise.
-//
-// The escape hatch survives for the case it was written for and nothing else: a
-// checkout whose claims genuinely live outside the repository AND that carries
-// no lock ledger, no comment digest store and no build-order artifact either. On
-// that tree the gate really is being asked about content the commit does not
-// have, `check --validate` says nothing either, and refusing would break
-// "run check --staged in CI" for a layout the rest of the product supports.
-//
-// WHAT IT COSTS, stated plainly because it is a real cost: a project whose
-// claims live outside the repository and whose lock ledger lives inside it is
-// now refused by --staged, per unreachable approval. That project's approvals
-// really do cover files no commit carries — its ledger is a record about
-// something this repository does not contain — and the same tree is refused by
-// `check --validate` the moment those claims are not where claims_dir points.
-// The alternative is the false clean above, in the mode that runs in the hook.
-func stagedWithUnreachableClaims(g *gitRunner, cfg *config.Config, sp StagedProject) (StagedProject, error) {
-	in, err := stagedLedgerInputs(g, cfg)
-	if err != nil {
-		return StagedProject{}, err
-	}
-	if !holdsGateEvidence(in) {
-		return StagedProject{}, fmt.Errorf(
-			"%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it — and the index holds no lock ledger, no comment digest store and no build-order artifact either, so there is nothing in it to judge",
-			ErrNoIndex, cfg.ClaimsDir, g.Dir())
-	}
-	sp.ledger = in
-	return sp, nil
+	return claims, fromIndex, nil
 }
 
 // holdsGateEvidence reports whether the index carries anything the ledger gate
-// can reach a verdict from WITHOUT any claims — a lock ledger, a comment digest
-// store, or a build-order artifact, present or merely unreadable.
+// can reach a verdict from WITHOUT any claims — a lock ledger or a comment
+// digest store, present or merely unreadable.
 //
 // Unreadable counts, and deliberately: a store that is there and will not decode
-// is reported (lock-ledger-unreadable, build-order-unreadable) precisely so that
+// is reported (lock-ledger-unreadable) precisely so that
 // corrupting the gate's evidence cannot be quieter than deleting it. Treating it
 // as "no evidence" here would restore that inversion through the one door left.
 func holdsGateEvidence(in ledgerInputs) bool {
@@ -534,11 +640,6 @@ func holdsGateEvidence(in ledgerInputs) bool {
 	}
 	if in.digests != nil && in.digests.FileExists() {
 		return true
-	}
-	for _, o := range in.buildOrders {
-		if o.Present || o.Unreadable {
-			return true
-		}
 	}
 	return false
 }
@@ -576,10 +677,10 @@ func configSource(cfg *config.Config) string {
 // because ErrNoIndex exits 0.
 //
 // The index's CONTENT is decoded but the WORKTREE directory stays the anchor:
-// claims_dir, the stores and the build-order artifacts are still resolved
+// claims_dir and the stores are still resolved
 // against cfg.Dir(), because that is where the files actually live. What comes
 // from the index is the part that decides what the gate looks at — claims_dir,
-// the module list, the doctrine facet, hub gating.
+// the module list.
 //
 // A config that is in the index but does not LOAD is a hard error, not a
 // fallback to the worktree. Falling back would restore the bypass in a slightly
@@ -681,7 +782,7 @@ func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
 			storeKind[e.path] = dec
 			continue
 		}
-		if isClaimFile(e.path) {
+		if isClaimFile(e.path) || loader.IsManifestFileName(e.path) {
 			candidates = append(candidates, e)
 		}
 	}
@@ -840,19 +941,26 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 		in.flags = flags
 	}
 
-	// The build-order artifacts come from the index for the same reason the
-	// ledger does. A locked build order read from the WORKTREE and compared
-	// against an INDEX ledger record would refuse commits over edits that are
-	// not being committed, and — the direction that matters — would pass a
-	// commit that stages a tampered artifact while the worktree copy still
-	// matches its record.
-	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {
-		path, err := materializeIndexFile(g, dir, cfg.BuildOrderPath(module))
-		if err != nil {
-			return nil, err
-		}
-		return buildorder.LoadArtifact(path)
-	})
+	// The roof, from the index like everything else here: a constitution
+	// edited in the working tree but not staged is not what the commit
+	// carries, and one staged but not yet on disk is. The verdict keeps the
+	// worktree path so a finding names a file a human can open.
+	constitutionPath, err := materializeIndexFile(g, dir, cfg.ConstitutionPath())
+	if err != nil {
+		return ledgerInputs{}, err
+	}
+	in.constitution = constitution.EvaluateAt(constitutionPath, constitutionRecord(in.store))
+	in.constitution.Path = cfg.ConstitutionPath()
+	// The lints that read the roof's text (shared-context-budget) must judge
+	// this same index copy, not the working tree the gate declined to read.
+	// Captured here, before the temp directory is removed.
+	indexed := &config.IndexedFile{}
+	if raw, readErr := os.ReadFile(constitutionPath); readErr == nil {
+		indexed = &config.IndexedFile{Tracked: true, Raw: raw}
+	} else if !os.IsNotExist(readErr) {
+		return ledgerInputs{}, fmt.Errorf("check --staged: read staged %s: %w", cfg.ConstitutionPath(), readErr)
+	}
+	cfg.ConstitutionIndex = indexed
 
 	return in, nil
 }
@@ -865,9 +973,9 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 //
 // The copy keeps the file's REPOSITORY PATH under dir, not its base name.
 // Every store is a plain <name>.json under the build directory now, so a
-// module named "lock-store" has a build-order artifact whose base name is the
-// ledger's, and a base-name copy would overwrite one with the other in the
-// temp directory. Keeping the path also keeps the lock store and the digest
+// module-scoped artifact (a module named "lock-store", say) could share the
+// ledger's base name, and a base-name copy would overwrite one with the other
+// in the temp directory. Keeping the path also keeps the lock store and the digest
 // siblings, which digest.StorePathBeside depends on.
 func materializeIndexFile(g *gitRunner, dir, src string) (string, error) {
 	spec, err := g.spec(src)
@@ -926,11 +1034,20 @@ func decodeClaim(sourcePath string, raw []byte) (model.Claim, error) {
 	return c, nil
 }
 
-// isClaimFile applies loader.LoadClaims's file filter: *.yaml and *.yml, case
-// insensitive, everything else ignored.
+// isClaimFile applies loader.LoadClaims's file filter: claim *.yaml/*.yml,
+// excluding module manifests.
 func isClaimFile(rel string) bool {
-	ext := strings.ToLower(path.Ext(rel))
-	return ext == ".yaml" || ext == ".yml"
+	return loader.IsClaimFile(rel)
+}
+
+func relToClaimsDir(claimsSpec, repoRel string) string {
+	spec := filepath.FromSlash(claimsSpec)
+	absRel := filepath.FromSlash(repoRel)
+	rel, err := filepath.Rel(spec, absRel)
+	if err != nil {
+		return filepath.ToSlash(repoRel)
+	}
+	return filepath.ToSlash(rel)
 }
 
 // normalizeLineEndings collapses CRLF to LF so the index copy of a claim and the

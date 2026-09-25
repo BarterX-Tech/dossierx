@@ -9,6 +9,6 @@ body: |
 
   A run that is not an autolink at all stays escaped: <script>alert(1)</script>,
   <img src=x onerror=alert(1)>, and a bare < in prose.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - "<" opens an autolink and nothing else, ever

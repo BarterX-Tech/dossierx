@@ -1,0 +1,10 @@
+id: crowded.contract.c05
+summary: Claim 6 of 11 in a module capped at 10.
+facet: contract
+module: crowded
+status: draft
+layout: card
+body: |
+  Claim 6 of 11 in the crowded module.
+rests_on:
+  - crowded.contract.c04

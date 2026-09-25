@@ -1,0 +1,11 @@
+id: crowded.contract.c00
+summary: Claim 1 of 11 in a module capped at 10.
+facet: contract
+module: crowded
+status: draft
+layout: card
+body: |
+  Claim 1 of 11 in the crowded module.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

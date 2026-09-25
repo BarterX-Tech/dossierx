@@ -1,4 +1,5 @@
 id: rollupmod.contract.banner
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: rollupmod
 status: locked
@@ -6,6 +7,6 @@ layout: banner
 body: |
   A locked banner claim whose module still has a draft sibling below --
   the roll-up must stay unlocked until every claim in the module locks.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture claim, not backed by any real doctrine

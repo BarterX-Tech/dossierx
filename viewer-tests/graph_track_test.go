@@ -45,7 +45,7 @@ import (
 const trackConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
   - gadget
@@ -66,14 +66,15 @@ func trackClaimYAML(id, facet, module, memberships string) string {
 facet: ` + facet + `
 module: ` + module + `
 status: draft
+summary: Fixture claim used by the engine test corpus.
 `
 	if memberships != "" {
 		body += "tracks:\n" + memberships
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
@@ -81,9 +82,9 @@ governed_by:
 // newTrackProject:
 //
 //	widget.contract.base    OWNS checkout
-//	widget.design.thing     cites checkout (role omitted)
+//	widget.internals.thing     cites checkout (role omitted)
 //	gadget.contract.core    OWNS search
-//	gadget.design.extra     in no track at all
+//	gadget.internals.extra     in no track at all
 //
 // So `checkout` is two claims across two facets of one module, `search` is
 // one, and one claim is outside both — which is what makes "every claim" a
@@ -94,11 +95,11 @@ func newTrackProject(t *testing.T) *project {
 	p := newProjectRaw(t, trackConfig)
 	p.writeClaim("wc.yaml", trackClaimYAML("widget.contract.base", "contract", "widget",
 		"  - id: checkout\n    role: owns\n"))
-	p.writeClaim("wd.yaml", trackClaimYAML("widget.design.thing", "design", "widget",
+	p.writeClaim("wd.yaml", trackClaimYAML("widget.internals.thing", "internals", "widget",
 		"  - id: checkout\n"))
 	p.writeClaim("gc.yaml", trackClaimYAML("gadget.contract.core", "contract", "gadget",
 		"  - id: search\n    role: owns\n"))
-	p.writeClaim("gd.yaml", trackClaimYAML("gadget.design.extra", "design", "gadget", ""))
+	p.writeClaim("gd.yaml", trackClaimYAML("gadget.internals.extra", "internals", "gadget", ""))
 	return p
 }
 
@@ -183,11 +184,11 @@ func TestGraphTrackFilterDrawsOneFeaturesSubgraph(t *testing.T) {
 		track string
 		want  []string
 	}{
-		{track: "checkout", want: []string{"widget.contract.base", "widget.design.thing"}},
+		{track: "checkout", want: []string{"widget.contract.base", "widget.internals.thing"}},
 		{track: "search", want: []string{"gadget.contract.core"}},
 		{track: "", want: []string{
-			"gadget.contract.core", "gadget.design.extra",
-			"widget.contract.base", "widget.design.thing",
+			"gadget.contract.core", "gadget.internals.extra",
+			"widget.contract.base", "widget.internals.thing",
 		}},
 	}
 	for _, tc := range cases {
@@ -242,7 +243,7 @@ func TestGraphTrackFilterDrawsOneFeaturesSubgraph(t *testing.T) {
 	if got := detailRowText(t, ctx, "tracks"); got != "Checkout (owns)" {
 		t.Fatalf("owner's tracks row = %q, want Checkout (owns)", got)
 	}
-	clickJump(t, ctx, "widget.design.thing")
+	clickJump(t, ctx, "widget.internals.thing")
 	if got := detailRowText(t, ctx, "tracks"); got != "Checkout (cites)" {
 		t.Fatalf("citing claim's tracks row = %q, want Checkout (cites)", got)
 	}

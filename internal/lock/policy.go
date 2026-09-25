@@ -75,10 +75,7 @@ func EvaluateSet(claims []model.Claim, requestedIDs []string, cfg *config.Config
 // inferred from a hash or silently cleared by a snapshot refresh.
 func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []string, cfg *config.Config, store *Store, conflicts []SemanticConflict) SetEvaluation {
 	ids := uniqueIDs(requestedIDs)
-	result := SetEvaluation{RequestedIDs: ids, PolicyVersion: PolicyLegacy}
-	if store != nil {
-		result.PolicyVersion = store.PolicyVersion
-	}
+	result := SetEvaluation{RequestedIDs: ids, PolicyVersion: PolicyLocalApprovalV1}
 	requested := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		requested[id] = true
@@ -148,20 +145,13 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 			if finding.Severity == lint.SeverityWarning && !(finding.LintName == "roll-up" && finding.ClaimID == id) {
 				continue
 			}
-			// Local approval deliberately replaces only the old "rests_on must
-			// already be locked" doctrine. Other graph/integrity lints keep
-			// their ordinary force; dependency readiness carries the visible
-			// condition this one rule used to hide by refusing the approval.
-			if store != nil && store.LocalApprovalEnabled() && finding.LintName == "rest-on-locked" {
-				continue
-			}
-			if findingAffects(finding, id) {
+			if findingAffects(finding, id, claim.Module) {
 				verdict.LocalAdmissible = false
 				verdict.Refusals = append(verdict.Refusals, "lint:"+finding.LintName)
 				verdict.LintFindings = append(verdict.LintFindings, finding)
 			}
 		}
-		for _, depID := range claim.RestsOn {
+		for _, depID := range claim.RestsOn.IDs {
 			dep, ok := byID[depID]
 			if !ok {
 				verdict.LocalAdmissible = false
@@ -190,36 +180,16 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 				verdict.Refusals = append(verdict.Refusals, "unreadable_dependency:"+depID)
 				continue
 			}
-			if cfg != nil && cfg.HubGatingEnabled() && dep.Facet == cfg.DoctrineFacet && !candidateLocked(depID, candidate) {
-				verdict.LocalAdmissible = false
-				verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+cfg.DoctrineFacet+":"+depID)
-				continue
-			}
-			if store == nil || !store.LocalApprovalEnabled() {
-				if !candidateLocked(depID, candidate) {
-					verdict.LocalAdmissible = false
-					verdict.Refusals = append(verdict.Refusals, "dependency_not_locked:"+depID)
-				}
-			} else if !candidateLocked(depID, candidate) {
+			// Local approval replaces the retired "rests_on must already be
+			// locked" doctrine: a readable draft dependency is a visible
+			// readiness condition, never a refusal of the reviewed statement.
+			if !candidateLocked(depID, candidate) {
 				verdict.Conditions = append(verdict.Conditions, DependencyCondition{
 					DependencyID: depID,
 					Kind:         "dependency_unapproved",
 					Path:         []string{id, depID},
 					Detail:       "approved locally against a readable dependency that is not approved",
 				})
-			}
-		}
-		// Doctrine hub gating remains a local approval gate for both required
-		// rests_on and mirrored doctrine edges. Local approval relaxes only a
-		// readable draft prerequisite; it never licenses a configured doctrine
-		// hub to be approved through a mirror while still draft.
-		if cfg != nil && cfg.HubGatingEnabled() {
-			for _, mirrorID := range claim.Mirrors {
-				mirror, ok := byID[mirrorID]
-				if ok && mirror.Facet == cfg.DoctrineFacet && !candidateLocked(mirrorID, candidate) {
-					verdict.LocalAdmissible = false
-					verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+cfg.DoctrineFacet+":"+mirrorID)
-				}
 			}
 		}
 		verdict.Refusals = uniqueStrings(verdict.Refusals)
@@ -229,12 +199,9 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 		if finding.Severity == lint.SeverityWarning {
 			continue
 		}
-		if store != nil && store.LocalApprovalEnabled() && finding.LintName == "rest-on-locked" {
-			continue
-		}
 		related := false
 		for _, id := range ids {
-			if findingAffects(finding, id) {
+			if findingAffects(finding, id, byID[id].Module) {
 				related = true
 				break
 			}
@@ -246,7 +213,16 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 	return result
 }
 
-func findingAffects(f lint.Finding, id string) bool {
+// findingAffects is the scoping rule: a finding blocks a candidate when it
+// names the candidate, or — for the module-manifest rule, whose ClaimID is
+// the MODULE ("" = project-wide) and never a claim — when it is about the
+// candidate's own module. A module with no valid manifest.yaml has no
+// lockable claims (NIT-22); a defect in another module's file is not this
+// candidate's to fix and does not hold it hostage.
+func findingAffects(f lint.Finding, id, module string) bool {
+	if f.LintName == lint.ModuleManifestLintName {
+		return f.ClaimID == "" || f.ClaimID == module
+	}
 	return f.ClaimID == id || strings.Contains(f.Message, id)
 }
 
@@ -274,7 +250,7 @@ func restCycleFrom(root, next string, claims map[string]model.Claim) bool {
 		if !ok {
 			return false
 		}
-		for _, dep := range claim.RestsOn {
+		for _, dep := range claim.RestsOn.IDs {
 			if visit(dep) {
 				return true
 			}

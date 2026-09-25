@@ -1063,6 +1063,22 @@ const costMeasurementCeiling = 2 * time.Second * costTimeScale
 // per-operation duration on every platform.
 const costTimerFloor = 2 * time.Millisecond
 
+// costMeasurementRuns is how many timed operations bestRenderTime keeps the
+// minimum of. Off -race that is five: scheduler noise only ever adds, and the
+// number is a growth-ratio denominator. Under -race the instrumentation already
+// dominates the clock, and repeating every size five times — then doing it
+// again through RenderClaimBody — exceeded Go's default 10m package deadline
+// on windows-latest / go stable (1.27.1) at commit 037eb72: the package
+// timed out in TestRenderClaimBody_ImageCostScalesLinearly/image-in-table-cells
+// after ~8m of the Render sweep. Growth still retries up to costGrowthAttempts
+// when a ratio is noisy. Every shape and size still runs.
+func costMeasurementRuns() int {
+	if raceEnabled {
+		return 1
+	}
+	return 5
+}
+
 // measurePerOp returns the per-operation cost of f. It gives up early, with
 // ok=false, once one operation is past ceiling, so a shape that has gone
 // superlinear fails the guard instead of spinning here.
@@ -1088,7 +1104,7 @@ func bestRenderTime(body string) (best time.Duration, ok bool) {
 	if !ok {
 		return best, false
 	}
-	for r := 1; r < 5; r++ {
+	for r := 1; r < costMeasurementRuns(); r++ {
 		d, ok := measurePerOp(func() { _ = Render(body) }, costMeasurementCeiling)
 		if !ok {
 			return d, false

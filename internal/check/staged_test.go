@@ -14,6 +14,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -95,9 +96,12 @@ func monorepoFixture(t *testing.T) *config.Config {
 		}
 	}
 	cfgPath := filepath.Join(docs, "project.config.yaml")
-	body := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: ../claims\n"
+	body := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: ../claims\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
+	}
+	if err := manifesttest.SeedMinimalFromConfigYAML(docs, []byte(body)); err != nil {
+		t.Fatalf("seed module manifests: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(claims, "locked.yaml"), []byte(lockedClaim("widget.contract.locked")), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
@@ -462,10 +466,9 @@ func TestStaged_UntrackedAndStagedDeletionsAreNotInTheRegistry(t *testing.T) {
 
 	// An untracked claim, deliberately one that would fail lint if judged
 	// (it references a claim that does not exist).
-	untracked := "id: widget.contract.untracked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	untracked := "id: widget.contract.untracked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  never added to the index.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(cfg.ClaimsDir, "untracked.yaml"), []byte(untracked), 0o644); err != nil {
 		t.Fatalf("write untracked claim: %v", err)
 	}
@@ -541,15 +544,15 @@ func TestStaged_OutsideAWorkTreeIsErrNoIndex(t *testing.T) {
 // check rejects, which is the worst possible way for these two to disagree.
 func TestStagedDecodeMatchesLoader(t *testing.T) {
 	cases := map[string]string{
-		"ordinary": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"ordinary": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
-		"unknown field": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+		"unknown field": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: hi\nnot_a_real_field: 1\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
-		"two documents": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: hi\ngoverned_by:\n  type: none\n  reason: fixture\n" +
-			"---\nid: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: hi\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
+		"two documents": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
+			"body: hi\nrests_on:\n  none: true\n  reason: fixture\n" +
+			"---\nid: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: hi\n",
 		"malformed yaml": "id: [unterminated\n",
 	}
 
@@ -674,9 +677,8 @@ func TestStaged_AssumeUnchangedCannotSubstituteTheWorktree(t *testing.T) {
 	}
 }
 
-// project.config.yaml names claims_dir, the module list, the doctrine facet and
-// the hub gating switch — every input that decides WHICH files the gate looks at
-// and what it demands of them. Read from the WORKTREE, one unstaged line was a
+// project.config.yaml names claims_dir, the module list and the facets — every
+// input that decides WHICH files the gate looks at and what it demands of them. Read from the WORKTREE, one unstaged line was a
 // complete bypass: stage a tampered locked claim, then point claims_dir at an
 // empty directory in the working tree only. The gate audited nothing, found
 // nothing, and let the commit through — while the commit itself still carried
@@ -773,5 +775,50 @@ func TestStaged_FromIndexIgnoresGitsOwnLineEndingConversion(t *testing.T) {
 	// The verdict is unchanged: the same clean project still passes.
 	if res := check.StatusStaged(sp, cfg); len(res.LedgerFindings) != 0 {
 		t.Fatalf("expected a clean gate, got %v", rulesOf(res.LedgerFindings))
+	}
+}
+
+// shared-context-budget measures the constitution's text, and under --staged
+// it must measure the copy the commit carries: the same index copy the
+// constitution gate reads. It read the working tree, so a roof grown past the
+// shared budget and not staged refused a commit that did not contain it, and
+// (the direction that matters for a gate) a roof staged over budget and then
+// trimmed in the working tree only passed the hook.
+func TestStaged_SharedContextBudgetReadsTheStagedConstitution(t *testing.T) {
+	root := t.TempDir()
+	cfg := writeProjectFiles(t, root, baseConfig, map[string]string{
+		"claims/one.yaml": draftClaim("widget.contract.one"),
+	})
+	gitRepo(t, root)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "fixture")
+	committed, err := os.ReadFile(cfg.ConstitutionPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	oversized := string(committed) + "decisions:\n  - slug: sprawl\n    body: " + strings.Repeat("sprawl ", 2000) + "\n"
+	budgetFired := func(verdict []string) bool {
+		for _, line := range verdict {
+			if strings.HasPrefix(line, "lint|shared-context-budget|") {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Over budget in the working tree only.
+	writeFixtureFile(t, cfg.ConstitutionPath(), oversized)
+	if !budgetFired(worktreeVerdict(t, cfg)) {
+		t.Fatal("fixture precondition: the oversized roof must trip shared-context-budget on the working tree")
+	}
+	if staged, _ := stagedVerdict(t, cfg); budgetFired(staged) {
+		t.Fatalf("--staged judged the unstaged working-tree roof: %v", staged)
+	}
+
+	// Over budget in the index, trimmed back in the working tree.
+	git(t, root, "add", filepath.Base(cfg.ConstitutionPath()))
+	writeFixtureFile(t, cfg.ConstitutionPath(), string(committed))
+	if staged, _ := stagedVerdict(t, cfg); !budgetFired(staged) {
+		t.Fatalf("--staged missed the staged oversized roof: %v", staged)
 	}
 }

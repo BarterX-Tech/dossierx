@@ -88,16 +88,15 @@ func TestFlagRefusesARawHTMLCardEndToEnd(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nmockup_modules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nmockup_modules:\n  - widget\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 	const id = "widget.contract.card"
 	claimPath := filepath.Join(claimsDir, "card.yaml")
-	claim := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	claim := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a card claim that also renders markup.\n" +
 		"raw_html: \"<div>a rendered mock</div>\"\nraw_html_reviewed: true\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

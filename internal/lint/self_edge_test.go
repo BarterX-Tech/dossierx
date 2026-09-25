@@ -17,73 +17,31 @@ func TestSelfEdgeLint(t *testing.T) {
 		{
 			name: "passing: every edge points at another claim",
 			claims: []model.Claim{
-				{ID: "widget.contract.doctrine", Governed: model.Governed{Type: "none", Reason: "root"}},
-				{
-					ID:       "widget.contract.overview",
-					RestsOn:  []string{"widget.contract.doctrine"},
-					Mirrors:  []string{"widget.internals.overview"},
-					Governed: model.Governed{Type: "widget.contract.doctrine"},
-				},
-				{ID: "widget.internals.overview", Mirrors: []string{"widget.contract.overview"}},
+				{ID: "widget.contract.doctrine", RestsOn: model.RestsNone("root")},
+				{ID: "widget.contract.overview", RestsOn: model.RestsOnIDs("widget.contract.doctrine")},
+				{ID: "widget.internals.overview", RestsOn: model.RestsOnIDs("widget.contract.overview")},
 			},
 			wantFindings: 0,
 		},
 		{
 			name: "failing: rests_on names its own id",
 			claims: []model.Claim{
-				{ID: "widget.contract.self", RestsOn: []string{"widget.contract.self"}},
+				{ID: "widget.contract.self", RestsOn: model.RestsOnIDs("widget.contract.self")},
 			},
 			wantFindings: 1,
 			wantContains: "rests_on names this claim's own id",
 		},
 		{
-			// The case the whole rule exists for: mirror-reciprocal and
-			// mirror-mismatch are both trivially satisfied by a self-mirror,
-			// so nothing reported this before.
-			name: "failing: mirrors names its own id",
-			claims: []model.Claim{
-				{ID: "widget.contract.self", Mirrors: []string{"widget.contract.self"}},
-			},
-			wantFindings: 1,
-			wantContains: "mirrors names this claim's own id",
-		},
-		{
-			// Likewise: governed_by: self resolves, so dangling and
-			// validated-on-missing both pass it.
-			name: "failing: governed_by names its own id",
-			claims: []model.Claim{
-				{ID: "widget.contract.self", Governed: model.Governed{Type: "widget.contract.self"}},
-			},
-			wantFindings: 1,
-			wantContains: "governed_by names this claim's own id",
-		},
-		{
-			name: "failing: all three edge kinds self-reference at once",
-			claims: []model.Claim{
-				{
-					ID:       "widget.contract.self",
-					RestsOn:  []string{"widget.contract.self"},
-					Mirrors:  []string{"widget.contract.self"},
-					Governed: model.Governed{Type: "widget.contract.self"},
-				},
-			},
-			wantFindings: 3,
-		},
-		{
-			// One finding per edge kind, not per occurrence.
 			name: "failing: a duplicated self reference in one list is still one finding",
 			claims: []model.Claim{
-				{ID: "widget.contract.self", RestsOn: []string{"widget.contract.self", "widget.contract.self"}},
+				{ID: "widget.contract.self", RestsOn: model.RestsOnIDs("widget.contract.self", "widget.contract.self")},
 			},
 			wantFindings: 1,
 		},
 		{
-			// governed_by: none is the grounded case, not a self-edge, and an
-			// empty id belongs to id-shape — neither may be reported here.
-			name: "passing: governed_by none and an id-less claim are not self-edges",
+			name: "passing: rests_on none and an id-less claim are not self-edges",
 			claims: []model.Claim{
-				{ID: "widget.contract.grounded", Governed: model.Governed{Type: "none", Reason: "no doctrine"}},
-				{ID: "", Governed: model.Governed{Type: ""}},
+				{ID: "", RestsOn: model.RestsNone("no id yet")},
 			},
 			wantFindings: 0,
 		},
@@ -110,9 +68,6 @@ func TestSelfEdgeLint(t *testing.T) {
 	}
 }
 
-// TestSelfEdgeLintIsRegistered guards the coverage meta-gate's premise: the
-// rule has to be in Registry for RunAll (and therefore "dossierx lint") to
-// run it at all.
 func TestSelfEdgeLintIsRegistered(t *testing.T) {
 	for _, l := range Registry {
 		if l.Name() == "self-edge" {

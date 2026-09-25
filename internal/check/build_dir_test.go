@@ -49,7 +49,7 @@ func TestRunWritesEverythingUnderBuildDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.Name() != "build" && e.Name() != "claims" && e.Name() != "project.config.yaml" {
+		if e.Name() != "build" && e.Name() != "claims" && e.Name() != "project.config.yaml" && e.Name() != "constitution.yaml" {
 			t.Fatalf("check wrote %q at the project root", e.Name())
 		}
 	}

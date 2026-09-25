@@ -214,14 +214,22 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":      8,
-		"commands":   25,
-		"lint_rules": 38,
+		"nouns":    9,
+		"commands": 24,
+		// 36 -> 37 with NIT-10's shared-context-budget (the shared half of
+		// the manifest show --isolation view). 37 -> 36 when lock policy 0
+		// was retired and rest-on-locked went with it.
+		"lint_rules": 36,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
 		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):
 		// `skills_drift` names a hand-edited or stale exported skill.
-		"error_codes": 52,
+		// Recomputed here after rebasing onto release/v0.7.21 (#104) and
+		// NIT-7's manifest harness together: the doctrine hub's
+		// `dependency_not_locked` is deleted (NIT-23) and `view_too_large`
+		// is added (`manifest show --isolation` over the 16384-byte view
+		// cap), landing at 50.
+		"error_codes": 50,
 		"http_routes": 14,
 	}
 	for name, expected := range want {
@@ -251,8 +259,8 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 // declared in a sibling file sit in the binary, reachable by every client, with
 // counts.error_codes reading 44 and every guard green.
 var codeConstREs = []*regexp.Regexp{
-	regexp.MustCompile(`(?m)^\s*[A-Za-z0-9_]+\s+Code\s*=\s*"[a-z_]+"`),
-	regexp.MustCompile(`(?m)^\s*Code[A-Za-z0-9_]*\s*=\s*(?:Code\()?"[a-z_]+"`),
+	regexp.MustCompile(`(?m)^\s*[A-Za-z0-9_]+\s+Code\s*=\s*"[A-Za-z_]+"`),
+	regexp.MustCompile(`(?m)^\s*Code[A-Za-z0-9_]*\s*=\s*(?:Code\()?"[A-Za-z_]+"`),
 }
 
 // TestSurfaceErrorCodesFindEveryConstantInThePackage is the meta-test the error

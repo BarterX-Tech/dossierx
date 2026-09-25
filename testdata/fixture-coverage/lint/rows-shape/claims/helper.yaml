@@ -1,10 +1,11 @@
 id: rowsmod.internals.helper
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: rowsmod
 status: draft
 layout: card
 body: |
   Helper claim, targeted by the mismatched-rows claim's rests_on edge.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture claim, not backed by any real doctrine

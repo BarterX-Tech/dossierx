@@ -153,7 +153,7 @@ func rawHTMLLayoutClaim(layout model.Layout, status model.Status, reviewed bool,
 		RawHTML:         rawHTML,
 		RawHTMLReviewed: reviewed,
 		Status:          status,
-		RestsOn:         []string{"widget.internals.anchor"},
+		RestsOn:         model.RestsOnIDs("widget.internals.anchor"),
 	}
 	switch layout {
 	case model.LayoutTable:

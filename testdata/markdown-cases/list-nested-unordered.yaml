@@ -8,6 +8,6 @@ body: |
     - Nested item one
     - Nested item two
   - Another top level
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

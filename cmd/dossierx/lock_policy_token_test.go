@@ -11,7 +11,7 @@ import (
 // decision than a reviewer of {B}. Keep that distinction at the token seam.
 func TestPolicySnapshotBindsCanonicalRequestedSet(t *testing.T) {
 	a := model.Claim{ID: "fixture.contract.a", Status: model.StatusDraft, Body: "A"}
-	b := model.Claim{ID: "fixture.contract.b", Status: model.StatusDraft, Body: "B", RestsOn: []string{a.ID}}
+	b := model.Claim{ID: "fixture.contract.b", Status: model.StatusDraft, Body: "B", RestsOn: model.RestsOnIDs(a.ID)}
 	claims := []model.Claim{a, b}
 	group := policySnapshot(claims, []string{b.ID, a.ID})
 	single := policySnapshot(claims, []string{b.ID})

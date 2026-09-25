@@ -1,0 +1,10 @@
+id: summarymod.contract.long
+summary: abcdefghijklmnopqrstu
+facet: contract
+module: summarymod
+status: draft
+layout: card
+rests_on:
+  - summarymod.contract.helper
+body: |
+  A claim whose summary is one character over a configured cap of 20.

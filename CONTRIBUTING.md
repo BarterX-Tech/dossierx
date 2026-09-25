@@ -186,10 +186,11 @@ archive — which leave this repository and so cannot be checked from inside it.
 loosely coupled" below for why that matters here). The current packages, which is what
 `go list ./internal/...` prints today rather than what this list used to say:
 
-`buildorder`, `catalog`, `check`, `cliout`, `comments`, `config`, `digest`, `graph`,
-`implink`, `layout`, `lint`, `loader`, `lock`, `model`, `reaudit`, `render`,
-`render/components`, `render/markdown`, `render/markdown/generate-goldens`, `serve`,
-`urlsafe`.
+`approvaledit`, `approvalrecovery`, `atomicfile`, `catalog`, `check`, `cliout`, `comments`,
+`config`, `conformance`, `constitution`, `digest`, `gitrepo`, `graph`, `implink`, `layout`,
+`lint`, `loader`, `lock`, `manifest`, `model`, `projectclaims`, `readiness`, `reaudit`,
+`releasebaseline`, `render`, `render/components`, `render/markdown`,
+`render/markdown/generate-goldens`, `serve`, `textdiff`, `urlsafe`, `visibility`.
 
 The rules:
 
@@ -203,19 +204,14 @@ The rules:
   for it beyond what its `config`+`cliout` import set already satisfies under the existing
   rules.
 - **`render` is a top-of-stack sink for everything upstream of it.** It may import other
-  `internal/` packages, and the six that sit upstream in the pipeline may not import it back:
-  `lint`, `catalog`, `lock`, `loader`, `implink` and `buildorder`. That is the exact set
+  `internal/` packages, and the five that sit upstream in the pipeline may not import it back:
+  `lint`, `catalog`, `lock`, `loader` and `implink`. That is the exact set
   `.golangci.yml`'s `render-is-top-of-stack` rule denies, and the rule is deliberately not
   "nothing under `internal/`" — `check` and `serve` both import `render` and are supposed to.
   They are the two packages that DRIVE the pipeline rather than sitting inside it: `check` runs
   lint → catalog → render → ledger → scan as its five stages, and `serve` renders the viewer
   from memory on each request. The rule to keep in your head is direction, not a blanket ban:
   nothing that produces input for the renderer may depend on how output gets drawn.
-  `buildorder` is in this set for the same reason as the rest: `internal/render` imports it to
-  render the build-order mermaid diagrams, so `buildorder` may not import `render` or
-  `render/components` back — which is why its label-formatting helper (`ClaimLabel` and
-  `DisplayCase`) is a small duplicate of `render/components`'s own, following the precedent at
-  `internal/graph/build.go:300`, rather than an import.
 - **`lint` must never import `lock`.** The dependency runs the other way: `lock` imports
   `lint`, because locking a claim is gated on that claim passing a clean lint run. A `lint`
   package that imported `lock` back would create a cycle and would also be backwards from

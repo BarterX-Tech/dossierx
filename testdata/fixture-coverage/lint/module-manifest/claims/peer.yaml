@@ -1,0 +1,11 @@
+id: missmod.contract.peer
+facet: contract
+module: missmod
+status: draft
+layout: card
+summary: Fixture claim used by the engine test corpus.
+body: |
+  Peer so neither claim is an orphan and no edge dangles.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real dependency

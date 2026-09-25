@@ -142,20 +142,22 @@ func icWriteFixtureProject(t *testing.T, root, module string) (cfgPath, claimPat
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
 
 	claimPath = filepath.Join(claimsDir, "overview.yaml")
 	claim := "id: " + module + ".contract.overview\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  fixture claim for in-process CLI tests.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
+	// The roof, LAST: its lock is the project's crossing into the ledger,
+	// which takes the claim on disk into digest coverage silently. Locked
+	// before the claim existed, the first check would report it as adopted.
+	lockFixtureConstitution(t, cfgPath)
 	return cfgPath, claimPath
 }
 
@@ -172,22 +174,9 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	// An orientation-note claim (via the reserved "overview" facet, which
-	// implies kind: orientation-note without saying so explicitly — see
-	// model.Claim.EffectiveKind) so the "check" assertion below can cover the
-	// orientation-notes non-blocking report line (computed in internal/check,
-	// formatted by formatCheckResult), not just "check: OK" itself.
-	overviewClaim := "id: widget.overview.router\n" +
-		"facet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
-		"body: |\n  fixture orientation-note claim for in-process CLI tests.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
-	if err := os.WriteFile(filepath.Join(root, "claims", "overview-router.yaml"), []byte(overviewClaim), 0o644); err != nil {
-		t.Fatalf("write overview claim: %v", err)
-	}
-
 	// --validate first, on a clean tree: it must report the lint verdict and
 	// leave the two artifacts ABSENT. The fixture claims carry no
-	// mirrors/rests_on edges, which trips the warning-severity "orphan" lint —
+	// rests_on edges, which trips the warning-severity "orphan" lint —
 	// expected and non-fatal (only an error-severity finding fails a run).
 	out, _, err := execCLI(t, "--config", cfgPath, "check", "--validate")
 	if err != nil {
@@ -208,17 +197,13 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 		}
 	}
 
-	// Now the writing form: same lint verdict, plus both artifacts and the
-	// non-blocking orientation-notes report.
+	// Now the writing form: same lint verdict, plus both artifacts.
 	out, _, err = execCLI(t, "--config", cfgPath, "check")
 	if err != nil {
 		t.Fatalf("check: %v (out: %s)", err, out)
 	}
 	if !strings.Contains(out, "check: OK") {
 		t.Fatalf("expected check: OK, got: %s", out)
-	}
-	if !strings.Contains(out, `orientation notes: module "widget": 1 (1 in overview)`) {
-		t.Fatalf("expected orientation notes report line, got: %s", out)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "build", "catalog", "catalog.json")); statErr != nil {
 		t.Fatalf("expected build/catalog/catalog.json to exist after check: %v", statErr)
@@ -235,15 +220,13 @@ func TestCLI_LintFailureFailsBothCheckForms(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	// A claim resting on a target that does not exist anywhere: a real
 	// error-severity lint finding.
 	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  broken fixture.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "broken.yaml"), []byte(broken), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
@@ -278,10 +261,10 @@ func TestCLI_ClaimShowReportsBothEdgeDirections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
-	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "governed_by") {
+	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "rests_on") {
 		t.Fatalf("expected claim show to describe the claim, got: %s", out)
 	}
-	if !strings.Contains(out, "incoming mirrors") || !strings.Contains(out, "incoming rests_on") {
+	if !strings.Contains(out, "incoming rests_on") {
 		t.Fatalf("expected claim show to report incoming edges, got: %s", out)
 	}
 	// The two things "deps" never said, and the reason claim show replaced it.
@@ -312,15 +295,14 @@ func TestCLI_ClaimListMigratedReportsTheRatioAndTheClaims(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	migrated := "id: widget.contract.migrated\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  migrated fixture.\nmigrated_from: docs/tabs/widget.html\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	fresh := "id: widget.contract.fresh\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"body: |\n  new fixture, never migrated.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "migrated.yaml"), []byte(migrated), 0o644); err != nil {
 		t.Fatalf("write migrated claim: %v", err)
 	}
@@ -350,9 +332,8 @@ func TestCLI_ClaimListMigratedEmptyClaimsDir(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 
 	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--migrated")
 	if err != nil {
@@ -398,23 +379,23 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 
 	depPath := filepath.Join(claimsDir, "dep.yaml")
 	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  dependency claim, v1.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(depPath, []byte(dep), 0o644); err != nil {
 		t.Fatalf("write dep: %v", err)
 	}
 
 	mainPath := filepath.Join(claimsDir, "main.yaml")
 	mainClaim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  main claim resting on the dependency.\n" +
-		"rests_on:\n  - widget.contract.dep\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.dep\n"
 	if err := os.WriteFile(mainPath, []byte(mainClaim), 0o644); err != nil {
 		t.Fatalf("write main: %v", err)
 	}

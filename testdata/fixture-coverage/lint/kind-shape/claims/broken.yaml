@@ -1,0 +1,11 @@
+id: kindshapemod.contract.broken
+summary: Fixture claim used by the engine test corpus.
+facet: contract
+module: kindshapemod
+status: draft
+layout: card
+kind: orientation-note
+body: |
+  A leftover orientation-note kind. kind-shape refuses every value other than fact.
+rests_on:
+  - kindshapemod.contract.helper

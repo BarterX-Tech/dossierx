@@ -1,8 +1,8 @@
-id: panel.decision.mockup
-facet: decision
+id: panel.internals.mockup
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: panel
 status: locked
-build_role: orientation
 layout: mockup
 section: What the panel looks like
 body: |
@@ -10,6 +10,6 @@ body: |
   paints.
 raw_html: '<div class="mockup-diagram"><div class="gcp-console"><div class="gcp-row"><span class="mockup-badge">DRAFT</span> widget.contract.overview</div></div></div>'
 raw_html_reviewed: true
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture claim, not backed by any real doctrine

@@ -103,7 +103,7 @@ var commentsPanelTmpl = template.Must(
 
 // commentsPanelView is the shape comments.html executes against: the claim id
 // (carried on the panel as data-claim-id, never id=, so the viewer JS can fan
-// state out across an overview claim's N rendered copies) plus its threads
+// state out across every rendered copy of the same claim) plus its threads
 // split into the open ones shown inline and the resolved ones tucked into the
 // <details> collapse.
 type commentsPanelView struct {
@@ -312,7 +312,7 @@ func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
 }
 
 // edgesHTML renders the edge/metadata footer shared by every non-banner
-// component: governed_by, mirrors, rests_on, migrated_from, and a
+// component: rests_on, migrated_from, and a
 // review_pending flag. It is a Go helper rather than template markup so
 // every component gets identical, balanced markup without duplicating it
 // six times; values are HTML-escaped by hand since a FuncMap-returned
@@ -377,8 +377,9 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // EdgesHTMLWithLinks renders the shared evidence-and-relationships footer —
 // docs/design/screens/05-claim-one-expansion-at-a-time.md's "one strip, four
 // doors" redesign (R09.1/R-F.1) — for the two doors this package owns:
-// RELATIONSHIPS (R09.4's three fixed directions, GOVERNED BY / DEPENDS ON /
-// DEPENDED ON BY, plus the mirrors/migrated_from/review_pending/implemented-in
+// RELATIONSHIPS (R09.4's fixed directions, DEPENDS ON / DEPENDED ON BY —
+// GOVERNED BY retired with the edge, NIT-29 — plus the
+// migrated_from/review_pending/implemented-in
 // facts that ride along after them) and SOURCES, split out into its own peer
 // disclosure per R09.5. The other two doors the board names — readiness and
 // implementation checks — are rendered by sibling components
@@ -463,36 +464,27 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated bool, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
 	links := 0
 
-	// The three R09.4 direction blocks, built independently of the "extra"
-	// facts below so their fixed order — GOVERNED BY, DEPENDS ON, DEPENDED ON
-	// BY — never depends on which of the six edge kinds a given claim happens
-	// to carry.
-	var governedBody strings.Builder
-	governedHas := false
-	if c.Governed.Type != "" {
-		governedHas = true
-		if c.Governed.Type == string(model.GovernedNone) {
-			// "governed_by: none" DOES NOT COUNT AS A LINK — see 05 §8 item 15.
-			// It still renders inside GOVERNED BY, as the stated-absence form
-			// 07's board specifies: the word "none", no dot, no badge.
-			governedBody.WriteString(`<li class="claim-governed governed-none claim-relationship-none">none`)
-			if c.Governed.Reason != "" {
-				governedBody.WriteString(`<span class="claim-governed-reason"> — `)
-				governedBody.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
-				governedBody.WriteString(`</span>`)
-			}
-			governedBody.WriteString(`</li>`)
-		} else {
-			links++
-			writeRelationshipRow(&governedBody, "claim-governed", c.Governed.Type, c.Module, c.Facet, targetStatuses)
+	// The R09.4 direction blocks, built independently of the "extra" facts
+	// below so their fixed order — RESTS ON, DEPENDED ON BY — never depends
+	// on which edge kinds a given claim happens to carry. GOVERNED BY was the
+	// first of the three until the edge retired (NIT-29); DEPENDS ON became
+	// RESTS ON when the stated-absence form joined it (NIT-24).
+	var restsOnBody strings.Builder
+	restsOnHas := false
+	if c.RestsOn.None {
+		restsOnHas = true
+		restsOnBody.WriteString(`<li class="claim-rests-on rests-on-none claim-relationship-none">none`)
+		if c.RestsOn.Reason != "" {
+			restsOnBody.WriteString(`<span class="claim-rests-on-reason"> — `)
+			restsOnBody.WriteString(string(markdown.RenderInline(c.RestsOn.Reason)))
+			restsOnBody.WriteString(`</span>`)
 		}
-	}
-
-	var dependsOnBody strings.Builder
-	if len(c.RestsOn) > 0 {
-		links += len(c.RestsOn)
-		for _, id := range c.RestsOn {
-			writeRelationshipRow(&dependsOnBody, "claim-rests-on", id, c.Module, c.Facet, targetStatuses)
+		restsOnBody.WriteString(`</li>`)
+	} else if len(c.RestsOn.IDs) > 0 {
+		restsOnHas = true
+		links += len(c.RestsOn.IDs)
+		for _, id := range c.RestsOn.IDs {
+			writeRelationshipRow(&restsOnBody, "claim-rests-on", id, c.Module, c.Facet, targetStatuses)
 		}
 	}
 
@@ -504,7 +496,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		}
 	}
 
-	// Facts that do not fit R09.4's three fixed directions (mirrors,
+	// Facts that do not fit R09.4's three fixed directions (
 	// migrated_from, review_pending, implemented-in/drifted) ride after the
 	// three direction blocks inside the same relationships panel, in the
 	// same hairline-divided row form, rather than inventing a fourth
@@ -513,12 +505,6 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// then it stays here, exactly where a reader could already find it, so
 	// nothing regresses to invisible.
 	var extra strings.Builder
-	if len(c.Mirrors) > 0 {
-		links += len(c.Mirrors)
-		extra.WriteString(`<li class="claim-mirrors claim-relationship-extra">mirrors:`)
-		writeIDListItems(&extra, c.Module, c.Facet, c.Mirrors, targetStatuses)
-		extra.WriteString(`</li>`)
-	}
 	if c.MigratedFrom != "" {
 		links++
 		extra.WriteString(`<li class="claim-migrated claim-relationship-extra">migrated_from: `)
@@ -578,9 +564,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// claim still shows four zeros and the comment count."; fix-list item
 	// 10). The strip now renders UNCONDITIONALLY: the previous all-zero gate
 	// (`links > 0 || len(files) > 0 || len(c.Sources) > 0`) hid the whole
-	// footer — GOVERNED BY row included — on any claim whose only
-	// relationship fact was a stated `governed_by: none`, since that state
-	// deliberately does not count toward `links` (see above). R-F.1 fixes
+	// footer on any claim with no countable relationship. R-F.1 fixes
 	// the strip's four positions; a reader who has learned "this position is
 	// sources" must not find the position itself missing on the next claim,
 	// only its count at zero.
@@ -633,7 +617,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// <details> elements themselves, which still exist, still share
 	// `name="claim-footer-<id>"`, and still carry the real `open` attribute
 	// exactly as before.
-	if links == 0 && !governedHas && extra.Len() == 0 {
+	if links == 0 && !restsOnHas && extra.Len() == 0 {
 		b.WriteString(`<span class="claim-footer-chip claim-footer-chip--relationships claim-footer-chip--empty"><span class="claim-footer-chip-label">No relationships</span></span>`)
 	} else {
 		b.WriteString(`<details class="claim-links" name="`)
@@ -650,11 +634,10 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		b.WriteString(`</span></div>`)
 
 		// The direction count (2nd param) is 05 §4.10's optional mono count,
-		// omitted for GOVERNED BY (sentinel -1: it always has exactly one
-		// target, so counting it is meaningless) and shown for DEPENDS ON /
-		// DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1", "DEPENDED ON BY · 1").
-		writeRelationshipDirection(&b, "up", "GOVERNED BY", -1, governedBody.String(), governedHas)
-		writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
+		// shown for RESTS ON / DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1",
+		// "DEPENDED ON BY · 1"; the label is RESTS ON since NIT-24); a negative
+		// count omits the element.
+		writeRelationshipDirection(&b, "down", "RESTS ON", len(c.RestsOn.IDs), restsOnBody.String(), restsOnHas)
 		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
 
 		if extra.Len() > 0 {
@@ -718,20 +701,18 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	return template.HTML(b.String())
 }
 
-// writeRelationshipDirection writes one of R09.4's three fixed-order
-// direction blocks — GOVERNED BY / DEPENDS ON / DEPENDED ON BY — as its own
-// header (arrow + label + optional count) followed by the rows body already
-// built for it. A direction with nothing to show (has is false) is omitted
-// entirely rather than printed empty: GOVERNED BY is the one direction a
-// claim always has an opinion about (a named target or a stated "none"), so
-// its caller always passes has=true.
+// writeRelationshipDirection writes one of R09.4's fixed-order direction
+// blocks — DEPENDS ON / DEPENDED ON BY — as its own header (arrow + label +
+// optional count) followed by the rows body already built for it. A
+// direction with nothing to show (has is false) is omitted entirely rather
+// than printed empty.
 //
 // count is 05 §4.10's "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
 // --color-faint" — omitted (no element at all, not a "0") when count is
-// negative, which is the sentinel every GOVERNED BY call passes: "GOVERNED BY
-// carries no count because it has exactly one target". DEPENDS ON and
-// DEPENDED ON BY always pass their real row count, matching 07a §6's pinned
-// "DEPENDS ON · 1" / "DEPENDED ON BY · 1".
+// negative. DEPENDS ON and DEPENDED ON BY always pass their real row count,
+// matching 07a §6's pinned "DEPENDS ON · 1" / "DEPENDED ON BY · 1"; the
+// negative sentinel was GOVERNED BY's and is kept for a later count-less
+// direction.
 //
 // arrow is a plain glyph rather than an SVG sprite reference — the frozen
 // theme-parity baselines already accept a CSS/glyph chevron for this exact
@@ -769,7 +750,7 @@ func writeRelationshipDirection(b *strings.Builder, arrow, label string, count i
 // the shared writeClaimRef anchor (title only — showPrefix=false, see below),
 // the target's own `module · facet` meta column, and a right-ranged
 // lifecycle badge — 05 §4.10's four columns. Unlike targetPillHTML (which
-// still governs the "extra" mirrors/rests-on-adjacent rows via
+// still governs the "extra" rests_on-adjacent rows via
 // writeIDListItems), a fixed-direction relationship row ALWAYS carries a
 // badge when the target's lifecycle is known — a healthy locked target gets
 // "LOCKED" rather than nothing, because R-I.2 states the badge is the row's
@@ -815,12 +796,18 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 // and 07 §4.10 ("Row meta … text form Module · Facet") measure it
 // unqualified — there is no same-module/same-facet special case for this
 // column, only for writeClaimRef's own inline prefix on every OTHER edge
-// list this footer renders (mirrors, rests_on-adjacent extras).
+// list this footer renders (rests_on-adjacent extras).
 //
 // An unshaped id (splitClaimID fails) has no module/facet to show and
 // writes no meta span at all — the same graceful degradation writeClaimRef's
 // own raw-id fallback uses.
 func writeRelationshipMeta(b *strings.Builder, targetID string) {
+	if model.IsProjectClaimID(targetID) {
+		b.WriteString(`<span class="claim-relationship-meta">`)
+		b.WriteString(html.EscapeString(DisplayCase(model.ScopeProject)))
+		b.WriteString(`</span>`)
+		return
+	}
 	module, facet, _, ok := splitClaimID(targetID)
 	if !ok {
 		return
@@ -898,9 +885,9 @@ const claimFooterChevronHTML = `<svg class="claim-footer__chevron" aria-hidden="
 // chromedp suite reach for via closest('.claim-comments-slot').
 //
 // This func emits no ` id="` sequence anywhere, deliberately: render's
-// stripOverviewIDs matches a leading-space ` id="<claim-id>"` literal to strip
-// the duplicate ids an overview claim's N rendered copies would otherwise carry,
-// and it must keep hitting only the root <section>.
+// stripDuplicateClaimIDs matches a leading-space ` id="<claim-id>"` literal
+// to strip ids from a track's non-canonical copy, and it must keep hitting
+// only the root <section>.
 func CommentChipHTML(c model.Claim) template.HTML {
 	open := len(c.OpenThreadIDs())
 	total := len(c.Comments)
@@ -1049,22 +1036,6 @@ func cell(v any) template.HTML {
 	return markdown.RenderInline(fmt.Sprint(v))
 }
 
-// writeIDListItems renders ids as a nested <ul> of one <li> per id, each
-// holding a writeClaimRef anchor, used for every edges-footer field that
-// lists other claim ids (mirrors, rests_on, depended-by) so each id gets its
-// own bulleted line rather than a run-on comma list. fromModule/fromFacet are
-// the RENDERING claim's own module and facet — the context writeClaimRef
-// elides each target's redundant prefix against.
-func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []string, targetStatuses map[string]TargetStatus) {
-	b.WriteString(`<ul class="claim-edge-id-list">`)
-	for _, id := range ids {
-		b.WriteString(`<li>`)
-		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses, true)
-		b.WriteString(`</li>`)
-	}
-	b.WriteString(`</ul>`)
-}
-
 // ---------------------------------------------------------------------
 // Claim-edge labels (issue #11)
 //
@@ -1135,11 +1106,15 @@ func splitClaimID(id string) (module, facet, slug string, ok bool) {
 // Exported both as a Go helper and, via funcMap, as the "claimLabel" template
 // func, so all seven layout partials' <div class="k"> heading share this one
 // implementation instead of each re-deriving a label from {{.ID}} in template
-// syntax. The Build order tab's diagram nodes label claims by the SAME rule
-// through a deliberate duplicate in internal/buildorder/mermaid.go
-// (claimLabel there; the render package cannot be imported from below it),
-// and internal/render/build_order_view_test.go pins the two to agree.
+// syntax.
+//
+// A project claim's id is two segments, project.<slug> (model.IsProjectClaimID),
+// and labels the same way from its slug: the Project claims tab is the page
+// context "project" would repeat.
 func ClaimLabel(id string) string {
+	if model.IsProjectClaimID(id) {
+		return DisplayCase(strings.TrimPrefix(id, model.ScopeProject+"."))
+	}
 	_, _, slug, ok := splitClaimID(id)
 	if !ok {
 		return id
@@ -1192,8 +1167,8 @@ func ClaimLabel(id string) string {
 // writeRelationshipRow) now carries the target's module/facet in its own,
 // UNCONDITIONAL meta column (writeRelationshipMeta), so folding the same
 // information into an elided inline prefix here as well would print it
-// twice on those rows. Every other caller — writeIDListItems, for mirrors
-// and rests_on-adjacent "extra" rows, which have no meta column of their
+// twice on those rows. Every other caller — writeIDListItems, for
+// rests_on-adjacent "extra" rows, which have no meta column of their
 // own — passes true and keeps this function's original elision behaviour
 // exactly as it was.
 func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus, showPrefix bool) {
@@ -1205,6 +1180,23 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, t
 	b.WriteString(`" title="`)
 	b.WriteString(esc)
 	b.WriteString(`">`)
+
+	// A project claim (project.<slug>) is two segments by design, not an
+	// unshaped id: it reads as "Project › Scope" wherever a prefix is shown,
+	// and as its bare label in a relationship row, whose meta column says
+	// "Project" (writeRelationshipMeta).
+	if model.IsProjectClaimID(targetID) {
+		if showPrefix {
+			b.WriteString(`<span class="claim-ref-prefix">`)
+			b.WriteString(html.EscapeString(DisplayCase(model.ScopeProject) + claimRefLabelSep))
+			b.WriteString(`</span>`)
+		}
+		b.WriteString(`<span class="claim-ref-label">`)
+		b.WriteString(html.EscapeString(ClaimLabel(targetID)))
+		b.WriteString(`</span></a>`)
+		b.WriteString(targetPillHTML(targetID, targetStatuses))
+		return
+	}
 
 	module, facet, slug, ok := splitClaimID(targetID)
 	if !ok {

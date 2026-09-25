@@ -68,7 +68,7 @@ const raceIterations = 6
 func TestCommentRace_AddVsLock(t *testing.T) {
 	for i := 0; i < raceIterations; i++ {
 		root := t.TempDir()
-		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		cfgPath := llWriteConfig(t, root, []string{"widget"})
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
 
 		runPair(t, root,
@@ -91,7 +91,7 @@ func TestCommentRace_AddVsLock(t *testing.T) {
 func TestCommentRace_AddVsUnlock(t *testing.T) {
 	for i := 0; i < raceIterations; i++ {
 		root := t.TempDir()
-		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		cfgPath := llWriteConfig(t, root, []string{"widget"})
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
 		if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 			t.Fatalf("iter %d: lock setup: %s", i, stderr)
@@ -117,7 +117,7 @@ func TestCommentRace_AddVsUnlock(t *testing.T) {
 func TestCommentRace_AddVsFlag(t *testing.T) {
 	for i := 0; i < raceIterations; i++ {
 		root := t.TempDir()
-		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		cfgPath := llWriteConfig(t, root, []string{"widget"})
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
 		if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 			t.Fatalf("iter %d: lock setup: %s", i, stderr)
@@ -187,7 +187,7 @@ func firstThreadID(t *testing.T, root, cfgPath, id string) string {
 func TestCommentRace_ResolveVsFlag(t *testing.T) {
 	for i := 0; i < raceIterations; i++ {
 		root := t.TempDir()
-		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		cfgPath := llWriteConfig(t, root, []string{"widget"})
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
 		if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 			t.Fatalf("iter %d: lock setup: %s", i, stderr)
@@ -242,7 +242,7 @@ func TestCommentRace_ResolveVsFlag(t *testing.T) {
 func TestCommentRace_AddVsCheck(t *testing.T) {
 	for i := 0; i < raceIterations; i++ {
 		root := t.TempDir()
-		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		cfgPath := llWriteConfig(t, root, []string{"widget"})
 		depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dep, v1."})
 		mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main on dep.", restsOn: []string{"widget.contract.dep"}})
 		for _, id := range []string{"widget.contract.dep", "widget.contract.main"} {

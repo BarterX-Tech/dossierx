@@ -144,7 +144,6 @@ Paper token and must be read from `graph.css`.
 | `--color-graph-other` | `#7D8C85` | `--color-dark-graph-other` | `#7D8C85` | `#6C7F75` | **no — light hex on a dark board, and both are dead** | Reserved slot for a claim with no facet. **`style.css` re-declares `--dxg-facet-other` and, being emitted after `graph.css`, wins: the live value is `#0d55b5` light / `#77a9e8` dark.** |
 | `--color-graph-cycle` | `#D1201A` | `--color-dark-graph-cycle` | `#FF6A62` | `#F5615C` | **no** | Cycle state on an edge — a state colour, not an identity colour |
 | `--color-graph-halo` | `#C07E0C` | `--color-dark-graph-halo` | `#C07E0C` | `#EFB44D` | **no — light hex on a dark board** | Halo state on a node |
-| `--color-graph-governed` | `#C11F5B` | `--color-dark-graph-governed` | `#E87F9B` | `#F06A9C` | **no** | Governance edge. Deliberately outside the ramp |
 
 **All nine light values match `graph.css` exactly. None of the nine dark values
 does.** Five of them (`facet-2`, `facet-3`, `facet-5`, `other`, `halo`) are the
@@ -382,7 +381,7 @@ engine. Ordered by how much damage it does if implemented as drawn.
 2. **The other four dark graph tokens also disagree with the engine.**
    `facet-1` `#8E9BF0` vs `#7C8CE8`; `facet-4` `#A98FD8` vs `#A98CD8` (three
    units of green apart, which reads as a transcription slip); `cycle` `#FF6A62`
-   vs `#F5615C`; `governed` `#E87F9B` vs `#F06A9C`. The engine's values are the
+   vs `#F5615C`. (`governed` left with the governed_by edge, NIT-29.) The engine's values are the
    output of a maximin CIEDE2000 solve seeded on frozen slots 1–5; changing one
    moves the ramp's minimum distance. *Resolution: `graph.css` wins.*
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
@@ -55,76 +56,6 @@ type policyLockData struct {
 	LockedAt   string             `json:"locked_at"`
 }
 
-type policyMigrationData struct {
-	From       lock.PolicyVersion `json:"from"`
-	To         lock.PolicyVersion `json:"to"`
-	Reason     string             `json:"reason"`
-	MigratedAt string             `json:"migrated_at,omitempty"`
-}
-
-// newLockPolicyMigrateCmd is the explicit adoption boundary for projects whose
-// existing lock store predates local approval. It changes no claim, approval,
-// baseline, receipt, or pending state.
-func newLockPolicyMigrateCmd() *cobra.Command {
-	var reason string
-	var dryRun bool
-	cmd := &cobra.Command{
-		Use:   "migrate-lock-policy",
-		Short: "Adopt the local-approval lock policy without rewriting existing approvals",
-		Args:  cobra.NoArgs,
-		RunE: envelopeRunE(func(cmd *cobra.Command, _ []string) (cmdResult, error) {
-			cfg, err := loadConfig()
-			if err != nil {
-				return cmdResult{}, err
-			}
-			store, err := lock.LoadStore(storePath(cfg))
-			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock policy migration: %w", err)
-			}
-			if store.FileExists() && store.OnDiskVersion() < 2 {
-				return cmdResult{}, cliout.Errorf(cliout.CodePreLedgerUnadopted, "lock policy migration: project predates the lock ledger; complete the ledger crossing before changing approval policy")
-			}
-			data := policyMigrationData{From: store.PolicyVersion, To: lock.PolicyLocalApprovalV1, Reason: reason, MigratedAt: store.PolicyMigratedAt}
-			if dryRun {
-				return cmdResult{Data: data, Text: func() {
-					fmt.Fprintln(cmd.OutOrStdout(), "lock policy migration preview: existing approvals and baselines stay unchanged")
-				}}, nil
-			}
-			if err := requireReason("claim migrate-lock-policy", reason); err != nil {
-				return cmdResult{}, err
-			}
-			release, err := lock.AcquireFileLock(storePath(cfg))
-			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteConflict, "lock policy migration: %w", err)
-			}
-			defer release()
-			store, err = lock.LoadStore(storePath(cfg))
-			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock policy migration: %w", err)
-			}
-			if store.FileExists() && store.OnDiskVersion() < 2 {
-				return cmdResult{}, cliout.Errorf(cliout.CodePreLedgerUnadopted, "lock policy migration: project predates the lock ledger; complete the ledger crossing before changing approval policy")
-			}
-			store.AdoptLocalApproval(reason)
-			if err := store.Save(); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock policy migration: %w", err)
-			}
-			data.MigratedAt = store.PolicyMigratedAt
-			return cmdResult{Data: data, Text: func() {
-				fmt.Fprintln(cmd.OutOrStdout(), "lock policy migration: local approval adopted; existing approvals were preserved")
-			}}, nil
-		}),
-	}
-	cmd.Flags().StringVar(&reason, "reason", "", "why the human adopts this policy (required unless --dry-run)")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report the migration without writing")
-	return cmd
-}
-
-func policyEnabledForConfig(cfg interface{ Dir() string }) bool {
-	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), lock.StoreFileName))
-	return err == nil && store.LocalApprovalEnabled()
-}
-
 func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflicts []lock.SemanticConflict) (cmdResult, error) {
 	cfg, claims, err := loadConfigAndClaims()
 	if err != nil {
@@ -159,6 +90,7 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 	// git cannot answer inside the work tree.
 	storesArePreconditionData := cliout.NewDryRun(data.Would)
 	storesArePrecondition(storesArePreconditionData, cfg)
+	constitutionPrecondition(storesArePreconditionData, constitutionVerdictWith(cfg, store))
 	for _, precondition := range storesArePreconditionData.Preconditions {
 		data.Preconditions = append(data.Preconditions, precondition)
 		if !precondition.OK {
@@ -205,10 +137,9 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	if err != nil {
 		return cmdResult{}, err
 	}
-	// The policy-enabled path must enforce the same repository carrier guard as
-	// the legacy singleton and batch paths before taking any write sentinel.
-	// Ignored stores cannot carry an approval to collaborators, and a failed
-	// git check is equally unsafe to proceed through.
+	// The repository carrier guard runs before any write sentinel. Ignored
+	// stores cannot carry an approval to collaborators, and a failed git check
+	// is equally unsafe to proceed through.
 	gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "lock")
 	if err != nil {
 		return cmdResult{}, err
@@ -230,6 +161,12 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	store, err := lock.LoadStore(storePath(cfg))
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
+	}
+	// The roof gate (NIT-26): the policy evaluator scopes lint findings to the
+	// requested claims, and the constitution is not a claim, so it is refused
+	// here, before the set is evaluated at all.
+	if err := constitutionGate("lock", constitutionVerdictWith(cfg, store)); err != nil {
+		return cmdResult{}, err
 	}
 	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
 		return cmdResult{}, err
@@ -365,11 +302,13 @@ func policyRefusalData(evaluation lock.SetEvaluation) lockRefusedData {
 			data.LintFindings = append(data.LintFindings, lintFindingData{Lint: finding.LintName, ClaimID: finding.ClaimID, Severity: string(finding.Severity), Message: finding.Message})
 		}
 		data.LintErrors = len(data.LintFindings)
-		switch verdict.Refusals[0] {
-		case "unresolved_comments":
+		switch first := verdict.Refusals[0]; {
+		case first == "unresolved_comments":
 			data.Gate = string(cliout.CodeUnresolvedComments)
-		case "claim_not_found":
+		case first == "claim_not_found":
 			data.Gate = string(cliout.CodeClaimNotFound)
+		case strings.HasPrefix(first, "semantic_contradiction_requires_human_review"):
+			data.Gate = string(cliout.CodeReviewPending)
 		default:
 			data.Gate = string(cliout.CodeLintFailed)
 		}
@@ -409,14 +348,20 @@ func policyRefusalError(evaluation lock.SetEvaluation) error {
 			case refusal == "already_locked":
 				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID).WithDetails(details)
 			case strings.HasPrefix(refusal, "semantic_contradiction_requires_human_review"):
-				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details)
-			case strings.HasPrefix(refusal, "doctrine_dependency_not_locked:"):
-				parts := strings.SplitN(refusal, ":", 3)
-				if len(parts) == 3 {
-					details["doctrine_facet"] = parts[1]
-					details["dependency_id"] = parts[2]
-					return cliout.Errorf(cliout.CodeLintFailed, "lock: claim %q requires locked %s doctrine dependency %q", verdict.ClaimID, parts[1], parts[2]).WithDetails(details)
+				// The contradiction exists only in this invocation's
+				// --semantic-conflict: it is recorded nowhere, the claim is not
+				// review_pending on disk, and claim show will not name it. The
+				// hint says so, because the router's generic review_pending
+				// recovery ("claim show names the trigger") is wrong here.
+				conflicts := []string{}
+				for _, r := range verdict.Refusals {
+					if strings.HasPrefix(r, "semantic_contradiction_requires_human_review") {
+						conflicts = append(conflicts, r)
+					}
 				}
+				details["semantic_conflicts"] = conflicts
+				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details).
+					WithHint("the contradiction comes from this call's --semantic-conflict and is recorded nowhere (claim show will not name it): put error.details.semantic_conflicts to the human, and only once they have resolved it run: dossierx claim lock " + verdict.ClaimID + " --dry-run (without --semantic-conflict)")
 			case strings.HasPrefix(refusal, "retired_dependency:"), strings.HasPrefix(refusal, "unreadable_dependency:"):
 				parts := strings.SplitN(refusal, ":", 2)
 				if len(parts) == 2 {
@@ -489,7 +434,7 @@ func policySnapshot(claims []model.Claim, ids []string) string {
 		if !ok {
 			return
 		}
-		for _, dep := range claim.RestsOn {
+		for _, dep := range claim.RestsOn.IDs {
 			visit(dep)
 		}
 	}
@@ -546,7 +491,7 @@ func reviewedPolicyClaims(claims []model.Claim, ids []string) ([]policyReviewedC
 		if !ok {
 			return
 		}
-		for _, dep := range claim.RestsOn {
+		for _, dep := range claim.RestsOn.IDs {
 			visit(dep)
 		}
 	}
@@ -586,19 +531,5 @@ func restoreOptional(path string, raw []byte, existed bool) error {
 		}
 		return nil
 	}
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".restore-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(raw); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.Write(path, raw, 0o644)
 }

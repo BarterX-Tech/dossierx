@@ -1,4 +1,5 @@
 id: srcdrift.internals.cited
+summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: srcdrift
 status: draft
@@ -18,6 +19,3 @@ sources:
     supports: the 100/min ceiling this claim states
 rests_on:
   - srcdrift.internals.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

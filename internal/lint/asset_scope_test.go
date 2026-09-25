@@ -236,8 +236,8 @@ func TestAssetScope_IgnoresFencedExamples(t *testing.T) {
 	}
 }
 
-// TestAssetScope_IgnoresNonImageSurfaces: a table cell, a comment body and
-// Governed.Reason render no image at all, so nothing there ever becomes an
+// TestAssetScope_IgnoresNonImageSurfaces: a table cell and a comment body
+// render no image at all, so nothing there ever becomes an
 // asset reference.
 func TestAssetScope_IgnoresNonImageSurfaces(t *testing.T) {
 	claim := model.Claim{

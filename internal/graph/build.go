@@ -69,7 +69,6 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 			Facet:         c.Facet,
 			Status:        string(c.Status),
 			Kind:          string(c.EffectiveKind()),
-			BuildRole:     string(c.BuildRole),
 			Emphasis:      c.Emphasis,
 			ReviewPending: c.ReviewPending,
 			OpenComments:  len(c.OpenThreadIDs()),
@@ -99,16 +98,8 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 	// client reports them under their own rule id, and swallowing them
 	// here would make that rule unable to fire.
 	for _, c := range claims {
-		for _, target := range c.RestsOn {
+		for _, target := range c.RestsOn.IDs {
 			p.appendEdge(known, c.ID, target, EdgeRestsOn)
-		}
-		for _, target := range c.Mirrors {
-			p.appendEdge(known, c.ID, target, EdgeMirrors)
-		}
-		// The same guard internal/lint/dangling.go uses: "none" and the
-		// empty type are both "deliberately not governed", not an edge.
-		if t := c.Governed.Type; t != "" && t != "none" {
-			p.appendEdge(known, c.ID, t, EdgeGovernedBy)
 		}
 		// c.Tracks IS NOT WALKED HERE, AND NOTHING BELONGS IN THIS LOOP FOR
 		// IT. Track membership is a set, not a dependency: it has no
@@ -255,11 +246,9 @@ func (p *Payload) appendEdge(known map[string]bool, from, to, typ string) {
 // group named "", which would render as an unnamed swatch in the legend and
 // tell a reader nothing.
 //
-// Extras exist for two ordinary reasons, not only for typos: the reserved
-// "overview" facet is real and is deliberately absent from every project's
-// declared facet list, and a claim can name a module the config has not
-// caught up with yet. Sorting them puts them after the declared list in a
-// stable place rather than dropping them.
+// Extras exist for an ordinary reason, not only for typos: a claim can name a
+// module the config has not caught up with yet. Sorting them puts them after
+// the declared list in a stable place rather than dropping them.
 func groupOrder(declared, seen []string) []string {
 	out := make([]string, 0, len(declared)+len(seen))
 	taken := make(map[string]bool, len(declared)+len(seen))

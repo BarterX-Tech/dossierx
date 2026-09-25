@@ -5,6 +5,6 @@ status: draft
 layout: card
 body: |
   Check the [documentation](https://example.com/docs) for details.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

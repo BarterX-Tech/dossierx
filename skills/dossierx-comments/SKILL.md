@@ -38,7 +38,7 @@ so a claim you unlocked at step 4 waits in draft, its approval released, until s
 after their Resolve and carrying their words, is the `lock` half of unlock → fix → lock.
 
 Step 5 is theirs and only theirs. There is no CLI verb for it — `comment resolve`, `reopen`,
-`edit` and `delete` are viewer-only in v0.3.0. If your plan contains "then I resolve the thread",
+`edit` and `delete` are viewer-only. If your plan contains "then I resolve the thread",
 the plan is wrong.
 
 ## The verbs
@@ -176,8 +176,7 @@ reviewable diff.
 ## How an open thread gates the lifecycle
 
 - **Lock gate.** A claim cannot be locked while it carries an open thread — `dossierx claim lock`
-  refuses with `unresolved_comments` and names the blocking thread ids. `dossierx build-order
-  propose` enforces the same gate across a whole module.
+  refuses with `unresolved_comments` and names the blocking thread ids.
 - **Third `review_pending` trigger.** Adding a thread to an already-locked claim sets
   `review_pending`. It clears when the last open thread is resolved — but only if no *other*
   trigger (dependency drift, a flag) still stands.
@@ -193,15 +192,15 @@ claim.
 
 ## When the ids or the state move under you
 
-Four refusals, all of them exit 1, all of them meaning "look again, do not retry":
+Four refusals, all of them meaning "look again, do not retry":
 
-- `thread_not_found` / `reply_not_found` — the id is not on that claim, or not in that thread. The
+- `thread_not_found` / `reply_not_found` (exit 2) — the id is not on that claim, or not in that thread. The
   usual cause is an id read out of an older `dossierx comment inbox` run; re-run it rather than
   guessing, because the inbox cursor is the only thing that tells you the thread still exists.
-- `thread_resolved` — a write against a thread the human resolved while you were working. This is
+- `thread_resolved` (exit 1) — a write against a thread the human resolved while you were working. This is
   the good outcome, not an error: their Resolve is the approval the lock gate was waiting for.
   Drop the reply and move to the lock step.
-- `read_only` — a write against a surface that has writes disabled: a `file://` viewer export, or
+- `read_only` (exit 1) — a write against a surface that has writes disabled: a `file://` viewer export, or
   `dossierx serve` started without them. Nothing about the claim is wrong; the surface cannot
   accept the call. Use the CLI.
 

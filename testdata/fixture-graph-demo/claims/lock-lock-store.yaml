@@ -1,13 +1,11 @@
-id: lock.schema.lock-store
-facet: schema
+id: lock.internals.lock-store
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: lock
 status: locked
 layout: card
-build_role: schema
 body: |
   The store records, per approved claim, when it was approved and what the approved content hashed to.
-governed_by:
-  type: none
-  reason: a demo corpus claim, not backed by any real doctrine
 rests_on:
-  - engine.schema.claim-shape
+  - engine.contract.claim-shape
+review_pending: true

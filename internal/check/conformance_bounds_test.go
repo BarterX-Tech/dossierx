@@ -11,8 +11,20 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution/constitutiontest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
+
+// armConstitution is the internal-package twin of the external suite's
+// helper (ledger_test.go): a minimal locked roof plus its lock-store record,
+// so the roof gate (NIT-26) lets these projections run.
+func armConstitution(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	if err := constitutiontest.Arm(cfg); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestConformanceArtifactBounds(t *testing.T) {
 	for _, kind := range []string{"catalog", "render: viewer"} {
@@ -26,11 +38,14 @@ func TestConformanceArtifactBounds(t *testing.T) {
 }
 
 func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
-	var facets []string
-	for i := 0; i < 72; i++ {
-		facets = append(facets, fmt.Sprintf("facet-%02d", i))
+	// Facets are engine-fixed (contract|internals plus the Manifest peer tab),
+	// so tab-strip multiplicity now comes from modules: each module's overview
+	// HTML is injected into Manifest | Contract | Internals.
+	modules := make([]string, 80)
+	for i := range modules {
+		modules[i] = fmt.Sprintf("mod%02d", i)
 	}
-	cfgBody := "schema_version: 1\nfacets: [" + strings.Join(facets, ", ") + "]\nmodules: [widget]\nclaims_dir: claims\n"
+	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
@@ -43,16 +58,18 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims := []model.Claim{{
-		ID: "widget.overview.router", Facet: "overview", Module: "widget", Status: model.StatusDraft,
-		Layout: model.LayoutBanner, Kind: model.KindOrientationNote, Body: "orientation fixture",
-		Governed:   model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
-		Embodiment: &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: strings.Repeat("x", 1<<20)},
-	}}
-	for _, facet := range facets {
+	armConstitution(t, cfg)
+	for _, mod := range modules {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	heavy := strings.Repeat("x", 1<<20)
+	var claims []model.Claim
+	for _, mod := range modules {
 		claims = append(claims, model.Claim{
-			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "facet fixture", Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			ID: mod + ".contract.one", Facet: "contract", Module: mod, Status: model.StatusDraft,
+			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: heavy, RestsOn: model.RestsNone("fixture"),
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -77,12 +94,12 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 }
 
 func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing.T) {
-	var facets []string
-	for i := 0; i < 72; i++ {
-		facets = append(facets, fmt.Sprintf("facet-%02d", i))
+	modules := make([]string, 80)
+	for i := range modules {
+		modules[i] = fmt.Sprintf("mod%02d", i)
 	}
 	root := t.TempDir()
-	cfgBody := "schema_version: 1\nfacets: [" + strings.Join(facets, ", ") + "]\nmodules: [widget]\nclaims_dir: claims\n"
+	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"
 	configPath := filepath.Join(root, "project.config.yaml")
 	if err := os.WriteFile(configPath, []byte(cfgBody), 0o644); err != nil {
 		t.Fatal(err)
@@ -91,15 +108,18 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims := []model.Claim{{
-		ID: "widget.overview.router", Facet: "overview", Module: "widget", Status: model.StatusDraft,
-		Layout: model.LayoutBanner, Kind: model.KindOrientationNote, Body: strings.Repeat("x", 1<<20),
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
-	}}
-	for _, facet := range facets {
+	armConstitution(t, cfg)
+	for _, mod := range modules {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	heavy := strings.Repeat("x", 1<<20)
+	var claims []model.Claim
+	for _, mod := range modules {
 		claims = append(claims, model.Claim{
-			ID: fmt.Sprintf("widget.%s.one", facet), Facet: facet, Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "facet fixture", Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			ID: mod + ".contract.one", Facet: "contract", Module: mod, Status: model.StatusDraft,
+			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: heavy, RestsOn: model.RestsNone("fixture"),
 		})
 	}
 	old := []byte("previous-complete-artifact")
@@ -132,18 +152,27 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
+	// 96 claims in four modules of 24, each inside its isolation budget, so
+	// the only refusal left is the projection capacity.
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [w0, w1, w2, w3]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 24\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	armConstitution(t, cfg)
+	for _, module := range cfg.Modules {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, module); err != nil {
+			t.Fatal(err)
+		}
+	}
 	claims := make([]model.Claim, 96)
 	for i := range claims {
+		module := fmt.Sprintf("w%d", i/24)
 		claims[i] = model.Claim{
-			ID: fmt.Sprintf("widget.contract.shared-%03d", i), Facet: "contract", Module: "widget", Status: model.StatusDraft,
-			Layout: model.LayoutCard, Body: "shared target fixture", Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture"},
+			ID: fmt.Sprintf("%s.contract.shared-%03d", module, i), Facet: "contract", Module: module, Status: model.StatusDraft,
+			Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "shared target fixture", RestsOn: model.RestsNone("fixture"),
 			Embodiment: &model.Embodiment{Mode: model.EmbodimentModeCompare, Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "neutral/v1", Target: "widget://shared", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{fmt.Sprintf("expected-%03d", i)}}}}},
 		}
 	}
@@ -175,11 +204,15 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
+		t.Fatal(err)
+	}
+	armConstitution(t, cfg)
+	if err := manifesttest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	shared := strings.Repeat("x", 20<<20)
@@ -187,8 +220,8 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
-			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: shared},
+			Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "plain capacity fixture",
+			RestsOn: model.RestsNone(shared),
 		}
 	}
 	old := []byte("previous-complete-artifact")
@@ -221,11 +254,15 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
+		t.Fatal(err)
+	}
+	armConstitution(t, cfg)
+	if err := manifesttest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	shared := strings.Repeat("x", 20<<20)
@@ -233,8 +270,8 @@ func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	for i := range claims {
 		claims[i] = model.Claim{
 			ID: fmt.Sprintf("widget.contract.capacity-%d", i), Facet: "contract", Module: "widget",
-			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "plain capacity fixture",
-			Governed: model.Governed{Type: string(model.GovernedNone), Reason: shared},
+			Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "Fixture claim used by the engine test corpus.", Body: "plain capacity fixture",
+			RestsOn: model.RestsNone(shared),
 		}
 	}
 

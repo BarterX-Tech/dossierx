@@ -140,7 +140,7 @@ There is deliberately no third argument. An earlier draft of this design passed
   ],
   "groups": {
     "modules": ["engine", "viewer", "cli", "lock", "telemetry"],
-    "facets":  ["contract", "schema", "behavior", "verification", "overview"]
+    "facets":  ["contract", "schema", "behavior", "verification"]
   },
   "dropped": { "unresolved_edges": 0 }
 }
@@ -156,7 +156,7 @@ There is deliberately no third argument. An earlier draft of this design passed
 | `title` | `components.ClaimLabel(c.ID)` | Derived from the id slug, **not** author prose — `model.Claim` has no `Title` field [VERIFIED: `internal/model/claim.go:248-306`; `ClaimLabel` at `components.go:889`]. |
 | `module` / `facet` | `c.Module` / `c.Facet`, verbatim | May be empty or not in `cfg`; the browser buckets those under a catch-all label and the reserved `--dxg-facet-other` slot. |
 | `status` | `c.Status` | Closed enum: `draft` \| `locked` [VERIFIED: `internal/model/claim.go:15-21`]. |
-| `kind` | `c.EffectiveKind()` | Not the raw field — the reserved overview facet implies `orientation-note` without the author repeating it. |
+| `kind` | `c.EffectiveKind()` | Resolved kind (`fact` when the field is omitted). |
 | `build_role` | `c.BuildRole` | May be empty; empty is meaningful (see `missing_build_phase`). |
 | `emphasis` | `c.Emphasis` | |
 | `review_pending` | `c.ReviewPending` | Engine-managed; only meaningful on a locked claim. |

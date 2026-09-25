@@ -8,6 +8,8 @@ package model
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -42,93 +44,9 @@ const (
 	LayoutMockup Layout = "mockup"
 )
 
-// BuildRole classifies a claim by where it sits in a module's build (i.e.
-// implementation) order, as distinct from Order/Section, which govern the
-// unrelated reading-order the VIEWER presents claims in (see render.go's
-// orderClaims). internal/buildorder consumes BuildRole to compute a
-// module's implementation sequence once every one of that module's claims
-// is locked; see that package's doc comment for the fixed phase sequence
-// this drives.
-//
-// BuildRole is optional (the zero value, "") while a claim is still draft —
-// it only becomes required once a claim locks, enforced by the
-// "build-role-required-for-locked" lint (internal/lint/build_role_required.go),
-// not by this type itself.
-type BuildRole string
-
-const (
-	// BuildRoleOrientation is context/process claims that are read for
-	// background but never themselves acted on during implementation
-	// (e.g. "why this module exists", house-style notes). First phase.
-	BuildRoleOrientation BuildRole = "orientation"
-
-	// BuildRoleSchema is data-shape claims (types, fields, storage
-	// layout) — built first among the "real work" phases, since behavior
-	// and api claims describe logic over these shapes.
-	BuildRoleSchema BuildRole = "schema"
-
-	// BuildRoleBehavior is workflow/logic claims — the bulk of the real
-	// implementation work. Within this phase, claims are ordered by their
-	// rests_on edges (a behavior claim resting on another behavior claim
-	// is built after it), not left in an arbitrary order.
-	BuildRoleBehavior BuildRole = "behavior"
-
-	// BuildRoleAPI is public-function/entry-point claims, built after
-	// behavior: an API is a thin, addressable surface over behavior that
-	// must already exist for the API to have something to call into.
-	BuildRoleAPI BuildRole = "api"
-
-	// BuildRoleVerification is test-checklist/acceptance-criteria claims,
-	// read last so a human (or agent) writing tests has every other phase
-	// of the module's build already in front of them to write tests
-	// against.
-	BuildRoleVerification BuildRole = "verification"
-
-	// BuildRoleOutOfScope marks a claim as deferred/future-scope: it is
-	// excluded from every module's build order sequence (never placed in
-	// a phase), but internal/buildorder still reports it (as Excluded) so
-	// it is never silently dropped from view the way a claim the pipeline
-	// simply forgot about would be.
-	BuildRoleOutOfScope BuildRole = "out-of-scope"
-)
-
-// buildRoleDefinitions is the ONE home of the six phase definitions as
-// prose: each entry is the matching const's doc comment above with the
-// leading identifier and its following "is" removed and the comment lines
-// joined by single spaces, nothing trimmed at the end. The viewer's Build
-// order tab, the "build-order show" export's %% lines and the payload all
-// read from BuildRoleDefinition, and build_role_definition_test.go parses
-// this file with go/ast and holds every entry to its doc comment, so editing
-// a comment without the map (or the map without the comment) is a named test
-// failure rather than a viewer that keeps printing superseded wording.
-var buildRoleDefinitions = map[BuildRole]string{
-	BuildRoleOrientation:  `context/process claims that are read for background but never themselves acted on during implementation (e.g. "why this module exists", house-style notes). First phase.`,
-	BuildRoleSchema:       `data-shape claims (types, fields, storage layout) — built first among the "real work" phases, since behavior and api claims describe logic over these shapes.`,
-	BuildRoleBehavior:     `workflow/logic claims — the bulk of the real implementation work. Within this phase, claims are ordered by their rests_on edges (a behavior claim resting on another behavior claim is built after it), not left in an arbitrary order.`,
-	BuildRoleAPI:          `public-function/entry-point claims, built after behavior: an API is a thin, addressable surface over behavior that must already exist for the API to have something to call into.`,
-	BuildRoleVerification: `test-checklist/acceptance-criteria claims, read last so a human (or agent) writing tests has every other phase of the module's build already in front of them to write tests against.`,
-	BuildRoleOutOfScope:   `marks a claim as deferred/future-scope: it is excluded from every module's build order sequence (never placed in a phase), but internal/buildorder still reports it (as Excluded) so it is never silently dropped from view the way a claim the pipeline simply forgot about would be.`,
-}
-
-// BuildRoleDefinition returns the one-paragraph definition of r, exactly as
-// the const's doc comment reads (see buildRoleDefinitions for the trim
-// rule). It returns "" for a value that is not one of the six roles, so a
-// caller printing a header over an unknown role prints nothing rather than
-// a wrong sentence.
-func BuildRoleDefinition(r BuildRole) string {
-	return buildRoleDefinitions[r]
-}
-
-// Kind distinguishes a claim that states a fact about the system (the
-// default, and everything the engine has ever rendered until this field
-// existed) from one that is itself guidance about how to read the docs —
-// an "orientation note". This is a different axis from BuildRole: a
-// BuildRoleOrientation claim is still a *fact* the module rests on (e.g.
-// "why this module exists"), while a KindOrientationNote claim is a
-// pointer *at* other claims (e.g. "if you only call the public API, read
-// Contract, never Internals"). See internal/lint/orientation_note_shape.go and
-// internal/lint/orientation_note_order.go for the rules this field feeds,
-// and FORMAT.md for the full authoring contract.
+// Kind is the claim's kind field. The only legal value is KindFact
+// (also the default when the field is omitted). kind-shape refuses every
+// other string, including the retired orientation-note value.
 type Kind string
 
 const (
@@ -136,30 +54,7 @@ const (
 	// Claim.EffectiveKind — see that method): a claim stating a fact about
 	// the system.
 	KindFact Kind = "fact"
-
-	// KindOrientationNote marks a claim as agent/reviewer-facing reading
-	// guidance rather than a fact. Every claim under the reserved
-	// config.ReservedOverviewFacet facet is a KindOrientationNote whether
-	// or not this field is set explicitly — see EffectiveKind.
-	KindOrientationNote Kind = "orientation-note"
 )
-
-// GovernedType is the kind of doctrine governance backing a claim.
-type GovernedType string
-
-const (
-	// GovernedNone means the claim is deliberately not backed by any
-	// doctrine claim; Reason is required in that case (see Governed.Reason).
-	GovernedNone GovernedType = "none"
-)
-
-// Governed records why a claim is (or is deliberately not) governed by a
-// doctrine claim. Type is either "none" or a doctrine claim id. Reason is
-// required by the lint suite whenever Type == GovernedNone.
-type Governed struct {
-	Type   string `yaml:"type"`
-	Reason string `yaml:"reason,omitempty"`
-}
 
 // Row is one structured data row under a claim's Rows. It is intentionally
 // a generic string-keyed map so claims can carry arbitrary columns; the
@@ -274,28 +169,29 @@ func (r Row) MarshalYAML() (interface{}, error) {
 // tags below are the authoritative field names for claim files on disk.
 type Claim struct {
 	ID     string `yaml:"id"`
-	Facet  string `yaml:"facet"`
+	Facet  string `yaml:"facet,omitempty"`
 	Module string `yaml:"module,omitempty"`
+	// Scope is "project" for project-claims store nodes (id project.<slug>).
+	// Module claims omit it. Facet and Module are forbidden on project claims.
+	Scope  string `yaml:"scope,omitempty"`
 	Status Status `yaml:"status"`
 	Layout Layout `yaml:"layout,omitempty"`
 
 	// Kind is optional; unset (or explicitly KindFact) means "an ordinary
-	// fact claim". See Kind's doc comment. Read via EffectiveKind, not this
-	// field directly, everywhere except lint's own explicit-value checks —
-	// EffectiveKind also accounts for the reserved overview facet implying
-	// orientation-note without the author having to repeat it.
+	// fact claim". Read via EffectiveKind, not this field directly,
+	// everywhere except lint's own explicit-value checks.
 	Kind Kind `yaml:"kind,omitempty"`
-
-	// BuildRole is optional (see BuildRole's doc comment for why, and for
-	// each phase value's meaning); internal/buildorder is the only
-	// consumer, and only once every claim in a module is locked.
-	BuildRole BuildRole `yaml:"build_role,omitempty"`
 
 	// Embodiment optionally declares one structured implementation expectation,
 	// or deliberately records that this claim has no software embodiment. It is
 	// project-neutral: adapter and target are opaque strings interpreted only by
 	// the project-owned adapter that emits observations.
 	Embodiment *Embodiment `yaml:"embodiment,omitempty"`
+
+	// Summary is the required one-line plain-text description of the claim.
+	// check ERRORs when it is missing, multiline, markdown-shaped, or over
+	// max_claim_summary_chars. It is part of lock.ContentHash when non-empty.
+	Summary string `yaml:"summary,omitempty"`
 
 	Body string `yaml:"body,omitempty"`
 	Rows []Row  `yaml:"rows,omitempty"`
@@ -332,10 +228,13 @@ type Claim struct {
 	// them in order.
 	Steps []string `yaml:"steps,omitempty"`
 
-	// Edges.
-	Mirrors  []string `yaml:"mirrors,omitempty"`
-	RestsOn  []string `yaml:"rests_on,omitempty"`
-	Governed Governed `yaml:"governed_by"`
+	// Edges. rests_on is the one claim-to-claim edge: the required
+	// dependency chain, and the drift baseline a locked claim is checked
+	// against. It is a list of claim ids, or the stated absence
+	// {none: true, reason} (NIT-24). The retired governed_by edge (NIT-29)
+	// and the retired mirrors key have no field and no shadow key: a claim
+	// file that still carries either fails strict decode.
+	RestsOn RestsOn `yaml:"rests_on,omitempty"`
 
 	// Sources is the evidence this claim rests on, cited from Body by "[n]"
 	// markers matching each entry's Ref. See model.Source for the whole
@@ -375,12 +274,10 @@ type Claim struct {
 	// Emphasis marks a claim as carrying outsized weight for its facet (the
 	// docs/ source's "hard boundary" cards — border-color:var(--warn) with a
 	// matching .k color — are the hand-authored precedent this mirrors). It
-	// is deliberately its own field rather than being inferred from Governed:
-	// GovernedNone/GovernedType answer "what backs this claim's truth", which
-	// is orthogonal to "how loudly should this render" — a governed claim can
-	// still be a hard boundary, and an ungoverned-with-reason claim usually
-	// isn't one. render/components/card.html uses Emphasis to add the
-	// claim-card--warn class.
+	// is deliberately its own field rather than being inferred from the
+	// claim's edges: what a claim rests on is orthogonal to "how loudly
+	// should this render". render/components/card.html uses Emphasis to add
+	// the claim-card--warn class.
 	Emphasis bool `yaml:"emphasis,omitempty"`
 
 	// ReviewPending is engine-managed: it is only meaningful when
@@ -418,25 +315,50 @@ type Claim struct {
 	SourcePath string `yaml:"-"`
 }
 
-// EffectiveKind returns c's real Kind, accounting for the reserved
-// "overview" facet (config.ReservedOverviewFacet) implicitly meaning
-// KindOrientationNote even when Kind itself is unset — see Kind's doc
-// comment. This package cannot import internal/config (config does not
-// depend on model, and importing it here would invert that), so the facet
-// name is duplicated as the unexported reservedOverviewFacet constant
-// immediately below, which internal/model/claim_test.go and
-// internal/config/config.go's own ReservedOverviewFacet constant both
-// pin equal via a same-package/cross-package equality test in Task 3.
+// EffectiveKind returns c's real Kind: unset maps to KindFact, otherwise
+// the authored value. kind-shape refuses every value other than fact.
 func (c Claim) EffectiveKind() Kind {
-	if c.Facet == reservedOverviewFacet {
-		return KindOrientationNote
-	}
 	if c.Kind == "" {
 		return KindFact
 	}
 	return c.Kind
 }
 
-// reservedOverviewFacet mirrors config.ReservedOverviewFacet — see
-// EffectiveKind's doc comment for why model can't import config directly.
-const reservedOverviewFacet = "overview"
+// IsProjectClaim reports a project-claims store node.
+func (c Claim) IsProjectClaim() bool {
+	return c.Scope == ScopeProject || IsProjectClaimID(c.ID)
+}
+
+// ClaimProseChars is the Unicode code-point count of body + steps + rows
+// cells. raw_html is excluded: NIT-8 caps authored prose, not markup.
+func ClaimProseChars(c Claim) int {
+	n := utf8.RuneCountInString(c.Body)
+	for _, step := range c.Steps {
+		n += utf8.RuneCountInString(step)
+	}
+	for _, row := range c.Rows {
+		for key, value := range row {
+			if key == rowOrderKey {
+				continue
+			}
+			n += utf8.RuneCountInString(rowCellText(value))
+		}
+	}
+	return n
+}
+
+func rowCellText(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+// SummaryIsMissing reports a blank or whitespace-only summary.
+func SummaryIsMissing(summary string) bool {
+	return strings.TrimSpace(summary) == ""
+}

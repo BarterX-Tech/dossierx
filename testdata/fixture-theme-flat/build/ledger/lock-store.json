@@ -1,34 +1,191 @@
 {
   "version": 2,
+  "policy_version": 1,
+  "policy_migrated_at": "2026-09-25T18:57:03.312522434Z",
+  "policy_migration_reason": "lock policy 0 retired in v0.7.21; this store now records local approval v1",
   "hashes": {
     "panel.contract.api": {
-      "panel.contract.behavior": "8799c05e90f414682aa59283cd5c88fd7657abd0e8a4ff36eaeb88fb0a0d0278"
+      "panel.contract.behavior": "db7259ed5a63c2fcb49787d8b548e5f4a7823a9553ff1a2b008ef1c0ee4a1686"
     },
     "panel.contract.behavior": {
-      "panel.contract.api": "e31add305ed1da5759f323d37aec9c2d47cf8e29a76b7dcc05ca969d0c7c3446",
-      "panel.internals.state": "eb9e5ece4506258aa04cfb2b21d71696af4051bcf718fd0038ab71a52e7e7b95"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+      "panel.internals.state": "8c0ea825059c90bc7feb545f0cff710e656aa9fe1ddd239569744a9a442d46b0"
     },
-    "panel.decision.mockup": {
-      "panel.contract.api": "e31add305ed1da5759f323d37aec9c2d47cf8e29a76b7dcc05ca969d0c7c3446"
+    "panel.internals.mockup": {
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210"
     },
     "panel.internals.state": {
-      "panel.contract.api": "e31add305ed1da5759f323d37aec9c2d47cf8e29a76b7dcc05ca969d0c7c3446",
-      "panel.decision.mockup": "4ee4abab4f1c655a0fe5f9a8865dc9b3cd99f3121572299ce61afe0ac26a0e21"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+      "panel.internals.mockup": "6b5bfd3f08d3e60b939296124499fcf9040c0aad9a9d4fe5769f305ba08dd140"
     },
     "panel.internals.verification": {
-      "panel.contract.api": "ffe2363d8d6524b8f2a2c9c4fce540c1e391a6ac847bab2bba192e4241db4854",
-      "panel.internals.state": "46456be1fece0d673583f071910369d09b4246b60a3d8499e75dd92bff700069"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+      "panel.internals.state": "8c0ea825059c90bc7feb545f0cff710e656aa9fe1ddd239569744a9a442d46b0"
     },
     "widget.contract.reviewed": {
-      "panel.contract.api": "ffe2363d8d6524b8f2a2c9c4fce540c1e391a6ac847bab2bba192e4241db4854"
+      "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210"
+    }
+  },
+  "receipts": {
+    "panel.contract.api": {
+      "panel.contract.behavior": {
+        "hash": "db7259ed5a63c2fcb49787d8b548e5f4a7823a9553ff1a2b008ef1c0ee4a1686",
+        "content": {
+          "ID": "panel.contract.behavior",
+          "Facet": "contract",
+          "Module": "panel",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "The panel opens on the claim named in the URL fragment and does nothing\nelse until a reader asks it to.\n",
+          "Rows": null,
+          "Section": "What the panel does",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "panel.internals.state"
+            ]
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-behavior.yaml"
+        }
+      }
+    },
+    "panel.contract.behavior": {
+      "panel.internals.state": {
+        "hash": "8c0ea825059c90bc7feb545f0cff710e656aa9fe1ddd239569744a9a442d46b0",
+        "content": {
+          "ID": "panel.internals.state",
+          "Facet": "internals",
+          "Module": "panel",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "list",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "- the claim currently open\n- the scroll position of the reading pane\n- nothing else\n",
+          "Rows": null,
+          "Section": "What the panel holds",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "panel.internals.mockup"
+            ]
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": [
+            "stub: ProposeDiff has no real LLM backend yet; dependency \"panel.decision.mockup\" changed but no proposal was generated"
+          ],
+          "Comments": null,
+          "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-state.yaml"
+        }
+      }
+    },
+    "panel.internals.state": {
+      "panel.internals.mockup": {
+        "hash": "6b5bfd3f08d3e60b939296124499fcf9040c0aad9a9d4fe5769f305ba08dd140",
+        "content": {
+          "ID": "panel.internals.mockup",
+          "Facet": "internals",
+          "Module": "panel",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "mockup",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
+          "Rows": null,
+          "Section": "What the panel looks like",
+          "RawHTML": "\u003cdiv class=\"mockup-diagram\"\u003e\u003cdiv class=\"gcp-console\"\u003e\u003cdiv class=\"gcp-row\"\u003e\u003cspan class=\"mockup-badge\"\u003eDRAFT\u003c/span\u003e widget.contract.overview\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+          "RawHTMLReviewed": true,
+          "Steps": null,
+          "RestsOn": {
+            "None": true,
+            "Reason": "fixture claim, not backed by any real doctrine",
+            "IDs": null
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-mockup.yaml"
+        }
+      }
+    },
+    "panel.internals.verification": {
+      "panel.contract.api": {
+        "hash": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
+        "content": {
+          "ID": "panel.contract.api",
+          "Facet": "contract",
+          "Module": "panel",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "The panel exposes one call, `render()`, and nothing else. This claim is\nlocked so the corpus has a locked claim beside its drafts.\n",
+          "Rows": null,
+          "Section": "The panel's surface",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "panel.contract.behavior"
+            ]
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/home/claude/dossierx/testdata/fixture-theme-flat/claims/panel-api.yaml"
+        }
+      }
     }
   },
   "locked_at": {
-    "panel.contract.api": "2026-09-02T10:22:20.17228Z",
-    "panel.contract.behavior": "2026-09-02T10:22:20.171147Z",
-    "panel.decision.mockup": "2026-09-02T13:54:05.924362Z",
-    "panel.internals.state": "2026-09-02T13:54:13.800093Z",
-    "panel.internals.verification": "2026-09-02T10:22:20.173459Z",
+    "panel.contract.api": "2026-09-24T15:43:17.811037Z",
+    "panel.contract.behavior": "2026-09-24T15:43:17.968334Z",
+    "panel.internals.mockup": "2026-09-24T15:43:18.126896Z",
+    "panel.internals.state": "2026-09-24T15:43:18.284302Z",
+    "panel.internals.verification": "2026-09-25T18:57:08.931116949Z",
     "widget.contract.reviewed": "2026-09-02T10:22:20.174643Z"
   },
   "ledger": {
@@ -41,45 +198,270 @@
     },
     "panel.contract.api": {
       "subject": "claim",
-      "hash": "ffe20844194e75a6c7dfa050ad6aafc35d1bc8ba3488f7f4f15a24c2ef300f33",
-      "at": "2026-09-02T10:22:20.172291Z",
+      "hash": "679690e24ed2d3386d189aa08489b638b3511536112ad228fd039ab811bcfeab",
+      "at": "2026-09-24T15:43:17.811047Z",
       "actor": "nitinkhanna",
-      "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
+      "reason": "fixture re-lock after the rests_on shape change",
+      "content": {
+        "ID": "panel.contract.api",
+        "Facet": "contract",
+        "Module": "panel",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "The panel exposes one call, `render()`, and nothing else. This claim is\nlocked so the corpus has a locked claim beside its drafts.\n",
+        "Rows": null,
+        "Section": "The panel's surface",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "panel.contract.behavior"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-api.yaml"
+      }
     },
     "panel.contract.behavior": {
       "subject": "claim",
-      "hash": "70804eb054472775d442e181031ed72a85392b32ff219e6b5efd572a74b71c7d",
-      "at": "2026-09-02T10:22:20.171156Z",
+      "hash": "82be35afabd744d2c3f68f545e07ee9dc3b4608219118ca7a64157b48184b11f",
+      "at": "2026-09-24T15:43:17.968345Z",
       "actor": "nitinkhanna",
-      "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
+      "reason": "fixture re-lock after the rests_on shape change",
+      "content": {
+        "ID": "panel.contract.behavior",
+        "Facet": "contract",
+        "Module": "panel",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "The panel opens on the claim named in the URL fragment and does nothing\nelse until a reader asks it to.\n",
+        "Rows": null,
+        "Section": "What the panel does",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "panel.internals.state"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-behavior.yaml"
+      }
     },
-    "panel.decision.mockup": {
+    "panel.internals.mockup": {
       "subject": "claim",
-      "hash": "752dbce9ef6d3739aadaedea9fc44858d257041133e5e55fe86a8135daeff0c3",
-      "at": "2026-09-02T13:54:05.924378Z",
+      "hash": "17d437c903c03e978e8d8df6a993fac0fbdd2c0c42bb0c0132e1bf6ab8deada2",
+      "at": "2026-09-24T15:43:18.126907Z",
       "actor": "nitinkhanna",
-      "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact"
+      "reason": "fixture re-lock after the rests_on shape change",
+      "content": {
+        "ID": "panel.internals.mockup",
+        "Facet": "internals",
+        "Module": "panel",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "mockup",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
+        "Rows": null,
+        "Section": "What the panel looks like",
+        "RawHTML": "\u003cdiv class=\"mockup-diagram\"\u003e\u003cdiv class=\"gcp-console\"\u003e\u003cdiv class=\"gcp-row\"\u003e\u003cspan class=\"mockup-badge\"\u003eDRAFT\u003c/span\u003e widget.contract.overview\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+        "RawHTMLReviewed": true,
+        "Steps": null,
+        "RestsOn": {
+          "None": true,
+          "Reason": "fixture claim, not backed by any real doctrine",
+          "IDs": null
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-mockup.yaml"
+      }
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "ca331beeb59d9422115b2ca37b11dc7d5516e4d6f65dd74fc49d63a72b9a614a",
-      "at": "2026-09-02T13:54:13.800106Z",
+      "hash": "76b4c6f1fb33ca84c12bd14b6dd8154c5e9ad8d8fad036f4aa7db4cd64b00f08",
+      "at": "2026-09-24T15:43:18.284312Z",
       "actor": "nitinkhanna",
-      "reason": "fixture build: the dependency's body changed (a token name lost its CSS double-dash prefix in prose); this claim's own content is unaffected"
+      "reason": "fixture re-lock after the rests_on shape change",
+      "content": {
+        "ID": "panel.internals.state",
+        "Facet": "internals",
+        "Module": "panel",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "list",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "- the claim currently open\n- the scroll position of the reading pane\n- nothing else\n",
+        "Rows": null,
+        "Section": "What the panel holds",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "panel.internals.mockup"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": [
+          "stub: ProposeDiff has no real LLM backend yet; dependency \"panel.decision.mockup\" changed but no proposal was generated"
+        ],
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-state.yaml"
+      }
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "ac5035627b094d6ad9b6a5ccfadd828361885d1ec255e2fbdce03e57fffcf0fb",
-      "at": "2026-09-02T10:22:20.173469Z",
-      "actor": "nitinkhanna",
-      "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
+      "hash": "9d9bfd1a78a0d128065205aac25e019e50925be790f53dbb7de7389abf73e66b",
+      "at": "2026-09-25T18:57:08.931196204Z",
+      "actor": "unknown",
+      "reason": "release cleanup for v0.7.21: the body named the retired build_role and build-order artifact; that sentence is removed",
+      "content": {
+        "ID": "panel.internals.verification",
+        "Facet": "internals",
+        "Module": "panel",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "Every claim above is proven by the browser suite, not by reading the\nsource.\n",
+        "Rows": null,
+        "Section": "How the panel is proven",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "panel.contract.api"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/home/claude/dossierx/testdata/fixture-theme-flat/claims/panel-verify.yaml"
+      }
     },
     "widget.contract.reviewed": {
       "subject": "claim",
-      "hash": "e91b8b77f729981d34b688af53b51b3dc67c8145c1faa69de614dc69721c0e8f",
+      "hash": "d2f61108e9d78948b5866f783ad200ede63e366ecfb209aa20a36b8652bf432d",
       "at": "2026-09-02T10:22:20.174653Z",
       "actor": "nitinkhanna",
-      "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending"
+      "reason": "fixture corpus: the panel module is locked end to end so it has a build-order artifact, and widget.contract.reviewed is locked so an open thread can put it in review_pending",
+      "released_at": "2026-09-24T15:43:18.458505Z",
+      "released_by": "nitinkhanna",
+      "released_reason": "fixture re-lock after the rests_on shape change",
+      "content": {
+        "ID": "widget.contract.reviewed",
+        "Facet": "contract",
+        "Module": "widget",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "This claim is locked and carries an open comment thread, which is what puts\nit in `review_pending` and renders the `.claim-review-pending` marker the\nparity probe reads.\n",
+        "Rows": null,
+        "Section": "A claim under standing review",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "panel.contract.api"
+          ]
+        },
+        "Sources": null,
+        "Tracks": [
+          {
+            "ID": "checkout",
+            "Role": ""
+          }
+        ],
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": true,
+        "AuditNotes": null,
+        "Comments": [
+          {
+            "ID": "c-7e728a",
+            "Status": "open",
+            "Author": "human",
+            "Created": "2026-09-02T12:24:55Z",
+            "Body": "Does this still hold after the panel took over the reading pane? Leaving this open on purpose: an open thread on a locked claim is what puts it in review_pending.",
+            "Edited": false,
+            "Replies": null,
+            "ResolvedBy": "",
+            "ResolvedAt": "",
+            "ReopenedBy": "",
+            "ReopenedAt": ""
+          }
+        ],
+        "SourcePath": "/agent/repos/dossierx/testdata/fixture-theme-flat/claims/widget-reviewed.yaml"
+      }
     }
+  },
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-24T15:43:17.557988Z"
   }
 }

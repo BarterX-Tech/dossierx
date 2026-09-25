@@ -8,6 +8,6 @@ body: |
   >
   > 1. First
   > 2. Second
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - lists inside a blockquote come free from the recursion

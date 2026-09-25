@@ -6,6 +6,6 @@ layout: card
 body: |
   | a | b |
   | --- | --- |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a table with a header and a delimiter row and no body rows

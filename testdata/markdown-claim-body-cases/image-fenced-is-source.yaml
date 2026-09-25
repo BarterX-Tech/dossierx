@@ -13,7 +13,6 @@ body: |
   and it renders like this:
 
   ![Alt](assets/diagram.png)
-
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: "markdown renderer test fixture - fence content is raw escaped source: documentation ABOUT the syntax is never a reference"

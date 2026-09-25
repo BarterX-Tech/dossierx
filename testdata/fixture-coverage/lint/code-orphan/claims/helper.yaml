@@ -1,10 +1,11 @@
 id: codeorphanmod.contract.helper
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: codeorphanmod
 status: draft
 layout: card
 body: |
   Plain helper claim, referenced by the main claim's rests_on edge only.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture claim, not backed by any real doctrine

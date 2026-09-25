@@ -59,7 +59,6 @@ func TestBuildNodes(t *testing.T) {
 				Facet:         "contract",
 				Status:        model.StatusLocked,
 				Kind:          model.KindFact,
-				BuildRole:     model.BuildRoleAPI,
 				Emphasis:      true,
 				ReviewPending: true,
 				Comments: []model.Comment{
@@ -70,7 +69,7 @@ func TestBuildNodes(t *testing.T) {
 			want: Node{
 				ID: "widget.contract.retry-policy", Title: "Retry Policy",
 				Module: "widget", Facet: "contract",
-				Status: "locked", Kind: "fact", BuildRole: "api",
+				Status: "locked", Kind: "fact",
 				Emphasis: true, ReviewPending: true, OpenComments: 1,
 			},
 		},
@@ -97,30 +96,15 @@ func TestBuildNodes(t *testing.T) {
 			},
 		},
 		{
-			name: "empty build_role is emitted as empty, not omitted",
+			name: "explicit fact kind is emitted as fact",
 			claim: model.Claim{
-				ID: "widget.contract.unphased", Module: "widget",
-				Facet: "contract", Status: model.StatusDraft,
+				ID: "widget.contract.read-me-first", Module: "widget",
+				Facet: "contract", Status: model.StatusDraft, Kind: model.KindFact,
 			},
 			want: Node{
-				ID: "widget.contract.unphased", Title: "Unphased",
+				ID: "widget.contract.read-me-first", Title: "Read Me First",
 				Module: "widget", Facet: "contract",
-				Status: "draft", Kind: "fact", BuildRole: "",
-			},
-		},
-		{
-			// The reserved overview facet implies orientation-note whether
-			// or not the author set kind — EffectiveKind's rule, which the
-			// payload must carry resolved so the client never re-derives it.
-			name: "overview facet infers orientation-note without an explicit kind",
-			claim: model.Claim{
-				ID: "widget.overview.read-me-first", Module: "widget",
-				Facet: config.ReservedOverviewFacet, Status: model.StatusDraft,
-			},
-			want: Node{
-				ID: "widget.overview.read-me-first", Title: "Read Me First",
-				Module: "widget", Facet: "overview",
-				Status: "draft", Kind: "orientation-note",
+				Status: "draft", Kind: "fact",
 			},
 		},
 		{
@@ -186,7 +170,7 @@ func TestBuildNodes(t *testing.T) {
 			t.Fatalf("json.Unmarshal(node): %v", err)
 		}
 		want := []string{
-			"id", "title", "module", "facet", "status", "kind", "build_role",
+			"id", "title", "module", "facet", "status", "kind",
 			"emphasis", "review_pending", "open_comments", "in_degree", "out_degree",
 		}
 		if len(keys) != len(want) {
@@ -207,16 +191,12 @@ func TestBuildEdges(t *testing.T) {
 		return model.Claim{ID: id, Module: "widget", Facet: "contract", Status: model.StatusDraft}
 	}
 
-	t.Run("all three types, in the declared direction", func(t *testing.T) {
-		a, b, d := base("widget.contract.a"), base("widget.contract.b"), base("widget.contract.d")
-		a.RestsOn = []string{"widget.contract.b"}
-		a.Mirrors = []string{"widget.contract.d"}
-		a.Governed = model.Governed{Type: "widget.contract.d"}
-		p := buildFrom(t, cfg, a, b, d)
+	t.Run("rests_on in the declared direction", func(t *testing.T) {
+		a, b := base("widget.contract.a"), base("widget.contract.b")
+		a.RestsOn = model.RestsOnIDs("widget.contract.b")
+		p := buildFrom(t, cfg, a, b)
 
 		want := []Edge{
-			{From: "widget.contract.a", To: "widget.contract.d", Type: EdgeGovernedBy},
-			{From: "widget.contract.a", To: "widget.contract.d", Type: EdgeMirrors},
 			{From: "widget.contract.a", To: "widget.contract.b", Type: EdgeRestsOn},
 		}
 		if !reflect.DeepEqual(p.Edges, want) {
@@ -227,45 +207,37 @@ func TestBuildEdges(t *testing.T) {
 		}
 	})
 
-	// The same guard internal/lint/dangling.go applies: "" and "none" are
-	// both "deliberately not governed", and neither is an edge.
-	for _, typ := range []string{"", "none"} {
-		t.Run(fmt.Sprintf("governed_by type %q produces no edge", typ), func(t *testing.T) {
-			a := base("widget.contract.a")
-			a.Governed = model.Governed{Type: typ, Reason: "not backed by doctrine"}
-			p := buildFrom(t, cfg, a)
-			if len(p.Edges) != 0 {
-				t.Errorf("edges = %#v, want none", p.Edges)
-			}
-			if p.Dropped.UnresolvedEdges != 0 {
-				t.Errorf("dropped = %d, want 0 (a non-edge is not a drop)", p.Dropped.UnresolvedEdges)
-			}
-		})
-	}
-
-	t.Run("unknown targets are dropped and counted, of every type", func(t *testing.T) {
+	t.Run("rests_on none produces no edge", func(t *testing.T) {
 		a := base("widget.contract.a")
-		a.RestsOn = []string{"widget.contract.ghost"}
-		a.Mirrors = []string{"widget.contract.phantom"}
-		a.Governed = model.Governed{Type: "widget.contract.spectre"}
+		a.RestsOn = model.RestsNone("not backed by another claim")
 		p := buildFrom(t, cfg, a)
 		if len(p.Edges) != 0 {
 			t.Errorf("edges = %#v, want none", p.Edges)
 		}
-		if p.Dropped.UnresolvedEdges != 3 {
-			t.Errorf("dropped.unresolved_edges = %d, want 3", p.Dropped.UnresolvedEdges)
+		if p.Dropped.UnresolvedEdges != 0 {
+			t.Errorf("dropped = %d, want 0 (a non-edge is not a drop)", p.Dropped.UnresolvedEdges)
+		}
+	})
+
+	t.Run("unknown targets are dropped and counted", func(t *testing.T) {
+		a := base("widget.contract.a")
+		a.RestsOn = model.RestsOnIDs("widget.contract.ghost")
+		p := buildFrom(t, cfg, a)
+		if len(p.Edges) != 0 {
+			t.Errorf("edges = %#v, want none", p.Edges)
+		}
+		if p.Dropped.UnresolvedEdges != 1 {
+			t.Errorf("dropped.unresolved_edges = %d, want 1", p.Dropped.UnresolvedEdges)
 		}
 	})
 
 	t.Run("edges are sorted by (from, type, to)", func(t *testing.T) {
 		a, b, c := base("widget.contract.a"), base("widget.contract.b"), base("widget.contract.c")
-		a.RestsOn = []string{"widget.contract.c", "widget.contract.b"}
-		a.Mirrors = []string{"widget.contract.c"}
-		b.RestsOn = []string{"widget.contract.a"}
+		a.RestsOn = model.RestsOnIDs("widget.contract.c", "widget.contract.b")
+		b.RestsOn = model.RestsOnIDs("widget.contract.a")
 		p := buildFrom(t, cfg, b, a, c)
 
 		want := []Edge{
-			{From: "widget.contract.a", To: "widget.contract.c", Type: EdgeMirrors},
 			{From: "widget.contract.a", To: "widget.contract.b", Type: EdgeRestsOn},
 			{From: "widget.contract.a", To: "widget.contract.c", Type: EdgeRestsOn},
 			{From: "widget.contract.b", To: "widget.contract.a", Type: EdgeRestsOn},
@@ -280,7 +252,7 @@ func TestBuildEdges(t *testing.T) {
 	// to fire at all.
 	t.Run("a self-edge survives to the payload", func(t *testing.T) {
 		a := base("widget.contract.a")
-		a.RestsOn = []string{"widget.contract.a"}
+		a.RestsOn = model.RestsOnIDs("widget.contract.a")
 		p := buildFrom(t, cfg, a)
 		want := []Edge{{From: "widget.contract.a", To: "widget.contract.a", Type: EdgeRestsOn}}
 		if !reflect.DeepEqual(p.Edges, want) {
@@ -295,20 +267,16 @@ func TestBuildDegrees(t *testing.T) {
 		return model.Claim{ID: id, Module: "m", Facet: "f", Status: model.StatusDraft}
 	}
 
-	// hub is rested on by two claims, mirrors one, and is governed by one —
-	// so every one of the three edge types contributes to its degrees.
-	hub, a, b, doc := base("m.f.hub"), base("m.f.a"), base("m.f.b"), base("m.f.doc")
-	a.RestsOn = []string{"m.f.hub"}
-	b.RestsOn = []string{"m.f.hub"}
-	hub.Mirrors = []string{"m.f.a"}
-	hub.Governed = model.Governed{Type: "m.f.doc"}
-	p := buildFrom(t, cfg, hub, a, b, doc)
+	// hub is rested on by two claims.
+	hub, a, b := base("m.f.hub"), base("m.f.a"), base("m.f.b")
+	a.RestsOn = model.RestsOnIDs("m.f.hub")
+	b.RestsOn = model.RestsOnIDs("m.f.hub")
+	p := buildFrom(t, cfg, hub, a, b)
 
 	want := map[string][2]int{ // id -> {in, out}
-		"m.f.hub": {2, 2},
-		"m.f.a":   {1, 1},
+		"m.f.hub": {2, 0},
+		"m.f.a":   {0, 1},
 		"m.f.b":   {0, 1},
-		"m.f.doc": {1, 0},
 	}
 	for id, wd := range want {
 		n := nodeByID(t, p, id)
@@ -319,7 +287,7 @@ func TestBuildDegrees(t *testing.T) {
 
 	t.Run("a dropped edge is not counted in either degree", func(t *testing.T) {
 		c := base("m.f.c")
-		c.RestsOn = []string{"m.f.nowhere"}
+		c.RestsOn = model.RestsOnIDs("m.f.nowhere")
 		p := buildFrom(t, cfg, c)
 		n := nodeByID(t, p, "m.f.c")
 		if n.OutDegree != 0 || n.InDegree != 0 {
@@ -342,7 +310,7 @@ func TestBuildGroups(t *testing.T) {
 	p := buildFrom(t, cfg,
 		model.Claim{ID: "cli.contract.a", Module: "cli", Facet: "contract"},
 		model.Claim{ID: "zeta.behavior.b", Module: "zeta", Facet: "behavior"},
-		model.Claim{ID: "alpha.overview.c", Module: "alpha", Facet: "overview"},
+		model.Claim{ID: "alpha.telemetry.c", Module: "alpha", Facet: "telemetry"},
 		model.Claim{ID: "engine.verification.d", Module: "engine", Facet: "verification"},
 		model.Claim{ID: "orphan.x.e", Module: "", Facet: ""},
 	)
@@ -351,7 +319,7 @@ func TestBuildGroups(t *testing.T) {
 	if !reflect.DeepEqual(p.Groups.Modules, wantModules) {
 		t.Errorf("groups.modules = %v, want %v (config order, then extras sorted)", p.Groups.Modules, wantModules)
 	}
-	wantFacets := []string{"contract", "schema", "behavior", "overview", "verification"}
+	wantFacets := []string{"contract", "schema", "behavior", "telemetry", "verification"}
 	if !reflect.DeepEqual(p.Groups.Facets, wantFacets) {
 		t.Errorf("groups.facets = %v, want %v (config order, then extras sorted)", p.Groups.Facets, wantFacets)
 	}
@@ -375,7 +343,7 @@ func TestBuildDeterministic(t *testing.T) {
 	claims := make([]model.Claim, 0, 60)
 	byID := make(map[string]model.Claim, 60)
 	mods := []string{"viewer", "engine", "cli", "extra"}
-	facets := []string{"contract", "schema", "behavior", "overview"}
+	facets := []string{"contract", "schema", "behavior", "telemetry"}
 	for i := range 60 {
 		c := model.Claim{
 			ID:     fmt.Sprintf("%s.%s.claim-%02d", mods[i%len(mods)], facets[i%len(facets)], i),
@@ -389,13 +357,10 @@ func TestBuildDeterministic(t *testing.T) {
 	// Wire a dense-enough edge set that ordering has something to get wrong.
 	for i := range claims {
 		if i >= 3 {
-			claims[i].RestsOn = []string{claims[i-1].ID, claims[i-3].ID}
+			claims[i].RestsOn = model.RestsOnIDs(claims[i-1].ID, claims[i-3].ID)
 		}
 		if i%5 == 0 && i+1 < len(claims) {
-			claims[i].Mirrors = []string{claims[i+1].ID}
-		}
-		if i%7 == 0 {
-			claims[i].Governed = model.Governed{Type: claims[0].ID}
+			claims[i].RestsOn.IDs = append(claims[i].RestsOn.IDs, claims[i+1].ID)
 		}
 		byID[claims[i].ID] = claims[i]
 	}
@@ -512,11 +477,10 @@ func TestBuildNilSafe(t *testing.T) {
 		// never lints, so Build has to survive it rather than assume it away.
 		p := buildFrom(t, nil,
 			model.Claim{ID: "", Module: "m", Facet: "f"},
-			model.Claim{ID: "", Module: "m", Facet: "f", RestsOn: []string{""}},
-			model.Claim{ID: "m.f.real", Module: "m", Facet: "f", RestsOn: []string{""}},
+			model.Claim{ID: "m.f.real", Module: "m", Facet: "f", RestsOn: model.RestsOnIDs("")},
 		)
-		if len(p.Nodes) != 3 {
-			t.Errorf("node count = %d, want 3 (an empty id is still a claim)", len(p.Nodes))
+		if len(p.Nodes) != 2 {
+			t.Errorf("node count = %d, want 2 (an empty id is still a claim; empty rests_on is not a ghost)", len(p.Nodes))
 		}
 		if _, err := Encode(p); err != nil {
 			t.Fatalf("Encode: %v", err)

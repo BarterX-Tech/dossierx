@@ -47,43 +47,42 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 	}
 
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - checkout\n  - payments\n" +
 		"claims_dir: claims\n" +
 		"tracks:\n" +
 		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
 		"  - id: refunds\n    title: Refunds\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 
 	claims := map[string]string{
 		// The track's OWN sentence: feature-level, locked, and the only claim
 		// whose body belongs in the assembled document.
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		// A citation with an EXPLICIT cites role, already locked.
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		// A citation with NO role — the default, which must read as cites — in a
 		// different module, and still draft. This is the blocker.
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
-			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
 			"tracks:\n  - id: guest-checkout\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		// In no track at all: it must not appear in any track's report.
 		"unrelated.yaml": "id: payments.contract.settlement\n" +
-			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  settlement runs nightly.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {

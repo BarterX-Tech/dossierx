@@ -46,6 +46,7 @@ func TestProjectGraphSafetySkillWorksWithoutSymlinksAfterRelocation(t *testing.T
 		"docs/MAINTAINER_SKILLS.md", "docs/lessons",
 		".agents",
 		".claude/skills/dossierx-graph-safety",
+		".claude/skills/test-audit",
 	} {
 		err := filepath.WalkDir(filepath.Join(source, filepath.FromSlash(rel)), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
@@ -93,6 +94,8 @@ func checkGraphSkillEntryPoints(t *testing.T, root string) {
 		{"AGENTS.md", "docs/MAINTAINER_SKILLS.md"},
 		{"docs/RELEASING.md", projectGraphSkill},
 		{".claude/skills/dossierx-graph-safety/SKILL.md", projectGraphSkill},
+		{"AGENTS.md", ".agents/skills/test-audit/SKILL.md"},
+		{".claude/skills/test-audit/SKILL.md", ".agents/skills/test-audit/SKILL.md"},
 	} {
 		from := filepath.Join(root, filepath.FromSlash(route.from))
 		want := filepath.Join(root, filepath.FromSlash(route.to))

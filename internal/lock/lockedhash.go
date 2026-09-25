@@ -16,12 +16,13 @@
 //
 //   - LockedClaimHash answers "is THIS locked claim still the bytes a human
 //     approved?" That question has no allowlist: every field a claim persists
-//     is part of what was approved. model.Claim persists twenty-two yaml-tagged
-//     fields; ContentHash covers eleven. The eight it cannot see —
-//     raw_html_reviewed, build_role, kind, section, order, emphasis,
-//     migrated_from, audit_notes — are all signed here, as are the three no
-//     hash covers (status, review_pending, comments; see
-//     lockedClaimHashExcluded for why the engine's own bookkeeping is left out).
+//     is part of what was approved. model.Claim persists twenty-four
+//     yaml-tagged fields; ContentHash covers eleven. The ten it cannot see —
+//     raw_html_reviewed, kind, scope, section, order, emphasis,
+//     migrated_from, audit_notes, sources, tracks — are all signed
+//     here, as are the three no hash covers (status, review_pending,
+//     comments; see lockedClaimHashExcluded for why the engine's own
+//     bookkeeping is left out).
 //
 //     raw_html headed that second list until v0.4.1, and it is the field that
 //     made the argument for this hash: it is the only path in this entire
@@ -146,6 +147,8 @@ var lockedClaimHashOmitWhenEmpty = map[string]bool{
 	"embodiment": true,
 	"sources":    true,
 	"tracks":     true,
+	"scope":      true,
+	"summary":    true,
 }
 
 // LockedClaimHash returns a deterministic hash over every persisted field of c
@@ -192,7 +195,7 @@ func LockedClaimHash(c model.Claim) string {
 // skipped here.
 //
 // exclude and omitWhenEmpty apply only at this level; nested structs
-// (model.Governed, model.Source, model.TrackRef) are called with both nil and
+// (model.Source, model.TrackRef, model.Embodiment) are called with both nil and
 // hash all of their own fields, since both maps name top-level claim fields.
 func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[string]bool) {
 	t := v.Type()
@@ -297,6 +300,21 @@ func hashValue(h io.Writer, v reflect.Value) {
 		fmt.Fprint(h, "}")
 
 	case reflect.Struct:
+		// rests_on became a struct (NIT-24) so it could carry the stated
+		// absence {none, reason} beside the id list. The LIST form is encoded
+		// exactly as the []string it used to be, so a claim that names targets
+		// hashes to the bytes its ledger record already holds; only the new
+		// NONE form — which no existing record can contain — gets a new
+		// encoding. Domain-separated by the "none:" prefix so a claim resting
+		// on nothing can never collide with one resting on an id.
+		if r, ok := v.Interface().(model.RestsOn); ok {
+			if r.None {
+				fmt.Fprintf(h, "none:s%d:%s", len(r.Reason), r.Reason)
+				return
+			}
+			hashValue(h, reflect.ValueOf(r.IDs))
+			return
+		}
 		fmt.Fprint(h, "{")
 		hashStructFields(h, v, nil, nil)
 		fmt.Fprint(h, "}")
@@ -438,7 +456,7 @@ func PersistedYAMLName(sf reflect.StructField) (string, bool) {
 // diff; when a claim's hash has changed and its body has not, a panel with an
 // empty diff in it is worse than no panel — it asserts a change and then shows
 // nothing. This is what fills that gap: "the wording is unchanged; rests_on
-// and build_role moved".
+// and section moved".
 //
 // It reuses lockedClaimHashExcluded rather than restating it. A field the hash
 // does not sign cannot be the reason the hash changed, and a second hand-kept

@@ -10,14 +10,29 @@ import (
 	"testing"
 )
 
-func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
-	files := make(map[string]string)
+// capacityProject is 64 compare claims sharing one observation whose
+// repeated projection crosses the output capacity. The claims sit in four
+// modules of 16 so every module stays inside its isolation budget and the
+// only lint finding is the one a caller asks for: a non-empty danglingTarget
+// makes the first claim rest on that missing id.
+func capacityProject(danglingTarget string) (files map[string]string, cfg string) {
+	files = make(map[string]string)
 	for i := 0; i < 64; i++ {
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
+		module := fmt.Sprintf("m%d", i/16)
+		restsBlock := "rests_on:\n  none: true\n  reason: fixture\n"
+		if i == 0 && danglingTarget != "" {
+			restsBlock = "rests_on:\n  - " + danglingTarget + "\n"
+		}
+		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: %s.contract.c%03d\nfacet: contract\nmodule: %s\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\n%sembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", module, i, module, restsBlock)
 	}
 	large := strings.Repeat("x", (1<<20)+(4<<10))
 	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
-	cfg := baseConfig + "conformance:\n  observations: observations.json\n"
+	cfg = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules: [m0, m1, m2, m3]\nclaims_dir: claims\nmax_claims_per_module: 16\nconformance:\n  observations: observations.json\n"
+	return files, cfg
+}
+
+func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
+	files, cfg := capacityProject("")
 	_, base, root := startServer(t, cfg, files)
 
 	resp, raw := do(t, http.MethodGet, base+"/api/status", "")
@@ -64,13 +79,7 @@ func TestServeReportsConformanceCapacityCauseAndRecovers(t *testing.T) {
 }
 
 func TestServeConformanceCapacityReportsFailure(t *testing.T) {
-	files := make(map[string]string)
-	for i := 0; i < 64; i++ {
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
-	}
-	large := strings.Repeat("x", (1<<20)+(4<<10))
-	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
-	cfg := baseConfig + "conformance:\n  observations: observations.json\n"
+	files, cfg := capacityProject("")
 	_, base, _ := startServer(t, cfg, files)
 	resp, raw := do(t, http.MethodGet, base+"/api/status", "")
 	var status struct {
@@ -88,17 +97,7 @@ func TestServeConformanceCapacityReportsFailure(t *testing.T) {
 }
 
 func TestServeLintPrecedesConformanceCapacityLikeEveryCheckMode(t *testing.T) {
-	files := make(map[string]string)
-	for i := 0; i < 64; i++ {
-		restsOn := ""
-		if i == 0 {
-			restsOn = "rests_on:\n  - widget.contract.missing\n"
-		}
-		files[fmt.Sprintf("claims/c%03d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: capacity fixture\n%[2]sgoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i, restsOn)
-	}
-	large := strings.Repeat("x", (1<<20)+(4<<10))
-	files["observations.json"] = `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://shared","shape":"set","value":["` + large + `"]}]}`
-	cfg := baseConfig + "conformance:\n  observations: observations.json\n"
+	files, cfg := capacityProject("m0.contract.missing")
 	_, base, _ := startServer(t, cfg, files)
 
 	resp, raw := do(t, http.MethodGet, base+"/api/status", "")
@@ -121,20 +120,14 @@ func TestServeLintPrecedesConformanceCapacityLikeEveryCheckMode(t *testing.T) {
 }
 
 func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecovers(t *testing.T) {
-	const facetCount = 600
-	files := make(map[string]string, facetCount+1)
-	facets := make([]string, facetCount)
-	for i := range facets {
-		facet := fmt.Sprintf("f%03d", i)
-		facets[i] = facet
-		files[fmt.Sprintf("claims/f%03d.yaml", i)] = fmt.Sprintf("id: widget.%s.one\nfacet: %s\nmodule: widget\nstatus: draft\nlayout: card\nbody: facet fixture\ngoverned_by:\n  type: none\n  reason: fixture\n", facet, facet)
+	// Facets are engine-fixed. Overflow comes from one oversized embodiment
+	// on a legal contract claim, not from a retired overview injection.
+	capacityPath := "claims/capacity.yaml"
+	capacity := func(reason string) string {
+		return "id: widget.contract.capacity\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: facet fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
 	}
-	overviewPath := "claims/overview.yaml"
-	overview := func(reason string) string {
-		return "id: widget.overview.capacity\nfacet: overview\nmodule: widget\nstatus: draft\nkind: orientation-note\nlayout: banner\nbody: overview fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: none\n  reason: \"" + reason + "\"\n"
-	}
-	files[overviewPath] = overview(strings.Repeat("x", 128<<10))
-	cfg := "schema_version: 1\nfacets: [" + strings.Join(facets, ", ") + "]\nmodules: [widget]\nclaims_dir: claims\n"
+	files := map[string]string{capacityPath: capacity(strings.Repeat("x", 70<<20))}
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"
 	_, base, root := startServer(t, cfg, files)
 
 	resp, raw := do(t, http.MethodGet, base+"/api/status", "")
@@ -153,7 +146,7 @@ func TestServeViewerFacetMultiplicityRefusesBeforeUnboundedConstructionAndRecove
 		t.Fatalf("oversized viewer status=%d", resp.StatusCode)
 	}
 
-	if err := os.WriteFile(filepath.Join(root, overviewPath), []byte(overview("small")), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, capacityPath), []byte(capacity("small")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	resp, raw = do(t, http.MethodGet, base+"/api/status", "")

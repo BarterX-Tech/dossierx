@@ -45,13 +45,12 @@ const (
 
 // TrackRef is one claim's membership in one track.
 //
-// Membership is deliberately NOT modelled as an edge alongside RestsOn,
-// Mirrors and Governed. Those are semantic dependencies between claims, and
-// they carry cycle lints (cycle, governed-cycle, mixed-cycle) that would
-// report nonsense over a membership graph: a track is a set, and a set has no
-// direction to run in a circle. See internal/lint/mixed_cycle.go's doc comment
-// for the rule this follows — a new edge kind must state whether it joins the
-// union walk, and this one deliberately does not.
+// Membership is deliberately NOT modelled as an edge alongside RestsOn.
+// That is a semantic dependency between claims, and it carries a cycle
+// lint (cycle) that would report nonsense over a membership graph: a track
+// is a set, and a set has no direction to run in a circle. A new edge kind
+// must state whether it joins the cycle walk, and this one deliberately
+// does not.
 type TrackRef struct {
 	// ID is the track this claim belongs to. It must name a track the
 	// project config declares; an unknown id is a lint error

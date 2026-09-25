@@ -26,7 +26,7 @@ func viewerHTML(t *testing.T, base string) string {
 	return string(raw)
 }
 
-const mockupConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
+const mockupConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n" +
 	"mockup_modules:\n  - widget\n"
 
 // hostileMockup is a claim typed by hand into the repo: status: locked and
@@ -37,7 +37,7 @@ const hostileMockup = "id: widget.contract.mock\nfacet: contract\nmodule: widget
 	"raw_html_reviewed: true\n" +
 	"raw_html: '<script>alert(1)</script><img src=x onerror=\"fetch(1)\">'\n" +
 	"body: |\n  a mockup claim.\n" +
-	"governed_by:\n  type: none\n  reason: fixture\n"
+	"rests_on:\n  none: true\n  reason: fixture\n"
 
 // approvedMockup passes every part of the gate: allowlisted module, locked,
 // reviewed, and markup inside the permitted tag/attribute/class vocabulary.
@@ -45,7 +45,7 @@ const approvedMockup = "id: widget.contract.ok\nfacet: contract\nmodule: widget\
 	"raw_html_reviewed: true\n" +
 	"raw_html: '<div class=\"gcp-row\">approved markup</div>'\n" +
 	"body: |\n  an approved mockup.\n" +
-	"governed_by:\n  type: none\n  reason: fixture\n"
+	"rests_on:\n  none: true\n  reason: fixture\n"
 
 func TestServe_UngatedRawHTMLIsEscaped(t *testing.T) {
 	_, base, _ := startServer(t, mockupConfig, map[string]string{

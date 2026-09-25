@@ -183,7 +183,7 @@ func bestClaimBodyTime(body string) (best time.Duration, ok bool) {
 	// measurePerOp rather than a single timed call: Windows' clock granularity
 	// rounds a fast RenderClaimBody to exactly zero, which made times[0] zero
 	// and the growth ratio +Inf. See costTimerFloor in markdown_cost_test.go.
-	for i := 0; i < claimBodyCostRuns; i++ {
+	for i := 0; i < claimBodyCostRuns(); i++ {
 		d, measured := measurePerOp(func() {
 			out := RenderClaimBody(body, claimBodyCostPrefix, Citations{})
 			runtime.KeepAlive(out)
@@ -198,4 +198,14 @@ func bestClaimBodyTime(body string) (best time.Duration, ok bool) {
 	return best, true
 }
 
-const claimBodyCostRuns = 3
+// claimBodyCostRuns is best-of-N for the claim-body entry point. Under -race
+// it is 1 for the same reason costMeasurementRuns is: the second full sweep
+// through every cost shape is what blew the 10m package deadline on
+// windows-latest / go stable, and repeating each size three times was the
+// multiplier that made it unfinishable. Off -race it stays three.
+func claimBodyCostRuns() int {
+	if raceEnabled {
+		return 1
+	}
+	return 3
+}

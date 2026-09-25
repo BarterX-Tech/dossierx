@@ -16,10 +16,9 @@ content change in a dependency
 creates review on the direct consumer and an inherited review cause on every
 downstream consumer, with the full path shown on that consumer.
 
-`governed_by` remains a drift input. A change to its claim-valued target can
-create a direct dependency review cause, but its approval status does not by
-itself become a `rests_on` approval prerequisite. Hashes detect comparable
-content changes; they do not decide semantic compatibility. Existing lint,
+`rests_on` is the only drift input; the baseline set and the required chain
+are the same set. Hashes
+detect comparable content changes; they do not decide semantic compatibility. Existing lint,
 integrity, comment, and human-review gates still apply.
 
 ## Preview and approval
@@ -145,22 +144,15 @@ does not guarantee linear work, memory, or serialized output.
 
 ## Existing projects
 
-A missing lock store belongs to a new project and defaults to local-approval
-policy v1. An existing store without explicit policy adoption remains on the
-legacy policy; loading a newer binary does not reinterpret its old approvals,
-refresh baselines, or clear review causes.
+Local-approval policy v1 is the only policy. A store that records an older
+policy, or predates the field, loads as v1 and its next write records the
+carry-over (`policy_version: 1`, `policy_migrated_at`,
+`policy_migration_reason`). No approval it holds is reinterpreted.
 
-Adopt v1 explicitly after reviewing the migration:
-
-```text
-dossierx claim migrate-lock-policy --dry-run
-dossierx claim migrate-lock-policy \
-  --reason "Reviewed the local approval and dependency readiness policy"
-```
-
-Migration preserves existing approvals, dependency baselines, receipts and
-review causes. It does not lock or unlock claims, refresh a baseline, or make a
-historical approval mean that an unseen draft dependency was approved.
+Existing approvals, dependency baselines, receipts and review causes stay as
+recorded. Loading a newer binary does not lock or unlock claims, refresh a
+baseline, or make a historical approval mean that an unseen draft dependency
+was approved.
 
 ## What was approved, and what is written now
 
@@ -228,7 +220,7 @@ claim nothing reported.
 
 ## What readiness does not prove
 
-The number of locked claims, a complete build order, passing fixture tests, or
+The number of locked claims, a complete track, passing fixture tests, or
 a green local approval count is not an integrated-readiness certificate. The
 relevant dependency chain must be approved, current, and clear of active
 review, and the project still needs the implementation and independent

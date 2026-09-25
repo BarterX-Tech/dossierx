@@ -1,7 +1,6 @@
 // implink_view_test.go covers the optional implementation-link viewer
-// extension's graceful-degradation contract, mirroring
-// build_order_render_test.go's approach for the sibling Build Order tab:
-// present (an extra "implemented in" edges-footer line) only when a module
+// extension's graceful-degradation contract: present (an extra
+// "implemented in" edges-footer line) only when a module
 // has an implementation-link artifact covering the rendered claim,
 // entirely absent (byte-for-byte unchanged output) when it does not.
 package render
@@ -21,8 +20,7 @@ import (
 // implinkTestConfig writes a minimal, valid project.config.yaml under a
 // fresh temp dir and loads it via config.LoadConfig — the only way to get a
 // *config.Config whose unexported dir field (and therefore Dir(), which
-// implink.ArtifactPath/Set resolve against) points somewhere real, mirroring
-// build_order_render_test.go's buildOrderTestConfig.
+// implink.ArtifactPath/Set resolve against) points somewhere real.
 func implinkTestConfig(t *testing.T, module string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()
@@ -30,7 +28,7 @@ func implinkTestConfig(t *testing.T, module string) *config.Config {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	writeFile(t, cfgPath, cfgYAML)
 
@@ -43,14 +41,13 @@ func implinkTestConfig(t *testing.T, module string) *config.Config {
 
 func implinkTestClaim(module string) model.Claim {
 	return model.Claim{
-		ID:        module + ".contract.main",
-		Module:    module,
-		Facet:     "contract",
-		Status:    model.StatusLocked,
-		Layout:    model.LayoutCard,
-		Body:      "main claim",
-		BuildRole: model.BuildRoleBehavior,
-		Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
+		ID:      module + ".contract.main",
+		Module:  module,
+		Facet:   "contract",
+		Status:  model.StatusLocked,
+		Layout:  model.LayoutCard,
+		Body:    "main claim",
+		RestsOn: model.RestsNone("test fixture"),
 	}
 }
 
@@ -140,7 +137,7 @@ func TestRender_ImplementedIn_OtherModuleUnaffected(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	writeFile(t, cfgPath, cfgYAML)
 	cfg, err := config.LoadConfig(cfgPath)
@@ -192,7 +189,7 @@ func implinkGatedConfig(t *testing.T, module string) *config.Config {
 		}
 	}
 	cfgPath := filepath.Join(dir, "project.config.yaml")
-	writeFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - "+module+"\nclaims_dir: claims\nsource_dirs:\n  - src\n")
+	writeFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - "+module+"\nclaims_dir: claims\nsource_dirs:\n  - src\n")
 	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -219,12 +216,12 @@ func TestRender_NotLinkedRow_PresentForGatedUnlinkedClaim(t *testing.T) {
 	claim := implinkTestClaim(module)
 	orientation := implinkTestClaim(module)
 	orientation.ID = module + ".contract.context"
-	orientation.BuildRole = model.BuildRoleOrientation
+	orientation.Embodiment = &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: "orientation, no code expected"}
 	orientation.Body = "orientation, no code expected"
 
 	out := renderClaims(t, []model.Claim{claim, orientation}, cfg)
 	if n := strings.Count(out, `class="claim-unlinked`); n != 1 {
-		t.Fatalf("expected exactly one unlinked row (the behavior claim, not the orientation one), got %d in:\n%s", n, out)
+		t.Fatalf("expected exactly one unlinked row (the ordinary claim, not the code-free one), got %d in:\n%s", n, out)
 	}
 	if !strings.Contains(out, `<span class="pill pw">not linked to code</span>`) {
 		t.Fatalf("expected the not-linked pill, got:\n%s", out)

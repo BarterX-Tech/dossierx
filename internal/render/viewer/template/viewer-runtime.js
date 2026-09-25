@@ -57,15 +57,37 @@
             if (i === 0) { moduleDefaultFacet[sec.id] = g.id; }
           });
         });
-        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
+        // The server picks the peer tab a module opens on (always Contract,
+        // never the Manifest tab that comes first in DOM order) and stamps it
+        // on the module's sec-tab. Prefer it over DOM order.
+        moduleTabs.forEach(function (tab) {
+          var modID = (tab.dataset.target || '').replace(/^#/, '');
+          var defID = (tab.dataset.defaultTarget || '').replace(/^#/, '');
+          if (modID && defID && facetToModule[defID] === modID) {
+            moduleDefaultFacet[modID] = defID;
+          }
+        });
+        firstModuleID = '';
+        for (var mi = 0; mi < moduleSections.length; mi++) {
+          var candidate = moduleSections[mi];
+          if (candidate.classList.contains('constitution-section') ||
+              candidate.classList.contains('track-section')) {
+            continue;
+          }
+          firstModuleID = candidate.id;
+          break;
+        }
 
         // claimToFacet maps every individual claim card's own id (the full claim
         // id, e.g. "widget.doctrine.foo") to its owning .claim-group (facet) id,
         // so an edges-footer link (`href="#<claim-id>"`) resolves to a specific
-        // card instead of the unknown-hash fallback. Overview claims render N
-        // times but only the canonical copy keeps its id (render.stripOverviewIDs
-        // strips the rest), so only that copy is indexed here — consistent with
-        // the comment JS keying off data-claim-id (never id) for state fan-out.
+        // card instead of the unknown-hash fallback. A claim a track owns
+        // renders twice, but only its module's copy keeps the id
+        // (render.stripDuplicateClaimIDs strips the track copy's), so only that
+        // copy is indexed here — consistent with the comment JS keying off
+        // data-claim-id (never id) for state fan-out. A project claim's one
+        // copy sits under the constitution's Project claims tab, which is a
+        // .claim-group like any facet, so a RESTS ON link to it resolves here.
         claimToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
           // Index both live-mounted cards and inert <template> payloads so a
@@ -90,8 +112,8 @@
         // reader clicking a citation would be moved to a different module
         // entirely, which is both wrong and hard to attribute to the click.
         // Only the canonical copy of a claim carries these ids
-        // (render.stripDuplicateClaimIDs removes them from an overview note's
-        // repeated copies and from a track's inline copy), so this map is
+        // (render.stripDuplicateClaimIDs removes them from a track's inline
+        // copy), so this map is
         // one-to-one for the same reason claimToFacet is.
         sourceToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -125,12 +147,10 @@
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
       // triple. Checked in order: a claim id -> its own card's facet + module; a
       // source row's anchor id -> the same, but scrolled to the row rather than
-      // to the card; a facet id -> its own module + itself (a Build order
-      // module's "#dossierx-build-order-<module>" group is a facet of the #dossierx-build-order
-      // section here, nothing special); a bare module id (which a TRACK section
-      // and the Build order section also are — see track_view.go) -> that
-      // module + its default facet; anything else -> the first module + its
-      // default facet.
+      // to the card; a facet id -> its own module + itself; a bare module id
+      // (which a TRACK section also is — see track_view.go) -> that module +
+      // its default facet; anything else -> the first module + its default
+      // facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -192,7 +212,10 @@
         if (!host || !tmpl) {
           return;
         }
-        if (!host.querySelector('.claim')) {
+        // A Manifest tab holds no .claim card, only its .manifest-view, so
+        // both count as "already mounted"; otherwise every revisit would
+        // clone the manifest into the host again.
+        if (!host.querySelector('.claim, .manifest-view')) {
           host.appendChild(tmpl.content.cloneNode(true));
           if (typeof window.dossierxEnhanceSystemRecord === 'function') {
             window.dossierxEnhanceSystemRecord();
@@ -261,8 +284,7 @@
 
         // Materialize the active surface BEFORE status-strip filtering and
         // before resolving a deep-linked claim id: getElementById / query
-        // cannot see cards that still live only in a <template>. Build-order
-        // sections have no surface template and no-op.
+        // cannot see cards that still live only in a <template>.
         mountSurface(facetID);
 
         if (lastStatusData) {
@@ -1362,9 +1384,7 @@
 
       function activeFacetClaimIDs() {
         var ids = Object.create(null);
-        // The Build order section holds diagrams, not claim cards: with it
-        // active the id set is empty and only project-wide findings render.
-        var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var section = document.querySelector('.module-section:not([hidden])');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
         if (!group) { return ids; }
         var collect = function (root) {
@@ -1675,9 +1695,7 @@
 // interval before system-record.js has enhanced a fresh SSE fragment.
       function positionStatusStrip() {
         if (!stripEl) { return; }
-        // Never the Build order section: it falls through to the .content-area
-        // branch rather than taking the strip as the diagrams' first child.
-        var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var section = document.querySelector('.module-section:not([hidden])');
         if (!section) {
           var content = document.querySelector('.content-area');
           if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
@@ -2357,7 +2375,7 @@
       // Two states look like an edit and have nothing to put behind a
       // "Changes" tab. A record written before the approved wording was kept
       // proves the text moved and does not carry what it moved from. A claim
-      // whose hash moved because its rests_on or build_role moved has an
+      // whose hash moved because its rests_on or section moved has an
       // approved wording identical to its current one. In both, the panel has
       // one sentence to say and no second version of the claim — so there is
       // no switch, and the claim's own body stays on screen.
@@ -3086,7 +3104,7 @@
           return all;
         }
         if (scope === 'module') {
-          var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+          var section = document.querySelector('.module-section:not([hidden])');
           var moduleID = section ? section.id : '';
           var ids = Object.create(null);
           Object.keys(claimToFacet).forEach(function (id) {
@@ -3272,7 +3290,7 @@
       // reading view already maintains — read-only, no new state.
       function issuesSyncHeader() {
         var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
-        var activeSection = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var activeSection = document.querySelector('.module-section:not([hidden])');
         var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
         if (issuesBreadcrumbFacetEl) {
           issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';
@@ -3836,23 +3854,6 @@
         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
         oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
-        // The Build order tab's renderer (the vendored mermaid build and
-        // build-order-ui.js) sits OUTSIDE .content-area and is only emitted
-        // for a project with a locked order, so a fragment swap cannot deliver
-        // it: a project that locks its FIRST build order while this page is
-        // open receives a .build-order-section with no renderer. One full
-        // reload, once, on that zero-to-one transition; every later swap has
-        // the renderer and takes the observer path. It is a one-time event
-        // only because the section is inside the same guard as the scripts.
-        // The test is the section's CLASS, which no module section carries,
-        // never its id: a module's section id is slugify(module), and a
-        // module named "build-order" once matched a getElementById here on
-        // every swap, turning each one into a full reload.
-        if (document.querySelector('.build-order-section') && typeof window.mermaid === 'undefined') {
-          window.location.reload();
-          return;
-        }
-
         // ---- re-point every lookup map at the fresh DOM ----
         initViewer();
 
@@ -3939,6 +3940,28 @@
             closeCommentPanel();
           } else {
             openCommentPanel(chipClaim);
+          }
+          return;
+        }
+        // The Manifest tab's refusal command (NIT-19). The command text is
+        // selected first, so a file:// viewer without clipboard access still
+        // leaves it one keystroke from copied; the clipboard write is a bonus.
+        var copyBtn = e.target.closest('.manifest-copy');
+        if (copyBtn) {
+          e.preventDefault();
+          var copyText = copyBtn.getAttribute('data-copy-text') || '';
+          var codeEl = copyBtn.parentNode.querySelector('.manifest-command-text');
+          if (codeEl && window.getSelection) {
+            var range = document.createRange();
+            range.selectNodeContents(codeEl);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          if (window.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(copyText).then(function () {
+              copyBtn.textContent = 'Copied';
+            }).catch(function () {});
           }
           return;
         }

@@ -1,13 +1,10 @@
-id: engine.behavior.degree-counting
-facet: behavior
+id: engine.internals.degree-counting
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: engine
 status: draft
 layout: card
-build_role: behavior
 body: |
-  A node's project-wide degree counts all three edge kinds. It is a fact about the corpus; the reader's current scope produces a different, smaller number that is computed separately.
-governed_by:
-  type: none
-  reason: a demo corpus claim, not backed by any real doctrine
+  A node's project-wide degree counts every rests_on edge into and out of it. It is a fact about the corpus; the reader's current scope produces a different, smaller number that is computed separately.
 rests_on:
-  - engine.schema.edge-kinds
+  - engine.internals.edge-kinds

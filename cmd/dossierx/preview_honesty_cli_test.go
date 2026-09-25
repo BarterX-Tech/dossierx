@@ -61,66 +61,21 @@ func TestServeFailureUnderTextIsUnchanged(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------
-// claim new keeps its own promise in the reserved overview facet
-// ---------------------------------------------------------------------
-
-// `claim new`'s help text promises "the claim it writes is shaped to pass the
-// lint suite immediately". Under the one RESERVED facet it did the opposite,
-// every time: a claim in `overview` IS an orientation note (the facet name is
-// what makes it one), orientation-note-shape requires layout: banner, and the
-// --layout default is card. The command wrote the file and then reported, in the
-// same call, the lint error it had just created.
-func TestClaimNewInTheOverviewFacetIsLintClean(t *testing.T) {
+func TestClaimNewHonoursAnExplicitLayout(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.router",
-		"--body", "read the contract claims below in order.",
-		"--governed-reason", "an orientation note is not backed by doctrine")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.explicit",
+		"--layout", "banner",
+		"--summary", "Deliberately a banner.",
+		"--body", "deliberately a banner.",
+		"--rests-on-none-reason", "fixture")
 	if err != nil {
 		t.Fatalf("claim new: %v", err)
 	}
 	var data claimNewData
 	envData(t, env, &data)
-	if data.LintErrorCount != 0 {
-		t.Fatalf("claim new promises a lint-clean claim; it wrote one with %d error(s): %+v", data.LintErrorCount, data)
-	}
 	if data.Layout != "banner" {
-		t.Fatalf("an overview-facet claim must default to layout: banner, got %q", data.Layout)
-	}
-
-	// The file on disk agrees, and the read-only gate confirms it.
-	written, readErr := os.ReadFile(data.Path)
-	if readErr != nil {
-		t.Fatalf("read the written claim: %v", readErr)
-	}
-	if !strings.Contains(string(written), "layout: banner") {
-		t.Fatalf("the written claim must carry the banner layout:\n%s", written)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
-		t.Fatalf("the project must still validate after claim new: %v", err)
-	}
-}
-
-// TestClaimNewHonoursAnExplicitLayoutInTheOverviewFacet: the default moves, the
-// caller's choice does not. A caller who names a layout is making a decision,
-// and the lint suite — reported in the same call — is where a wrong one is
-// answered.
-func TestClaimNewHonoursAnExplicitLayoutInTheOverviewFacet(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
-
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.explicit",
-		"--layout", "card",
-		"--body", "deliberately not a banner.",
-		"--governed-reason", "fixture")
-	if err != nil {
-		t.Fatalf("claim new: %v", err)
-	}
-	var data claimNewData
-	envData(t, env, &data)
-	if data.Layout != "card" {
 		t.Fatalf("an explicit --layout must win, got %q", data.Layout)
 	}
 }
@@ -137,20 +92,18 @@ func TestClaimNewHonoursAnExplicitLayoutInTheOverviewFacet(t *testing.T) {
 func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"build_role: schema\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  the approved body.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	// A hand edit to a LOCKED claim, after the ledger recorded it: the drift the
 	// gate exists to catch.
 	claimsDir := filepath.Join(root, "claims")
 	tamper(t, filepath.Join(claimsDir, "locked.yaml"), "the approved body.", "a body nobody approved.")
 	// And, entirely separately, a draft claim that does not lint.
-	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	broken := "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  rests on nothing that exists.\n" +
-		"rests_on:\n  - widget.contract.does-not-exist\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.does-not-exist\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "broken.yaml"), []byte(broken), 0o644); err != nil {
 		t.Fatalf("write broken claim: %v", err)
 	}
@@ -185,7 +138,7 @@ func TestDryRunDetailsDescribeTheVerdictTheyStandNextTo(t *testing.T) {
 
 	// claim new, on an id nothing has taken.
 	dr := dryRunOf(t, "--config", cfgPath, "claim", "new", "widget.contract.fresh",
-		"--body", "a new claim.", "--governed-reason", "fixture")
+		"--summary", "A new claim.", "--body", "a new claim.", "--rests-on-none-reason", "fixture")
 	assertPassingDetailsDoNotContradict(t, "claim new", dr.Preconditions, map[string]string{
 		"id_is_unused":   "already exists",
 		"file_is_unused": "already exists",

@@ -98,10 +98,11 @@ const revealBaseClaim = `id: widget.contract.base
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the claim the deep-linked one rests on; its own footer must stay collapsed.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -117,13 +118,11 @@ const revealDeepClaim = `id: widget.contract.deep
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the deep-link target: landing on its id must reveal the footer below.
 rests_on:
   - widget.contract.base
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 const (
@@ -333,7 +332,7 @@ func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 	after := readFooter(t, ctx, revealDeepID)
 	assertRevealed(t, before, after, revealDeepID, "after :target matched", targetRule)
 
-	// The rule must not fan out. render.stripOverviewIDs guarantees at most one
+	// The rule must not fan out. render.stripDuplicateClaimIDs guarantees at most one
 	// element can match :target, so the OTHER claim's footer — which has its own
 	// edges and would be just as revealable — must still be collapsed.
 	baseAfter := readFooter(t, ctx, revealBaseID)
@@ -412,7 +411,7 @@ func emulatePrint(t *testing.T, ctx context.Context) {
 const twoFacetConfigYAML = `schema_version: 1
 facets:
   - contract
-  - interface
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -427,41 +426,40 @@ claims_dir: claims
 // breaking the "only difference is the facet" symmetry the comment above
 // promises, even though this particular test's own assertions do not
 // depend on that door's open/closed state.
-const printFacetInterfaceBase = `id: widget.interface.base
-facet: interface
+const printFacetInterfaceBase = `id: widget.internals.base
+facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the inactive facet's base claim.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
 // lockPrintFacetInterfaceBase is lockRevealBase's twin for the inactive
 // facet's base claim — see printFacetInterfaceBase's doc comment.
 func lockPrintFacetInterfaceBase(p *project) {
-	p.run("claim", "lock", "widget.interface.base", "--reason", "viewer-test fixture, readiness must not auto-open this claim's own footer")
+	p.run("claim", "lock", "widget.internals.base", "--reason", "viewer-test fixture, readiness must not auto-open this claim's own footer")
 }
 
-const printFacetInterfaceDeep = `id: widget.interface.deep
-facet: interface
+const printFacetInterfaceDeep = `id: widget.internals.deep
+facet: internals
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim in the facet the reader is NOT looking at; its footer never reaches paper.
 rests_on:
-  - widget.interface.base
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
+  - widget.internals.base
 `
 
 const (
 	// The facet group ids are slugify("<module>-<facet>") — see render.Group.ID.
 	activeGroupID   = "widget-contract"
-	inactiveGroupID = "widget-interface"
-	inactiveDeepID  = "widget.interface.deep"
+	inactiveGroupID = "widget-internals"
+	inactiveDeepID  = "widget.internals.deep"
 )
 
 // facetFooterState is a WIDER observation than footerState: for a claim inside a
@@ -530,7 +528,7 @@ func readFacetFooter(t *testing.T, ctx context.Context, claimID string) facetFoo
 // The decision it encodes is the SCOPE clause of the @media print block in
 // internal/render/viewer/template/style.css (decision Q4, v0.4.1): "only the
 // facet currently ON SCREEN prints", because un-hiding every facet for print is
-// a page-order / per-facet-heading / duplicated-overview design change larger
+// a page-order / per-facet-heading design change larger
 // than a patch release should make. A human ruled on that deliberately; nothing
 // exercised it, because every other fixture in this suite has one facet.
 //
@@ -627,7 +625,7 @@ func TestPrintCoversOnlyTheOnScreenFacet(t *testing.T) {
 		t.Errorf("%s: a collapsed footer in the INACTIVE facet must stay UNRENDERED under print, but it measured %.1fpx across %d client rect(s).\n"+
 			"  measured: %s\n"+
 			"  this is decision Q4's stated SCOPE: only the on-screen facet prints, because the other facet's ancestor section.claim-group carries `hidden` (display:none) and a disclosure rule cannot resurrect a subtree removed from the box tree.\n"+
-			"  if printing every facet is now WANTED, that is a real design change (page order, per-facet headings, duplicated overview copies) — make it, update the SCOPE clause in internal/render/viewer/template/style.css, and rewrite or delete this test. Do not work around it.",
+			"  if printing every facet is now WANTED, that is a real design change (page order, per-facet headings, duplicated copies) — make it, update the SCOPE clause in internal/render/viewer/template/style.css, and rewrite or delete this test. Do not work around it.",
 			inactiveDeepID, inactiveAfter.Height, inactiveAfter.ClientRects, inactiveAfter)
 	}
 }

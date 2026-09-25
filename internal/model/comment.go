@@ -8,11 +8,10 @@
 //
 // The raw "does this claim have unresolved review threads?" predicates
 // (OpenThreadIDs/HasOpenThreads) live in THIS package, on model.Claim, on
-// purpose: internal/lint's comments-unresolved rule and internal/buildorder's
-// completeness gate need them, and internal/lock (which the lock gate lives
-// in) already imports internal/lint — so hosting the predicate anywhere lint
-// or buildorder would have to import lock/comments to reach it would create
-// an import cycle. model is the one package every consumer already depends
+// purpose: internal/lint's comments-unresolved rule needs them, and
+// internal/lock (which the lock gate lives in) already imports internal/lint
+// — so hosting the predicate anywhere lint would have to import lock/comments
+// to reach it would create an import cycle. model is the one package every consumer already depends
 // on, so the predicate is cycle-free here.
 package model
 
@@ -78,9 +77,9 @@ type Comment struct {
 // still open, in declaration order. It returns nil (not an empty slice) when
 // c has no open threads, so `len(c.OpenThreadIDs()) == 0` is the canonical
 // "nothing unresolved" test. This is the raw predicate internal/lint's
-// comments-unresolved rule, internal/lock's lock gate, and
-// internal/buildorder's completeness gate all read — see this file's package
-// doc for why it lives on model rather than in internal/comments.
+// comments-unresolved rule and internal/lock's lock gate both read — see this
+// file's package doc for why it lives on model rather than in
+// internal/comments.
 func (c Claim) OpenThreadIDs() []string {
 	var ids []string
 	for _, cm := range c.Comments {

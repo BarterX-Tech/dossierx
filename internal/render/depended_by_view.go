@@ -41,7 +41,7 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 	}
 	out := map[string][]string{}
 	for _, c := range cat.Claims {
-		for _, dep := range c.RestsOn {
+		for _, dep := range c.RestsOn.IDs {
 			out[dep] = append(out[dep], c.ID)
 		}
 	}
@@ -56,7 +56,7 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 
 // buildTargetStatusLookup returns, for every claim id in the catalog, the
 // Status/ReviewPending pair components.writeClaimRef needs to decide
-// whether a claim-edge target (governed_by/mirrors/rests_on/depended-on-by)
+// whether a claim-edge target (rests_on/depended-on-by)
 // gets a status pill (C6, the last unshipped piece of GitHub issue #11): a
 // pill renders only when the target is actionable — draft, or locked with
 // review_pending — never for a healthy locked target, so the footer stays
@@ -87,8 +87,8 @@ func buildTargetStatusLookup(cat *catalog.Catalog) map[string]components.TargetS
 // attachEdgesOverride rebinds every partial in partials' "edges" template
 // func to a single closure combining implinkLookup (internal/implink-
 // sourced "implemented in" lines) and dependedByLookup (this file's
-// "depended on by" lines) on top of the shared governed_by/mirrors/
-// rests_on/etc footer components.edgesHTML already renders. Both
+// "depended on by" lines) on top of the shared rests_on/etc footer
+// components.edgesHTML already renders. Both
 // extensions have to be folded into one Funcs call rather than two
 // separate ones — a *template.Template only ever has one function bound
 // to a given name at Execute time, so a second, unrelated call to

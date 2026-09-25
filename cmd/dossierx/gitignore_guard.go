@@ -1,6 +1,7 @@
 // gitignore_guard.go is the approval verbs' half of the store-gitignored guard
 // (internal/check.Gitignored): claim lock (single and batch), claim flag, claim
-// reaudit --confirm and build-order lock are about to write an approval whose
+// reaudit --confirm, claim recover-approved-content and constitution lock are
+// about to write an approval whose
 // ONLY way to reach a collaborator is the repository, so a store git would
 // ignore — or a work tree git cannot answer for — is a refusal, not a skip.
 // The read-only check modes take the other branch (they report

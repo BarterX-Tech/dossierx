@@ -1,88 +1,6 @@
 {
   "claims": [
     {
-      "id": "cli.behavior.dry-run-writes-nothing",
-      "facet": "behavior",
-      "module": "cli",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.behavior.dry-run-writes-nothing",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "cli.behavior.exit-codes",
-      "facet": "behavior",
-      "module": "cli",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.behavior.exit-codes",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "cli.behavior.format-flag",
-      "facet": "behavior",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.behavior.format-flag",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
       "id": "cli.contract.check-noun",
       "facet": "contract",
       "module": "cli",
@@ -91,17 +9,13 @@
       "kind": "fact",
       "edges": {
         "rests_on": [
-          "engine.contract.check-is-fail-fast",
-          "cli.behavior.exit-codes"
+          "engine.contract.check-is-fail-fast"
         ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "cli.contract.check-noun",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -110,13 +24,41 @@
         "review_causes": [
           {
             "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "cli.contract.check-noun",
+              "(internals)",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "(internals)",
+            "path": [
+              "cli.contract.check-noun",
+              "engine.contract.check-is-fail-fast",
+              "(internals)",
+              "(internals)"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -124,13 +66,41 @@
         "causes": [
           {
             "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "cli.contract.check-noun",
+              "(internals)",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "(internals)",
+            "path": [
+              "cli.contract.check-noun",
+              "engine.contract.check-is-fail-fast",
+              "(internals)",
+              "(internals)"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -145,21 +115,46 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "cli.contract.noun-list-is-fixed",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "cli.contract.noun-list-is-fixed",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "cli.contract.noun-list-is-fixed",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -170,325 +165,104 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "cli.contract.serve-noun",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.decision.agent-operates-human-reviews",
-      "facet": "decision",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.contract.serve-noun"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.decision.agent-operates-human-reviews",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "cli.contract.serve-noun",
-            "path": [
-              "cli.decision.agent-operates-human-reviews",
-              "cli.contract.serve-noun"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "cli.contract.serve-noun",
-            "path": [
-              "cli.decision.agent-operates-human-reviews",
-              "cli.contract.serve-noun"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.decision.no-new-noun-for-the-graph",
-      "facet": "decision",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.contract.noun-list-is-fixed"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.decision.no-new-noun-for-the-graph",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.overview.six-nouns",
-      "facet": "overview",
-      "module": "cli",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.overview.six-nouns",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.schema.error-codes",
-      "facet": "schema",
-      "module": "cli",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "cli.schema.json-envelope"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.schema.error-codes",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "cli.schema.json-envelope",
-      "facet": "schema",
-      "module": "cli",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "cli.schema.json-envelope",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.behavior.catalog-groups-by-facet",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.catalog-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.catalog-groups-by-facet",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.behavior.degree-counting",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.edge-kinds"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.degree-counting",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "engine.behavior.lint-runs-before-catalog",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.edge-kinds"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.behavior.lint-runs-before-catalog",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
         "dependency_ready": true,
         "ready": false,
         "review_pending": true,
         "review_causes": [
           {
-            "kind": "own_thread",
-            "source_kind": "own_thread",
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
-              "engine.behavior.lint-runs-before-catalog"
+              "cli.contract.serve-noun",
+              "(internals)",
+              "engine.contract.claim-shape"
             ],
-            "detail": "c-2e8875",
-            "direct": true,
-            "inherited": false
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
         "causes": [
           {
-            "kind": "own_thread",
-            "source_kind": "own_thread",
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
-              "engine.behavior.lint-runs-before-catalog"
+              "cli.contract.serve-noun",
+              "(internals)",
+              "engine.contract.claim-shape"
             ],
-            "detail": "c-2e8875",
-            "direct": true,
-            "inherited": false
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
-        ]
+        ],
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     },
     {
-      "id": "engine.behavior.loader-walks-claims-dir",
-      "facet": "behavior",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
+      "id": "cli.contract.six-nouns",
+      "facet": "contract",
+      "module": "cli",
+      "status": "draft",
+      "layout": "banner",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
-        "claim_id": "engine.behavior.loader-walks-claims-dir",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
+        "claim_id": "cli.contract.six-nouns",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "cli.contract.six-nouns",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "cli.contract.six-nouns",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     },
     {
@@ -500,21 +274,97 @@
       "kind": "fact",
       "edges": {
         "rests_on": [
-          "engine.schema.catalog-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+          "engine.contract.catalog-shape"
+        ]
       },
       "readiness": {
         "claim_id": "engine.contract.build-is-pure",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "engine.contract.build-is-pure",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "engine.contract.build-is-pure",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "engine.contract.catalog-shape",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.contract.claim-shape"
+        ]
+      },
+      "readiness": {
+        "claim_id": "engine.contract.catalog-shape",
+        "policy_version": 1,
+        "local_approved": true,
+        "locally_approved": true,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ],
+        "causes": [
+          {
+            "kind": "direct_dependency_change",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": true,
+            "inherited": false
+          }
+        ]
       }
     },
     {
@@ -525,17 +375,11 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "engine.behavior.lint-runs-before-catalog"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "engine.contract.check-is-fail-fast",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -544,12 +388,25 @@
         "review_causes": [
           {
             "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "(internals)",
+            "path": [
+              "engine.contract.check-is-fail-fast",
+              "(internals)",
+              "(internals)"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -557,12 +414,25 @@
         "causes": [
           {
             "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "(internals)",
+            "path": [
+              "engine.contract.check-is-fail-fast",
+              "(internals)",
+              "(internals)"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          },
+          {
+            "kind": "upstream_dependency_review",
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.behavior.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -570,76 +440,19 @@
       }
     },
     {
-      "id": "engine.decision.facts-not-verdicts",
-      "facet": "decision",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "mirrors": [
-          "viewer.decision.facts-not-verdicts"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.decision.facts-not-verdicts",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "engine.decision.no-code-nodes",
-      "facet": "decision",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.decision.no-code-nodes",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "engine.decision.single-source-of-truth",
-      "facet": "decision",
+      "id": "engine.contract.claim-shape",
+      "facet": "contract",
       "module": "engine",
       "status": "locked",
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
       },
       "readiness": {
-        "claim_id": "engine.decision.single-source-of-truth",
-        "policy_version": 0,
+        "claim_id": "engine.contract.claim-shape",
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -648,24 +461,66 @@
       }
     },
     {
-      "id": "engine.overview.start-here",
-      "facet": "overview",
+      "id": "engine.contract.facts-not-verdicts",
+      "facet": "contract",
+      "module": "engine",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
+      "readiness": {
+        "claim_id": "engine.contract.facts-not-verdicts",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      }
+    },
+    {
+      "id": "engine.contract.single-source-of-truth",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
+      },
+      "readiness": {
+        "claim_id": "engine.contract.single-source-of-truth",
+        "policy_version": 1,
+        "local_approved": true,
+        "locally_approved": true,
+        "dependency_ready": true,
+        "ready": true,
+        "review_pending": false
+      }
+    },
+    {
+      "id": "engine.contract.start-here",
+      "facet": "contract",
       "module": "engine",
       "status": "draft",
       "layout": "banner",
-      "kind": "orientation-note",
+      "kind": "fact",
       "edges": {
         "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+          "engine.contract.claim-shape"
+        ]
       },
       "readiness": {
-        "claim_id": "engine.overview.start-here",
-        "policy_version": 0,
+        "claim_id": "engine.contract.start-here",
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
@@ -678,215 +533,57 @@
       }
     },
     {
-      "id": "engine.schema.catalog-shape",
-      "facet": "schema",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.schema.catalog-shape",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.schema.claim-shape",
-      "facet": "schema",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.schema.claim-shape",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.schema.edge-kinds",
-      "facet": "schema",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.schema.edge-kinds",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.verification.determinism-suite",
-      "facet": "verification",
-      "module": "engine",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.contract.build-is-pure"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.verification.determinism-suite",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "engine.verification.nil-safety-suite",
-      "facet": "verification",
-      "module": "engine",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.contract.build-is-pure"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "engine.verification.nil-safety-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.behavior.comment-digest",
-      "facet": "behavior",
+      "id": "lock.contract.ledger-first",
+      "facet": "contract",
       "module": "lock",
       "status": "draft",
-      "layout": "card",
+      "layout": "banner",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
-        "claim_id": "lock.behavior.comment-digest",
-        "policy_version": 0,
+        "claim_id": "lock.contract.ledger-first",
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "lock.contract.ledger-first",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "lock.contract.ledger-first",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
         "local_reasons": [
           "claim status \"draft\" is not locally approved"
         ],
         "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.behavior.lock-gates",
-      "facet": "behavior",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.behavior.lock-gates",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "lock.behavior.unlock-keeps-the-record",
-      "facet": "behavior",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.behavior.unlock-keeps-the-record",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
       }
     },
     {
@@ -897,21 +594,50 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "lock.behavior.lock-gates"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "lock.contract.lock-is-human-approved",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "lock.contract.lock-is-human-approved",
+              "(internals)",
+              "(internals)",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "lock.contract.lock-is-human-approved",
+              "(internals)",
+              "(internals)",
+              "(internals)",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     },
     {
@@ -922,266 +648,48 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "lock.behavior.lock-gates"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "lock.contract.review-pending-is-engine-managed",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.decision.no-migration-command",
-      "facet": "decision",
-      "module": "lock",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.ledger-record"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.decision.no-migration-command",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.overview.ledger-first",
-      "facet": "overview",
-      "module": "lock",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "lock.schema.lock-store"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.overview.ledger-first",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "lock.schema.ledger-record",
-      "facet": "schema",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.schema.lock-store"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.schema.ledger-record",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "lock.schema.lock-store",
-      "facet": "schema",
-      "module": "lock",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.claim-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.schema.lock-store",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "lock.verification.ledger-audit-suite",
-      "facet": "verification",
-      "module": "lock",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "lock.behavior.lock-gates"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "lock.verification.ledger-audit-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.behavior.counter-increment",
-      "facet": "behavior",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.behavior.counter-increment",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
+        "review_pending": true,
+        "review_causes": [
           {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
-              "telemetry.behavior.counter-increment",
-              "telemetry.schema.counter-shape"
+              "lock.contract.review-pending-is-engine-managed",
+              "(internals)",
+              "(internals)",
+              "(internals)",
+              "engine.contract.claim-shape"
             ],
-            "detail": "required dependency is not locally approved"
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
-        "conditions": [
+        "causes": [
           {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
             "path": [
-              "telemetry.behavior.counter-increment",
-              "telemetry.schema.counter-shape"
+              "lock.contract.review-pending-is-engine-managed",
+              "(internals)",
+              "(internals)",
+              "(internals)",
+              "engine.contract.claim-shape"
             ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.behavior.flush-on-exit",
-      "facet": "behavior",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.behavior.flush-on-exit",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
           }
         ],
         "local_reasons": [
@@ -1200,15 +708,11 @@
       "edges": {
         "rests_on": [
           "telemetry.contract.no-egress"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "telemetry.contract.disabled-by-default",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": false,
@@ -1217,16 +721,6 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.contract.disabled-by-default",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
             "dependency_id": "telemetry.contract.no-egress",
             "path": [
               "telemetry.contract.disabled-by-default",
@@ -1236,12 +730,22 @@
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "(internals)",
+              "(internals)"
+            ],
+            "detail": "required dependency is not locally approved"
+          },
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "(internals)",
+            "path": [
+              "telemetry.contract.disabled-by-default",
+              "telemetry.contract.no-egress",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -1249,16 +753,6 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.contract.disabled-by-default",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
             "dependency_id": "telemetry.contract.no-egress",
             "path": [
               "telemetry.contract.disabled-by-default",
@@ -1268,12 +762,22 @@
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "(internals)",
+              "(internals)"
+            ],
+            "detail": "required dependency is not locally approved"
+          },
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "(internals)",
+            "path": [
+              "telemetry.contract.disabled-by-default",
+              "telemetry.contract.no-egress",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -1292,16 +796,11 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "telemetry.behavior.flush-on-exit"
-        ],
-        "governed_by": {
-          "type": "telemetry.decision.counters-are-local"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "telemetry.contract.no-egress",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": false,
@@ -1310,20 +809,20 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
+              "(internals)",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -1331,20 +830,20 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
+              "(internals)",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -1356,51 +855,18 @@
       }
     },
     {
-      "id": "telemetry.decision.counters-are-local",
-      "facet": "decision",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.decision.counters-are-local",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.overview.what-this-module-is",
-      "facet": "overview",
+      "id": "telemetry.contract.what-this-module-is",
+      "facet": "contract",
       "module": "telemetry",
       "status": "draft",
       "layout": "banner",
-      "kind": "orientation-note",
+      "kind": "fact",
       "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
-        "claim_id": "telemetry.overview.what-this-module-is",
-        "policy_version": 0,
+        "claim_id": "telemetry.contract.what-this-module-is",
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": false,
@@ -1409,10 +875,10 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
-              "telemetry.overview.what-this-module-is",
-              "telemetry.schema.counter-shape"
+              "telemetry.contract.what-this-module-is",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -1420,10 +886,10 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
-              "telemetry.overview.what-this-module-is",
-              "telemetry.schema.counter-shape"
+              "telemetry.contract.what-this-module-is",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -1435,347 +901,19 @@
       }
     },
     {
-      "id": "telemetry.schema.counter-shape",
-      "facet": "schema",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.schema.counter-shape",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.schema.event-names",
-      "facet": "schema",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.schema.counter-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.schema.event-names",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.schema.event-names",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.schema.event-names",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "telemetry.verification.offline-suite",
-      "facet": "verification",
-      "module": "telemetry",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "telemetry.contract.no-egress"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "telemetry.verification.offline-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.contract.no-egress",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.behavior.flush-on-exit",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.contract.no-egress",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.schema.counter-shape",
-            "path": [
-              "telemetry.verification.offline-suite",
-              "telemetry.contract.no-egress",
-              "telemetry.behavior.flush-on-exit",
-              "telemetry.schema.counter-shape"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.behavior.gap-rules-run-in-the-browser",
-      "facet": "behavior",
+      "id": "viewer.contract.facts-not-verdicts",
+      "facet": "contract",
       "module": "viewer",
       "status": "draft",
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "viewer.behavior.representative-node-rule"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim; nothing to rest on"
       },
       "readiness": {
-        "claim_id": "viewer.behavior.gap-rules-run-in-the-browser",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.representative-node-rule",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.representative-node-rule",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule"
-            ],
-            "detail": "required dependency is not locally approved"
-          },
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.gap-rules-run-in-the-browser",
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.behavior.pane-is-inert-until-opened",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.pane-is-inert-until-opened",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "viewer.behavior.representative-node-rule",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.behavior.scope-filter"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.representative-node-rule",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "viewer.behavior.scope-filter",
-            "path": [
-              "viewer.behavior.representative-node-rule",
-              "viewer.behavior.scope-filter"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.behavior.scope-filter",
-      "facet": "behavior",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.node-fields"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.behavior.scope-filter",
-        "policy_version": 0,
+        "claim_id": "viewer.contract.facts-not-verdicts",
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
@@ -1795,22 +933,104 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "viewer.contract.no-network-at-runtime",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "viewer.contract.no-network-at-runtime",
+              "(internals)",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "viewer.contract.no-network-at-runtime",
+              "(internals)",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "viewer.contract.read-me-first",
+      "facet": "contract",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
+      "readiness": {
+        "claim_id": "viewer.contract.read-me-first",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "viewer.contract.read-me-first",
+              "(internals)",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "viewer.contract.read-me-first",
+              "(internals)",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ],
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     },
     {
@@ -1823,360 +1043,107 @@
       "edges": {
         "rests_on": [
           "engine.contract.build-is-pure"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "viewer.contract.render-is-pure",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "viewer.decision.canvas-not-svg",
-      "facet": "decision",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.decision.canvas-not-svg",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
         "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
+        "review_pending": true,
+        "review_causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "viewer.contract.render-is-pure",
+              "engine.contract.build-is-pure",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
         ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.decision.colour-is-not-the-only-channel",
-      "facet": "decision",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.decision.colour-is-not-the-only-channel",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.decision.facts-not-verdicts",
-      "facet": "decision",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "mirrors": [
-          "engine.decision.facts-not-verdicts"
-        ],
-        "governed_by": {
-          "type": "engine.decision.single-source-of-truth"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.decision.facts-not-verdicts",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.overview.read-me-first",
-      "facet": "overview",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "orientation-note",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.overview.read-me-first",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "viewer.schema.node-fields",
-      "facet": "schema",
-      "module": "viewer",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.schema.payload-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.schema.node-fields",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "viewer.schema.payload-shape",
-      "facet": "schema",
-      "module": "viewer",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "engine.schema.catalog-shape"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.schema.payload-shape",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "viewer.verification.browser-suite",
-      "facet": "verification",
-      "module": "viewer",
-      "status": "draft",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "viewer.behavior.pane-is-inert-until-opened"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "a demo corpus claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "viewer.verification.browser-suite",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": true,
-        "ready": false,
-        "review_pending": false,
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
+        "causes": [
+          {
+            "kind": "upstream_dependency_review",
+            "source_kind": "direct_dependency_change",
+            "dependency_id": "engine.contract.claim-shape",
+            "path": [
+              "viewer.contract.render-is-pure",
+              "engine.contract.build-is-pure",
+              "engine.contract.catalog-shape",
+              "engine.contract.claim-shape"
+            ],
+            "detail": "dependency content differs from the reviewed baseline",
+            "direct": false,
+            "inherited": true
+          }
+        ]
       }
     }
   ],
   "by_facet": {
-    "behavior": [
-      "cli.behavior.dry-run-writes-nothing",
-      "cli.behavior.exit-codes",
-      "cli.behavior.format-flag",
-      "engine.behavior.catalog-groups-by-facet",
-      "engine.behavior.degree-counting",
-      "engine.behavior.lint-runs-before-catalog",
-      "engine.behavior.loader-walks-claims-dir",
-      "lock.behavior.comment-digest",
-      "lock.behavior.lock-gates",
-      "lock.behavior.unlock-keeps-the-record",
-      "telemetry.behavior.counter-increment",
-      "telemetry.behavior.flush-on-exit",
-      "viewer.behavior.gap-rules-run-in-the-browser",
-      "viewer.behavior.pane-is-inert-until-opened",
-      "viewer.behavior.representative-node-rule",
-      "viewer.behavior.scope-filter"
-    ],
     "contract": [
       "cli.contract.check-noun",
       "cli.contract.noun-list-is-fixed",
       "cli.contract.serve-noun",
+      "cli.contract.six-nouns",
       "engine.contract.build-is-pure",
+      "engine.contract.catalog-shape",
       "engine.contract.check-is-fail-fast",
+      "engine.contract.claim-shape",
+      "engine.contract.facts-not-verdicts",
+      "engine.contract.single-source-of-truth",
+      "engine.contract.start-here",
+      "lock.contract.ledger-first",
       "lock.contract.lock-is-human-approved",
       "lock.contract.review-pending-is-engine-managed",
       "telemetry.contract.disabled-by-default",
       "telemetry.contract.no-egress",
+      "telemetry.contract.what-this-module-is",
+      "viewer.contract.facts-not-verdicts",
       "viewer.contract.no-network-at-runtime",
+      "viewer.contract.read-me-first",
       "viewer.contract.render-is-pure"
-    ],
-    "decision": [
-      "cli.decision.agent-operates-human-reviews",
-      "cli.decision.no-new-noun-for-the-graph",
-      "engine.decision.facts-not-verdicts",
-      "engine.decision.no-code-nodes",
-      "engine.decision.single-source-of-truth",
-      "lock.decision.no-migration-command",
-      "telemetry.decision.counters-are-local",
-      "viewer.decision.canvas-not-svg",
-      "viewer.decision.colour-is-not-the-only-channel",
-      "viewer.decision.facts-not-verdicts"
-    ],
-    "overview": [
-      "cli.overview.six-nouns",
-      "engine.overview.start-here",
-      "lock.overview.ledger-first",
-      "telemetry.overview.what-this-module-is",
-      "viewer.overview.read-me-first"
-    ],
-    "schema": [
-      "cli.schema.error-codes",
-      "cli.schema.json-envelope",
-      "engine.schema.catalog-shape",
-      "engine.schema.claim-shape",
-      "engine.schema.edge-kinds",
-      "lock.schema.ledger-record",
-      "lock.schema.lock-store",
-      "telemetry.schema.counter-shape",
-      "telemetry.schema.event-names",
-      "viewer.schema.node-fields",
-      "viewer.schema.payload-shape"
-    ],
-    "verification": [
-      "engine.verification.determinism-suite",
-      "engine.verification.nil-safety-suite",
-      "lock.verification.ledger-audit-suite",
-      "telemetry.verification.offline-suite",
-      "viewer.verification.browser-suite"
     ]
   },
   "by_module": {
     "cli": [
-      "cli.behavior.dry-run-writes-nothing",
-      "cli.behavior.exit-codes",
-      "cli.behavior.format-flag",
       "cli.contract.check-noun",
       "cli.contract.noun-list-is-fixed",
       "cli.contract.serve-noun",
-      "cli.decision.agent-operates-human-reviews",
-      "cli.decision.no-new-noun-for-the-graph",
-      "cli.overview.six-nouns",
-      "cli.schema.error-codes",
-      "cli.schema.json-envelope"
+      "cli.contract.six-nouns"
     ],
     "engine": [
-      "engine.behavior.catalog-groups-by-facet",
-      "engine.behavior.degree-counting",
-      "engine.behavior.lint-runs-before-catalog",
-      "engine.behavior.loader-walks-claims-dir",
       "engine.contract.build-is-pure",
+      "engine.contract.catalog-shape",
       "engine.contract.check-is-fail-fast",
-      "engine.decision.facts-not-verdicts",
-      "engine.decision.no-code-nodes",
-      "engine.decision.single-source-of-truth",
-      "engine.overview.start-here",
-      "engine.schema.catalog-shape",
-      "engine.schema.claim-shape",
-      "engine.schema.edge-kinds",
-      "engine.verification.determinism-suite",
-      "engine.verification.nil-safety-suite"
+      "engine.contract.claim-shape",
+      "engine.contract.facts-not-verdicts",
+      "engine.contract.single-source-of-truth",
+      "engine.contract.start-here"
     ],
     "lock": [
-      "lock.behavior.comment-digest",
-      "lock.behavior.lock-gates",
-      "lock.behavior.unlock-keeps-the-record",
+      "lock.contract.ledger-first",
       "lock.contract.lock-is-human-approved",
-      "lock.contract.review-pending-is-engine-managed",
-      "lock.decision.no-migration-command",
-      "lock.overview.ledger-first",
-      "lock.schema.ledger-record",
-      "lock.schema.lock-store",
-      "lock.verification.ledger-audit-suite"
+      "lock.contract.review-pending-is-engine-managed"
     ],
     "telemetry": [
-      "telemetry.behavior.counter-increment",
-      "telemetry.behavior.flush-on-exit",
       "telemetry.contract.disabled-by-default",
       "telemetry.contract.no-egress",
-      "telemetry.decision.counters-are-local",
-      "telemetry.overview.what-this-module-is",
-      "telemetry.schema.counter-shape",
-      "telemetry.schema.event-names",
-      "telemetry.verification.offline-suite"
+      "telemetry.contract.what-this-module-is"
     ],
     "viewer": [
-      "viewer.behavior.gap-rules-run-in-the-browser",
-      "viewer.behavior.pane-is-inert-until-opened",
-      "viewer.behavior.representative-node-rule",
-      "viewer.behavior.scope-filter",
+      "viewer.contract.facts-not-verdicts",
       "viewer.contract.no-network-at-runtime",
-      "viewer.contract.render-is-pure",
-      "viewer.decision.canvas-not-svg",
-      "viewer.decision.colour-is-not-the-only-channel",
-      "viewer.decision.facts-not-verdicts",
-      "viewer.overview.read-me-first",
-      "viewer.schema.node-fields",
-      "viewer.schema.payload-shape",
-      "viewer.verification.browser-suite"
+      "viewer.contract.read-me-first",
+      "viewer.contract.render-is-pure"
     ]
   }
 }

@@ -208,7 +208,7 @@ func isTagBoundary(c byte) bool {
 // filtered to open threads with ?open=1. body_html is produced only by
 // markdown.Render, the one safe renderer, so a hostile body is inert here.
 func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
 		return
@@ -271,7 +271,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // readiness map is the exact map check.Status used for catalog/viewer capacity
 // grading; there is deliberately no second store read after the verdict.
 func (s *Server) renderStatus() ([]byte, error) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("load claims: %w", err)
 	}
@@ -321,7 +321,7 @@ func (s *Server) renderStatus() ([]byte, error) {
 // dropped.unresolved_edges, and the pane shows a notice rather than silently
 // drawing a smaller graph than the data describes.
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
 		return
@@ -816,16 +816,8 @@ type statusDTO struct {
 	// next_steps: the client ranges over it without a null test.
 	LedgerFindings []lock.Finding `json:"ledger_findings"`
 
-	// BuildOrders is every module's build-order state with staleness recomputed
-	// live, beside the ledger findings and for the same reason: a locked build
-	// order is the second class of locked artifact in a project, and a human
-	// reading the viewer had no way to see that the approved implementation
-	// sequence had gone stale under the claims they were reading. It is an array,
-	// never null.
-	BuildOrders []check.BuildOrderReport `json:"build_orders"`
-
 	// Readiness is a claim-id keyed live assessment. It deliberately sits beside
-	// lock counts rather than being derived from them: a locked/build-order
+	// lock counts rather than being derived from them: a locked
 	// count cannot imply that required dependencies are approved and clear.
 	Readiness map[string]readiness.Assessment `json:"readiness"`
 
@@ -882,10 +874,6 @@ func statusToDTO(res check.Result) statusDTO {
 	if ledger == nil {
 		ledger = []lock.Finding{}
 	}
-	orders := res.BuildOrders
-	if orders == nil {
-		orders = []check.BuildOrderReport{}
-	}
 	var conformanceCode cliout.Code
 	var errorCode cliout.Code
 	conformanceBlocked := res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0
@@ -896,7 +884,10 @@ func statusToDTO(res check.Result) statusDTO {
 		conformanceCode = cliout.CodeConformanceCapacityExceeded
 	}
 	switch {
-	case len(res.LintErrors) > 0:
+	case len(res.ClaimLintErrors()) > 0:
+		// The claims' own findings; the roof's finding rides in the same list
+		// but is decided at its own gate below, after the ledger, exactly as
+		// every check mode decides it.
 		errorCode = cliout.CodeLintFailed
 		failurePhase = "lint"
 	case res.ConformanceCapacityExceeded:
@@ -908,6 +899,14 @@ func statusToDTO(res check.Result) statusDTO {
 		if failurePhase == "" {
 			failurePhase = "ledger"
 		}
+	case !res.Constitution.Locked() || res.Constitution.OverCap:
+		// The roof gate (NIT-26): the strip shows the project as refused
+		// until the constitution is locked, with the finding in lint_errors.
+		errorCode = cliout.CodeConstitutionNotLocked
+		if res.Constitution.OverCap {
+			errorCode = cliout.CodeConstitutionOverCap
+		}
+		failurePhase = "constitution"
 	case conformanceBlocked:
 		errorCode = cliout.CodeConformanceFailed
 		failurePhase = "conformance"
@@ -923,7 +922,6 @@ func statusToDTO(res check.Result) statusDTO {
 		OpenComments:               open,
 		NextSteps:                  next,
 		LedgerFindings:             ledger,
-		BuildOrders:                orders,
 		Readiness:                  assessment,
 		Conformance:                res.Conformance,
 		ConformanceBlockingEnabled: res.ConformanceBlockingEnabled,

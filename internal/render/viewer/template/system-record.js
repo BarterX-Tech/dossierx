@@ -197,7 +197,7 @@
 
   // enhanceFooters and enhanceFieldLabels were retired here: both targeted
   // the pre-redesign single-<details> mono digest and flat <li> labels
-  // ("N links - N files - N drifted", "governed_by:" text prefixes) that
+  // ("N links - N files - N drifted", "rests_on:" text prefixes) that
   // components.EdgesHTMLWithLinks no longer emits — see that Go function's
   // doc comment and docs/design/screens/05-claim-one-expansion-at-a-time.md
   // R09.1/R-F.1. The new footer strip (.claim-footer, .claim-footer-chip*,
@@ -426,11 +426,11 @@
     });
   }
 
-  // activeFacet returns null while the Build order tab is active (it is not a
-  // module section: no header, TOC, status strip or claim controls are built
-  // over the diagrams), so renderToc hides the TOC there.
+  // activeFacet returns null while no plain module section is visible (a
+  // track or the constitution section is active), so renderToc hides the TOC
+  // there.
   function activeFacet() {
-    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)'));
+    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.track-section):not(.constitution-section)'));
     var module = modules.find(function (section) { return !section.hidden; });
     if (!module) { return null; }
     var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
@@ -743,7 +743,7 @@
     // directly (see bindFocusControl above).
     var focusState = isFocusOn() ? 'on' : 'off';
     var moduleSections = Array.prototype.slice.call(
-      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)')
+      document.querySelectorAll('.module-section:not(.track-section):not(.constitution-section)')
     );
     var moduleCount = moduleSections.length;
     moduleSections.forEach(function (section, moduleIndex) {
@@ -859,12 +859,12 @@
 
   // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
   // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
-  // labels back to "Rests On" / "Mirrors" / "Governed By" and renamed the
+  // labels back to "Rests On" and renamed the
   // "edge types" / "edges" headings to "Relationships" — a fixup for a
   // pre-13 build of the pane that had no display-label map of its own.
   // graph-ui.js now builds every one of those labels correctly at the
-  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" / "Says the
-  // same thing" / "Governed by", the "Relations" eyebrow, the "marks"
+  // source (RELATIONSHIP_LABELS, 13 §4.2/§4.5/§6: "Depends on" /
+  // the "Relations" eyebrow, the "marks"
   // legend group), and this shim was firing on every rebuild and silently
   // reverting all of it back to the pre-13 wording — removed here rather
   // than left to fight graph-ui.js on every interaction. Found via

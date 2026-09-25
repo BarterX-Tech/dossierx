@@ -117,8 +117,15 @@ jobs:
       # couple of dozen lines to roughly 14,500 (~3.4 MB) per cell. That is a
       # machine's account and it is not a thing a person skims. Read the job's
       # conclusion, and open this log only when something in it went red.
+      #
+      # `-timeout=20m` is the package deadline, not a selector. Go's default
+      # 10m is what failed test (go stable, windows-latest) on #100 at 037eb72:
+      # internal/render/markdown's two cost sweeps (Render, then RenderClaimBody
+      # with images ON) hit the alarm mid-shape after the race detector had
+      # already spent ~8m on the first sweep. The growth guards still run every
+      # shape; this only gives the instrumented binary time to finish them.
       - name: Test (race)
-        run: go test -race -json ./...
+        run: go test -race -timeout=20m -json ./...
 
   # The pre-commit gate is a shell script running a real binary against a real
   # git repository: the assertions that matter are "git refused the commit",

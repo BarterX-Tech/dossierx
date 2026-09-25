@@ -1,12 +1,10 @@
-id: widget.interface.surface
-facet: interface
+id: widget.contract.surface
+facet: contract
 module: widget
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is read and written through one accessor pair.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.overview

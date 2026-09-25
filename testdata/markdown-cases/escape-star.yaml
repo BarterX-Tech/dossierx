@@ -5,6 +5,6 @@ status: draft
 layout: card
 body: |
   You can escape a star like \* this.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests backslash escape (not yet supported)

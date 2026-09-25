@@ -1,0 +1,9 @@
+id: project.retention
+summary: A widget is kept for thirty days after its last use.
+scope: project
+status: draft
+layout: card
+body: |
+  A widget is kept for thirty days after its last use, whichever module holds it.
+rests_on:
+  - widget.contract.overview

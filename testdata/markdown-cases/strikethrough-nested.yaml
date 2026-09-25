@@ -7,6 +7,6 @@ body: |
   ~~**Struck and bold**~~, ~~*struck and italic*~~, and ~~`struck code`~~.
 
   A single ~tilde~ is literal, and so is a ~~~triple~~~ run.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - strikethrough is exactly two tildes, and it composes

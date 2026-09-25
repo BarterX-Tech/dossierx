@@ -8,6 +8,6 @@ body: |
   - Second item
 
   A non-indented, non-marker line after a blank line still ends the list.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - the non-regression half of the loose-list rule; a blank line followed by column-zero prose must still close the list

@@ -30,8 +30,8 @@ comments:
     created: "2026-07-27T10:00:00Z"
     body: a thread written before the digest store existed
     edited: false
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -533,8 +533,8 @@ comments:
     created: "2026-07-27T10:00:00Z"
     body: a thread nobody wrote, marked resolved by nobody
     edited: false
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 	if err := os.WriteFile(filepath.Join(p.claimsDir, "b.yaml"), []byte(forged), 0o644); err != nil {

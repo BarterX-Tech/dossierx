@@ -1,12 +1,10 @@
 id: cyclemod.contract.triangle-b
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: cyclemod
 status: draft
 layout: card
 body: |
   Node B of a 3-claim rests_on cycle: a -> b -> c -> a.
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine
 rests_on:
   - cyclemod.contract.triangle-c

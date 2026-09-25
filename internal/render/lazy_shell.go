@@ -11,7 +11,7 @@ import (
 // buildEagerShellData is the embedded shell's audited path. Every projection
 // below is emitted by that shell, so one shared output-derived budget remains
 // an honest early lower bound before the final exact writer.
-func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Template, buildOrderTemplate *template.Template, budget *renderByteBudget) (shellData, error) {
+func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Template, budget *renderByteBudget) (shellData, error) {
 	renderedByID, err := renderClaimsWithBudget(in.cat, partials, in.cat.Conformance, budget)
 	if err != nil {
 		return shellData{}, err
@@ -24,27 +24,17 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	}
 	in.graphPayload = graphPayload
 
-	buildOrders, buildOrderPayload, err := buildOrderTabDataWithBudget(in.cat, in.cfg, buildOrderTemplate, in.generatedAt, budget)
-	if err != nil {
-		return shellData{}, err
-	}
-	in.buildOrders = buildOrders
-	in.buildOrderPayload = buildOrderPayload
-
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
 	data.Tracks, err = buildTrackSectionsWithBudget(in.cat, in.cfg, renderedByID, budget)
 	if err != nil {
 		return shellData{}, fmt.Errorf("render: track sections: %w", err)
 	}
-	if err := buildOrderIDCollision(data.BuildOrders, data.ModuleGroups); err != nil {
-		return shellData{}, err
-	}
 	return data, nil
 }
 
 // lazyShellData preserves the historical `.Field` syntax of custom shell
-// templates while shadowing the five expensive promoted fields with zero-arg
+// templates while shadowing the expensive promoted fields with zero-arg
 // methods. html/template invokes those methods only when execution reaches the
 // action, so a static shell or a dead conditional branch computes nothing.
 type lazyShellData struct {
@@ -52,22 +42,15 @@ type lazyShellData struct {
 	projection *lazyShellProjection
 }
 
-func newLazyShellData(in shellInputs, partials map[model.Layout]*template.Template, buildOrderTemplate *template.Template, budget *renderByteBudget) *lazyShellData {
+func newLazyShellData(in shellInputs, partials map[model.Layout]*template.Template, budget *renderByteBudget) *lazyShellData {
 	return &lazyShellData{
 		shellData:  buildShellStaticData(in),
-		projection: &lazyShellProjection{in: in, partials: partials, buildOrderTemplate: buildOrderTemplate, budget: budget},
+		projection: &lazyShellProjection{in: in, partials: partials, budget: budget},
 	}
 }
 
 func (d *lazyShellData) ModuleGroups() ([]ModuleGroup, error) {
-	groups, err := d.projection.moduleGroups()
-	if err != nil {
-		return nil, err
-	}
-	if err := d.projection.noteGroupsRequested(); err != nil {
-		return nil, err
-	}
-	return groups, nil
+	return d.projection.moduleGroups()
 }
 
 func (d *lazyShellData) Tracks() ([]TrackSection, error) {
@@ -78,27 +61,10 @@ func (d *lazyShellData) GraphPayload() (template.JS, error) {
 	return d.projection.graphPayloadJSON()
 }
 
-func (d *lazyShellData) BuildOrders() (BuildOrderTab, error) {
-	tab, _, err := d.projection.buildOrderData()
-	if err != nil {
-		return BuildOrderTab{}, err
-	}
-	if err := d.projection.noteBuildOrderTabRequested(); err != nil {
-		return BuildOrderTab{}, err
-	}
-	return tab, nil
-}
-
-func (d *lazyShellData) BuildOrderPayload() (template.JS, error) {
-	_, payload, err := d.projection.buildOrderData()
-	return payload, err
-}
-
 type lazyShellProjection struct {
-	in                 shellInputs
-	partials           map[model.Layout]*template.Template
-	buildOrderTemplate *template.Template
-	budget             *renderByteBudget
+	in       shellInputs
+	partials map[model.Layout]*template.Template
+	budget   *renderByteBudget
 
 	claimsOnce sync.Once
 	claims     map[string]template.HTML
@@ -115,15 +81,6 @@ type lazyShellProjection struct {
 	graphOnce sync.Once
 	graph     template.JS
 	graphErr  error
-
-	buildOrderOnce    sync.Once
-	buildOrders       BuildOrderTab
-	buildOrderPayload template.JS
-	buildOrderErr     error
-
-	requestMu              sync.Mutex
-	groupsRequested        bool
-	buildOrderTabRequested bool
 }
 
 func (p *lazyShellProjection) renderedClaims() (map[string]template.HTML, error) {
@@ -162,51 +119,4 @@ func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {
 		p.graph, p.graphErr = graphPayloadJSONWithBudget(p.in.cat, p.in.cfg, p.in.generatedAt, p.budget)
 	})
 	return p.graph, p.graphErr
-}
-
-func (p *lazyShellProjection) buildOrderData() (BuildOrderTab, template.JS, error) {
-	p.buildOrderOnce.Do(func() {
-		p.buildOrders, p.buildOrderPayload, p.buildOrderErr = buildOrderTabDataWithBudget(
-			p.in.cat, p.in.cfg, p.buildOrderTemplate, p.in.generatedAt, p.budget,
-		)
-	})
-	return p.buildOrders, p.buildOrderPayload, p.buildOrderErr
-}
-
-func (p *lazyShellProjection) noteGroupsRequested() error {
-	p.requestMu.Lock()
-	p.groupsRequested = true
-	mustCheck := p.buildOrderTabRequested
-	p.requestMu.Unlock()
-	if !mustCheck {
-		return nil
-	}
-	tab, _, err := p.buildOrderData()
-	if err != nil {
-		return err
-	}
-	groups, err := p.moduleGroups()
-	if err != nil {
-		return err
-	}
-	return buildOrderIDCollision(tab, groups)
-}
-
-func (p *lazyShellProjection) noteBuildOrderTabRequested() error {
-	p.requestMu.Lock()
-	p.buildOrderTabRequested = true
-	mustCheck := p.groupsRequested
-	p.requestMu.Unlock()
-	if !mustCheck {
-		return nil
-	}
-	tab, _, err := p.buildOrderData()
-	if err != nil {
-		return err
-	}
-	groups, err := p.moduleGroups()
-	if err != nil {
-		return err
-	}
-	return buildOrderIDCollision(tab, groups)
 }

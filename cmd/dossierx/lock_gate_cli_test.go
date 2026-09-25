@@ -7,6 +7,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,9 +25,9 @@ import (
 // the loop. Every other refusal in the CLI carries its payload in data; this was
 // the exception, and nothing about lock justified being one.
 func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.router", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("fixture precondition: this lock must be refused, got %+v", env)
 	}
@@ -39,7 +40,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 
 	var data lockRefusedData
 	envData(t, env, &data)
-	if data.ClaimID != "widget.contract.b" {
+	if data.ClaimID != "widget.contract.router" {
 		t.Fatalf("the refusal payload must name the claim, got %+v", data)
 	}
 	if data.Gate != string(cliout.CodeLintFailed) {
@@ -50,7 +51,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 	}
 	named := false
 	for _, f := range data.LintFindings {
-		if f.Lint == "build-role-required-for-locked" && f.ClaimID == "widget.contract.b" {
+		if f.Lint == "roll-up" && f.ClaimID == "widget.contract.router" {
 			named = true
 		}
 		if f.Message == "" || f.Severity == "" {
@@ -77,9 +78,9 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 // duplicated prefix is worse than untidy — it is the sort of thing a consumer
 // writes a TrimPrefix against and then breaks on.
 func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
-	cfgPath := buildRoleAdoptedFixture(t)
+	cfgPath := restOnUnlockedFixture(t)
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.router", "--reason", "go")
 	if err == nil {
 		t.Fatalf("fixture precondition: this lock must be refused")
 	}
@@ -99,7 +100,7 @@ func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
 // ---------------------------------------------------------------------
 
 // rollUpDeadlockFixture is the shape that had no legal move: one LOCKED banner
-// claim (an orientation note, the ordinary way a banner exists) and TWO draft
+// claim (a banner layout) and TWO draft
 // claims in the same module.
 //
 // With roll-up as a project-wide error this failed `check`, `check --validate`,
@@ -111,18 +112,16 @@ func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
 func rollUpDeadlockFixture(t *testing.T, bannerStatus string) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/banner.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\n" +
-			"build_role: orientation\n" +
+		"claims/banner.yaml": "id: widget.contract.banner\nfacet: contract\nmodule: widget\nstatus: " + bannerStatus + "\nlayout: banner\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"embodiment:\n  mode: none\n  reason: context only, no code\n" +
 			"body: |\n  read the contract claims below in order.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
-		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"build_role: schema\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+		"claims/one.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  the first draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
-		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"build_role: behavior\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+		"claims/two.yaml": "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 			"body: |\n  the second draft claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 }
 
@@ -172,7 +171,7 @@ func TestRollUpStillRefusesTheBannersOwnLock(t *testing.T) {
 	// would (correctly) refuse first, testing the wrong gate.
 	cfgPath := rollUpDeadlockFixture(t, "draft")
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.banner", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("a banner must not lock while its module holds a draft, got %+v", env)
 	}
@@ -202,7 +201,7 @@ func TestRollUpStillRefusesTheBannersOwnLock(t *testing.T) {
 func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 	cfgPath := rollUpDeadlockFixture(t, "draft")
 
-	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.overview.router")
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.banner")
 	detail := ""
 	for _, p := range dr.Preconditions {
 		if p.Name == "lint_clean" {
@@ -215,14 +214,14 @@ func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 	if !strings.Contains(detail, "roll-up") {
 		t.Fatalf("the lint_clean detail must name the rule, got %q", detail)
 	}
-	if !strings.Contains(detail, "widget.overview.router") {
+	if !strings.Contains(detail, "widget.contract.banner") {
 		t.Fatalf("the lint_clean detail must name the offending banner, got %q", detail)
 	}
 	if !strings.Contains(detail, "widget.contract.one") {
 		t.Fatalf("the lint_clean detail must name the blocking sibling, got %q", detail)
 	}
 
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.overview.router")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.banner")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
@@ -233,5 +232,130 @@ func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 	actions := strings.Join(show.NextActions, "\n")
 	if !strings.Contains(actions, "roll-up") || !strings.Contains(actions, "widget.contract.one") {
 		t.Fatalf("claim show must name the rule and the blocking sibling, got %v", show.NextActions)
+	}
+}
+
+func moduleCapOverFixture(t *testing.T) string {
+	t.Helper()
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 1\n"
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the module cap.\n" +
+			"rests_on:\n  - widget.contract.b\n" +
+			"body: |\n  first card over a configured cap of one.\n",
+		"claims/b.yaml": "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the module cap.\n" +
+			"body: |\n  second card that puts the module over the cap.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+	})
+	return cfgPath
+}
+
+func TestLockRefusesWhenModuleExceedsClaimCap(t *testing.T) {
+	cfgPath := moduleCapOverFixture(t)
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	if err == nil || env.OK {
+		t.Fatalf("check --validate must fail an over-cap module, got %+v", env)
+	}
+
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	if err == nil || env.OK {
+		t.Fatalf("lock must refuse while the module is over the cap, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
+		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
+	}
+	var data lockRefusedData
+	envData(t, env, &data)
+	named := false
+	for _, f := range data.LintFindings {
+		if f.Lint == "module-claim-cap" && f.ClaimID == "widget.contract.b" {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatalf("data.lint_findings must name module-claim-cap on the candidate, got %+v", data.LintFindings)
+	}
+
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.b")
+	if !dr.Blocked {
+		t.Fatalf("dry-run must be blocked on an over-cap module: %+v", dr)
+	}
+}
+
+// TestLockSucceedsAtConfiguredModuleCap: eleven claims sit over the default cap
+// of ten, so this lock succeeds only if the configured cap of twelve was read.
+func TestLockSucceedsAtConfiguredModuleCap(t *testing.T) {
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 12\n"
+	files := map[string]string{}
+	for i := 0; i < 11; i++ {
+		files[fmt.Sprintf("claims/c%02d.yaml", i)] = fmt.Sprintf("id: widget.contract.c%02d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n", i) +
+			"summary: Fixture card for the module cap.\n" +
+			"body: |\n  one of eleven cards under a configured cap of twelve.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n"
+	}
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, files)
+
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+		t.Fatalf("check --validate must be clean under the configured cap: %v", err)
+	}
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.c00", "--reason", "approved"); err != nil {
+		t.Fatalf("locking a claim under the configured module cap must succeed: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------
+// --semantic-conflict
+// ---------------------------------------------------------------------
+
+// TestLockSemanticConflictRefusesForHumanReview pins what the flag does: it
+// refuses the named claim for human review with review_pending, and — because
+// the contradiction is recorded nowhere and claim show cannot name it — the
+// hint says so instead of leaving the router's generic "claim show names the
+// trigger" recovery to send the agent looking for a trigger that is not there.
+// A conflict on a claim the call does not lock is refused, since it would
+// otherwise refuse nothing and the lock would go ahead.
+func TestLockSemanticConflictRefusesForHumanReview(t *testing.T) {
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	card := func(slug string) string {
+		return "id: widget.contract." + slug + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the semantic conflict.\n" +
+			"body: |\n  the widget answers within 200ms.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n"
+	}
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, map[string]string{
+		"claims/a.yaml": card("a"),
+		"claims/b.yaml": card("b"),
+	})
+	conflict := "widget.contract.a=widget.contract.b=a says 200ms, b says 500ms"
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "go", "--semantic-conflict", conflict)
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeReviewPending {
+		t.Fatalf("expected %q, got err=%v env=%+v", cliout.CodeReviewPending, err, env.Error)
+	}
+	if !strings.Contains(env.Error.Hint, "recorded nowhere") || !strings.Contains(env.Error.Hint, "dossierx claim lock widget.contract.a --dry-run") {
+		t.Fatalf("the hint must say the conflict is not recorded and name the re-preview, got %q", env.Error.Hint)
+	}
+	details, ok := env.Error.Details.(map[string]any)
+	if !ok {
+		t.Fatalf("error.details must be an object, got %#v", env.Error.Details)
+	}
+	got, err := json.Marshal(details["semantic_conflicts"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "widget.contract.b:a says 200ms, b says 500ms") {
+		t.Fatalf("error.details.semantic_conflicts must carry the dependency and the reason, got %s", got)
+	}
+	var data lockRefusedData
+	envData(t, env, &data)
+	if data.Gate != string(cliout.CodeReviewPending) {
+		t.Fatalf("data.gate must agree with error.code, got %q", data.Gate)
+	}
+
+	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--dry-run", "--semantic-conflict", conflict)
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeBadRequest {
+		t.Fatalf("a conflict on a claim not being locked must be refused, got err=%v env=%+v", err, env.Error)
 	}
 }

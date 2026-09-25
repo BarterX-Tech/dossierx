@@ -17,7 +17,7 @@ func TestBuildDirPathHelpersResolveUnderTheBuildDirectory(t *testing.T) {
 	}
 	p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
-facets: [contract]
+facets: [contract, internals]
 modules: [ledger, widget]
 claims_dir: claims
 `)
@@ -33,12 +33,12 @@ claims_dir: claims
 		want string
 	}{
 		{"BuildDirPath", cfg.BuildDirPath(), build},
-		{"BuildOrderPath", cfg.BuildOrderPath("widget"), filepath.Join(build, "build-order", "widget.json")},
 		{"CodeLinksPath", cfg.CodeLinksPath("widget"), filepath.Join(build, "code-links", "widget.json")},
 		{"LockStorePath", cfg.LockStorePath(), filepath.Join(build, "ledger", "lock-store.json")},
 		{"CommentDigestPath", cfg.CommentDigestPath(), filepath.Join(build, "ledger", "comment-digest.json")},
 		{"FlagStorePath", cfg.FlagStorePath(), filepath.Join(build, "ledger", "flag-store.json")},
 		{"CatalogPath", cfg.CatalogPath(), filepath.Join(build, "catalog", "catalog.json")},
+		{"ConformanceStatusPath", cfg.ConformanceStatusPath(), filepath.Join(build, "conformance", "status.json")},
 		{"ViewerPath", cfg.ViewerPath(), filepath.Join(build, "viewer", "index.html")},
 		{"ClaimsSentinelPath", cfg.ClaimsSentinelPath(), filepath.Join(build, "ledger", "claims")},
 		{"BuildGitignorePath", cfg.BuildGitignorePath(), filepath.Join(build, ".gitignore")},
@@ -64,7 +64,7 @@ func TestTrackedStoreFileNamesAreTheLedgerBaseNames(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract]\nmodules: [m]\nclaims_dir: claims\n")
+	p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract, internals]\nmodules: [m]\nclaims_dir: claims\n")
 	cfg, err := LoadConfig(p)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)

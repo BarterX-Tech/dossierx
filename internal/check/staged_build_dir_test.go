@@ -1,18 +1,16 @@
 // staged_build_dir_test.go pins how `check --staged` reads the build/ layout
 // out of the index: the legacy-root refusal it shares with every other verb,
-// the build-order artifact judged from its index copy, the base-name collision
-// materializeIndexFile closes, and the decode-confirmed store match that keeps
-// an unrelated repository file named lock-store.json from being a refusal.
+// the untracked-config refusal over a staged ledger, and the decode-confirmed
+// store match that keeps an unrelated repository file named lock-store.json
+// from being a refusal.
 //
 // These rows live beside TestStaged_AgreesWithValidateOnAMatrixOfTamperedTrees
-// rather than inside it because they need fixtures the matrix's parityFixture
-// cannot provide: a build order needs a FULLY locked module with no open
-// thread (buildorder.Propose's completeness gates), while the parity fixture
-// holds a commented draft on purpose.
+// rather than inside it because each needs an index shape the matrix's
+// parityFixture does not have: a partial commit, a legacy root file, or a
+// second project in the same repository.
 package check_test
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,55 +20,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 )
-
-// orderedClaimIn is orderedClaim for a module other than widget.
-func orderedClaimIn(module, id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\n" +
-		"build_role: behavior\n" +
-		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
-}
-
-// committedBuildOrderFixture is a project whose one module is fully locked,
-// with its build order locked and recorded, everything committed.
-func committedBuildOrderFixture(t *testing.T, cfgBody string, files map[string]string, modules ...string) *config.Config {
-	t.Helper()
-	cfg, claims := project(t, cfgBody, files)
-	for _, m := range modules {
-		lockBuildOrder(t, cfg, claims, m)
-	}
-	gitRepo(t, cfg.Dir())
-	git(t, cfg.Dir(), "add", "-A")
-	git(t, cfg.Dir(), "commit", "-qm", "fixture")
-	if rules := validateRules(t, cfg); len(rules) != 0 {
-		t.Fatalf("fixture precondition: the honest project must be silent under --validate, got %v", rules)
-	}
-	return cfg
-}
-
-// tamperArtifact hand-edits module's build-order artifact on disk.
-func tamperArtifact(t *testing.T, cfg *config.Config, module string) {
-	t.Helper()
-	path := cfg.BuildOrderPath(module)
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read artifact: %v", err)
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("parse artifact: %v", err)
-	}
-	doc["excluded"] = []string{module + ".contract.smuggled"}
-	edited, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal edited artifact: %v", err)
-	}
-	if err := os.WriteFile(path, edited, 0o644); err != nil {
-		t.Fatalf("write edited artifact: %v", err)
-	}
-}
 
 // A commit that still carries a legacy root file refuses with layout_legacy —
 // the same refusal every other verb gives on the working-tree form — even when
@@ -107,109 +57,6 @@ func TestStaged_LegacyRootFilesInTheIndexRefuseWithLayoutLegacy(t *testing.T) {
 	if !strings.Contains(ce.Message, "git mv .dossierx-lock-store.json build/ledger/lock-store.json") {
 		t.Fatalf("the refusal must print the git mv line for the tracked file, got:\n%s", ce.Message)
 	}
-}
-
-// A locked build order under build/build-order/ is judged from its INDEX copy
-// by --staged and from disk by --validate, and the two agree: honest is
-// silent, a staged tamper is build-order-content-drift in both. A tamper left
-// in the worktree only is refused by --validate (the worktree gate) and is,
-// by design, invisible to --staged, which reads the commit — the direction
-// TestStaged_VerdictFollowsTheIndexNotTheWorktree pins for claims.
-func TestStaged_BuildOrderUnderBuildDirIsJudgedByBothModes(t *testing.T) {
-	files := map[string]string{"claims/a.yaml": orderedClaim("widget.contract.a")}
-
-	t.Run("honest", func(t *testing.T) {
-		cfg := committedBuildOrderFixture(t, baseConfig, files, "widget")
-		if _, err := os.Stat(filepath.Join(cfg.Dir(), "build", "build-order", "widget.json")); err != nil {
-			t.Fatalf("the artifact must sit under build/build-order/: %v", err)
-		}
-		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped || len(got) != 0 {
-			t.Fatalf("--staged on the honest tree: skipped=%v rules=%v", skipped, got)
-		}
-	})
-
-	t.Run("staged tamper", func(t *testing.T) {
-		cfg := committedBuildOrderFixture(t, baseConfig, files, "widget")
-		tamperArtifact(t, cfg, "widget")
-		git(t, cfg.Dir(), "add", "-A")
-		want := validateRules(t, cfg)
-		if !hasName(want, check.RuleBuildOrderContentDrift) {
-			t.Fatalf("control precondition: --validate must refuse the tamper as %s, got %v", check.RuleBuildOrderContentDrift, want)
-		}
-		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped {
-			t.Fatalf("--staged took the escape hatch on a tree --validate refuses with %v", want)
-		}
-		if strings.Join(got, ",") != strings.Join(want, ",") {
-			t.Fatalf("the two modes disagree:\n--staged:   %v\n--validate: %v", got, want)
-		}
-	})
-
-	t.Run("worktree-only tamper", func(t *testing.T) {
-		cfg := committedBuildOrderFixture(t, baseConfig, files, "widget")
-		tamperArtifact(t, cfg, "widget")
-		if !hasName(validateRules(t, cfg), check.RuleBuildOrderContentDrift) {
-			t.Fatalf("the worktree gate must refuse a hand-edited artifact under build/build-order/")
-		}
-		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped || len(got) != 0 {
-			t.Fatalf("--staged judges the commit, whose artifact is untouched: skipped=%v rules=%v", skipped, got)
-		}
-	})
-}
-
-// A module literally named "lock-store" has a build-order artifact whose BASE
-// NAME is the ledger's (build/build-order/lock-store.json beside
-// build/ledger/lock-store.json). Both must survive materialisation into the
-// temp directory and both must be judged: a tampered artifact is
-// build-order-content-drift and a deleted ledger is lock-ledger-absent, in
-// --staged as in --validate. A base-name copy would overwrite one with the
-// other and one of the two rows would go quiet.
-func TestStaged_ModuleNamedLockStoreSurvivesMaterialisation(t *testing.T) {
-	cfgBody := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - lock-store\nclaims_dir: claims\n"
-	files := map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
-		"claims/b.yaml": orderedClaimIn("lock-store", "lock-store.contract.b"),
-	}
-
-	t.Run("honest", func(t *testing.T) {
-		cfg := committedBuildOrderFixture(t, cfgBody, files, "widget", "lock-store")
-		if filepath.Base(cfg.BuildOrderPath("lock-store")) != filepath.Base(cfg.LockStorePath()) {
-			t.Fatalf("fixture precondition: the two base names must collide, got %q and %q", cfg.BuildOrderPath("lock-store"), cfg.LockStorePath())
-		}
-		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped || len(got) != 0 {
-			t.Fatalf("--staged on the honest tree: skipped=%v rules=%v", skipped, got)
-		}
-	})
-
-	t.Run("the artifact tampered", func(t *testing.T) {
-		cfg := committedBuildOrderFixture(t, cfgBody, files, "widget", "lock-store")
-		tamperArtifact(t, cfg, "lock-store")
-		git(t, cfg.Dir(), "add", "-A")
-		want := validateRules(t, cfg)
-		if !hasName(want, check.RuleBuildOrderContentDrift) {
-			t.Fatalf("control precondition: --validate must refuse as %s, got %v", check.RuleBuildOrderContentDrift, want)
-		}
-		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped || strings.Join(got, ",") != strings.Join(want, ",") {
-			t.Fatalf("the artifact named like the ledger was not judged from the index:\n--staged:   %v (skipped=%v)\n--validate: %v", got, skipped, want)
-		}
-	})
-
-	t.Run("the ledger deleted", func(t *testing.T) {
-		cfg := committedBuildOrderFixture(t, cfgBody, files, "widget", "lock-store")
-		git(t, cfg.Dir(), "rm", "-q", config.LockStoreDisplayPath)
-		want := validateRules(t, cfg)
-		if !hasName(want, lock.RuleLockLedgerAbsent) {
-			t.Fatalf("control precondition: --validate must refuse as %s, got %v", lock.RuleLockLedgerAbsent, want)
-		}
-		got, skipped := stagedRulesOrSkipped(t, cfg)
-		if skipped || !hasName(got, lock.RuleLockLedgerAbsent) {
-			t.Fatalf("the ledger must be judged absent from the index, not read from the artifact that shares its name: got %v (skipped=%v)", got, skipped)
-		}
-	})
 }
 
 // An untracked config whose build_dir points somewhere else does not decide

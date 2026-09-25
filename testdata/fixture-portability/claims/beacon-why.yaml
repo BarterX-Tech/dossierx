@@ -1,5 +1,6 @@
-id: beacon.rationale.why-simple
-facet: rationale
+id: beacon.internals.why-simple
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: beacon
 status: draft
 layout: card
@@ -7,7 +8,4 @@ body: |
   Beacons stay deliberately simple so this fixture project can exercise the
   rationale facet without any doctrine hub configured at all.
 rests_on:
-  - beacon.spec.overview
-governed_by:
-  type: none
-  reason: portability fixture claim, not backed by any real doctrine
+  - beacon.internals.overview

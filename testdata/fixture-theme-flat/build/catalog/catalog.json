@@ -10,15 +10,11 @@
       "edges": {
         "rests_on": [
           "panel.contract.behavior"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "readiness": {
         "claim_id": "panel.contract.api",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -34,92 +30,11 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "panel.internals.state"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "panel.contract.behavior",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "panel.decision.mockup",
-      "facet": "decision",
-      "module": "panel",
-      "status": "locked",
-      "layout": "mockup",
-      "kind": "fact",
-      "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "panel.decision.mockup",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "panel.internals.state",
-      "facet": "internals",
-      "module": "panel",
-      "status": "locked",
-      "layout": "list",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "panel.decision.mockup"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "panel.internals.state",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
-        "dependency_ready": true,
-        "ready": true,
-        "review_pending": false
-      }
-    },
-    {
-      "id": "panel.internals.verification",
-      "facet": "internals",
-      "module": "panel",
-      "status": "locked",
-      "layout": "card",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "panel.contract.api"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "panel.internals.verification",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": true,
         "locally_approved": true,
         "dependency_ready": true,
@@ -135,10 +50,8 @@
       "layout": "card",
       "kind": "fact",
       "edges": {
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        "rests_on_none": true,
+        "rests_on_reason": "fixture claim, not backed by any real doctrine"
       },
       "tracks": [
         {
@@ -148,7 +61,7 @@
       ],
       "readiness": {
         "claim_id": "widget.contract.overview",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": true,
@@ -164,17 +77,13 @@
       "id": "widget.contract.reviewed",
       "facet": "contract",
       "module": "widget",
-      "status": "locked",
+      "status": "draft",
       "layout": "card",
       "kind": "fact",
       "edges": {
         "rests_on": [
           "panel.contract.api"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        ]
       },
       "tracks": [
         {
@@ -184,9 +93,9 @@
       ],
       "readiness": {
         "claim_id": "widget.contract.reviewed",
-        "policy_version": 0,
-        "local_approved": true,
-        "locally_approved": true,
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
         "dependency_ready": true,
         "ready": false,
         "review_pending": true,
@@ -198,6 +107,16 @@
               "widget.contract.reviewed"
             ],
             "detail": "c-7e728a",
+            "direct": true,
+            "inherited": false
+          },
+          {
+            "kind": "unapproved_edit",
+            "source_kind": "unapproved_edit",
+            "path": [
+              "widget.contract.reviewed"
+            ],
+            "detail": "this claim was approved, then unlocked and rewritten; what is written differs from what was approved",
             "direct": true,
             "inherited": false
           }
@@ -212,8 +131,22 @@
             "detail": "c-7e728a",
             "direct": true,
             "inherited": false
+          },
+          {
+            "kind": "unapproved_edit",
+            "source_kind": "unapproved_edit",
+            "path": [
+              "widget.contract.reviewed"
+            ],
+            "detail": "this claim was approved, then unlocked and rewritten; what is written differs from what was approved",
+            "direct": true,
+            "inherited": false
           }
-        ]
+        ],
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     },
     {
@@ -224,13 +157,7 @@
       "layout": "steps",
       "kind": "fact",
       "edges": {
-        "rests_on": [
-          "widget.internals.fields"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
+        "rests_on_internals_omitted": 1
       },
       "tracks": [
         {
@@ -240,7 +167,7 @@
       ],
       "readiness": {
         "claim_id": "widget.contract.walkthrough",
-        "policy_version": 0,
+        "policy_version": 1,
         "local_approved": false,
         "locally_approved": false,
         "dependency_ready": false,
@@ -252,17 +179,17 @@
             "dependency_id": "widget.contract.overview",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields",
+              "(internals)",
               "widget.contract.overview"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "widget.internals.fields",
+            "dependency_id": "(internals)",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -273,121 +200,17 @@
             "dependency_id": "widget.contract.overview",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields",
+              "(internals)",
               "widget.contract.overview"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "widget.internals.fields",
+            "dependency_id": "(internals)",
             "path": [
               "widget.contract.walkthrough",
-              "widget.internals.fields"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "widget.decision.boundary",
-      "facet": "decision",
-      "module": "widget",
-      "status": "draft",
-      "layout": "banner",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "widget.contract.overview"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "widget.decision.boundary",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "widget.contract.overview",
-            "path": [
-              "widget.decision.boundary",
-              "widget.contract.overview"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "widget.contract.overview",
-            "path": [
-              "widget.decision.boundary",
-              "widget.contract.overview"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "local_reasons": [
-          "claim status \"draft\" is not locally approved"
-        ],
-        "local_approval_issue": "claim status \"draft\" is not locally approved"
-      }
-    },
-    {
-      "id": "widget.internals.fields",
-      "facet": "internals",
-      "module": "widget",
-      "status": "draft",
-      "layout": "table",
-      "kind": "fact",
-      "edges": {
-        "rests_on": [
-          "widget.contract.overview"
-        ],
-        "governed_by": {
-          "type": "none",
-          "reason": "fixture claim, not backed by any real doctrine"
-        }
-      },
-      "readiness": {
-        "claim_id": "widget.internals.fields",
-        "policy_version": 0,
-        "local_approved": false,
-        "locally_approved": false,
-        "dependency_ready": false,
-        "ready": false,
-        "review_pending": false,
-        "dependency_conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "widget.contract.overview",
-            "path": [
-              "widget.internals.fields",
-              "widget.contract.overview"
-            ],
-            "detail": "required dependency is not locally approved"
-          }
-        ],
-        "conditions": [
-          {
-            "kind": "dependency_unapproved",
-            "dependency_id": "widget.contract.overview",
-            "path": [
-              "widget.internals.fields",
-              "widget.contract.overview"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -406,31 +229,17 @@
       "widget.contract.overview",
       "widget.contract.reviewed",
       "widget.contract.walkthrough"
-    ],
-    "decision": [
-      "panel.decision.mockup",
-      "widget.decision.boundary"
-    ],
-    "internals": [
-      "panel.internals.state",
-      "panel.internals.verification",
-      "widget.internals.fields"
     ]
   },
   "by_module": {
     "panel": [
       "panel.contract.api",
-      "panel.contract.behavior",
-      "panel.decision.mockup",
-      "panel.internals.state",
-      "panel.internals.verification"
+      "panel.contract.behavior"
     ],
     "widget": [
       "widget.contract.overview",
       "widget.contract.reviewed",
-      "widget.contract.walkthrough",
-      "widget.decision.boundary",
-      "widget.internals.fields"
+      "widget.contract.walkthrough"
     ]
   }
 }

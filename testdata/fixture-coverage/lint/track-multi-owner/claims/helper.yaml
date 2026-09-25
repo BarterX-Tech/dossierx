@@ -1,4 +1,5 @@
 id: trackmod.contract.helper
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: trackmod
 status: draft
@@ -6,6 +7,6 @@ layout: card
 body: |
   Helper claim, targeted by the two-owner claim's rests_on edge so neither claim
   trips the orphan warning. It declares no track membership of its own.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture claim, not backed by any real doctrine

@@ -2,7 +2,6 @@ package lock
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,9 +41,10 @@ func downgradeStoreVersion(t *testing.T, path string) {
 // downgrade is reported once, project-scoped; the refusals have to hold
 // everywhere. See Store.LedgerEstablished.
 //
-// Without that change this fails at the Lock assertion: commentDigestUnrecorded
+// Without that change this fails at the refusal assertion: commentDigestUnrecorded
 // asks LedgerCovered, gets false from the edited version field, and the lock
-// succeeds — writing an entry that certifies the forged comment block.
+// policy admits the claim — whose approval then writes an entry that certifies
+// the forged comment block.
 func TestTheDigestGatesStayArmedOnADowngradedStore(t *testing.T) {
 	withRegistry(t)
 
@@ -56,8 +56,8 @@ func TestTheDigestGatesStayArmedOnADowngradedStore(t *testing.T) {
 	// A real lock takes the project across into ledger coverage and creates the
 	// comment digest store beside the lock store.
 	other := model.Claim{ID: "widget.contract.other", Facet: "contract", Module: "widget", Body: "unrelated"}
-	if _, err := Lock(other, []model.Claim{other}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"}); err != nil {
-		t.Fatalf("seed Lock: %v", err)
+	if _, err := approve(other, []model.Claim{other}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"}); err != nil {
+		t.Fatalf("seed approve: %v", err)
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -91,16 +91,13 @@ func TestTheDigestGatesStayArmedOnADowngradedStore(t *testing.T) {
 	if !store.CommentDigestUnrecorded(forged) {
 		t.Fatalf("the deleted-digest-key state must still be recognised on a downgraded store")
 	}
-	_, lockErr := Lock(forged, []model.Claim{forged}, testConfig(), store, Approval{Actor: "mallory", Reason: "the thread reads resolved"})
-	if !errors.Is(lockErr, ErrCommentDigestUnrecorded) {
-		t.Fatalf("locking must stay refused on a downgraded store; got %v", lockErr)
-	}
+	requireRefusal(t, []model.Claim{forged}, forged.ID, testConfig(), store, "comment_digest_unrecorded")
 	after, err := digest.LoadStore(digest.StorePathBeside(storePath))
 	if err != nil {
 		t.Fatalf("digest.LoadStore: %v", err)
 	}
 	if _, known := after.Digest(forged.ID); known {
-		t.Fatalf("the refused lock still recorded a digest for the forged comment block")
+		t.Fatalf("evaluating the refused lock still recorded a digest for the forged comment block")
 	}
 }
 

@@ -1,4 +1,5 @@
 id: rollupmod.contract.sibling
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: rollupmod
 status: draft
@@ -7,6 +8,3 @@ body: |
   A still-draft sibling in the same module as the locked banner claim.
 rests_on:
   - rollupmod.contract.banner
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

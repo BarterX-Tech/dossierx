@@ -85,6 +85,17 @@
 #                          move that TAKES ITS CLAIMS WITH IT still commits, and
 #                          the gate is still armed against a hand-edited locked
 #                          claim afterwards.
+#  22  project claims      a locked module claim resting on a locked PROJECT
+#                          claim (project-claims/<slug>.yaml, a second store
+#                          beside claims_dir) commits through the hook. The
+#                          gate used to enumerate claims_dir alone, so this
+#                          exact tree was refused as `dangling` plus
+#                          `lock-ledger-abandoned` while plain check accepted
+#                          it — a project that adopted project claims could not
+#                          commit through the hook at all.
+#  23  project claim gate  and the second store is JUDGED, not merely tolerated:
+#                          a hand-edited locked project claim is refused exactly
+#                          like a hand-edited locked module claim.
 #
 # Usage: bash scripts/hook-smoke-test.sh
 # Exit status: 0 all assertions held; 1 the first one that did not.
@@ -137,8 +148,6 @@ build/*
 !build/.gitignore
 !build/ledger
 !build/ledger/*
-!build/build-order
-!build/build-order/*
 !build/code-links
 !build/code-links/*
 EOF
@@ -167,6 +176,44 @@ reviewed_lock() {
 # is not installed, so point every hook run at the one we just built.
 export DOSSIERX_BIN="$BIN"
 
+# arm_roof <config-dir> — the locked constitution the lock gate demands
+# (NIT-26): no claim locks and no plain check passes until the project's roof
+# is locked, so every fixture here needs one before its first "check". The
+# file lands BESIDE project.config.yaml — in whatever directory the fixture
+# keeps its config, which is not always the repository root (case 17 keeps it
+# in docs/, case 19 in repo/) — and it is locked through the REAL command, so
+# the lock store carries the same record a human's `constitution lock` leaves
+# and the gate judges a roof that was actually approved, not a status line
+# somebody typed.
+arm_roof() {
+	local dir="$1"
+	cat >"$dir/constitution.yaml" <<'YAML'
+status: draft
+invariants:
+  - slug: one-roof
+    title: One roof
+    body: This fixture has one lockable constitution above every module.
+YAML
+	(cd "$dir" && "$BIN" constitution lock --reason "smoke-test roof" --format text >/dev/null) ||
+		fail "constitution lock failed in $dir; no fixture claim can lock without the roof"
+}
+
+# arm_manifest <claims-dir> <module> — the module-manifest harness (NIT-7):
+# every configured module needs exactly one claims_dir/<module>/manifest.yaml
+# before "check" or "claim lock" passes. "claim new" itself only writes an
+# empty-summary STUB (deliberately unfrictioned drafting, refused until an
+# agent fills it in), so every fixture below drafts one here, the same way an
+# agent would from "dossierx manifest show <module> --isolation".
+arm_manifest() {
+	local claims_dir="$1" module="$2"
+	mkdir -p "$claims_dir/$module"
+	cat >"$claims_dir/$module/manifest.yaml" <<YAML
+summary: module $module — the smoke test's fixture module.
+provides: []
+depends_on: []
+YAML
+}
+
 CLAIM_ID="widget.contract.overview"
 
 # new_project <dir> — a git repository containing a one-claim dossierx project
@@ -179,6 +226,7 @@ new_project() {
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -189,9 +237,12 @@ YAML
 		git config user.email hook-smoke@example.invalid
 		git config user.name "hook smoke test"
 		git config commit.gpgsign false
+		arm_roof "$dir"
+		arm_manifest "$dir/claims" widget
 		"$BIN" claim new "$CLAIM_ID" \
+			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
-			--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
 		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -209,15 +260,19 @@ add_project() {
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: claims
 YAML
 	(
 		cd "$repo/$sub"
+		arm_roof "$repo/$sub"
+		arm_manifest "$repo/$sub/claims" widget
 		"$BIN" claim new "$CLAIM_ID" \
+			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
-			--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
 		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -659,6 +714,7 @@ cat >"$SPLIT/docs/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: ../claims
@@ -672,9 +728,12 @@ YAML
 )
 (
 	cd "$SPLIT/docs"
+	arm_roof "$SPLIT/docs"
+	arm_manifest "$SPLIT/claims" widget
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
-		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
 	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -732,7 +791,7 @@ cp "$UNTRACKED/claims/$CLAIM_ID.yaml" "$UNTRACKED/decoy/"
 # Commit the claims and the ledger WITHOUT the config, before the hook exists —
 # the hook would (correctly, after this fix) refuse to be the thing that creates
 # this state.
-(cd "$UNTRACKED" && git add claims decoy build/ledger/lock-store.json build/ledger/comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
+(cd "$UNTRACKED" && git add claims decoy constitution.yaml build/ledger/lock-store.json build/ledger/comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
 	fail "could not build the untracked-config fixture: $(cat "$TMP/untracked-commit1.out")"
 (cd "$UNTRACKED" && git ls-files --error-unmatch project.config.yaml) >/dev/null 2>&1 &&
 	fail "the fixture tracked project.config.yaml; this case must leave it untracked"
@@ -768,7 +827,7 @@ grep -q 'project.config.yaml' "$TMP/untracked-commit2.out" ||
 #
 # The reachable shape is claims_dir resolving OUTSIDE the repository altogether
 # AND the index holding nothing else the ledger gate could judge — no lock
-# ledger, no comment digest store, no build-order artifact. Then no commit could
+# ledger, no comment digest store. Then no commit could
 # carry the claims and the engine genuinely has nothing to look at. Silence is
 # the wrong answer there too: the hook is installed to guard these claims, and
 # "I could not look at them" is a refusal, not an approval.
@@ -790,6 +849,7 @@ cat >"$SKIPPED/repo/project.config.yaml" <<'YAML'
 schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - widget
 claims_dir: ../outside-claims
@@ -800,9 +860,12 @@ YAML
 	git config user.email hook-smoke@example.invalid
 	git config user.name "hook smoke test"
 	git config commit.gpgsign false
+	arm_roof "$SKIPPED/repo"
+	arm_manifest "$SKIPPED/outside-claims" widget
 	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
-		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
 	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -849,7 +912,7 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 # hook and CI actually run was the permissive one.
 #
 # That mode disagreement is closed: the skip is now reached only when the index
-# holds no lock ledger, no comment digest store and no build-order artifact —
+# holds no lock ledger and no comment digest store —
 # i.e. only when there is genuinely nothing to judge, which is case 19 above.
 # With a ledger present the tree is judged over an empty registry, because no
 # commit can carry those claims, and the ledger's standing records are reported
@@ -1022,4 +1085,98 @@ if (cd "$MOVE" && git commit -qm "docs: tweak") >"$TMP/scope-move-tamper.out" 2>
 	fail "after a sanctioned claims_dir move the gate stopped catching a hand-edited locked claim: $(cat "$TMP/scope-move-tamper.out")"
 fi
 
-echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it. Doing BOTH of those halves in ONE change is not refused, and that is the boundary rather than a bug: an in-repo ledger cannot attest anything against the person who can write it, so a change that rewrites a claim and the record approving it together leaves nothing behind to disagree. FORMAT.md states the boundary in full; internal/check/staged_no_parent_test.go and internal/lock/audit_boundary_test.go pin it."
+# --- 22 · a PROJECT CLAIM under a module claim, both locked, still commits ---
+#
+# The project-claims store (project-claims/<slug>.yaml, config
+# project_claims_dir, a sibling of claims_dir and never inside it) is read by
+# plain check through loader.LoadAll, merged with the module claims before
+# anything is linted or audited. "check --staged" used to enumerate the
+# claims_dir pathspec alone: the module claim resting on project.<slug> came
+# out `dangling`, the locked project claim's approval came out
+# `lock-ledger-abandoned`, and the hook refused a tree `check` and `check
+# --validate` both accepted. The gate now reads project-claims/ out of the
+# index exactly as it reads claims/, and THIS is the commit that has to pass:
+# the hook is installed BEFORE the first commit, so the baseline itself goes
+# through the gate.
+echo "hook-smoke-test: a locked module claim resting on a locked project claim still commits ..."
+PROJCLAIMS="$TMP/project-claims"
+PROJECT_CLAIM_ID="project.scope"
+mkdir -p "$PROJCLAIMS/claims"
+cat >"$PROJCLAIMS/project.config.yaml" <<'YAML'
+schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - widget
+claims_dir: claims
+YAML
+(
+	cd "$PROJCLAIMS"
+	git init -q .
+	git config user.email hook-smoke@example.invalid
+	git config user.name "hook smoke test"
+	git config commit.gpgsign false
+	arm_roof "$PROJCLAIMS"
+	arm_manifest "$PROJCLAIMS/claims" widget
+	"$BIN" claim new "$PROJECT_CLAIM_ID" \
+		--summary "Every widget this project documents is kept under one roof." \
+		--body "every widget this project documents is kept under one roof." \
+		--rests-on-none-reason "the roof above this claim is the constitution, which is not a claim" \
+		--format text >/dev/null
+	"$BIN" claim new "$CLAIM_ID" \
+		--summary "The widget answers within 200ms." \
+		--body "the widget answers within 200ms." \
+		--rests-on "$PROJECT_CLAIM_ID" \
+		--format text >/dev/null
+	"$BIN" check --format text >/dev/null
+	reviewed_lock "$PROJECT_CLAIM_ID" "approved for the smoke test"
+	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
+)
+[ -f "$PROJCLAIMS/project-claims/scope.yaml" ] ||
+	fail "claim new $PROJECT_CLAIM_ID did not write into project-claims/, so this case is not exercising the second store"
+grep -q 'status: locked' "$PROJCLAIMS/project-claims/scope.yaml" ||
+	fail "the project claim did not lock, so this case is not exercising a LOCKED project claim"
+(cd "$PROJCLAIMS" && sh "$INSTALLER" --yes) >"$TMP/projclaims-install.out" 2>&1 ||
+	fail "install into the project-claims fixture failed: $(cat "$TMP/projclaims-install.out")"
+(cd "$PROJCLAIMS" && git add -A && git commit -qm "claims, project claims and their approvals") >"$TMP/projclaims-commit.out" 2>&1 ||
+	fail "the gate refused an honest commit in a project that uses project claims — a locked module claim resting on a locked project claim: $(cat "$TMP/projclaims-commit.out")"
+# And it JUDGED the tree rather than skipping it: the project claim is in the
+# staged registry, so an honest run names no finding and no skip.
+(cd "$PROJCLAIMS" && "$BIN" check --staged --format json) >"$TMP/projclaims-status.out" 2>&1 ||
+	fail "check --staged failed on the honest project-claims tree it had just let commit: $(cat "$TMP/projclaims-status.out")"
+grep -q '"skipped"' "$TMP/projclaims-status.out" &&
+	fail "check --staged skipped the project-claims tree instead of judging it: $(cat "$TMP/projclaims-status.out")"
+grep -q 'dangling' "$TMP/projclaims-status.out" &&
+	fail "check --staged still reports the project claim as dangling: $(cat "$TMP/projclaims-status.out")"
+
+# --- 23 · a hand-edited LOCKED PROJECT CLAIM is refused --------------------
+#
+# The other half of 22, and the one that makes it a gate rather than a
+# tolerance: the second store is judged by the same rules as the first, so a
+# locked project claim rewritten in the file — no unlock, no new record — is
+# refused with the same lock-content-drift the module store gets.
+echo "hook-smoke-test: hand-editing the locked project claim and committing (must be refused) ..."
+sed 's/under one roof/under one shared roof/' "$PROJCLAIMS/project-claims/scope.yaml" >"$PROJCLAIMS/project-claims/scope.yaml.tmp"
+mv "$PROJCLAIMS/project-claims/scope.yaml.tmp" "$PROJCLAIMS/project-claims/scope.yaml"
+grep -q 'under one shared roof' "$PROJCLAIMS/project-claims/scope.yaml" ||
+	fail "the project-claim tamper did not change the claim body"
+(cd "$PROJCLAIMS" && git add -A) || fail "could not stage the project-claim tamper"
+projclaims_status_before=$(cd "$PROJCLAIMS" && git status --porcelain)
+if (cd "$PROJCLAIMS" && git commit -qm "sneak a project-claim edit past review") >"$TMP/projclaims-tamper.out" 2>&1; then
+	fail "the commit SUCCEEDED after a locked PROJECT claim was hand-edited — the second store is not gated"
+fi
+grep -qi 'refused' "$TMP/projclaims-tamper.out" ||
+	fail "the project-claim refusal did not say so in words a human can act on: $(cat "$TMP/projclaims-tamper.out")"
+grep -q "$PROJECT_CLAIM_ID" "$TMP/projclaims-tamper.out" ||
+	fail "the refusal did not name the tampered project claim $PROJECT_CLAIM_ID: $(cat "$TMP/projclaims-tamper.out")"
+grep -q 'claim unlock' "$TMP/projclaims-tamper.out" ||
+	fail "the project-claim refusal did not print the unlock -> fix -> lock repair path: $(cat "$TMP/projclaims-tamper.out")"
+projclaims_status_after=$(cd "$PROJCLAIMS" && git status --porcelain)
+[ "$projclaims_status_before" = "$projclaims_status_after" ] ||
+	fail "the hook changed the working tree of the project-claims fixture. before:
+$projclaims_status_before
+after:
+$projclaims_status_after"
+
+echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it and a locked module claim resting on a locked PROJECT claim in project-claims/ — and refuses a hand-edited locked project claim exactly as it refuses a hand-edited locked module claim. Doing BOTH of those halves in ONE change is not refused, and that is the boundary rather than a bug: an in-repo ledger cannot attest anything against the person who can write it, so a change that rewrites a claim and the record approving it together leaves nothing behind to disagree. FORMAT.md states the boundary in full; internal/check/staged_no_parent_test.go and internal/lock/audit_boundary_test.go pin it."

@@ -1,19 +1,18 @@
 # DossierX claim format
 
 This document describes the on-disk claim schema and project config schema
-this engine reads. It is generic by design — nothing here names any
-specific project, module, or facet. All project-specific vocabulary
-(which facets exist, which modules exist, where claims live) comes from
-`project.config.yaml`, never from the engine itself.
+this engine reads. Modules and paths come from `project.config.yaml`. Claim
+facets are engine-fixed: exactly `contract` and `internals`. No other facet
+name is legal. Other modules may read and cite only `contract`. Internals
+are never readable or citable from outside the owning module.
 
 ## Lock policy v1
 
-The lock store has a separate `policy_version` from its JSON `version`. A
-missing store is a new project and begins at policy v1. A store written before
-this policy remains on its recorded legacy rule until a human explicitly runs
-`dossierx claim migrate-lock-policy --reason "..."`. Migration records its
-time and reason but does not rewrite claims, approvals, dependency baselines,
-receipts or review causes.
+The lock store has a separate `policy_version` from its JSON `version`. v1 is
+the only policy. A store that records an older `policy_version`, or none, loads
+as v1, and its next write stamps `policy_version: 1` with `policy_migrated_at`
+and `policy_migration_reason`. The carry-over reinterprets no approval,
+refreshes no baseline and clears no review cause.
 
 Policy v1 evaluates a requested claim set as one final candidate state. A set
 of one uses the same evaluator as a group. `claim lock ... --dry-run` returns
@@ -22,8 +21,8 @@ the matching snapshot as mandatory `--proposal` on the write refuses if its requ
 content changed in between. A readable draft dependency can leave a claim
 locally approved with a visible `dependency_unapproved` condition. That claim
 is not dependency-ready. Missing, retired, unreadable, or cyclic required
-dependencies, open review threads, lint/integrity gates and unresolved doctrine
-gating still refuse approval.
+dependencies, open review threads, an unlocked constitution, and lint or
+integrity gates still refuse approval.
 
 Each policy-v1 approval stores a receipt per reviewed dependency: its id,
 comparable content hash and decoded claim content. The receipt makes the
@@ -42,12 +41,13 @@ would be silently clobbered). Split multiple claims into separate files.
 
 ```yaml
 id: module.facet.slug          # e.g. widget.contract.overview
-facet: string                  # must be in project.config.yaml's facets[]
+facet: contract | internals    # engine-fixed; module claims only. Any other name is refused at config load
+scope: project                 # project claims only (id project.<slug>, no module, no facet); module claims omit it
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
+summary: string                # REQUIRED; one-line plain text, no markdown
 layout: card | table | list | steps | tree | banner | mockup  # optional
-kind: fact | orientation-note  # optional, default fact (see below)
-build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
+kind: fact                     # optional, default fact; any other value is refused
 # CONTENT — at least one of the next four is REQUIRED (see "Content is required"):
 body: markdown string          # optional on its own, illustrative prose
 rows: [ { ... } ]              # optional on its own, table rows; each cell must be a string
@@ -71,11 +71,12 @@ embodiment:                    # optional project-neutral implementation expecta
       expectation:
         shape: scalar
         value: "3"
-mirrors: [ id, ... ]           # optional
-rests_on: [ id, ... ]          # optional
-governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
-  type: none | doctrine_id
-  reason: string                # required when type is "none"
+rests_on:                       # REQUIRED — a list of claim ids, or none with a reason
+  - module.facet.slug           # any module's *.contract.*, this module's own *.internals.*,
+  - project.slug                # or a project claim; never a foreign module's internals
+  # or, for a claim that rests on nothing:
+  # none: true
+  # reason: string              # required when none: true
 migrated_from: string           # optional provenance note — what this claim REPLACED
 sources:                        # optional — what evidence BACKS this claim; cited from prose as [n] (see below)
   - ref: 1                      # positive int, unique within the claim
@@ -145,9 +146,38 @@ envelope are in
 `id` is three dot-separated segments: `module.facet.slug`.
 
 - `module` — one of the project's configured `modules[]`.
-- `facet` — one of the project's configured `facets[]`.
+- `facet` — exactly `contract` or `internals` (engine-fixed). `overview` is
+  not a facet.
 - `slug` — a free-form, kebab-case identifier unique within that
   `module.facet` pair.
+
+**Visibility (hard law).** `contract` is the only claim surface another
+module may read, cite (`rests_on`), or pin from a module manifest.
+`internals` may be cited only from the owning module; `rests-on-target` is
+the ERROR that refuses a foreign module's internals on check and lock (see
+*rests_on* below). Isolation of a module may include that module's own
+internals. Integration (including `catalog.json`) never includes internals:
+where a contract claim's readiness runs through an internals claim, the
+catalog writes `"(internals)"` in place of that id and counts the dropped
+edges in `edges.rests_on_internals_omitted`.
+The viewer strip is three peer tabs — Manifest | Contract | Internals — in
+that order. Manifest is not a banner and not a claim facet.
+
+### `summary`
+
+`summary` is required on every claim: one line of plain text, no markdown,
+with its own ceiling `max_claim_summary_chars` (omit → 200 Unicode code
+points). Missing, whitespace-only, multiline, or markdown-shaped values are
+`summary-required`. A present summary over the ceiling is `summary-oversize`.
+Both are ERROR on draft and locked claims alike; `claim lock` refuses.
+`dossierx claim list` prints the summary. A non-empty summary is part of
+the dependency-drift `ContentHash`. There is no exemption: mockup claims
+and project claims need one too.
+
+`body` + `steps` + `rows` cells share `max_claim_body_chars` (omit → 2000
+Unicode code points). Over is `body-oversize` (ERROR). `raw_html` is exempt.
+The engine refuses; it does not truncate. Zero and negatives on either
+config key are config-load errors.
 
 ### Content is required
 
@@ -161,29 +191,121 @@ refuses `dossierx claim lock` like any other error-severity finding.
 `mockup.html` is the field's documented primary use; the finding's message
 predates that and names three fields rather than four.
 
-### `kind` and orientation notes
+### Module `manifest.yaml` — why / start here
+
+The durable module context is **exactly one** required file:
+
+```
+claims_dir/<module>/manifest.yaml
+```
+
+It is YAML only, it is **not a claim**, and the loader never decodes it as one.
+The manifest is the module's "why / start here". An
+**agent** drafts the manifest from the module's claims (contract-surface first)
+plus a short note on how neighbors / the product use this module — not a
+freestyle essay and not a paste of claim bodies. The CLI never drafts it: it
+writes a stub and emits hints.
+
+```yaml
+summary: widget is the public boundary other modules call; start with retry-policy.
+provides:
+  - widget.contract.retry-policy
+depends_on:
+  - lock.contract.store
+```
+
+- `summary` — required, non-empty, at most **280 characters** (Unicode code
+  points, the unit every DossierX cap uses). The single why / start here.
+- `provides` — this module's **export list**: its own `facet: contract` claim
+  ids that other modules may pin. A contract claim left out is still readable
+  and citable (`rests_on`); it is simply not pinnable by a neighbor.
+- `depends_on` — contract-surface claim ids of **other** modules this module
+  consumes. Each must appear in that provider's `provides`: a module may only
+  depend on what its provider exports. Never this module's own ids; never a
+  project claim or a constitution entry (those are `rests_on` targets).
+- Unknown keys, a second YAML document, `manifest.yml`, or a `manifest.yaml`
+  anywhere except `claims_dir/<module>/manifest.yaml` are errors.
+- File size is at most **4096 bytes** — a guard on the file, not the budget.
+  The budget is the summary cap plus `max_claims_per_module`.
+
+`dossierx check`, `dossierx claim lock` and `dossierx manifest show` refuse every
+one of those defects (`module-manifest`, error severity). The finding's claim id
+is the **module**, and it blocks locking every claim of that module — a module
+with no valid manifest has no lockable claims — and never a claim of another
+module. Empty `provides` / `depends_on` lists are legal. Cycles between modules
+are legal: the lists are **not** `rests_on` edges and do not change readiness,
+catalog graph walks, or lock policy. Nothing sets `review_pending` on a manifest;
+the export rule is the staleness rule.
+
+**Create timing.** `dossierx claim new` writes a **stub** when the module has no
+manifest. The stub's `summary` is empty on purpose, so `check` and `claim lock`
+refuse it until an agent drafts it — a placeholder never passes. For a module
+that already exists (adoption), run
+`dossierx manifest show <module> --isolation`: while the file is missing it
+exits 1 with `lint_failed` and still returns `data.isolation.draft_hints`
+(suggested `provides` = the module's contract ids) and the claim summaries to
+draft from. Write the file, re-run `dossierx check --validate`. There is no
+migration tooling.
+
+`check --staged` reads the index copy of each manifest, not the worktree.
+
+`dossierx manifest show <module>` prints the file and always includes a
+`constitution_digest` object (path, word count, hash and the constitution gate's
+`state`). `--isolation` adds the bounded context an agent works a module from:
+
+- `shared.constitution_text`: the whole constitution as text;
+- `shared.project_claims`: the project claims index, one line per
+  `project.<slug>` (id, authored `summary`, status);
+- `manifest`: this module's file;
+- `claims`: each of this module's claims as id, title, facet, status and its
+  authored `summary`, exactly as written. No bodies; read one with
+  `dossierx claim show <id>`;
+- `draft_hints`: suggested `provides` (the module's contract ids).
+
+The view is at most 16384 bytes of compact JSON, split into two budgets that
+`isolation_budget` reports beside it. The **shared** budget (10240 bytes) is
+`shared` itself. Every module carries the same text, so it is never a reason to
+refuse one module's view: `check` enforces it with `shared-context-budget`
+(error), raised on the project claim whose index line pushes the shared context
+over, in id order (project-wide when the constitution text alone is over).
+The **module** budget (6144 bytes) is everything else in the view. Over it,
+`manifest show --isolation` refuses with `view_too_large`, naming the module,
+its bytes and claim count. Ten claims with 200-character summaries fit; a
+`max_claims_per_module` override well above 10, or a manifest near its
+4096-byte file cap, can outgrow it.
+
+`--integration` reads one hop. For each module this module's `depends_on`
+names, it adds that module's manifest `summary`, its `provides` ids and the
+authored `summary` of each provided contract claim (never internals, never
+bodies), so an agent can pick a `rests_on` target without opening the
+neighbor's own view. It also adds the `depends_on` membership edges and the
+same project claims index `--isolation` carries. It never follows a
+neighbor's own `depends_on` and is not a catalog graph walk. It has no byte cap
+in this release: the module's `depends_on` bounds it. `dossierx manifest list` is the summaries-only module
+catalog. The retired `deps` and `catalog` nouns stay retired. No lock exists for
+the manifest itself in this release: the human reviews it in the viewer's
+Manifest tab and approves the module through its claim locks.
+
+The Manifest tab (static and served viewer alike) is read-only. A healthy
+file shows its `summary`, each `provides` id linked to its Contract claim,
+each `depends_on` id linked to its claim and its provider module, and a
+toggle that reveals the raw YAML. A missing, oversize, malformed or invalid
+file shows only the `module-manifest` finding(s) `check` reports for that
+module, verbatim, and the copyable `dossierx manifest show <module>
+--isolation` command; none of the broken file is rendered. There is no
+editing in the viewer.
+
+### `kind`
 
 `kind` is optional and defaults to `fact`: a claim stating something about the
-system, which is everything the engine rendered before this field existed. The
-other value is `orientation-note` — a claim that is *reading guidance about
-other claims* rather than a fact ("if you only call the public API, read
-Contract, never Internals").
-
-This is a different axis from `build_role`. A `build_role: orientation` claim
-is still a fact the module rests on ("why this module exists"); a
-`kind: orientation-note` claim is a pointer *at* other claims. Two lints police
-the non-default value — `orientation-note-shape` and `orientation-note-order` —
-and every claim under the reserved `overview` facet is an orientation note
-whether or not the field is set, so a claim there need not repeat it.
+system. That is the only legal value. `kind-shape` refuses every other string.
 
 ### `emphasis` and hard-boundary cards
 
 `emphasis: true` is optional and marks a claim as carrying outsized weight for
 its facet; the viewer renders it as a warn / hard-boundary card. It is
-deliberately its own field rather than being derived from `governed_by`: what
-backs a claim's truth and how loudly it should render are different questions —
-a governed claim can still be a hard boundary, and an ungoverned-with-reason
-claim usually is not.
+deliberately its own field rather than being derived from the claim's edges:
+what a claim rests on and how loudly it should render are different questions.
 
 Both `kind` and `emphasis` are outside the dependency-drift `ContentHash` (see
 "What is signed, and what is not"), so changing either never flags a dependent
@@ -250,7 +372,7 @@ constructs below; the only thing that differs between them is images (see
   `_italic_` both become `<em>`, and `~~strike~~` becomes `<del>`, under
   strict CommonMark left/right-flanking delimiter rules. In particular, an
   **intraword** underscore can neither open nor close emphasis, so ordinary
-  identifier-shaped prose (`governed_by`, `rests_on`, `build_role`) never
+  identifier-shaped prose (`claims_dir`, `rests_on`, `raw_html`) never
   italicizes by accident — a run of underscores that is genuinely flanked on
   both sides (e.g. `__init__` as a whole word) does still pair and italicize.
   Strikethrough is exactly two tildes; one tilde or three-or-more is literal.
@@ -549,7 +671,7 @@ what is not":
   and reported as `lock-content-drift`. This is the thing the field exists for:
   approving a claim now approves the evidence behind it too.
 - `sources` is **not** part of the dependency-drift `ContentHash`, the baseline a
-  dependent records for the claims it `rests_on`, `mirrors` or is `governed_by`.
+  dependent records for the claims it `rests_on`.
   Adding or correcting a citation does not change what a claim *promises*, so it
   must not flip every dependent to `review_pending`. Provenance is not contract.
 - The field is `omitempty`: a claim carrying no sources serializes and hashes
@@ -588,26 +710,25 @@ criteria are statements that belong to no single module, and without an owning
 track they have nowhere in the corpus to live. With one, they are an ordinary
 claim: linted, reviewable, and lockable like any other.
 
-**Track membership is not an edge.** `rests_on`, `mirrors` and `governed_by` are
-semantic dependencies, which is why each carries a cycle lint — a loop in them is
-a set of claims that can only be reviewed together, and drift has no order to
-propagate in. A track is a *set*, and a set has no direction to run in a circle.
-Track membership therefore joins no cycle walk: not `cycle`, not
-`governed-cycle`, and not the `mixed-cycle` union graph.
+**Track membership is not an edge.** `rests_on` is a semantic dependency,
+which is why it carries a cycle lint — a loop in it is a set of claims that can
+only be reviewed together, and drift has no order to propagate in. A track is a
+*set*, and a set has no direction to run in a circle. Track membership therefore
+joins no cycle walk.
 
 **Five lints police the axis:**
 
 | Lint | Severity | What it catches |
 |---|---|---|
-| `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` and `build_role` are: a third value invented by a typo would be a membership nothing reads. |
-| `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary, exactly as it is for `modules[]` and `facets[]`; a typo that created a track would put a claim in a feature nobody is looking at. |
+| `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` is: a third value invented by a typo would be a membership nothing reads. |
+| `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary for tracks, exactly as it is for `modules[]` (facets are engine-fixed: `contract` \| `internals`); a typo that created a track would put a claim in a feature nobody is looking at. |
 | `track-multi-owner` | ERROR | two claims claiming `role: owns` on the same track. The one-owner-per-axis invariant, enforced. |
 | `track-empty` | WARNING | a track declared in config that no claim references. Nothing a reader is told is wrong; the track page is empty, and the human decides whether the track is premature or the claims are missing. |
 | `track-unowned` | WARNING | a track with citations but no owner. The assembled document renders as references with no statement of what the feature *is* — incomplete, not false. |
 
 **Track membership never gates `dossierx claim lock`, and this is a non-goal
-rather than an omission.** A claim locks on its own merits — lint clean, doctrine
-dependencies locked, no unresolved comment thread — and adding a second axis must
+rather than an omission.** A claim locks on its own merits — lint clean, the
+constitution locked, no unresolved comment thread — and adding a second axis must
 not add a second way to be refused. `dossierx track status <id>` **reports**:
 a track is COMPLETE when every claim it owns and every claim it cites is locked,
 and an incomplete track is a fact about the feature, not a verdict on any claim
@@ -677,60 +798,14 @@ decoding never rejects it.
 `agent`), not an identity — the same axis as the CLI's `--as` flag. A banner
 (`layout: banner`) claim is decorative and cannot carry comment threads.
 
-### `build_role` and the build/implementation order
+### Retired fields
 
-`build_role` is optional and orthogonal to `order`/`section` above: those
-two are viewer-only reading-order concerns, while `build_role` drives a
-different, additional ordering concept — a module's build (implementation)
-order, computed by the engine's `internal/buildorder` package once every
-claim in that module is locked.
-
-- Unset (`""`) is allowed while a claim is `draft` — a human may not have
-  decided yet where a claim sits in its module's build sequence.
-- Once a claim locks, `build_role` becomes required for that claim's
-  module, but only once that module has set `build_role` on at least one
-  other claim — a module that has never used `build_role` at all sees no
-  change in its lock-time behavior. This is enforced by the
-  `build-role-required-for-locked` lint, not by the schema itself.
-- The six values, in the fixed sequence a build order is computed in
-  (`out-of-scope` is never part of the sequence — see below):
-  1. `orientation` — context/process claims read for background but never
-     themselves acted on during implementation.
-  2. `schema` — data-shape claims (types, fields, storage layout); built
-     first among the "real work" phases.
-  3. `behavior` — workflow/logic claims, the bulk of the real
-     implementation work; ordered within this phase by `rests_on` edges to
-     other `behavior` claims in the same module.
-  4. `api` — public-function/entry-point claims, built after the behavior
-     they call into.
-  5. `verification` — test-checklist/acceptance-criteria claims, read last
-     so tests can be written against everything else already built.
-  6. `out-of-scope` — deferred/future-scope claims. Never placed in a
-     module's build order, but still reported (as excluded) by
-     `internal/buildorder`, so nothing silently vanishes from view.
-- A `rests_on` edge from one claim to another claim in the SAME module
-  whose `build_role` is a later phase in the sequence above is a
-  phase-order violation — a modeling error the dependency graph doesn't
-  respect the fixed phase sequence — and is refused, by name, when a
-  build order is proposed. A `rests_on` edge to a claim in a DIFFERENT
-  module is informational only and never checked this way: cross-module
-  dependencies are out of scope for one module's own build sequence.
-
-See `internal/buildorder`'s package doc comment for the full propose /
-status / lock lifecycle (`dossierx build-order propose|status|lock`), which
-mirrors `internal/lock`'s own draft→locked→stale lifecycle for claims.
-`dossierx build-order show --module <name> --format json|text|mermaid` (json
-default) renders the stored artifact, proposed or locked (`data.locked`
-says which) — one flowchart per phase that has claims, in build-role order,
-ghost nodes for a `rests_on` target the artifact placed in an EARLIER phase
-of the same module (already built; a target it excluded or one in another
-module is listed as text, never drawn), and a cross-module dependency list
-per phase in `--format text` and in the viewer only, not in the mermaid
-export — without recomputing anything: it reads
-`build/build-order/<module>.json` and never re-derives the sequence from
-the current claims. The viewer's top-level "Build order" tab (one tab, a
-module strip inside it) renders the same six-phase diagram from the same
-stored, locked artifact.
+A claim file carrying a key the schema does not have fails strict decode at
+`load` (`invalid_claim`). That includes the retired `build_role`,
+`governed_by` and `mirrors`; the `dossierx-upgrading` skill folds a corpus
+that still carries them. What to implement next is locked claims, module
+`depends_on`, and claim `rests_on`; viewer reading order is `order` /
+`section`.
 
 ### `section` and in-content headings
 
@@ -749,12 +824,11 @@ schema field instead of a path convention.
 
 - `draft` — freely editable, not yet reviewed.
 - `locked` — has passed human review via `dossierx claim lock` (refused if lint
-  has any error-level finding, if doctrine hub-gating blocks it, or if the claim
+  has any error-level finding, or if the claim
   still carries an unresolved comment thread); also carries an engine-managed
   `review_pending` bool. `review_pending` is `true` while ANY of three
-  independent triggers stands: a dependency's content — a `mirrors` or
-  `rests_on` target, or a claim-valued `governed_by` — has drifted since the
-  claim was last locked or reaudited; a `dossierx claim flag` has recorded a
+  independent triggers stands: a `rests_on` target's content has drifted
+  since the claim was last locked or reaudited; a `dossierx claim flag` has recorded a
   spec mismatch; or the claim carries an unresolved (`status: open`) comment
   thread. It is set automatically but never cleared automatically — a locked
   claim's `status` never reverts to `draft` on its own, and `review_pending`
@@ -772,45 +846,31 @@ schema field instead of a path convention.
 
 ## Edge types
 
-A claim may reference other claims by `id` via three distinct kinds of
-edge, each with a different meaning:
+A claim may reference other claims by `id` via one directed edge kind:
 
-- **`mirrors`** — a deterministic equality edge. The target claims'
-  comparable content must match this claim's exactly; if they diverge,
-  that is a lint failure (`mirror-mismatch`), not merely staleness.
 - **`rests_on`** — a semantic-consequence edge. This claim depends on the
   target claim remaining true, but is not required to be textually
   identical to it. When a `rests_on` target's content changes underneath a
   locked claim, the locked claim is flagged `review_pending` rather than
   invalidated outright.
-- **`governed_by`** — names the doctrine claim (by id) that backs this
-  claim's authority, or explicitly declares `type: none` with a required
-  `reason` when no such doctrine claim exists. Note that `governed_by` is
-  **not** itself a gated edge: when the project config sets
-  `doctrine_facet`, hub-gating refuses to lock a claim whose **`mirrors`
-  or `rests_on`** names an unlocked claim in that facet — those two lists
-  are the whole of what it walks. A doctrine claim named *only* by
-  `governed_by` is not gated, so to have hub-gating cover it, name it as a
-  `rests_on` dependency as well. If `doctrine_facet` is unset, hub-gating
-  does not run at all. A claim-valued `governed_by` **is** a
-  semantic-consequence edge on the same terms as `rests_on`: when the named
-  governor's content changes underneath a locked claim, the locked claim is
-  flagged `review_pending` rather than invalidated outright. Only a
-  claim-valued `governed_by.type` participates — `type: none` names no claim,
-  so there is nothing for it to drift against. `governed_by` is **also**
-  checked for the authority chain terminating — see `governed-cycle` below.
-  The drift edge is new in v0.4.0 and is not backfilled: a claim locked before
-  the upgrade carries no governance baseline until its next `claim lock` or
-  confirmed `claim reaudit`, so the first governor edit after upgrading does
-  not flag it.
+- **`rests_on` NONE** — `{none: true, reason}` is a stated absence, not an
+  edge. The author's reason is required and never empty. It is not a graph
+  node and never a drift baseline. A claim must carry one or the other:
+  `rests-on-required` refuses a claim with neither (NIT-24).
+- **The constitution is never a target.** `constitution.yaml` is the brief for
+  the whole system and every claim builds toward it by definition, so no claim
+  cites it: there is no `constitution.*` ref grammar, the file is not a graph
+  node, and editing it never touches a claim (no baseline, no finding, no
+  `review_pending`). Its reach is the lock gate (`CONSTITUTION_NOT_LOCKED`),
+  the viewer's Constitution pin, and the digest and text `manifest show` will
+  carry. See "The constitution" below.
 
 ### Graph invariants
 
-Each edge kind is not just a per-claim field but a directed graph over the
-whole claim set, and each of those graphs has a shape it must hold to — plus a
-fourth graph, the union of two of them, whose shape neither of its halves can
-see. These are enforced by the lint suite, so a violation blocks
-`dossierx claim lock` the same way any other error-severity finding does:
+An edge kind is not just a per-claim field but a directed graph over the
+whole claim set, and that graph has a shape it must hold to. This is enforced
+by the lint suite, so a violation blocks `dossierx claim lock` the same way
+any other error-severity finding does:
 
 1. **`rests_on` must be acyclic.** It is a dependency edge, so a cycle means
    a set of claims each of which is true only if the others are — no claim
@@ -818,45 +878,129 @@ see. These are enforced by the lint suite, so a violation blocks
    that flips dependents to `review_pending` has no order to run in. Every
    claim in the loop is reported by the `cycle` lint, with the cycle path in
    the message.
-2. **`mirrors` must be a reciprocal 2-cycle.** Equality is symmetric, so if
-   `A` mirrors `B` then `B` must mirror `A` back (`mirror-reciprocal`), the
-   target must exist (`mirror-unanchored`), and the two claims' comparable
-   content — `layout`, `body`, `rows`, `steps` — must actually match
-   (`mirror-mismatch`). A one-directional `mirrors` edge is not a weaker
-   equality claim; it is an unfinished one.
-3. **`governed_by` must terminate.** Following `governed_by` from any claim
-   has to reach `type: none` (with its required `reason`) in finitely many
-   steps — that sentinel is the only grounded end state. A cycle in this
-   graph means a set of claims whose authority rests only on each other,
-   which is to say on nothing, and is reported by the `governed-cycle` lint.
-4. **The UNION of `rests_on` and `governed_by` must be acyclic** — new in
-   v0.5.0, and that release's one BREAKING change to what a claim corpus may
-   look like. `mixed-cycle` walks both edge kinds as one graph, carrying the
-   edge kind on every hop, and reports a cycle whose hops include at least one
-   of each: "A `rests_on` B, B `governed_by` A". Neither rule above can see that
-   shape — `cycle` walks `rests_on` alone and `governed-cycle` walks
-   `governed_by` alone, so a mixed loop presents no back edge to either walk and
-   passed the whole registry before v0.5.0. It runs at **error** severity, so
-   satisfying `cycle` and `governed-cycle` is *not* the whole of the cycle rule:
-   a corpus carrying a mixed loop passed `dossierx check` before v0.5.0 and
-   exits 1 after it, with no edit on the author's side, no content-hash move and
-   nothing in the lock store to explain it. The recovery is to break the loop —
-   the finding names every claim on it — and re-run `check`; where those claims
-   are locked that is unlock, edit, lock, like any other correction. `mirrors`
-   is not part of the union graph and never trips this rule.
 
-`tracks` is not a fourth edge kind and appears in none of these graphs. It is a
+`tracks` is not a second edge kind and appears in no graph. It is a
 membership set, not a dependency: no claim's truth rests on another claim's track
 membership, so there is no direction for a track to run in a circle and nothing
 for a cycle walk to find. Two claims in the same track constrain each other in
 exactly one way — `track-multi-owner`, at most one owner apiece — which is a
 per-track count, not a walk. See "`tracks` and the second ownership axis" above.
 
-Across all four, a claim may never name **its own id** in any edge
+A claim may never name **its own id** in `rests_on`
 (`self-edge`). A self-edge is trivially satisfied by every content rule —
-a claim always equals itself, always mirrors itself back, and always
-resolves — so it asserts nothing while looking like a well-formed edge. An
-edge is a statement about a *different* claim.
+a claim always equals itself and always resolves — so it asserts nothing
+while looking like a well-formed edge. An edge is a statement about a
+*different* claim.
+
+## The constitution
+
+One lockable `constitution.yaml` beside `project.config.yaml`, **outside**
+`claims_dir` (NIT-6). It is the roof: the critical brief for the whole system,
+which every claim of every module builds toward by definition. It is not a
+module (it is not in `modules[]`, has no facets, no `manifest.yaml`), not a
+claim, not a graph node, and **never a `rests_on` target** — there is no
+`constitution.*` ref grammar, and nothing in the constitution points at,
+depends on, or is hashed against a claim. Its reach is the lock gate below,
+the viewer's Constitution pin, and the digest and full text `manifest show`
+carries into an agent's context (NIT-10).
+
+```yaml
+status: draft | locked        # written by `dossierx constitution lock`; half of the lock state
+invariants:                    # each section optional; three sections only
+  - slug: single-roof          # required, kebab-case, unique across the file
+    title: One roof            # optional
+    body: Every module builds toward this file.   # plain text (markdown is an open question)
+glossary:
+  - slug: claim
+    body: One reviewable fact, in one file.
+decisions:
+  - slug: no-refs
+    title: Claims never cite the constitution
+    body: It is unsaid context for every claim.
+```
+
+Unknown keys are refused, one document per file, `status` defaults to `draft`.
+The path is `constitution:` in the config (default `constitution.yaml`).
+
+**The word cap.** Words, not bytes: every entry's title and body, counted as
+letter/number runs (slugs are identifiers and do not count). Over **800**
+words `check` and `constitution lock` refuse with `CONSTITUTION_OVER_CAP`;
+from **720** `check` reports `constitution-near-cap` at warning severity.
+The viewer's meter reads "N of 800 words".
+
+**The lock record.** `dossierx constitution lock --reason "<the human's
+words>"` flips `status:` to `locked` and writes, into the same
+`build/ledger/lock-store.json` the claim ledger lives in, a sibling of the
+ledger rather than a record inside it:
+
+```json
+"constitution": {"hash": "<sha256 of the sections' content>", "reason": "...", "locked_at": "<RFC3339Nano UTC>"}
+```
+
+The hash covers every section's entries in order (slug, title, body,
+length-prefixed) and deliberately not `status`, so the lock's own rewrite
+cannot move it. That is the same integrity contract a claim gets: a hand edit
+after the lock leaves a file whose hash no longer matches the record.
+`constitution show` prints the full text, the digest (counts and hash) and the
+lock verdict; an agent drafts against the words, never the hash.
+
+**Five states, one gate.** `check` judges the file against the record:
+
+| state | meaning |
+|---|---|
+| `locked` | `status: locked`, a record stands, the hashes agree — module work may proceed |
+| `missing` | no file at the configured path |
+| `unreadable` | the file exists and does not parse |
+| `draft` | `status: draft` |
+| `unrecorded` | `status: locked` but the store holds no record — a status line flipped by hand |
+| `edited` | a record stands but the content hash moved — **the edited file is what every module now reads**; nothing from the old version stays in force, and module work stops until a human runs `constitution lock` again |
+
+**No module work until the constitution is locked** (NIT-26). `dossierx claim
+lock` — one claim or a set, through the one policy-v1 path — `dossierx claim reaudit
+--confirm` (a confirmed reaudit writes an approval to the lock ledger; the
+bare preview and `--dry-run` stay open) and plain `dossierx check`
+refuse with `CONSTITUTION_NOT_LOCKED` in every state but `locked`; `check`
+regenerates the catalog and the viewer first and refuses at `stopped_at:
+constitution`, like the ledger gate — a gate, not an outage. `check --validate`
+and `check --staged` report `constitution-not-locked` as an error-severity
+lint finding (`claim_id: constitution`) and exit 1 with the same code; the
+staged gate reads the constitution and the record from the index, like every
+other store. Always on, no config switch, no warn-and-continue. `claim new`,
+`claim show`, `claim list`, `serve`, `constitution show` and `constitution
+lock` keep working, so the agent can draft and the human can read and re-lock.
+`constitution lock` refuses `already_locked` only when the roof is locked AND
+unchanged; an edited roof re-locks. Every fixture and every upgrading project
+needs a locked constitution before any claim can lock — the roof lock is the
+project's first ledger write, and it takes the comment threads on disk into
+digest coverage the way the first `check` used to.
+
+### Project claims
+
+Project-wide facts that are not critical roof law live in the **project-claims
+store** (NIT-25): `project-claims/<slug>.yaml` (`project_claims_dir:` in the
+config, default `project-claims`, a sibling of `claims/` and never inside it).
+A project claim is an ordinary claim — linted, reviewable, lockable, a graph
+node — with three differences:
+
+- `id: project.<slug>` (exactly two segments, `project` reserved), `scope:
+  project`, and **no** `module` and **no** `facet` (`id-shape` refuses either).
+- A separate loader: `loader.LoadProjectClaims` is never mixed into the module
+  walk, and `loader.LoadAll` merges the two stores for lint, lock and the
+  projections. The staged gate does the same from the index: `check --staged`
+  (the pre-commit hook's entry point) enumerates `project-claims/` out of the
+  git index exactly as it enumerates `claims/` — index content only, under the
+  config the index holds, an absent store an empty store — so the hook and
+  plain `check` agree on a project that uses project claims.
+- **No cap and no manifest.** Every module may rest on every project claim, so
+  there is no export boundary to curate; project claims do not count toward a
+  per-module cap. The tier-1 read is the system-generated **project claims
+  index** — one line per claim, id plus its own required `summary` — that
+  `manifest show --isolation` and `--integration` carry; `claim show
+  project.<slug>` is the body on demand.
+
+A project claim's `rests_on` may name other `project.*` ids and any module's
+`*.contract.*`; never any module's `*.internals.*` (`rests-on-target`). The
+viewer's Constitution section lists the store under its **Project claims** tab.
 
 ## Integrity invariants
 
@@ -881,16 +1025,21 @@ file freeze locking project-wide and stop the viewer regenerating.
 
 ### The stores under `build/ledger/` are tracked artifacts
 
+The lock store also carries the constitution's lock record (`"constitution"`,
+see "The constitution"); a store that travels without it arrives with a roof
+that reads as `unrecorded`, and no claim in that clone locks until a human
+locks the roof again.
+
 | File | Holds |
 |---|---|
-| `build/ledger/lock-store.json` | the lock ledger: per locked claim and per locked build-order artifact, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
+| `build/ledger/lock-store.json` | the lock ledger: per locked claim, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
 | `build/ledger/comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
 | `build/ledger/flag-store.json` | each flagged claim's pending `claim flag` trigger: `{claim_says, now_does, reason, flagged_at}`, consumed and deleted by a confirmed `claim reaudit` |
 
 All three live under the build directory (`build_dir`, default `build`,
 resolved against the config file's directory like `claims_dir`), in its
 `ledger/` subdirectory. **Commit them; never `.gitignore` them.** Every other
-generated kind lives under the same directory too — `build/build-order/<module>.json`,
+generated kind lives under the same directory too —
 `build/code-links/<module>.json`, `build/catalog/catalog.json`, `build/viewer/index.html` —
 and `check` writes `build/.gitignore` so the regenerated kinds are ignored
 and the tracked kinds are not. A project whose repository `.gitignore` matches
@@ -947,7 +1096,7 @@ persists except three engine-managed fields:
 Everything else is signed, **including any field added to the schema later**.
 This is deliberately not the same hash as the dependency-drift `ContentHash`,
 which covers a hand-picked eleven fields and must stay byte-identical
-forever: `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
+forever: `raw_html_reviewed`, `kind`, `section`, `order`,
 `emphasis`, `migrated_from`, `sources`, `tracks`, and `audit_notes` are
 invisible to it —
 `raw_html` was in that blind list through v0.4.0, but as of v0.4.1 a
@@ -963,7 +1112,7 @@ cannot see, and
 `LockedClaimHash` is the net for all of them regardless of what
 `ContentHash` tracks: it signs everything a claim persists except `status`,
 `review_pending`, and `comments` (above), so a swapped `raw_html` payload —
-or a swapped `raw_html_reviewed`, `build_role`, or any other field —
+or a swapped `raw_html_reviewed`, `section`, or any other field —
 still fails the lock ledger's check even on a claim with no dependent to
 notice the drift. A ledger built on `ContentHash` alone would have
 certified exactly the edit that most needed a signature; it is built on
@@ -975,8 +1124,8 @@ certified exactly the edit that most needed a signature; it is built on
 |---|---|
 | `lock-ledger-absent` | Locked claims exist, so the ledger file must exist. Deleting it is not a way to re-bless a project; it is a project-scoped refusal you fix by restoring the file from version control. |
 | `lock-ledger-downgraded` | The lock store says it predates the ledger while the project around it proves otherwise — its `version` set back from `2` to `1` and the `ledger` key deleted, one hand edit to the audited file. **Read this as tamper evidence, not as a grandfathering guard.** It was written as the latter: adoption used to key on the store's own `version`, so this edit re-ran adoption and recorded whatever the claims said at that moment as approved, and the rule's job was to catch that with evidence the store does not own (a sibling `build/ledger/comment-digest.json`, or ledger records still sitting in a store claiming to predate records). There is no adoption path at all any more — see *Crossing onto the ledger* below — so the edit buys nothing and this rule is no longer load-bearing for that. It still fires, because a store lying about its own schema version is still a store somebody edited by hand, and the per-claim findings under it still stand. Restore the store from version control. Do **not** re-lock. A downgraded store is deliberately not offered the crossing either: `PreLedgerUnadopted` is `PreLedger && !LedgerDowngraded`, so this store gets *this* finding rather than `lock-ledger-pre-ledger`, and `CrossPreLedger` returns without stamping it. |
-| `lock-ledger-pre-ledger` | This project's lock store predates the lock ledger **and** the project still holds a locked claim or a locked build order, so nothing locked here has an approval record and nothing can attest to content no ledger ever recorded. This is **not** tampering and there is nothing wrong with the claims: the ledger simply does not exist yet. There is no adoption path and no migration command any more — a project crosses by emptying itself of everything that predates the ledger, and the next `claim lock` stamps the store while recording a real approval. One project-scoped finding, deliberately in place of one `lock-ledger-missing` per claim — repeating "locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is destructive advice at a project that has done nothing wrong. **It is CONDITIONAL:** a pre-ledger project holding nothing locked is silent, because such a project crosses correctly on its next lock and a finding there would be a finding on correct state. It is emitted exactly once per project in every state, from two mutually exclusive halves — the locked-claims term (`lock.Audit`) and the locked-build-orders-only term (`internal/check`'s gate, the only layer holding both inputs). Its write-path twin is the `pre_ledger_unadopted` refusal from `claim lock`, `claim reaudit --confirm` and `build-order lock`. See *Crossing onto the ledger* below. Tell it apart from `lock-ledger-absent`, which means the project **had** a ledger and no longer does — and from `lock-ledger-downgraded`, a store that only *claims* to predate the ledger: that rule owns that diagnosis, and such a store is never offered the crossing. |
-| `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate, hub-gating and the unresolved-comment gate as though all three had passed. |
+| `lock-ledger-pre-ledger` | This project's lock store predates the lock ledger **and** the project still holds a locked claim, so nothing locked here has an approval record and nothing can attest to content no ledger ever recorded. This is **not** tampering and there is nothing wrong with the claims: the ledger simply does not exist yet. There is no adoption path and no migration command any more — a project crosses by emptying itself of everything that predates the ledger, and the next `claim lock` stamps the store while recording a real approval. One project-scoped finding, deliberately in place of one `lock-ledger-missing` per claim — repeating "locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is destructive advice at a project that has done nothing wrong. **It is CONDITIONAL:** a pre-ledger project holding nothing locked is silent, because such a project crosses correctly on its next lock and a finding there would be a finding on correct state. It is emitted exactly once per project from the locked-claims term (`lock.Audit`). Its write-path twin is the `pre_ledger_unadopted` refusal from `claim lock` and `claim reaudit --confirm`. See *Crossing onto the ledger* below. Tell it apart from `lock-ledger-absent`, which means the project **had** a ledger and no longer does — and from `lock-ledger-downgraded`, a store that only *claims* to predate the ledger: that rule owns that diagnosis, and such a store is never offered the crossing. |
+| `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate and the unresolved-comment gate as though both had passed. |
 | `lock-ledger-deleted` | A claim **this engine locked** still has its record. `lock-ledger-missing`'s sharper twin, and it exists because every other rule keyed on a record *existing*, so deleting one removed the claim from the switch entirely: drop its entry from the `ledger` map, flip `status: locked` to `draft`, and it is an ordinary draft — freely editable, and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. The evidence the deletion does not reach is one key away in the same file: `locked_at`, stamped by every lock and confirmed reaudit and removed by nothing in this build, plus the claim's dependency baselines under `hashes`. The only path that legitimately ends an approval is `unlock`, which **keeps** the record and stamps `ReleasedAt` — so a record that is absent rather than released was deleted by hand. Stated plainly: deleting `locked_at` and the baselines in the same edit leaves nothing to notice, which is three keys in a tracked file instead of one, in a diff whose purpose is to be read. |
 | `lock-ledger-released` | A `locked` claim's record is a *standing* approval. Unlocking marks the record released rather than deleting it, so flipping `status:` back to `locked` by hand leaves a released record in place — which satisfies "a record exists" while recording the opposite of an approval, and passes the hash check because the hash deliberately excludes `status`. |
 | `lock-content-drift` | A locked claim's content still hashes to what was approved. Covers every field above, including the ones `ContentHash` cannot see. |
@@ -987,12 +1136,7 @@ certified exactly the edit that most needed a signature; it is built on
 | `comment-digest-unrecorded` | In a ledger-covered project, a claim **holding threads** has a digest entry beside them. The predicate is the threads themselves, which is what makes it survive the tamper: comments are engine-managed and the single path that writes a thread into a claim file records the claim's digest in the same act, so threads with no entry have exactly two explanations — the entry was removed, or the threads were never written by the engine — and both are the finding. Deliberately silent where the evidence is honestly absent: an uncovered project, an absent store (`comment-digest-absent` is that cause, said once), a claim with no threads, and a claim holding a *standing* approval (that one is `comment-digest-missing`, built on the ledger record instead — reporting both would name one state twice). |
 | `comment-digest-missing` | The digest store is there, and a claim holding a **standing** approval record has no entry in it. The store was protected against deletion and not against being *emptied*, and overwriting it with `{"version":1,"digests":{}}` is strictly cheaper to hide in a review diff than the `rm` the rule above catches: hand-delete an unresolved `comments:` block and empty the map in one edit, and `claim lock` accepted the claim with a real record while `check --validate` reported ok. Coverage, not file presence, is the trigger, and the predicate is built only out of the ledger record — every approval writes the claim's comment digest in the same act that writes the record (`lock.RecordApproval`), so a standing record with no entry is a statement about the store, not about the claim. Silent where it should be: a project with no ledger coverage is not asked, an uncommented draft holds no record, and a released record describes a claim that has left the approval path. Suppressed entirely when the whole file is gone, so `comment-digest-absent` stays the single project-scoped cause. |
 | `comment-digest-abandoned` | A digest entry that recorded review history still has the claim it recorded it for. This is the comment half's reverse sweep, symmetric with `lock-ledger-abandoned`, and it is what makes the **rename** launder visible: deleting a claim's `comments:` block alone fires `comment-ledger-drift`, but deleting the block *and* changing `id:` in the same edit went completely quiet — the claim the store knows no longer exists, the claim that exists is one the store has never seen, and `claim lock <new id>` then succeeded on a claim whose human review had been erased. The old id's entry survives that edit precisely because it is not reachable from the file the tamper rewrote. It does not fire on the two accounted-for departures — an entry that recorded no threads, and a claim whose record an honest `unlock` released — and `lock.SweepCommentDigests` drops those entries so they never accumulate. `lock.AbandonedCommentDigests` owns the predicate for both the rule and the sweep, so the gate and the sweep cannot disagree. |
-| `build-order-content-drift` | A locked `build/build-order/<module>.json` still matches the artifact that was approved. The sequence is what an implementing agent builds from, so reordering two phases by hand, moving a claim into `excluded`, or editing a recorded `rests_on` list so the viewer draws a dependency the claims do not declare all change what gets built without changing any claim. |
-| `build-order-ledger-missing` | A build-order artifact carrying `locked: true` has an approval record. `locked` in that file is a claim about a human's `--reason`, and a hand-set one is the same act as a hand-set `status: locked` on a claim. |
-| `build-order-ledger-orphan` | An unlocked build-order artifact whose ledger record still **stands**, unreleased. This was the cheapest bypass in the gate: both build-order rules above skip an artifact carrying `locked: false` — correctly, since an unlocked artifact is a proposal nobody approved — so writing `false` removed the file from every rule's evidence at once while the approved sequence sat there for an agent to follow and the record still said a human approved it. The honest re-propose window is separated by the *release*, not by a guess: `build-order propose` releases the module's record as it overwrites the artifact, so an unlocked artifact under a released record is the documented flow and one under a standing record is not. The predicate therefore has no exception, and it catches a flag flip made together with a content edit — which the earlier, exact predicate (re-sign the artifact as if the flag were still `true`) could not, since a content edit re-signs to something else. |
-| `build-order-ledger-abandoned` | An unreleased build-order record still has the artifact it approved. The two build-order rules above are both driven by the artifacts that exist, so deleting `build/build-order/<module>.json` — or dropping the module from `modules:`, which stops anything auditing it — silenced them both at once and made removal strictly quieter than editing. It fires on *unreleased* records only, so a build order a human deliberately released stays silent. This is the build-order twin of `lock-ledger-abandoned`, and exists for the same reason. |
-| `store-gitignored` | Every path the engine writes under `build/ledger`, `build/build-order` and `build/code-links` is trackable. Checked per FILE with `git check-ignore --no-index` — the three ledger stores, `build/.gitignore`, and each module's build-order and code-links artifact, whether or not the file exists yet — because a directory-level check reads the index and goes green the moment one file under the directory is force-added, while every sibling stays ignored. One finding per ignored, untracked path, naming the pattern and its line; an ignored path that IS tracked is an envelope warning instead, since that ledger does reach collaborators. The recovery is the replacement block (`build/*` plus a slash-less negation and a `/*` re-include per tracked kind — git never re-enters an excluded directory, and a trailing-slash negation cannot match a directory that does not exist yet) or `build_dir` pointed at a directory the pattern does not match. Outside a work tree, or where git cannot answer, `check`'s read-only modes report `data.gitignore_check` and no finding; the approval-recording verbs refuse with `store_gitignored`. |
-| `build-order-unreadable` | A build-order artifact that is *there* is legible. This is the build-order twin of `lock-ledger-unreadable`, and it closed the gap where corrupting the approved sequence was quieter than deleting it: deletion is caught by `build-order-ledger-abandoned`, but truncating the same file mid-token left it neither present (so the forward rules skipped it) nor absent (so the reverse sweep skipped it), and `check` exited 0 over a destroyed sequence. Its own rule because it is neither of the two: the artifact was not deleted, and its bytes cannot be compared to anything. Restore the file from version control — never re-propose, which records whatever the claims say **now** as the approved order. |
+| `store-gitignored` | Every path the engine writes under `build/ledger` and `build/code-links` is trackable. Checked per FILE with `git check-ignore --no-index` — the three ledger stores, `build/.gitignore`, and each module's code-links artifact, whether or not the file exists yet — because a directory-level check reads the index and goes green the moment one file under the directory is force-added, while every sibling stays ignored. One finding per ignored, untracked path, naming the pattern and its line; an ignored path that IS tracked is an envelope warning instead, since that ledger does reach collaborators. The recovery is the replacement block (`build/*` plus a slash-less negation and a `/*` re-include per tracked kind — git never re-enters an excluded directory, and a trailing-slash negation cannot match a directory that does not exist yet) or `build_dir` pointed at a directory the pattern does not match. Outside a work tree, or where git cannot answer, `check`'s read-only modes report `data.gitignore_check` and no finding; the approval-recording verbs refuse with `store_gitignored`. |
 | `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |
 
 `comment-digest-absent` is the comment half's answer to `lock-ledger-absent`,
@@ -1060,28 +1204,6 @@ starts from the claims that exist, so `rm claims/foo.yaml` walked past all of
 them at once and left an unreleased approval pointing at nothing.
 `lock-ledger-downgraded` covers the *ledger* being edited instead of the claims,
 which was the one bypass that lived entirely inside the file doing the checking.
-The `build-order-*` rules cover the artifact an implementing agent actually
-reads: `build/build-order/<module>.json` is generated, but a **locked** one is
-generated, approved and then frozen, and the frozen sequence is what `stale`
-is measured against — every reader re-derives the order from the claims as
-they are now and compares, so the order is stale exactly when a fresh
-`propose` would produce a different one (a claim's `build_role` or `rests_on`
-moved, the module's membership or its out-of-scope set changed), and never
-because a covered claim's prose was edited. The `stale` key persisted in the
-file is the value as of the last write — always `false` — not a live verdict;
-`build-order status`, `build-order show`, `check` and the viewer all report the
-recomputed one. A locked build order is checked against its
-record for the same reason a locked claim is — the record is written by
-`build-order lock`, and a record nothing ever reads is not a gate. Note that the
-evidence set has to be closed from both ends: a rule keyed on `locked: true`
-is disarmed by writing `false`, which is why `build-order-ledger-orphan` audits
-the artifacts the forward rules skip.
-
-Commit `build/build-order/<module>.json` once it is locked, for the same reason you
-commit the ledger: those rules read the artifact off disk, so an approved order
-that never travels with the repository is an approval CI has nothing to compare
-against. While it is still `locked: false` it is ordinary generated output that
-`propose` rewrites in full.
 
 ### What the gate detects, what it does not, and where the rest is caught
 
@@ -1100,7 +1222,7 @@ than a hole.
 #### What IS detected
 
 Every rule in this document judges **one tree** — these claim files, this lock
-store, this digest store, these build-order artifacts, exactly as they are. That
+store, this digest store, exactly as they are. That
 is the whole evidence base. Within it, every edit that puts one artifact at odds
 with another is a named finding — every edit to the **approved content** of a
 locked claim, and every removal of any piece of the evidence around it. The
@@ -1117,7 +1239,7 @@ read the sentence above as covering the file byte for byte.
 
 | The tampering | Named by |
 |---|---|
-| a locked claim's content edited — including `raw_html`, `build_role`, `section`, `order`, `sources`, `tracks` | `lock-content-drift` |
+| a locked claim's content edited — including `raw_html`, `section`, `order`, `sources`, `tracks` | `lock-content-drift` |
 | `status: draft` flipped to `locked` by hand, with no approval record | `lock-ledger-missing` |
 | a record deleted from a claim this engine locked | `lock-ledger-deleted` |
 | `status:` edited back to `locked` over a record `unlock` already released | `lock-ledger-released` |
@@ -1126,17 +1248,12 @@ read the sentence above as covering the file byte for byte.
 | the whole lock store removed while locked claims remain | `lock-ledger-absent` |
 | the lock store present but unparseable | `lock-ledger-unreadable` |
 | the lock store's own `version` set back to pre-ledger | `lock-ledger-downgraded` |
-| a project whose lock store predates the ledger, still holding a locked claim or a locked build order (a state, not a tamper) | `lock-ledger-pre-ledger` |
+| a project whose lock store predates the ledger, still holding a locked claim (a state, not a tamper) | `lock-ledger-pre-ledger` |
 | a review thread edited or deleted outside the engine | `comment-ledger-drift` |
 | the digest store removed from a covered project | `comment-digest-absent` |
 | a standing approval whose digest entry was dropped from the map | `comment-digest-missing` |
 | threads present on a claim with no digest entry beside them | `comment-digest-unrecorded` |
 | a digest entry whose claim id was renamed out from under it | `comment-digest-abandoned` |
-| a locked build order's sequence, recorded `rests_on` or `excluded` set edited | `build-order-content-drift` |
-| a build order claiming `locked: true` with no record | `build-order-ledger-missing` |
-| a locked build order's flag cleared to `false` while its record stands | `build-order-ledger-orphan` |
-| a locked build order's artifact deleted, or its module dropped from `modules:` | `build-order-ledger-abandoned` |
-| a build-order artifact present and undecodable | `build-order-unreadable` |
 | a tracked store or artifact under `build/` matched by `.gitignore` and not in the index | `store-gitignored` |
 
 Note the shape of that table. Every artifact in the design is watched by rules
@@ -1158,7 +1275,7 @@ table, and the next section says once what the whole of it is.
 **An in-repo ledger cannot attest anything against the person who can write it.**
 
 That sentence is the boundary. Everything above is one tree judging itself: the
-claim files, the lock store, the digest store and the build-order artifacts are
+claim files, the lock store and the digest store are
 the entire evidence base, and every one of them is a tracked file in the
 repository the committer is editing.
 
@@ -1336,37 +1453,23 @@ There is **no** automatic adoption and **no** migration command. `dossierx
 migrate` was removed in v0.4.0 and survives only as a hidden stub whose whole job
 is to name this path. Nothing can attest to content no ledger ever recorded.
 
-A pre-ledger project that still holds a locked claim or a locked build order is
-refused by every approval-recording command — `claim lock`, `claim reaudit
---confirm`, `build-order lock` — with `error.code` `pre_ledger_unadopted`, and
-reported by `check` as `lock-ledger-pre-ledger`.
+A pre-ledger project that still holds a locked claim is refused by every
+approval-recording command — `claim lock`, `claim reaudit --confirm` — with
+`error.code` `pre_ledger_unadopted`, and reported by `check` as
+`lock-ledger-pre-ledger`.
 
-The crossing is an ordered sequence of ordinary commands. The order is not
-cosmetic: `build-order propose` requires the module still **fully locked**, so
-unlocking a claim first strands the locked order with no way to release it. One
-decision belongs before the first command, per module: will you re-lock *every*
-claim in it at step 3? A build order exists only over a fully locked module, and
-step 1 releases the approved sequence — so a module you re-lock only partially
-finishes the crossing gate-green but without a locked build order, and its step 4
-waits until the day its last claim locks.
+The crossing is an ordered sequence of ordinary commands: unlock every locked
+claim, then re-lock only what you still stand behind. The first of those locks
+stamps the store onto the ledger.
 
 ```sh
-# 1. FIRST, for every module whose build order is locked:
-dossierx build-order propose --module <m>
-
-# 2. then every locked claim — unlock is gateless and always has been:
+# 1. every locked claim — unlock is gateless and always has been:
 dossierx claim unlock <id> --reason "..."
 
-# 3. then re-lock only what you still stand behind. The FIRST of these
+# 2. then re-lock only what you still stand behind. The FIRST of these
 #    crosses the store onto the ledger and records a real approval:
 dossierx claim lock <id> --dry-run
 dossierx claim lock <id> --reason "..." --proposal "<snapshot>"
-
-# 4. then the build orders again, for every module that is fully locked
-#    again. A module you re-locked only partially has nothing to propose
-#    yet — run this pair for it on the day its last claim locks:
-dossierx build-order propose --module <m>
-dossierx build-order lock --module <m> --reason "..."
 ```
 
 A pre-ledger project holding **nothing** locked crosses silently and correctly on
@@ -1419,7 +1522,7 @@ eyebrow: string                  # optional one-line subtitle rendered under
                                    # the sidebar heading (e.g. "user-intelligence
                                    # service"). No fallback — unset renders no
                                    # eyebrow element at all.
-facets: [string, ...]           # non-empty, no duplicates
+facets: [contract, internals]   # engine-fixed; both required, no other names
 modules: [string, ...]          # non-empty, no duplicates
 tracks:                          # optional; the whole vocabulary of cross-cutting
   - id: checkout                 # feature tracks a claim may name. Unset/empty
@@ -1435,7 +1538,9 @@ conformance:                     # optional; read only with declared embodiment
                                   # relative to this config and outside build_dir
   blocking: bool                 # optional; default false. If true, any owed,
                                   # mismatch, or uncheckable check fails check
-doctrine_facet: string           # optional; omitted disables hub-gating entirely
+constitution: path               # optional; default constitution.yaml at the project root
+                                  # (the roof: not a module, not a graph node)
+project_claims_dir: path         # optional; default project-claims (scope: project nodes)
 source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-claim: <id>" and
                                   # "dossierx-step: <id> #<n> <sha256-hex>"
@@ -1446,12 +1551,34 @@ source_dirs: [path, ...]         # optional; directories scanned for
                                   # existed, and the engine never guesses where
                                   # the code is. Without it, a code link can
                                   # only be recorded by `dossierx claim link`.
+                                  # Set, plain `check` refuses unlinked_claims
+                                  # while any locked module claim has no code
+                                  # link (a stepped claim: on every step).
+                                  # Project claims are exempt; a claim with no
+                                  # code behind it declares
+                                  # embodiment: {mode: none, reason: "..."}.
 mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
                                   # to author layout: mockup claims — the module
                                   # allowlist leg of raw-html-scope's gate. Every
                                   # entry must also appear in modules[]. An
                                   # unset/empty list means NO module may author
                                   # one; it is not a vacuous pass.
+max_claim_body_chars: int        # optional; omit → 2000. Unicode code-point
+                                  # ceiling on body + steps + rows cells.
+                                  # check reports body-oversize (ERROR) when
+                                  # over, and claim lock refuses. raw_html is
+                                  # exempt. Values below 1 are a config-load
+                                  # error.
+max_claim_summary_chars: int     # optional; omit → 200. Unicode code-point
+                                  # ceiling on summary. check reports
+                                  # summary-oversize (ERROR) when over.
+max_claims_per_module: int       # optional; omit → 10. Project-wide ceiling
+                                  # on claim files per module. check reports
+                                  # module-claim-cap (ERROR) when a module is
+                                  # over, and claim lock refuses every claim
+                                  # in that module. Raise this number to
+                                  # override; there is no per-module key.
+                                  # Values below 1 are a config-load error.
 viewer:
   template_overrides: path        # optional override dir; resolved relative
                                     # to this file's own directory. Eligible
@@ -1461,22 +1588,11 @@ viewer:
                                     # steps.html, tree.html, banner.html,
                                     # mockup.html), plus the outer shell
                                     # (shell.html) and base stylesheet
-                                    # (style.css). The Build order tab is
-                                    # not overridable: a directory still
-                                    # carrying the former build_order.html
-                                    # override is refused by name at render.
-                                    # A style.css override does not carry
-                                    # the tab's .bo-* diagram rules, and
-                                    # check warns when one is in force
-                                    # beside a locked build order. Missing
+                                    # (style.css). Missing
                                     # individual files inside it fall back
                                     # to engine defaults per-file; a
                                     # configured-and-missing directory itself
-                                    # is a hard load-time error. An overridden
-                                    # style.css does not carry the engine's
-                                    # `.bo-*` diagram rules, and `check` warns
-                                    # when one is in force beside a locked
-                                    # build order.
+                                    # is a hard load-time error.
 ```
 
 All paths in this file are resolved relative to the config file's own
@@ -1486,7 +1602,8 @@ lets the same engine binary be pointed at a config file from anywhere.
 ### Tracks
 
 `tracks[]` declares the whole vocabulary of cross-cutting feature tracks, the
-same way `modules[]` and `facets[]` declare theirs. Each entry is:
+same way `modules[]` declares modules. Facets are not a project vocabulary —
+they are engine-fixed (`contract`, `internals`). Each track entry is:
 
 - `id` — required, the value a claim's `tracks[].id` names. Kebab-case, unique
   within the list.
@@ -1498,7 +1615,7 @@ The field is optional as a whole: a project that declares no tracks behaves
 exactly as it did before the field existed, and the five `track-*` lints have
 nothing to report. A claim naming a track this list does not declare is
 `track-unknown` at error severity, which is deliberately the same treatment an
-unknown `module` or `facet` gets — a typo that silently created a track would
+unknown `module` gets — a typo that silently created a track would
 put a claim in a feature nobody is looking at, and the human would find out by
 noticing an absence.
 
@@ -1510,19 +1627,20 @@ See "`tracks` and the second ownership axis" under Claim above for what a claim'
 own `tracks:` block means, why membership is not an edge, and why it never gates
 `dossierx claim lock`.
 
-### Directory layout is not part of this spec
+### Directory layout is not part of this spec (one exception)
 
-`claims_dir`'s internal structure — subdirectory names, nesting depth,
-how files are grouped on disk — carries no meaning to the engine and is
-entirely the claim author's choice. `internal/loader.LoadClaims` walks
-`claims_dir` recursively and loads every `*.yaml`/`*.yml` file it finds,
-matched purely by file extension; it does no filename or path-segment
-parsing of any kind. A claim's `module` and `facet` come only from that
-claim's own YAML fields (`module:`, `facet:`), never from where the file
-happens to live on disk. This means a project can reorganize its
-`claims_dir` freely — flatten it, rename subdirectories, move files
-between them — without touching claim content or breaking anything the
-engine reads.
+`claims_dir`'s internal structure for **claim files** — subdirectory names,
+nesting depth, how claim YAML is grouped on disk — carries no meaning to the
+engine and is entirely the claim author's choice. `internal/loader.LoadClaims`
+walks `claims_dir` recursively and loads every claim `*.yaml`/`*.yml` file it
+finds; it skips `manifest.yaml` / `manifest.yml`. A claim's `module` and
+`facet` come only from that claim's own YAML fields (`module:`, `facet:`),
+never from where the file happens to live on disk. Claim files can be
+reorganized freely.
+
+The exception is the required module manifest: it **must** live at
+`claims_dir/<module>/manifest.yaml`. That path is load-bearing. See
+"Module `manifest.yaml`" above.
 
 #### Recommended authoring convention (non-enforced)
 

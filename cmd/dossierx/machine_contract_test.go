@@ -75,26 +75,9 @@ func walkJSONKeys(v any, path string, visit func(path, key string)) {
 // see the leak at all.
 func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 	root := t.TempDir()
-	cfgPath, claimPath := icWriteFixtureProject(t, root, "widget")
+	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	// A PROPOSED AND LOCKED build order, seeded before anything else, because
-	// "build-order show" is in the list below and this test's whole method is
-	// to walk the raw keys of a REAL payload. Against the bare fixture that
-	// command answers not_proposed, whose envelope carries an error and no
-	// data.phases[] at all — a case that asserts nothing about the shape it was
-	// added to cover.
-	//
-	// The order of these four steps is the only one buildorder.Propose's gates
-	// allow, and the thread below has to come AFTER all of them: Propose
-	// refuses a non-locked claim, refuses a claim with an open comment thread,
-	// and refuses one with an empty build_role. A thread added afterwards
-	// blocks nothing this test runs. The pre-existing "claim lock --dry-run"
-	// row consequently previews an already-locked claim, which is still an
-	// envelope and still what this test reads.
-	icWriteRoledClaim(t, claimPath, "widget")
 	icMustRun(t, cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
-	icMustRun(t, cfgPath, "build-order", "propose", "--module", "widget")
-	icMustRun(t, cfgPath, "build-order", "lock", "--module", "widget", "--reason", "fixture approval")
 
 	// A thread with a reply, so comment list's whole tree — thread fields AND
 	// reply fields — is exercised rather than just the root of it.
@@ -113,7 +96,7 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"check", "--validate"},
 		{"claim", "show", "widget.contract.overview"},
 		{"claim", "list"},
-		{"claim", "new", "widget.contract.second", "--body", "another claim", "--dry-run"},
+		{"claim", "new", "widget.contract.second", "--summary", "Fixture claim used by the engine test corpus.", "--body", "another claim", "--dry-run"},
 		{"claim", "lock", "widget.contract.overview", "--reason", "r", "--dry-run"},
 		{"claim", "unlock", "widget.contract.overview", "--reason", "r", "--dry-run"},
 		{"claim", "flag", "widget.contract.overview", "--claim-says", "a", "--now-does", "b", "--reason", "c", "--dry-run"},
@@ -122,14 +105,6 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"comment", "inbox"},
 		{"comment", "add", "widget.contract.overview", "--as", "agent", "--body", "b", "--dry-run"},
 		{"comment", "reply", "widget.contract.overview", added.ThreadID, "--as", "agent", "--body", "b", "--dry-run"},
-		{"build-order", "status", "--module", "widget"},
-		{"build-order", "propose", "--module", "widget", "--dry-run"},
-		{"build-order", "lock", "--module", "widget", "--reason", "r", "--dry-run"},
-		// The one leaf whose payload nests three levels deep — data.phases[]
-		// with a per-phase cross_module map and a ghosts[] of a type declared
-		// in another package — which is precisely the shape an untagged Go
-		// field leaks its name through.
-		{"build-order", "show", "--module", "widget"},
 		// The track leaves run against the SAME track-less fixture as everything
 		// else here: list answers with an empty registry, and show/status answer
 		// with the unknown-track refusal. All three are envelopes, which is what
@@ -154,21 +129,6 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 				}
 			})
 		})
-	}
-}
-
-// icWriteRoledClaim rewrites the shared fixture claim with a build_role, which
-// is what buildorder.Propose needs and what icWriteFixtureProject deliberately
-// does not carry (its subject is the claim lifecycle, not the build order).
-func icWriteRoledClaim(t *testing.T, claimPath, module string) {
-	t.Helper()
-	claim := "id: " + module + ".contract.overview\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
-		"build_role: schema\n" +
-		"body: |\n  fixture claim for in-process CLI tests.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
-	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
-		t.Fatalf("rewrite claim with a build_role: %v", err)
 	}
 }
 
@@ -228,42 +188,14 @@ var jsonTagName = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*$`)
 // the first time an agent reads the output and finds nothing under the key the
 // contract promised.
 func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
-	payloads := []any{
-		versionData{},
-		checkData{},
-		claimShowData{},
-		claimListData{},
-		claimNewData{},
-		claimLinkData{},
-		lockData{},
-		lockRefusedData{},
-		unlockData{},
-		reauditData{},
-		flagData{},
-		commentWriteData{},
-		commentListData{},
-		commentInboxData{},
-		buildOrderProposeData{},
-		buildOrderStatusData{},
-		buildOrderLockData{},
-		// Both halves of "build-order show". This list is HAND-WRITTEN with no
-		// cross-check in either direction, which is exactly why the payload
-		// that embeds a type from another package is named here: nothing goes
-		// red if it is forgotten, and buildOrderShowPhaseData carries
-		// buildorder.Ghost, the class this test's doc comment exists for.
-		buildOrderShowData{},
-		buildOrderShowPhaseData{},
-		trackListData{},
-		trackShowData{},
-		trackStatusData{},
-
-		skillsExportData{},
-		cliout.DryRun{},
-		cliout.Envelope{},
-	}
-	for _, p := range payloads {
+	// surfacePayloadTypes is the one inventory of every payload this package
+	// publishes (TestSurfacePayloadTableCoversEveryDataType keeps it complete);
+	// the envelope itself is the one type outside it.
+	payloads := surfacePayloadTypes()
+	payloads["cliout.Envelope"] = cliout.Envelope{}
+	for name, p := range payloads {
 		rt := reflect.TypeOf(p)
-		t.Run(rt.Name(), func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			requireJSONTags(t, rt, rt.Name(), map[reflect.Type]bool{})
 		})
 	}
@@ -414,10 +346,9 @@ func TestClaimLinkDryRunAgreesWithTheWritePath(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	// Two modules, so "the claim is in a different module" is expressible.
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("rewrite config: %v", err)
-	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture"); err != nil {
 		t.Fatalf("lock the claim so it is linkable: %v", err)
 	}
@@ -484,140 +415,6 @@ func TestCommentWriteDryRunAgreesWithTheWritePath(t *testing.T) {
 	}
 }
 
-// buildorder.Lock refuses a STALE order before it looks at anything else — a
-// bare relock would freeze an order whose claims have moved — and the preview
-// not only failed to check it, its "not_already_current" gate actively PASSED a
-// stale order (it reads !locked || stale). So the one artifact state that always
-// refuses previewed as go-ahead.
-func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
-	root := t.TempDir()
-	claimsDir := filepath.Join(root, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims: %v", err)
-	}
-	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	claimPath := filepath.Join(claimsDir, "a.yaml")
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"build_role: schema\nbody: |\n  claim a.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
-	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
-		t.Fatalf("write claim: %v", err)
-	}
-
-	mustSucceed := func(args ...string) {
-		t.Helper()
-		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
-			t.Fatalf("%v: %v", args, err)
-		}
-	}
-	mustSucceed("claim", "lock", "widget.contract.a", "--reason", "fixture")
-	mustSucceed("build-order", "propose", "--module", "widget")
-	mustSucceed("build-order", "lock", "--module", "widget", "--reason", "fixture")
-
-	// Make the order stale the sanctioned way: unlock, edit, relock. The
-	// artifact's recorded claim hash no longer matches.
-	mustSucceed("claim", "unlock", "widget.contract.a", "--reason", "fixing it")
-	onDisk, err := os.ReadFile(claimPath)
-	if err != nil {
-		t.Fatalf("read claim: %v", err)
-	}
-	if err := os.WriteFile(claimPath, []byte(strings.Replace(string(onDisk), "claim a.", "claim a, revised.", 1)), 0o644); err != nil {
-		t.Fatalf("rewrite claim: %v", err)
-	}
-	mustSucceed("claim", "lock", "widget.contract.a", "--reason", "fixture")
-
-	assertDryRunAgrees(t, true,
-		"--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock it")
-}
-
-// The hand-edit gate (buildorder.ErrHandEdited) is the LAST refusal Lock makes
-// and it was the only one the preview could not see. It is also the one the
-// preview most needed: an artifact whose phase blocks were reversed by hand
-// between propose and lock is UNLOCKED, so it is never stale (staleness is a
-// locked-artifact concept and recomputeStale early-returns on an unlocked one)
-// and it is not already current — meaning every precondition the preview did
-// evaluate passed. The run previewed blocked:false and then exited 1.
-//
-// Reversing the phase blocks is the specific edit chosen here because it is the
-// one that survives a per-claim comparison: a claim's signature is
-// phase/position-within-phase/File, so moving whole blocks leaves every
-// signature byte-identical. Only the explicit phase-sequence comparison catches
-// it, which is exactly the check that lived behind an unexported function.
-func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
-	root := t.TempDir()
-	claimsDir := filepath.Join(root, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims: %v", err)
-	}
-	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	// Two claims in DIFFERENT phases, so the artifact has two phase blocks to
-	// reverse. One claim could not express this edit at all.
-	for _, c := range []struct{ name, id, role string }{
-		{"a", "widget.contract.a", "schema"},
-		{"b", "widget.contract.b", "behavior"},
-	} {
-		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"build_role: " + c.role + "\nbody: |\n  claim " + c.name + ".\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n"
-		if err := os.WriteFile(filepath.Join(claimsDir, c.name+".yaml"), []byte(claim), 0o644); err != nil {
-			t.Fatalf("write claim %s: %v", c.id, err)
-		}
-	}
-
-	mustSucceed := func(args ...string) {
-		t.Helper()
-		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
-			t.Fatalf("%v: %v", args, err)
-		}
-	}
-	mustSucceed("claim", "lock", "widget.contract.a", "--reason", "fixture")
-	mustSucceed("claim", "lock", "widget.contract.b", "--reason", "fixture")
-	mustSucceed("build-order", "propose", "--module", "widget")
-
-	// A freshly proposed order previews AND locks cleanly. Asserting this first
-	// is what keeps the test honest: without it, a preview that blocked
-	// unconditionally would pass the assertion below.
-	artifactPath := filepath.Join(root, "build", "build-order", "widget.json")
-	pristine, err := os.ReadFile(artifactPath)
-	if err != nil {
-		t.Fatalf("read artifact: %v", err)
-	}
-	blocked, missing := dryRunBlocked(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approve")
-	if blocked {
-		t.Fatalf("a freshly proposed order must preview as go-ahead, got blocked (missing %v)", missing)
-	}
-
-	// Now the edit: reverse the phase BLOCKS and change nothing else.
-	var doc map[string]any
-	if err := json.Unmarshal(pristine, &doc); err != nil {
-		t.Fatalf("parse artifact: %v", err)
-	}
-	phases, ok := doc["phases"].([]any)
-	if !ok || len(phases) < 2 {
-		t.Fatalf("fixture must produce at least two phase blocks, got %v", doc["phases"])
-	}
-	for i, j := 0, len(phases)-1; i < j; i, j = i+1, j-1 {
-		phases[i], phases[j] = phases[j], phases[i]
-	}
-	doc["phases"] = phases
-	edited, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal artifact: %v", err)
-	}
-	if err := os.WriteFile(artifactPath, edited, 0o644); err != nil {
-		t.Fatalf("write artifact: %v", err)
-	}
-
-	assertDryRunAgrees(t, true,
-		"--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approve")
-}
-
 // ---------------------------------------------------------------------
 // 4. one condition, one error code
 // ---------------------------------------------------------------------
@@ -647,7 +444,13 @@ func TestClaimsSentinelContentionIsAWriteConflictOnEveryVerb(t *testing.T) {
 	if err := os.Chmod(root, 0o555); err != nil {
 		t.Fatalf("make the project dir read-only: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(root, 0o755) }) //nolint:errcheck // best-effort restore so TempDir cleanup works
+	// The roof lock already created build/ledger; the sentinels live there,
+	// so it has to be read-only too for the write to be refused.
+	if err := os.Chmod(filepath.Join(root, "build", "ledger"), 0o555); err != nil {
+		t.Fatalf("make the ledger dir read-only: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Join(root, "build", "ledger"), 0o755) }) //nolint:errcheck // best-effort restore
+	t.Cleanup(func() { os.Chmod(root, 0o755) })                                   //nolint:errcheck // best-effort restore so TempDir cleanup works
 
 	for _, tc := range []struct {
 		name string

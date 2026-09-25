@@ -3,15 +3,16 @@
 Use the smallest graph that isolates each property, then vary graph size and
 shape to test growth. Apply approval rows when approval/readiness is affected;
 for other traversals add their own ordering, membership, edge, and diagnostic
-invariants. For example, build order must preserve phase ordering and explicit
-exclusions; an approval boolean alone cannot test it. Record applicability and
+invariants. For example, the viewer's graph payload must preserve node
+membership and every edge, and count the edges it drops; an approval boolean
+alone cannot test it. Record applicability and
 justify exclusions using the call graph before running proofs.
 
 ## Required graph shapes
 
 | Shape | What it must prove |
 | --- | --- |
-| Single edge | Under v1, a child can be locally approved against a readable draft parent while remaining unready; legacy policy is not silently migrated. |
+| Single edge | Under v1, a child can be locally approved against a readable draft parent while remaining unready; a store carried over from policy 0 keeps every approval, baseline and review cause it held. |
 | Chain, including a deep chain | Parent drift and review propagate through unchanged intermediates; depth does not cause unsafe stack or witness growth. |
 | Diamond | Two dependent-to-dependency baselines remain independently clearable. |
 | Reconverging diamond | A key based only on first hop or terminal node cannot merge distinct causes. |
@@ -43,8 +44,8 @@ Cover own thread, own flag, direct dependency drift, approval-integrity failure,
 unapproved dependency, missing dependency, retired dependency, unreadable
 dependency, unknown historical baseline, cycles, and legacy/v1 stores. Include
 multiple independent causes at one claim and independent baselines to one target.
-Governance/mirror drift must still propagate as specified without accidentally
-becoming required approval edges. Define an inherited witness as a required-edge
+Governance drift must still propagate as specified without accidentally
+becoming a required approval edge. Define an inherited witness as a required-edge
 route to its owner plus any documented terminal drift edge; not every diagnostic
 hop is necessarily `rests_on`.
 

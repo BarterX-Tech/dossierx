@@ -128,7 +128,7 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "claim", "list"},
 		{"--config", cfgPath, "claim", "list", "--review-pending"},
 		{"--config", cfgPath, "claim", "list", "--migrated"},
-		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--body", "a new fact", "--governed-reason", "fixture"},
+		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--summary", "Fixture claim used by the engine test corpus.", "--body", "a new fact", "--rests-on-none-reason", "fixture"},
 		{"--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "unlock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "flag", "widget.contract.overview", "--dry-run"},
@@ -138,9 +138,6 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "comment", "list", "widget.contract.overview"},
 		{"--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "agent", "--body", "a note"},
 		{"--config", cfgPath, "comment", "reply", "widget.contract.overview", "c-000000", "--dry-run"},
-		{"--config", cfgPath, "build-order", "propose", "--module", "widget", "--dry-run"},
-		{"--config", cfgPath, "build-order", "status", "--module", "widget"},
-		{"--config", cfgPath, "build-order", "lock", "--module", "widget", "--dry-run"},
 		{"--config", trackCfg, "track", "list"},
 		{"--config", trackCfg, "track", "show", "guest-checkout"},
 		{"--config", trackCfg, "track", "status", "guest-checkout"},
@@ -251,10 +248,9 @@ func TestEnvelope_CheckSuccess(t *testing.T) {
 func TestEnvelope_CheckFailsAtLint(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  broken fixture.\n" +
-			"rests_on:\n  - widget.contract.does-not-exist\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")
@@ -303,7 +299,7 @@ func TestEnvelope_LockUnlockRoundTrip(t *testing.T) {
 	if !env.OK || env.Command != "claim lock" {
 		t.Fatalf("envelope drift: %+v", env)
 	}
-	var locked lockData
+	var locked policyLockData
 	envData(t, env, &locked)
 	if locked.ClaimID != id || locked.From != "draft" || locked.To != "locked" {
 		t.Fatalf("transition drift: %+v", locked)
@@ -425,27 +421,6 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 	}
 }
 
-func TestEnvelope_BuildOrderStatusNotProposedIsASuccess(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
-
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "status", "--module", "widget")
-	if err != nil {
-		t.Fatalf("build-order status: %v", err)
-	}
-	// "Nothing here yet" is an answer, not a failure — a status command that
-	// errored for want of a thing to report on would be unusable in exactly the
-	// case it is most needed.
-	if !env.OK {
-		t.Fatalf("an unproposed module must be a successful status, got %+v", env)
-	}
-	var data buildOrderStatusData
-	envData(t, env, &data)
-	if data.Proposed || data.Module != "widget" {
-		t.Fatalf("status payload drift: %+v", data)
-	}
-}
-
 func TestEnvelope_SkillsExport(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "skills")
 	env, _, err := execReviewedCLIJSON(t, "skills", "export", target)
@@ -534,12 +509,6 @@ func TestErrorCodes(t *testing.T) {
 			wantExit: 1,
 		},
 		{
-			name:     "unknown module",
-			args:     []string{"--config", cfgPath, "build-order", "status", "--module", "nope"},
-			wantCode: cliout.CodeUnknownModule,
-			wantExit: 1,
-		},
-		{
 			name:     "lock refused by an open comment thread",
 			args:     []string{"--config", gatedCfg, "claim", "lock", "widget.contract.overview", "--reason", "approved"},
 			wantCode: cliout.CodeUnresolvedComments,
@@ -597,9 +566,9 @@ func TestLockGateCodes(t *testing.T) {
 	// A dangling rests_on => lint_failed.
 	broken := t.TempDir()
 	brokenCfg := writeCheckFixture(t, broken, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  a claim.\nrests_on:\n  - widget.contract.nope\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
+			"body: |\n  a claim.\n" +
+			"rests_on:\n  - widget.contract.nope\n",
 	})
 	env, _, err = execReviewedCLIJSON(t, "--config", brokenCfg, "claim", "lock", "widget.contract.a", "--reason", "approved")
 	if err == nil {
@@ -639,6 +608,10 @@ func TestDryRun_LockReportsGatesAndLeavesDiskAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read claim: %v", err)
 	}
+	storeBefore, err := os.ReadFile(storePathForTest(t, cfgPath))
+	if err != nil {
+		t.Fatalf("read store before dry run: %v", err)
+	}
 
 	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
 	if dr.Blocked {
@@ -669,8 +642,10 @@ func TestDryRun_LockReportsGatesAndLeavesDiskAlone(t *testing.T) {
 	if string(after) != string(before) {
 		t.Fatal("--dry-run wrote to the claim file")
 	}
-	if _, statErr := os.Stat(storePathForTest(t, cfgPath)); !os.IsNotExist(statErr) {
-		t.Fatalf("--dry-run created a lock store: %v", statErr)
+	// The roof lock already wrote the store; the dry run must leave it
+	// byte-identical rather than merely present.
+	if storeAfter, readErr := os.ReadFile(storePathForTest(t, cfgPath)); readErr != nil || string(storeAfter) != string(storeBefore) {
+		t.Fatalf("--dry-run touched the lock store: %v", readErr)
 	}
 }
 
@@ -779,170 +754,6 @@ func TestDryRun_CommentAddWarnsThatItFlipsALockedClaim(t *testing.T) {
 	}
 }
 
-// buildOrderFixture writes a project whose single claim is locked and carries a
-// build_role, which is the minimum a build order can be proposed from.
-func buildOrderFixture(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"build_role: schema\n" +
-			"body: |\n  a locked claim with a build role.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
-	})
-	return cfgPath
-}
-
-func TestEnvelope_BuildOrderProposeThenLock(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
-
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err != nil {
-		t.Fatalf("build-order propose: %v", err)
-	}
-	var proposed buildOrderProposeData
-	envData(t, env, &proposed)
-	if proposed.Locked || proposed.Path == "" {
-		t.Fatalf("propose payload drift: %+v", proposed)
-	}
-	// The per-phase claim IDS, not just counts: the whole reason to ask for a
-	// build order is to know what to implement next, and a count cannot say.
-	found := false
-	for _, p := range proposed.Phases {
-		for _, id := range p.Claims {
-			if id == "widget.contract.a" {
-				found = true
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("the ordered claim ids must be in the envelope, got %+v", proposed.Phases)
-	}
-
-	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "reviewed the order")
-	if err != nil {
-		t.Fatalf("build-order lock: %v", err)
-	}
-	var locked buildOrderLockData
-	envData(t, env, &locked)
-	if locked.LockedAt == "" || locked.Reason != "reviewed the order" {
-		t.Fatalf("build-order lock payload drift: %+v", locked)
-	}
-}
-
-// TestBuildOrderLockCodes pins buildOrderLockCode's classification of the THREE
-// refusals buildorder.Lock can produce. ErrNotProposed and ErrStale are
-// sentinels; the already-locked refusal is still matched on a fragment of its
-// own prose, so this is the guard that catches that message being reworded.
-//
-// The stale case is the one that shipped wrong. cliout.CodeBuildOrderStale was
-// declared, documented in the build-order skill as the ONE route to
-// "re-propose, then re-lock", and never emitted by anything: the stale refusal
-// fell through to build_order_refused, whose three documented recoveries ("lock
-// every claim in the module", "give each claim a build_role", "resolve the open
-// threads") the stale artifact has already satisfied. An agent branching on
-// code, exactly as the router skill instructs, got a dead branch and a set of
-// recoveries that could not apply.
-func TestBuildOrderLockCodes(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
-
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
-	if err == nil {
-		t.Fatal("locking an unproposed build order must fail")
-	}
-	if env.Error.Code != cliout.CodeNotProposed {
-		t.Fatalf("expected not_proposed, got %q (%s)", env.Error.Code, env.Error.Message)
-	}
-
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("first lock: %v", err)
-	}
-	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved again")
-	if err == nil {
-		t.Fatal("re-locking a current build order must fail rather than silently succeed")
-	}
-	if env.Error.Code != cliout.CodeAlreadyLocked {
-		t.Fatalf("expected already_locked, got %q (%s)", env.Error.Code, env.Error.Message)
-	}
-
-	// Move a covered claim underneath the frozen order, which is what makes it
-	// stale: unlock, change its build_role (a derivation input — since issue
-	// #58 a body edit alone leaves the order current), lock again.
-	for _, args := range [][]string{
-		{"claim", "unlock", "widget.contract.a", "--reason", "reopening to reclassify"},
-	} {
-		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
-			t.Fatalf("%v: %v", args, err)
-		}
-	}
-	claimFile := filepath.Join(filepath.Dir(cfgPath), "claims", "a.yaml")
-	raw, err := os.ReadFile(claimFile)
-	if err != nil {
-		t.Fatalf("read claim: %v", err)
-	}
-	edited := strings.Replace(string(raw), "build_role: schema\n", "build_role: behavior\n", 1)
-	if edited == string(raw) {
-		t.Fatalf("fixture precondition: the build_role substitution did not apply")
-	}
-	if err := os.WriteFile(claimFile, []byte(edited), 0o644); err != nil {
-		t.Fatalf("edit claim: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "re-approved"); err != nil {
-		t.Fatalf("re-lock the edited claim: %v", err)
-	}
-
-	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock the stale order")
-	if err == nil {
-		t.Fatal("locking a stale build order must fail rather than freezing an outdated order")
-	}
-	if env.Error.Code != cliout.CodeBuildOrderStale {
-		t.Fatalf("expected build_order_stale, got %q (%s)", env.Error.Code, env.Error.Message)
-	}
-}
-
-func TestDryRun_BuildOrderLockNeedsAProposalAndAReason(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
-
-	dr := dryRunOf(t, "--config", cfgPath, "build-order", "lock", "--module", "widget")
-	if !dr.Blocked {
-		t.Fatalf("no proposal and no --reason: the preview must say blocked, got %+v", dr)
-	}
-	missing := strings.Join(dr.Missing, ",")
-	if !strings.Contains(missing, "--reason") || !strings.Contains(missing, "build_order_proposed") {
-		t.Fatalf("expected both the absent input and the failed gate in missing[], got %v", dr.Missing)
-	}
-
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	dr = dryRunOf(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
-	if dr.Blocked {
-		t.Fatalf("a fresh proposal with a reason must not be blocked, got %+v", dr)
-	}
-}
-
-func TestDryRun_BuildOrderProposeWritesNothing(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
-	artifactDir := filepath.Dir(cfgPath)
-
-	dr := dryRunOf(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if dr.Blocked {
-		t.Fatalf("a fully locked module is orderable; got %+v", dr)
-	}
-	entries, err := os.ReadDir(artifactDir)
-	if err != nil {
-		t.Fatalf("read project dir: %v", err)
-	}
-	for _, e := range entries {
-		if strings.Contains(e.Name(), "build-order") {
-			t.Fatalf("--dry-run wrote a build-order artifact: %s", e.Name())
-		}
-	}
-}
-
 func TestDryRun_ImplinkSetChecksTheClaimIsLocked(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
@@ -1027,10 +838,9 @@ func TestTextModeErrorLineMatchesCobra(t *testing.T) {
 func TestEnvelopeKeysAreSnakeCase(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  broken fixture.\n" +
-			"rests_on:\n  - widget.contract.does-not-exist\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.does-not-exist\n",
 	})
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")

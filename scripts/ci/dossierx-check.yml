@@ -63,8 +63,7 @@
 # precisely what a checkout is — and runs every rule that survives: the whole
 # lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
 # -orphan / -abandoned / -absent / -pre-ledger / -downgraded,
-# comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
-# the build-order rules.
+# comment-ledger-drift, comment-digest-unrecorded and comment-digest-absent.
 #
 # WHAT THAT COSTS, stated as the principle rather than as a count. Earlier
 # revisions of this comment put a number on it — one, then two, then three —
@@ -72,9 +71,9 @@
 # count is gone and the reason is here instead:
 #
 #   AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE
-#   IT. The claim files, the lock store, the digest store and the build-order
-#   artifacts are the whole evidence base, and every one of them is a tracked
-#   file in the tree the committer is editing.
+#   IT. The claim files, the lock store and the digest store are the whole
+#   evidence base, and every one of them is a tracked file in the tree the
+#   committer is editing.
 #
 # So the line falls between UNCOORDINATED and COORDINATED change, not between
 # clumsy and clever. One file edited, one record removed, one status flipped,
@@ -117,13 +116,6 @@
 # Do not add them to .gitignore. Without the ledger in the repository, CI has
 # nothing to compare the claims against and this workflow is theatre.
 #
-# One generated file joins them the moment you approve it: a LOCKED
-# build/build-order/<module>.json. While it is locked:false it is ordinary output that
-# `build-order propose` rewrites in full, but a locked one is the sequence a
-# human approved and the artifact an implementing agent builds from, so this
-# workflow compares it against its record (build-order-content-drift,
-# build-order-ledger-missing) — and can only do that if it was committed.
-#
 # WHAT THE ABSENT-LEDGER ERROR DOES AND DOES NOT COVER
 #
 # dossierx says so out loud when the ledger FILE is missing: locked claims with
@@ -133,36 +125,26 @@
 # lock-ledger-pre-ledger. Nothing is grandfathered on the quiet.
 #
 # That finding is CONDITIONAL as of v0.4.0: it is emitted only when the project
-# actually holds a locked claim or a locked build order. A pre-ledger project
+# actually holds a locked claim. A pre-ledger project
 # that holds nothing locked is not a finding, because its next lock crosses the
 # store onto the ledger schema by itself — and records a real approval doing it.
 #
 # There is no **ledger** migration command any more. v0.4.0 removed `dossierx
 # migrate` outright, because ledger adoption would manufacture approval out of
 # nothing, and no evidence inside a repository distinguishes an honest pre-ledger
-# store from a downgraded one. `dossierx claim migrate-lock-policy --reason "..."`
-# is separate: it adopts policy v1 only after the ledger crossing, and preserves
-# existing approval records, baselines, receipts, and pending review state. So if
-# you are upgrading a project that
+# store from a downgraded one. There is also no everyday policy-adoption leaf:
+# existing stores stay on their recorded lock policy, and a new project starts
+# on policy v1. So if you are upgrading a project that
 # locked claims before v0.3.0, this job will fail until you do this ONCE,
-# locally, at a keyboard, IN THIS ORDER. Decide per module, before the first
-# command, whether you will re-lock every claim in it: a build order exists
-# only over a fully locked module, and the first command releases the approved
-# sequence — so a module you re-lock only partially finishes the crossing
-# gate-green but without a locked build order, and its propose + lock pair
-# waits until the day its last claim locks.
+# locally, at a keyboard, IN THIS ORDER. Leftover build-order files are
+# ignored and are not part of the crossing.
 #
-#   dossierx build-order propose --module <m>    # every LOCKED build order, re-proposed
 #   dossierx claim unlock <id> --reason "..."    # every locked claim
 #   dossierx claim lock   <id> --dry-run          # review the exact draft first
 #   dossierx claim lock   <id> --reason "..." --proposal "<snapshot>"    # re-lock only what you still stand
 #                                                # behind; the first lock in a project
 #                                                # holding nothing locked is what
 #                                                # crosses the store onto the ledger
-#   dossierx build-order propose --module <m>    # then, for every module that is
-#   dossierx build-order lock --module <m> --reason "..."
-#                                                # fully locked again: re-derive
-#                                                # the sequence and re-approve it
 #
 # then COMMIT the build/ledger/lock-store.json and build/ledger/comment-digest.json it
 # writes. Until that commit lands, every run here checks out the old-format store
@@ -208,7 +190,7 @@ jobs:
       # you adopt on purpose, in a commit someone reviewed — not something that
       # arrives on a Tuesday and starts failing everyone's builds.
       - name: Install dossierx
-        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.20
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.21
 
       # The full pipeline: lint, catalog, render, and the lock-ledger gate.
       # --format text because the audience here is a human reading a failed

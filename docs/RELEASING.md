@@ -50,7 +50,7 @@ The checklist below asks for each one.
       GOBIN="$DOSSIERX_LINT_BIN" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
       "$DOSSIERX_LINT_BIN/golangci-lint" run ./...
       (cd viewer-tests && "$DOSSIERX_LINT_BIN/golangci-lint" run ./...)
-      DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test -race -json ./...
+      DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test -race -timeout=20m -json ./...
 
       Replace `vPREVIOUS` with the greatest stable release below the version
       being prepared. The resolver must agree:
@@ -76,7 +76,7 @@ The checklist below asks for each one.
 
 - [ ] **A graph-changing release has passed the project graph-safety skill.** If
       the complete release diff changes the behavior of dependency readiness,
-      claim locking, review propagation, build-order graphs, catalog or viewer
+      claim locking, review propagation, catalog or viewer
       graph projections, or any other graph traversal (including shared inputs
       and consumers), read
       `.agents/skills/dossierx-graph-safety/SKILL.md` and record its `PASS` for
@@ -129,10 +129,9 @@ The checklist below asks for each one.
       passing on the uncommitted tree is the check for — and nothing
       untracked. Restore stamp-only viewer diffs; do not commit them. Commit a
       generated artifact only when its semantic content changed, and inspect that
-      diff before continuing. Because the vendored mermaid renderer changes every rendered
-      viewer this release, a fixture with a locked build order commits a
-      viewer noticeably larger than before: record each fixture viewer's
-      before/after `wc -c` in the CHANGELOG entry so the repository's growth
+      diff before continuing. When a release changes every rendered viewer,
+      record each fixture viewer's before/after `wc -c` in the CHANGELOG
+      entry so the repository's growth
       is visible rather than discovered later from
       `TestCommittedFixtureViewersAreNotStale` failing — the way the fixture
       viewers went stale through v0.3.0 and v0.3.1.

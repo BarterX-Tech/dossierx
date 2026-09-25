@@ -84,14 +84,15 @@ func liveGraphScaleFiles(layers, width int) (files map[string]string, claimCount
 			index := layer*width + column
 			id := fmt.Sprintf("widget.contract.live-%03d", index)
 			var claim strings.Builder
-			fmt.Fprintf(&claim, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: bounded live graph fixture\n", id)
+			fmt.Fprintf(&claim, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: bounded live graph fixture\n", id)
 			if layer > 0 {
 				claim.WriteString("rests_on:\n")
 				for previous := 0; previous < width; previous++ {
 					fmt.Fprintf(&claim, "  - widget.contract.live-%03d\n", (layer-1)*width+previous)
 				}
+			} else {
+				claim.WriteString("rests_on:\n  none: true\n  reason: fixture\n")
 			}
-			claim.WriteString("governed_by:\n  type: none\n  reason: fixture\n")
 			claim.WriteString("embodiment:\n  mode: compare\n  checks:\n    - id: set-state\n      adapter: neutral/v1\n      target: widget://shared/set\n      expectation:\n        shape: set\n        value: [ready, waiting]\n    - id: scalar-state\n      adapter: neutral/v1\n      target: widget://shared/scalar\n      expectation:\n        shape: scalar\n        value: ready\n")
 			files[fmt.Sprintf("claims/live-%03d.yaml", index)] = claim.String()
 		}

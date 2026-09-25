@@ -36,7 +36,7 @@
 // image route answers from an allowlist computed from loaded claims; a src the
 // lint refuses is a src that route must never learn about. Unlike
 // markdown-sanity's craft findings this one is meant to block a lock, and it
-// does, through internal/lock.Lock's existing error-severity gate.
+// does, through internal/lock.EvaluateSet's existing error-severity gate.
 //
 // WHAT THIS LINT DOES NOT CHECK, and why:
 //
@@ -56,7 +56,7 @@
 //     co-location mistake, and the message below is the only one in the engine
 //     that explains where images must live — so both rules fire on it, on the
 //     package's existing co-firing precedent (cycle/self-edge,
-//     dangling/mirror-unanchored). See urlsafe.IsOffOrigin.
+//     dangling/validated-on-missing). See urlsafe.IsOffOrigin.
 //
 //   - It skips a claim whose SourcePath is empty. SourcePath is populated by
 //     the loader and is not part of the YAML schema, so a claim built in
@@ -107,9 +107,9 @@ var assetExtensions = map[string]bool{
 // allowlist.
 //
 // Only Body and Steps are scanned: they are the two image-permitting surfaces
-// (amendment A3's per-surface permission table). A table cell, a comment body
-// and Governed.Reason render no image at all, so an image there is
-// markdown-sanity's business and never becomes an asset reference.
+// (amendment A3's per-surface permission table). A table cell and a comment
+// body render no image at all, so an image there is markdown-sanity's
+// business and never becomes an asset reference.
 func (AssetScope) Check(claims []model.Claim, _ *config.Config) []Finding {
 	var findings []Finding
 	for _, c := range claims {

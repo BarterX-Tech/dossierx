@@ -1,0 +1,8 @@
+schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - bodymod
+claims_dir: claims
+max_claim_body_chars: 20

@@ -170,6 +170,29 @@ func TestEncodeJSONBoundedLargeSparseCatalogDoesNotFalseRefuse(t *testing.T) {
 	t.Logf("ambiguous catalog estimate measured exactly: claims=%d catalog_bytes=%d cap=%d", claimCount, len(got), conformance.MaxOutputBytes)
 }
 
+// The preflight is refusal authority, so it may charge only bytes Document
+// emits. An internals claim never reaches catalog.json; its bytes (here, a
+// rests_on reason alone larger than the cap) must not refuse a catalog whose
+// actual output is small.
+func TestEncodeJSONBoundedDoesNotChargeOmittedInternals(t *testing.T) {
+	huge := strings.Repeat("x", conformance.MaxOutputBytes+1)
+	claims := []model.Claim{
+		{ID: "widget.contract.api", Module: "widget", Facet: "contract", Status: model.StatusDraft, RestsOn: model.RestsOnIDs("widget.internals.queue")},
+		{ID: "widget.internals.queue", Module: "widget", Facet: "internals", Status: model.StatusDraft, RestsOn: model.RestsOn{None: true, Reason: huge}},
+	}
+	cat, err := Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	if err != nil {
+		t.Fatalf("bytes of an omitted internals claim refused the catalog: %v", err)
+	}
+	if strings.Contains(string(data), "widget.internals.queue") || len(data) > 4096 {
+		t.Fatalf("catalog = %d bytes, want the small contract-only projection:\n%.512s", len(data), data)
+	}
+}
+
 func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing.T) {
 	const claimCount = 420000
 	claims := make([]model.Claim, claimCount)
@@ -209,9 +232,12 @@ func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing
 
 func TestCatalogProjectionUpperBoundCoversEscapedIndentedOutput(t *testing.T) {
 	claim := model.Claim{
-		ID: "widget.contract.escaped", Module: "widget<&>", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard,
-		Mirrors: []string{"widget.contract.\x00quoted\""}, RestsOn: []string{"widget.contract.<rest>"},
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "<&>\\\"\n"},
+		ID:      "widget.contract.escaped",
+		Module:  "widget<&>",
+		Facet:   "contract",
+		Status:  model.StatusDraft,
+		Layout:  model.LayoutCard,
+		RestsOn: model.RestsNone("<&>\\\"\n"),
 	}
 	cat, err := Build([]model.Claim{claim}, nil)
 	if err != nil {
@@ -302,29 +328,22 @@ func TestBuild_NilCatalogDocumentAndWrite(t *testing.T) {
 func TestDocument_EdgeSerialization(t *testing.T) {
 	claims := []model.Claim{
 		{
-			ID:     "widget.contract.overview",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusLocked,
-			Layout: model.LayoutCard,
-			Governed: model.Governed{
-				Type:   "none",
-				Reason: "fixture claim, not backed by any real doctrine",
-			},
+			ID:      "widget.contract.overview",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusLocked,
+			Layout:  model.LayoutCard,
+			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 		{
-			ID:     "widget.internals.fields",
-			Facet:  "internals",
+			ID:     "widget.contract.fields",
+			Facet:  "contract",
 			Module: "widget",
 			Status: model.StatusDraft,
 			Rows: []model.Row{
 				{"field": "id", "type": "string"},
 			},
-			Mirrors: []string{"widget.contract.overview"},
-			RestsOn: []string{"widget.contract.overview", "widget.internals.other"},
-			Governed: model.Governed{
-				Type: "widget.doctrine.hub",
-			},
+			RestsOn: model.RestsOnIDs("widget.contract.overview", "gadget.contract.api"),
 		},
 	}
 
@@ -356,34 +375,66 @@ func TestDocument_EdgeSerialization(t *testing.T) {
 	if overview.Layout != model.LayoutCard {
 		t.Errorf("overview layout = %q, want card", overview.Layout)
 	}
-	if overview.Edges.Mirrors != nil || overview.Edges.RestsOn != nil {
-		t.Errorf("overview should have no mirrors/rests_on edges, got %#v", overview.Edges)
+	if overview.Edges.RestsOn != nil {
+		t.Errorf("overview should have no rests_on target list, got %#v", overview.Edges)
 	}
-	if overview.Edges.GovernedBy == nil || overview.Edges.GovernedBy.Type != "none" ||
-		overview.Edges.GovernedBy.Reason != "fixture claim, not backed by any real doctrine" {
-		t.Errorf("overview governed_by = %#v, want type=none with reason", overview.Edges.GovernedBy)
+	if !overview.Edges.RestsOnNone || overview.Edges.RestsOnReason != "fixture claim, not backed by any real doctrine" {
+		t.Errorf("overview rests_on none = %#v, want none with reason", overview.Edges)
 	}
 
-	fields, ok := byID["widget.internals.fields"]
+	fields, ok := byID["widget.contract.fields"]
 	if !ok {
-		t.Fatal("missing widget.internals.fields entry")
+		t.Fatal("missing widget.contract.fields entry")
 	}
 	if fields.Layout != model.LayoutTable {
 		t.Errorf("fields layout = %q, want table (inferred from rows)", fields.Layout)
 	}
-	if len(fields.Edges.Mirrors) != 1 || fields.Edges.Mirrors[0] != "widget.contract.overview" {
-		t.Errorf("fields mirrors = %v, want [widget.contract.overview]", fields.Edges.Mirrors)
-	}
 	if len(fields.Edges.RestsOn) != 2 {
 		t.Errorf("fields rests_on = %v, want 2 entries", fields.Edges.RestsOn)
 	}
-	if fields.Edges.GovernedBy == nil || fields.Edges.GovernedBy.Type != "widget.doctrine.hub" || fields.Edges.GovernedBy.Reason != "" {
-		t.Errorf("fields governed_by = %#v, want type=widget.doctrine.hub with no reason", fields.Edges.GovernedBy)
+	if fields.Edges.RestsOnNone {
+		t.Errorf("fields should not be rests_on none, got %#v", fields.Edges)
 	}
 
 	// Entries must be sorted by id regardless of input order.
-	if doc.Claims[0].ID != "widget.contract.overview" || doc.Claims[1].ID != "widget.internals.fields" {
+	if doc.Claims[0].ID != "widget.contract.fields" || doc.Claims[1].ID != "widget.contract.overview" {
 		t.Errorf("entries not sorted by id: got order %q, %q", doc.Claims[0].ID, doc.Claims[1].ID)
+	}
+}
+
+func TestDocument_IntegrationOmitsInternals(t *testing.T) {
+	claims := []model.Claim{
+		{ID: "widget.contract.api", Facet: "contract", Module: "widget", Status: model.StatusDraft, RestsOn: model.RestsOnIDs("widget.internals.queue", "gadget.contract.api")},
+		{ID: "widget.internals.queue", Facet: "internals", Module: "widget", Status: model.StatusDraft},
+		{ID: "gadget.internals.secret", Facet: "internals", Module: "gadget", Status: model.StatusDraft},
+		{ID: "gadget.contract.api", Facet: "contract", Module: "gadget", Status: model.StatusDraft},
+	}
+	cat, err := Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cat.Claims) != 4 {
+		t.Fatalf("in-memory catalog must keep internals: %d", len(cat.Claims))
+	}
+	doc := cat.Document()
+	if len(doc.Claims) != 2 {
+		t.Fatalf("integration document = %d, want 2 contract claims", len(doc.Claims))
+	}
+	for _, e := range doc.Claims {
+		if e.Facet == "internals" {
+			t.Fatalf("catalog.json included internals %s", e.ID)
+		}
+		for _, id := range e.Edges.RestsOn {
+			if strings.Contains(id, ".internals.") {
+				t.Fatalf("integration edge still names internals: %s -> %s", e.ID, id)
+			}
+		}
+	}
+	if _, ok := doc.ByFacet["internals"]; ok {
+		t.Fatal("ByFacet must omit internals")
+	}
+	if got := doc.ByModule["widget"]; len(got) != 1 || got[0] != "widget.contract.api" {
+		t.Fatalf("ByModule[widget] = %v, want only contract", got)
 	}
 }
 
@@ -431,9 +482,9 @@ func TestBuild_LargeListDeterminism(t *testing.T) {
 				Module: module,
 				Status: model.StatusDraft,
 				Body:   "filler",
-				Mirrors: []string{
+				RestsOn: model.RestsOnIDs(
 					fmt.Sprintf("%s.%s.slug-%04d", module, facet, (i+1)%n),
-				},
+				),
 			})
 		}
 		return claims
@@ -492,8 +543,7 @@ func TestBuild_LargeListDeterminism(t *testing.T) {
 func TestDocument_KindIsEffectiveKind(t *testing.T) {
 	claims := []model.Claim{
 		{ID: "w.contract.fact", Module: "w", Facet: "contract"},
-		{ID: "w.contract.note", Module: "w", Facet: "contract", Kind: model.KindOrientationNote, Layout: model.LayoutBanner},
-		{ID: "w.overview.router", Module: "w", Facet: "overview", Layout: model.LayoutBanner},
+		{ID: "w.contract.explicit", Module: "w", Facet: "contract", Kind: model.KindFact},
 	}
 	cat, err := Build(claims, nil)
 	if err != nil {
@@ -506,9 +556,8 @@ func TestDocument_KindIsEffectiveKind(t *testing.T) {
 		got[e.ID] = e.Kind
 	}
 	want := map[string]model.Kind{
-		"w.contract.fact":   model.KindFact,
-		"w.contract.note":   model.KindOrientationNote,
-		"w.overview.router": model.KindOrientationNote,
+		"w.contract.fact":     model.KindFact,
+		"w.contract.explicit": model.KindFact,
 	}
 	for id, k := range want {
 		if got[id] != k {

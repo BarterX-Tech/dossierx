@@ -15,9 +15,10 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Neutral conformance gate fixture.
 body: neutral conformance gate fixture
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 embodiment:
   mode: compare
@@ -50,9 +51,9 @@ func blockingCLIProjectWithPolicy(t *testing.T, policy, claim, observations stri
 		blockingLine = "  blocking: " + policy + "\n"
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets: [contract]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n" + blockingLine
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n" + blockingLine
+	writeProjectConfigFile(t, cfgPath, cfg)
 	for path, data := range map[string]string{
-		cfgPath: cfg,
 		filepath.Join(root, "claims", "state.yaml"): claim,
 		filepath.Join(root, "observations.json"):    observations,
 	} {
@@ -60,6 +61,7 @@ func blockingCLIProjectWithPolicy(t *testing.T, policy, claim, observations stri
 			t.Fatal(err)
 		}
 	}
+	lockFixtureConstitution(t, cfgPath)
 	return root, cfgPath
 }
 
@@ -259,7 +261,7 @@ func TestConformanceBlockingPreservesLintAndThemePrecedence(t *testing.T) {
 		wantStop string
 	}{
 		{name: "lint", mutate: func(claim string) string {
-			return strings.Replace(claim, "governed_by:\n", "rests_on:\n  - widget.contract.missing\ngoverned_by:\n", 1)
+			return strings.Replace(claim, "rests_on:\n  none: true\n  reason: fixture\n", "rests_on:\n  - widget.contract.missing\n", 1)
 		}, wantCode: "lint_failed", wantStop: "lint"},
 		{name: "theme", mutate: func(claim string) string { return claim }, wantCode: "invalid_config", wantStop: "config"},
 	} {

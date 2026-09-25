@@ -27,7 +27,7 @@ func scanTestConfig(t *testing.T, modules ...string) (cfg *config.Config, srcDir
 	for _, m := range modules {
 		modYAML += "  - " + m + "\n"
 	}
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n" + modYAML +
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n" + modYAML +
 		"claims_dir: claims\nsource_dirs:\n  - src\n"
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
@@ -53,7 +53,7 @@ func writeScanFile(t *testing.T, srcDir, rel, content string) {
 
 func TestScan_NoSourceDirs_IsANoOp(t *testing.T) {
 	cfg := testConfig(t, "widget") // no source_dirs set at all
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	report, err := Scan(claims, cfg)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
@@ -65,7 +65,7 @@ func TestScan_NoSourceDirs_IsANoOp(t *testing.T) {
 
 func TestScan_ValidTag_ReconcilesALink(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	writeScanFile(t, srcDir, "main.py", "# dossierx-claim: widget.contract.main\ndef do_thing():\n    pass\n")
 
 	report, err := Scan(claims, cfg)
@@ -98,7 +98,7 @@ func TestScan_ValidTag_ReconcilesALink(t *testing.T) {
 
 func TestScan_UnknownClaimID_IsAScanError(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	writeScanFile(t, srcDir, "main.py", "# dossierx-claim: widget.contract.mian\ndef do_thing():\n    pass\n")
 
 	report, err := Scan(claims, cfg)
@@ -133,9 +133,9 @@ func TestScan_DraftClaim_IsAScanError(t *testing.T) {
 func TestScan_MultipleTagsAcrossFiles(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{
-		lockedClaim("widget.contract.a", "widget", model.BuildRoleBehavior),
-		lockedClaim("widget.contract.b", "widget", model.BuildRoleBehavior),
-		lockedClaim("widget.contract.c", "widget", model.BuildRoleVerification),
+		lockedClaim("widget.contract.a", "widget"),
+		lockedClaim("widget.contract.b", "widget"),
+		lockedClaim("widget.contract.c", "widget"),
 	}
 	writeScanFile(t, srcDir, "a.go", "// dossierx-claim: widget.contract.a\nfunc doA() {}\n")
 	writeScanFile(t, srcDir, "sub/b.go",
@@ -159,7 +159,7 @@ func TestScan_GoModuleImportPathNeverMistakenForATag(t *testing.T) {
 	// never confuse an ordinary import line for a dossierx-claim tag just
 	// because both are lines of text in a source file.
 	cfg, srcDir := scanTestConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	writeScanFile(t, srcDir, "main.go", "import \"github.com/BarterX-Tech/dossierx/internal/model\"\n\nfunc main() {}\n")
 
 	report, err := Scan(claims, cfg)
@@ -178,7 +178,7 @@ func TestScan_GoModuleImportPathNeverMistakenForATag(t *testing.T) {
 // first real Swift project it met (Curtainly, 2026-09-22).
 func TestScan_SkipsHiddenDirectoriesAndSymlinks(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
-	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
+	claims := []model.Claim{lockedClaim("widget.contract.main", "widget")}
 	writeScanFile(t, srcDir, "main.go", "// dossierx-claim: widget.contract.main\nfunc Foo() {}\n")
 	// A tag inside a hidden directory is not source and must not be found.
 	writeScanFile(t, srcDir, ".build/checkouts/vendor.go", "// dossierx-claim: widget.contract.main\n")

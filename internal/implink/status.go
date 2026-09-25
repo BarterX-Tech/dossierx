@@ -1,9 +1,9 @@
 // status.go implements the read-only reporting half of this package's
 // contract: Status recomputes drift for every linked file against its
-// stored baseline hash and separately counts a module's locked,
-// code-producing-phase claims that have no linked file at all — mirroring
-// internal/buildorder's Status (a read-only recompute-on-load over an
-// artifact only ever written elsewhere, by Lock there and by Set here).
+// stored baseline hash and separately counts a module's locked
+// code-linked claims (see Expects) that have no linked file at all. It is a
+// read-only recompute-on-load over an artifact only ever written elsewhere,
+// by Set.
 package implink
 
 import (
@@ -17,37 +17,20 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// codeProducingRoles is the subset of model.BuildRole phases expected to
-// produce real code or tests once a module's claims lock: the same 4
-// "real work" phases internal/buildorder.Phases places after orientation,
-// minus orientation itself (context/process claims are never expected to
-// have a linked file the way a schema/behavior/api/verification claim is)
-// and minus out-of-scope (deferred/future-scope, excluded from the build
-// order sequence for the same reason). Status uses this set to decide
-// which locked-but-unlinked claims are actually worth reporting as
-// "unlinked" — an orientation or out-of-scope claim missing a linked file
-// is the normal, expected case, not a gap.
-var codeProducingRoles = map[model.BuildRole]bool{
-	model.BuildRoleSchema:       true,
-	model.BuildRoleBehavior:     true,
-	model.BuildRoleAPI:          true,
-	model.BuildRoleVerification: true,
-}
-
-// CodeProducing reports whether a claim in build_role role is expected to
-// have a linked file once locked — the one predicate Status's unlinked
-// count, check's code-link gate and the viewer's "not linked to code" row
-// all key off, exported so no consumer keeps a second copy of the set.
-func CodeProducing(role model.BuildRole) bool {
-	return codeProducingRoles[role]
-}
-
 // Expects reports whether c is a claim the code-link gate holds to account:
-// locked, and in a code-producing build_role. A draft claim is never
-// expected to be linked (Scan refuses a tag on it), and an orientation or
-// out-of-scope claim has no code to point at.
+// a locked MODULE claim that has not declared itself code-free. A draft claim
+// is never expected to be linked (Scan refuses a tag on it); a project claim
+// (project.<slug>) is project-wide law with no module to own its code; and a
+// claim carrying `embodiment: {mode: none, reason: ...}` has recorded, under
+// the human's lock, that it has no software embodiment. Every other locked
+// claim is expected to point at the code or test that makes it true — the
+// one predicate Status's unlinked count, check's code-link gate and the
+// viewer's "not linked to code" row all key off.
 func Expects(c model.Claim) bool {
-	return c.Status == model.StatusLocked && codeProducingRoles[c.BuildRole]
+	if c.Status != model.StatusLocked || c.IsProjectClaim() {
+		return false
+	}
+	return c.Embodiment == nil || c.Embodiment.Mode != model.EmbodimentModeNone
 }
 
 // DriftEntry is one linked file whose current on-disk content no longer
@@ -79,7 +62,7 @@ type PartialEntry struct {
 // StatusReport is Status's full result for one module: how many claims
 // have at least one linked file, which specific linked files have drifted,
 // which stepped claims are linked but not on every step, and how many of
-// the module's locked, code-producing-phase claims have no linked file at
+// the module's claims Expects holds to account have no linked file at
 // all. UnlinkedCount and PartialCount are deliberately always present
 // (never omitted or hidden behind a "no drift, nothing to see" summary) — a
 // project adopting this feature needs to see gaps as loudly as it sees
@@ -105,7 +88,7 @@ func (r *StatusReport) Incomplete() int {
 // print, so the two call sites can never drift apart on phrasing.
 func (r *StatusReport) Summary() string {
 	return fmt.Sprintf(
-		"impl-links: %d linked, %d drifted, %d partial, %d unlinked-in-schema/behavior/api/verification-phases",
+		"impl-links: %d linked, %d drifted, %d partial, %d unlinked locked claims",
 		r.LinkedClaims, len(r.Drifted), r.PartialCount, r.UnlinkedCount,
 	)
 }
@@ -139,11 +122,9 @@ func StepCoverage(total int, steps []int) (covered int, missing []int) {
 // Status loads module's implementation-link artifact and reports its
 // current state against claims: every linked file's hash is re-checked
 // against its stored baseline (a mismatch, or the file having vanished
-// entirely, is reported as drift), and every one of module's locked claims
-// whose build_role is a code-producing phase (see codeProducingRoles) but
-// which has no Link entry at all is counted as unlinked. It never writes
-// path back out — recomputing drift is a pure read, exactly like
-// buildorder.Status never mutates the artifact it loads.
+// entirely, is reported as drift), and every one of module's claims that
+// Expects holds to account but which has no Link entry at all is counted as
+// unlinked. It never writes path back out — recomputing drift is a pure read.
 //
 // A missing artifact (module has never called Set) returns an error
 // wrapping ErrNoArtifact; callers that want to treat that as "nothing to
@@ -162,7 +143,7 @@ func Status(claims []model.Claim, cfg *config.Config, module string) (*StatusRep
 
 // Coverage is Status for the code-link gate: a module that has never
 // linked anything is not "nothing to report", it is a module in which
-// EVERY locked, code-producing claim is unlinked. Where Status wraps
+// EVERY claim Expects holds to account is unlinked. Where Status wraps
 // ErrNoArtifact for a missing artifact — the right answer for a reporter
 // that must stay silent on projects that never opted in — Coverage
 // evaluates the empty artifact, because the caller has already decided,
@@ -269,9 +250,7 @@ type ViewFile struct {
 // with current drift status. It returns an error wrapping ErrNoArtifact
 // when module has no artifact at all (never called Set) — callers (namely
 // internal/render's attach step) are expected to treat that as "render
-// nothing extra for this module", the same graceful-degradation contract
-// internal/render's Build order tab follows for a module whose build-order
-// artifact does not load.
+// nothing extra for this module" (graceful degradation, not an error).
 func ViewsByClaim(cfg *config.Config, module string) (map[string][]ViewFile, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("implink: cfg must not be nil")

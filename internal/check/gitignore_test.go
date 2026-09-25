@@ -24,7 +24,7 @@ func gitignoreProject(t *testing.T, root string) *config.Config {
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFixtureFile(t, filepath.Join(root, config.FileName), "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n")
+	writeFixtureFile(t, filepath.Join(root, config.FileName), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n")
 	cfg, err := config.LoadConfig(filepath.Join(root, config.FileName))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -44,14 +44,14 @@ func gitignoreRepo(t *testing.T, ignore string) *config.Config {
 }
 
 // TestGitignored_BareBuildPatternIsOneFindingPerPath: `.gitignore` = "build/"
-// yields one finding per checked path — the three ledger stores, both
-// artifacts of each module, and build/.gitignore LAST — each naming the
+// yields one finding per checked path — the three ledger stores, each
+// module's code-links artifact, and build/.gitignore LAST — each naming the
 // pattern and its line, in the engine's order. The order is load-bearing: the
 // approval verbs print findings[0] as the store_gitignored refusal, so the
 // first finding must be the lock ledger's, whose harm clause is the plan's
 // verbatim one. Each finding's harm clause is its own kind's — the sentence
 // true of the lock ledger (check fails with lock-ledger-absent) is false of a
-// build order, the flag store and build/.gitignore, and a refutable harm is
+// module's code links, the flag store and build/.gitignore, and a refutable harm is
 // the report that teaches people to bypass the gate.
 func TestGitignored_BareBuildPatternIsOneFindingPerPath(t *testing.T) {
 	cfg := gitignoreRepo(t, "build/\n")
@@ -66,9 +66,7 @@ func TestGitignored_BareBuildPatternIsOneFindingPerPath(t *testing.T) {
 		"build/ledger/lock-store.json",
 		"build/ledger/comment-digest.json",
 		"build/ledger/flag-store.json",
-		"build/build-order/widget.json",
 		"build/code-links/widget.json",
-		"build/build-order/panel.json",
 		"build/code-links/panel.json",
 		"build/.gitignore",
 	}
@@ -78,9 +76,7 @@ func TestGitignored_BareBuildPatternIsOneFindingPerPath(t *testing.T) {
 		"build/ledger/lock-store.json":     {"so the lock ledger never reaches the repository", "check fails there with lock-ledger-absent", `so "!build/ledger/" alone does nothing`},
 		"build/ledger/comment-digest.json": {"so the comment digest never reaches the repository", "comment-digest-absent", `so "!build/ledger/" alone does nothing`},
 		"build/ledger/flag-store.json":     {"so the flag store never reaches the repository", "claim reaudit there finds no pending flag", `so "!build/ledger/" alone does nothing`},
-		"build/build-order/widget.json":    {`so module "widget"'s build order never reaches the repository`, `build-order-ledger-abandoned`, `module "widget"`, `so "!build/build-order/" alone does nothing`},
 		"build/code-links/widget.json":     {`so module "widget"'s code links never reaches the repository`, "prints no code-link status", `so "!build/code-links/" alone does nothing`},
-		"build/build-order/panel.json":     {`module "panel"`, `build-order-ledger-abandoned`},
 		"build/code-links/panel.json":      {`module "panel"`, "prints no code-link status"},
 		"build/.gitignore":                 {"so the build directory's own .gitignore never reaches the repository", "rewrites the file from the default", `so "!build/.gitignore" alone does nothing`},
 	}
@@ -137,7 +133,7 @@ func TestGitignored_ForceAddedLedgerIsAWarningAndItsSiblingsStayFindings(t *test
 	for _, f := range findings {
 		paths = append(paths, strings.SplitN(f.Message, " ", 2)[0])
 	}
-	for _, sibling := range []string{"build/ledger/flag-store.json", "build/ledger/comment-digest.json", "build/build-order/widget.json", "build/build-order/panel.json", "build/code-links/widget.json"} {
+	for _, sibling := range []string{"build/ledger/flag-store.json", "build/ledger/comment-digest.json", "build/code-links/widget.json"} {
 		if !containsStr(paths, sibling) {
 			t.Fatalf("a directory-level check goes green here; %s must still be a finding, got %v", sibling, paths)
 		}
@@ -267,7 +263,7 @@ func TestGitignored_BuildDirAboveTheTopLevelIsAReason(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFixtureFile(t, filepath.Join(repo, config.FileName), "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
+	writeFixtureFile(t, filepath.Join(repo, config.FileName), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
 	cfg, err := config.LoadConfig(filepath.Join(repo, config.FileName))
 	if err != nil {
 		t.Fatal(err)

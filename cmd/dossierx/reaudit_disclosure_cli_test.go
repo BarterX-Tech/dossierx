@@ -34,16 +34,15 @@ func disclosureFixture(t *testing.T) (cfgPath, claimPath string) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, parityConfig)
+	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "main.yaml")
-	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
+	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n" +
 		"  the retry policy allows two attempts.\n" +
 		"  Backoff is exponential, starting at 200ms.\n" +
 		"  A dead-letter queue receives whatever still fails.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}

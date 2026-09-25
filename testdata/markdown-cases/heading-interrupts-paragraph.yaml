@@ -7,6 +7,6 @@ body: |
   Prose line.
   ### Heading
   More prose.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a heading interrupts an open paragraph

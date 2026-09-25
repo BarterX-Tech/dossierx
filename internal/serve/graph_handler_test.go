@@ -136,8 +136,8 @@ func TestGraphEndpoint(t *testing.T) {
 	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("body does not parse as JSON: %v\n%s", err, body)
 	}
-	if payload.Schema != 1 {
-		t.Errorf("schema = %d, want 1", payload.Schema)
+	if payload.Schema != 3 {
+		t.Errorf("schema = %d, want 3", payload.Schema)
 	}
 	if payload.GeneratedAt == "" {
 		t.Errorf("generated_at is empty; the handler must stamp it (graph.Build deliberately does not)")

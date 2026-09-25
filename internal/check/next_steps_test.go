@@ -21,9 +21,9 @@ import (
 // draftWithOpenThread is a draft claim carrying an unresolved comment thread —
 // the lock gate's third refusal, and one the "still draft" hint cannot see.
 func draftWithOpenThread(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-aaa111\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: does this still hold?\n    edited: false\n"
@@ -62,32 +62,6 @@ func TestNextSteps_DraftExampleSkipsAThreadBlockedClaim(t *testing.T) {
 	// tally, or a reader would think a blocked claim had stopped being draft.
 	if !strings.Contains(hint, "2 claim(s) still draft") {
 		t.Fatalf("the count must still cover every draft, got %q", hint)
-	}
-}
-
-// A doctrine-facet dependency that is still draft is hub gating's refusal, the
-// other gate the hint cannot see.
-func TestNextSteps_DraftExampleSkipsAnUnlockedDoctrineDependency(t *testing.T) {
-	const doctrineConfig = "schema_version: 1\nfacets:\n  - doctrine\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
-		"doctrine_facet: doctrine\n"
-
-	cfg, claims := project(t, doctrineConfig, map[string]string{
-		"claims/hub.yaml": "id: widget.doctrine.hub\nfacet: doctrine\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  the doctrine hub, still draft.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
-		// Sorts first, and rests on the still-draft hub, so hub gating refuses it.
-		"claims/blocked.yaml": "id: widget.contract.blocked\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-			"body: |\n  rests on a draft doctrine claim.\n" +
-			"rests_on:\n  - widget.doctrine.hub\n" +
-			"governed_by:\n  type: widget.doctrine.hub\n  reason: governed by the hub\n",
-	})
-	if !cfg.HubGatingEnabled() {
-		t.Fatalf("fixture precondition: hub gating must be on")
-	}
-
-	hint := draftHint(t, check.Status(claims, cfg))
-	if strings.Contains(hint, "widget.contract.blocked") {
-		t.Fatalf("the example named a claim hub gating would refuse: %q", hint)
 	}
 }
 
@@ -153,10 +127,9 @@ func TestNextSteps_FixturePreconditions(t *testing.T) {
 // one command that could not work.
 func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.aaa\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.aaa\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  rests on a still-draft sibling.\n" +
-			"rests_on:\n  - widget.contract.zzz\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.zzz\n",
 		"claims/z.yaml": draftClaim("widget.contract.zzz"),
 	})
 
@@ -175,9 +148,9 @@ func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 // lockedWithOpenThread is a LOCKED claim carrying an unresolved thread. It is
 // review_pending because an open thread is one of the three triggers.
 func lockedWithOpenThread(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-406a9f\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: I am not sure about this.\n    edited: false\n"

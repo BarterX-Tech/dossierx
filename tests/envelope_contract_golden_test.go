@@ -279,31 +279,30 @@ func envTracked(t *testing.T, dir string) map[string]string {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - checkout\n  - payments\n" +
 		"claims_dir: claims\n" +
 		"tracks:\n" +
 		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
 		"  - id: refunds\n    title: Refunds\n"
-	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(dir, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, dir)
 	claims := map[string]string{
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a guest completes a purchase without creating an account.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim\n",
+			"rests_on:\n  none: true\n  reason: fixture claim\n",
 		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a guest session expires after thirty minutes.\n" +
 			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim\n",
+			"rests_on:\n  none: true\n  reason: fixture claim\n",
 		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
-			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
+			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a card is captured at authorization time.\n" +
 			"tracks:\n  - id: guest-checkout\n" +
-			"governed_by:\n  type: none\n  reason: fixture claim\n",
+			"rests_on:\n  none: true\n  reason: fixture claim\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
@@ -408,60 +407,15 @@ func envDangling(t *testing.T, dir string) map[string]string {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
-	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, filepath.Join(dir, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, dir)
+	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 		"body: |\n  a claim resting on an id nothing declares.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n" +
 		"rests_on:\n  - widget.contract.ghost\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
-	return nil
-}
-
-// envRoleLocked is a locked claim carrying a build_role, which is what
-// build-order propose needs: the shared writeFixtureProject claim has none, and
-// proposing over it is refused with build_order_refused rather than producing an
-// order.
-func envRoleLocked(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	claimsDir := filepath.Join(dir, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims dir: %v", err)
-	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
-	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"build_role: schema\nbody: |\n  fixture claim carrying a build role.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
-	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
-		t.Fatalf("write claim: %v", err)
-	}
-	envMustRun(t, dir, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
-	return nil
-}
-
-// envProposedOrder is envRoleLocked with the build order proposed but not yet
-// locked.
-func envProposedOrder(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	envRoleLocked(t, dir)
-	envMustRun(t, dir, "build-order", "propose", "--module", "widget")
-	return nil
-}
-
-// envLockedOrder is envProposedOrder with the build order LOCKED, which is the
-// state "build-order show" exists to hand over: an approved implementation
-// sequence with a lock stamp and a ledger record behind it.
-func envLockedOrder(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	envProposedOrder(t, dir)
-	envMustRun(t, dir, "build-order", "lock", "--module", "widget", "--reason", "approved")
 	return nil
 }
 
@@ -508,13 +462,12 @@ func envelopeCases() []envelopeCase {
 		{"claim show / a draft claim", envFresh, []string{"claim", "show", "widget.contract.overview"}},
 		{"claim show / an id no claim carries", envFresh, []string{"claim", "show", "widget.contract.ghost"}},
 		{"claim list / every claim", envFresh, []string{"claim", "list"}},
-		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--body", "another fact", "--governed-reason", "fixture"}},
+		{"claim new / a fresh draft", envFresh, []string{"claim", "new", "widget.contract.second", "--summary", "Fixture claim used by the engine test corpus.", "--body", "another fact", "--rests-on-none-reason", "fixture"}},
 
 		{"claim lock / approved", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / previewed", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"}},
 		{"claim lock / already locked", envLocked, []string{"claim", "lock", "widget.contract.overview", "--reason", "again"}},
-		{"claim migrate-lock-policy / preview", envFresh, []string{"claim", "migrate-lock-policy", "--dry-run"}},
 		// Both branches of the recovery verb: nothing eligible needs no git
 		// and succeeds, something eligible with no work tree refuses. Pinning
 		// only the first would leave an agent unable to tell them apart.
@@ -543,18 +496,6 @@ func envelopeCases() []envelopeCase {
 		{"comment add / an actor that is neither role", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "robot", "--body", "a note"}},
 		{"comment reply / on the agent's own thread", envAgentThread, []string{"comment", "reply", "widget.contract.overview", "{thread}", "--as", "agent", "--body", "checked, it holds"}},
 
-		{"build-order propose / one locked claim", envRoleLocked, []string{"build-order", "propose", "--module", "widget"}},
-		{"build-order status / nothing proposed yet", envLocked, []string{"build-order", "status", "--module", "widget"}},
-		{"build-order lock / a fresh proposal", envProposedOrder, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
-		{"build-order lock / nothing proposed yet", envLocked, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
-		// Both halves of "show", because the refusal is a DECISION rather than
-		// a fallout: "build-order status" answers the same unproposed module
-		// with ok:true, proposed:false at exit 0, and "show" answers it with
-		// not_proposed at exit 1. Pinning only the success block would leave
-		// the divergence resting on a comment in build_order_show.go.
-		{"build-order show / a locked order", envLockedOrder, []string{"build-order", "show", "--module", "widget"}},
-		{"build-order show / nothing proposed yet", envLocked, []string{"build-order", "show", "--module", "widget"}},
-
 		// The track leaves, against a project that has adopted the axis and one
 		// that has not. Both matter: the adopted project is where the lists have
 		// entries to pin, and the unadopted one is where "count:0 at exit 0" is
@@ -567,12 +508,23 @@ func envelopeCases() []envelopeCase {
 		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
 		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
 
+		{"manifest show / one module file", envFresh, []string{"manifest", "show", "widget"}},
+		{"manifest show / isolation", envFresh, []string{"manifest", "show", "widget", "--isolation"}},
+		{"manifest show / a module the config does not declare", envFresh, []string{"manifest", "show", "ghost"}},
+		{"manifest list / every configured module", envFresh, []string{"manifest", "list"}},
+
 		// Removed viewer.theme configuration fails consistently before rendering.
 		{"check / legacy viewer.theme is rejected at config, writing", envRemovedTheme, []string{"check"}},
 		{"check --validate / legacy viewer.theme is rejected at config, read-only", envRemovedTheme, []string{"check", "--validate"}},
 		{"check --staged / legacy viewer.theme is rejected at config, staged", envRemovedTheme, []string{"check", "--staged"}},
 
 		{"skills export / into an explicit directory", envFresh, []string{"skills", "export", "skills-out"}},
+
+		{"constitution show / absent file", envFresh, []string{"constitution", "show"}},
+		{"constitution lock / absent file", envFresh, []string{"constitution", "lock", "--reason", "fixture"}},
+		{"manifest show / constitution digest", envFresh, []string{"manifest", "show"}},
+		{"usage / constitution with no leaf", envFresh, []string{"constitution"}},
+		{"usage / manifest with no leaf", envFresh, []string{"manifest"}},
 
 		{"usage / a noun with no leaf", envFresh, []string{"claim"}},
 		{"usage / a format nothing renders", envFresh, []string{"--format", "yaml", "version"}},

@@ -13,6 +13,16 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
+// indexByID maps each claim id to the claim. Duplicate ids are last-wins;
+// id-shape/ambiguous own that case.
+func indexByID(claims []model.Claim) map[string]model.Claim {
+	byID := make(map[string]model.Claim, len(claims))
+	for _, c := range claims {
+		byID[c.ID] = c
+	}
+	return byID
+}
+
 // claimByID returns the claim with the given id, if any.
 func claimByID(claims []model.Claim, id string) (model.Claim, bool) {
 	for _, c := range claims {

@@ -1,0 +1,9 @@
+id: project.bad.shape
+summary: A project claim whose id is malformed for id-shape.
+scope: project
+status: draft
+layout: card
+body: |
+  A project claim whose id has three segments; the grammar is project.<slug>.
+rests_on:
+  - idshapemod.contract.helper

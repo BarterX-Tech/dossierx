@@ -353,8 +353,8 @@ func TestReloadPreservesComposerDraft(t *testing.T) {
 	// (part b) An UNRELATED claim changes -> a reload whose fragment brings in the
 	// new card. The open claim's own threads are unchanged, so the destructive
 	// panel rebuild must be skipped.
-	p.writeClaim("des.yaml", facetClaim("widget.design.unrelated", "design"))
-	pollTrue(t, ctx, `!!document.getElementById('widget.design.unrelated')`)
+	p.writeClaim("des.yaml", facetClaim("widget.internals.unrelated", "internals"))
+	pollTrue(t, ctx, `!!document.getElementById('widget.internals.unrelated')`)
 
 	// (part a) ...then the OPEN claim itself changes (a second thread added
 	// out-of-band) -> a reload that DOES rebuild the panel. Anchor on the second

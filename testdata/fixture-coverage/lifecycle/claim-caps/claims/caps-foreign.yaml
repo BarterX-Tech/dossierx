@@ -1,0 +1,10 @@
+id: caps.contract.foreign
+summary: Rests on another module's internals, which rests-on-target refuses.
+facet: contract
+module: caps
+status: draft
+layout: card
+body: |
+  Cites a foreign internals claim.
+rests_on:
+  - other.internals.secret

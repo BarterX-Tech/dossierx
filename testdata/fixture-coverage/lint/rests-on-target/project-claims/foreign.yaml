@@ -1,0 +1,9 @@
+id: project.foreign
+summary: A project claim resting on a foreign module's internals.
+scope: project
+status: draft
+layout: card
+body: |
+  A project claim resting on a module's internals, which no project claim may do.
+rests_on:
+  - other.internals.secret

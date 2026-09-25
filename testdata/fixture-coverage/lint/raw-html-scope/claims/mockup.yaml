@@ -1,4 +1,5 @@
 id: rawhtmlmod.contract.mockup
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: rawhtmlmod
 status: draft
@@ -11,6 +12,3 @@ raw_html: '<div class="mockup-box"><span class="mockup-badge">OK</span></div>'
 raw_html_reviewed: true
 rests_on:
   - rawhtmlmod.contract.helper
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

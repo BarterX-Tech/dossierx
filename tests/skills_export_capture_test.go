@@ -52,7 +52,7 @@ var siblingSkillLinkPattern = regexp.MustCompile(`\]\(\.\./([^/)\n]+)/SKILL\.md\
 
 var skillsExportCaptureOut = flag.String("skills-export-capture-out", "", "write the captured `dossierx skills export` output (surfaces.yaml's `agent-skills` surface) to this path as export-output.json")
 
-// The five bundles this repo ships, in their embedded directory names. Kept
+// The seven bundles this repo ships, in their embedded directory names. Kept
 // as a local literal (rather than importing skills.Order from package tests,
 // which has no dependency on the skills module) so this test has no coupling
 // beyond what captureSkillsExport already has to the compiled binary's
@@ -60,9 +60,11 @@ var skillsExportCaptureOut = flag.String("skills-export-capture-out", "", "write
 var wantSkillsExportNames = []string{
 	"dossierx",
 	"dossierx-claims",
+	"dossierx-modules",
+	"dossierx-constitution",
 	"dossierx-comments",
-	"dossierx-build-order",
 	"dossierx-code-links",
+	"dossierx-upgrading",
 }
 
 // newSkillsExportFixture builds a project with every harness `skills export`
@@ -195,7 +197,8 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 // one that has to be broad:
 //   - inserting "See [[dossierx-claimz]]" (a typo) into a bundle's SKILL.md;
 //   - inserting "See [[claims-router]]" (a plausible but nonexistent name);
-//   - renaming the loaded name "dossierx-build-order" to
+//   - renaming the loaded name "dossierx-build-order" (a bundle since
+//     retired) to
 //     "build-order-skill" everywhere EXCEPT inside an existing
 //     "[[dossierx-build-order]]" reference, simulating a rename regression
 //     that leaves one cross-reference stale.
@@ -297,11 +300,11 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 	if !outGiven {
 		root := newSkillsExportFixture(t)
 		capture := captureSkillsExport(t, root)
-		// The five bundles plus dossierx-skills.lock, which every tree carries
+		// The four bundles plus dossierx-skills.lock, which every tree carries
 		// so `skills export --check` can tell a hand-edited skill from a stale one.
 		const lockFile = "dossierx-skills.lock"
 		if len(capture.SkillTree) != len(wantSkillsExportNames)+1 {
-			t.Fatalf("flagless capture exported %d skill files, want %d (five bundles plus %s): %v", len(capture.SkillTree), len(wantSkillsExportNames)+1, lockFile, sortedSkillTreeKeys(capture.SkillTree))
+			t.Fatalf("flagless capture exported %d skill files, want %d (four bundles plus %s): %v", len(capture.SkillTree), len(wantSkillsExportNames)+1, lockFile, sortedSkillTreeKeys(capture.SkillTree))
 		}
 		if _, ok := capture.SkillTree[lockFile]; !ok {
 			t.Errorf("flagless capture missing %s", lockFile)

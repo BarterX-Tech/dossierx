@@ -12,6 +12,6 @@ body: |
   2. Second item covers state immutability guarantees.
   3. Third item is a plain top-level entry.
   4. Fourth item closes out the list.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

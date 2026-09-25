@@ -774,7 +774,7 @@ type mdDelimRun struct {
 //
 //   - a "_" run sitting between two alphanumerics is intraword and is not a
 //     delimiter at all (CommonMark's own intraword-underscore rule) — this is
-//     what keeps "governed_by" and "rests_on", the two most common tokens in
+//     what keeps "claims_dir" and "rests_on", the two most common tokens in
 //     any DossierX body, silent;
 //   - a run that is both left- and right-flanking ("2*3", "count(*)") is
 //     skipped, because a reader cannot tell which way the author meant it and
@@ -811,7 +811,7 @@ func mdDelimRunAt(text string, start, runLen int, c byte) (mdDelimRun, bool) {
 	nextR, nextSize := utf8.DecodeRuneInString(text[end:])
 
 	// The intraword rule stays byte-exact: it exists for an "_" between two
-	// ASCII alphanumerics ("governed_by"), so the size guards keep it from
+	// ASCII alphanumerics ("claims_dir"), so the size guards keep it from
 	// widening to anything a multi-byte neighbour might be.
 	if c == '_' && prevSize == 1 && mdIsAlnum(byte(prevR)) &&
 		nextSize == 1 && mdIsAlnum(byte(nextR)) {
@@ -1099,7 +1099,7 @@ func mdImagesIn(source string) []mdImageRef {
 // "../other-facet/assets/x.png" is refused by the renderer AND is the canonical
 // co-location mistake, so asset-scope reports it too rather than deferring
 // (deliberate co-firing, on the package's existing cycle/self-edge and
-// dangling/mirror-unanchored precedent), whereas an OFF-ORIGIN src is not a
+// dangling/validated-on-missing precedent), whereas an OFF-ORIGIN src is not a
 // path at all and has no directory to be in or out of, so asset-scope stays
 // silent on it and markdown-sanity alone reports it.
 

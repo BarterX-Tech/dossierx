@@ -41,6 +41,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
@@ -58,7 +59,6 @@ func newClaimCmd() *cobra.Command {
 		newClaimListCmd(),
 		newClaimNewCmd(),
 		newLockCmd(),
-		newLockPolicyMigrateCmd(),
 		newClaimRecoverApprovedContentCmd(),
 		newUnlockCmd(),
 		newFlagCmd(),
@@ -99,33 +99,29 @@ func claimTitle(id string) string {
 }
 
 // incomingEdges returns the ids of every OTHER claim that points at id through
-// mirrors and through rests_on, each sorted.
+// rests_on, sorted.
 //
-// internal/render has a rests_on-only reverse index (buildDependedByLookup)
+// internal/render has a rests_on reverse index (buildDependedByLookup)
 // built for the viewer's "depended on by" footer. It is deliberately not reused
-// here: it is unexported, in a package whose job is HTML, and covers only one of
-// the two edge kinds "claim show" has to report. A linear scan over the claim
-// set — the same scan the retired "deps" verb did — is cheaper than the coupling.
-func incomingEdges(claims []model.Claim, id string) (mirroredBy, dependedOnBy []string) {
+// here: it is unexported, in a package whose job is HTML. A linear scan over
+// the claim set — the same scan the retired "deps" verb did — is cheaper than
+// the coupling.
+func incomingEdges(claims []model.Claim, id string) (dependedOnBy []string) {
 	for _, c := range claims {
 		if c.ID == id {
 			continue
 		}
-		if containsStr(c.Mirrors, id) {
-			mirroredBy = append(mirroredBy, c.ID)
-		}
-		if containsStr(c.RestsOn, id) {
+		if containsStr(c.RestsOn.IDs, id) {
 			dependedOnBy = append(dependedOnBy, c.ID)
 		}
 	}
-	sort.Strings(mirroredBy)
 	sort.Strings(dependedOnBy)
-	return mirroredBy, dependedOnBy
+	return dependedOnBy
 }
 
 // emptyIfNil coerces a nil string slice to an empty one so every list in a
 // payload encodes as "[]" rather than "null" — a consumer must be able to range
-// over edges.mirrors without first testing it for null.
+// over edges.rests_on without first testing it for null.
 func emptyIfNil(ss []string) []string {
 	if ss == nil {
 		return []string{}
@@ -264,12 +260,10 @@ func claimTrackViews(refs []model.TrackRef) []claimTrackView {
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
 type claimEdgesData struct {
-	Mirrors        []string `json:"mirrors"`
-	RestsOn        []string `json:"rests_on"`
-	GovernedBy     string   `json:"governed_by"`
-	GovernedReason string   `json:"governed_reason,omitempty"`
-	MirroredBy     []string `json:"mirrored_by"`
-	DependedOnBy   []string `json:"depended_on_by"`
+	RestsOn       []string `json:"rests_on"`
+	RestsOnNone   bool     `json:"rests_on_none,omitempty"`
+	RestsOnReason string   `json:"rests_on_reason,omitempty"`
+	DependedOnBy  []string `json:"depended_on_by"`
 }
 
 // claimCommentCounts is the discussion roll-up. OpenThreadIDs is carried in
@@ -326,14 +320,21 @@ type claimLedgerView struct {
 // release is built around starts with an agent orienting itself on one card
 // and it should not cost four round trips.
 type claimShowData struct {
-	ClaimID      string `json:"claim_id"`
-	Title        string `json:"title"`
+	ClaimID string `json:"claim_id"`
+	Title   string `json:"title"`
+	// Summary and Body are the claim's own words, exactly as authored (Body is
+	// not re-wrapped or trimmed). They are here because "claim show <id>" is
+	// the verb the isolation view and the skills send an agent to when it has
+	// to read a neighbor's contract; a show without the text sent the agent to
+	// the YAML file instead. Both keys are always present: a structured layout
+	// (table, steps) may carry an empty body.
+	Summary      string `json:"summary"`
+	Body         string `json:"body"`
 	Facet        string `json:"facet"`
 	Module       string `json:"module"`
 	Status       string `json:"status"`
 	Layout       string `json:"layout"`
 	Kind         string `json:"kind"`
-	BuildRole    string `json:"build_role,omitempty"`
 	Section      string `json:"section,omitempty"`
 	MigratedFrom string `json:"migrated_from,omitempty"`
 	SourcePath   string `json:"source_path"`
@@ -421,7 +422,7 @@ func claimReviewTrigger(claim model.Claim, claims []model.Claim, store *lock.Sto
 // + open threads + lint state will get it wrong sooner or later. This computes
 // it once, in the binary, from the same policy evaluator the preview and write
 // paths enforce, so the advice cannot reinterpret a dependency condition as a
-// refusal. Legacy stores retain the legacy gate until explicit migration.
+// refusal.
 func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Config, store *lock.Store, storeErr error, trigger string, links []claimLinkView, ledger *claimLedgerView) []string {
 	var actions []string
 	id := claim.ID
@@ -430,37 +431,11 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 		if storeErr != nil {
 			return []string{"local approval cannot be assessed because " + config.LockStoreDisplayPath + " is unreadable -> restore the ledger from version control; dossierx check --validate names the integrity finding"}
 		}
-		if store != nil && store.LocalApprovalEnabled() {
-			evaluation := lock.EvaluateSetWithSemanticConflicts(claims, []string{id}, cfg, store, nil)
-			if len(evaluation.Verdicts) != 1 {
-				return []string{fmt.Sprintf("local approval cannot be assessed because the policy evaluator returned no verdict for %s -> dossierx claim lock %s --dry-run", id, id)}
-			}
-			return policyVerdictNextActions(evaluation.Verdicts[0])
+		evaluation := lock.EvaluateSetWithSemanticConflicts(claims, []string{id}, cfg, store, nil)
+		if len(evaluation.Verdicts) != 1 {
+			return []string{fmt.Sprintf("local approval cannot be assessed because the policy evaluator returned no verdict for %s -> dossierx claim lock %s --dry-run", id, id)}
 		}
-		gate := evaluateLockGates(claim, claims, cfg)
-		switch {
-		// The rules NAMED, and the next command pointed at the one that can
-		// name them again.
-		//
-		// This used to read "-> dossierx check --validate", and for the whole
-		// family of lints that decide a LOCK that was a dead end: rest-on-locked,
-		// roll-up and build-role-required-for-locked all key off a claim's own
-		// status, so against the project as it stands — with this claim still
-		// draft — `check --validate` reports ok:true and zero findings. The
-		// agent was told a finding blocks the lock, sent to a command that
-		// reports none, and left with no CLI path to the rule's name.
-		// evaluateLockGates lints the ABOUT-TO-BE-LOCKED form, so the answer is
-		// right here; --dry-run is where the same answer lives in full.
-		case gate.LintErrors > 0:
-			actions = append(actions, fmt.Sprintf("%s block locking -> dossierx claim lock %s --dry-run", gate.lintBlockerDetail(), id))
-		case gate.UnlockedDoctrineDep != "":
-			actions = append(actions, fmt.Sprintf("dependency %s is doctrine and still draft -> lock it first", gate.UnlockedDoctrineDep))
-		case len(gate.OpenThreads) > 0:
-			actions = append(actions, fmt.Sprintf("%d open comment thread(s) block locking -> the human resolves them in the viewer; that click is the approval", len(gate.OpenThreads)))
-		default:
-			actions = append(actions, fmt.Sprintf("ready to lock -> ask the human, then dossierx claim lock %s --reason \"<their words>\"", id))
-		}
-		return actions
+		return policyVerdictNextActions(evaluation.Verdicts[0])
 	}
 
 	// THE INTEGRITY BRANCH, ahead of every other locked-claim action.
@@ -567,13 +542,6 @@ func policyVerdictNextActions(verdict lock.CandidateVerdict) []string {
 				actions = append(actions, fmt.Sprintf("%d blocking lint finding(s): %s block local approval -> %s", len(details), strings.Join(details, "; "), preview))
 			case refusal == "unresolved_comments":
 				actions = append(actions, fmt.Sprintf("%d open comment thread(s) block local approval -> the human resolves them in the viewer; that click is the approval", len(verdict.OpenThreads)))
-			case strings.HasPrefix(refusal, "doctrine_dependency_not_locked:"):
-				parts := strings.SplitN(refusal, ":", 3)
-				depID := refusal
-				if len(parts) == 3 {
-					depID = parts[2]
-				}
-				actions = append(actions, fmt.Sprintf("dependency %s is doctrine and still draft -> lock it first", depID))
 			default:
 				actions = append(actions, fmt.Sprintf("local approval refused (%s) -> %s", refusal, preview))
 			}
@@ -621,7 +589,7 @@ func newClaimShowCmd() *cobra.Command {
 			assessments := readiness.Compute(claims, store, flagStore)
 			assessment := assessments[id]
 
-			mirroredBy, dependedOnBy := incomingEdges(claims, id)
+			dependedOnBy := incomingEdges(claims, id)
 			links := linkViewsFor(cfg, claim)
 			trigger := claimReviewTrigger(claim, claims, store, flagStore)
 
@@ -645,12 +613,13 @@ func newClaimShowCmd() *cobra.Command {
 			data := claimShowData{
 				ClaimID:       claim.ID,
 				Title:         claimTitle(claim.ID),
+				Summary:       claim.Summary,
+				Body:          claim.Body,
 				Facet:         claim.Facet,
 				Module:        claim.Module,
 				Status:        string(claim.Status),
 				Layout:        string(claim.Layout),
 				Kind:          string(claim.EffectiveKind()),
-				BuildRole:     string(claim.BuildRole),
 				Section:       claim.Section,
 				MigratedFrom:  claim.MigratedFrom,
 				SourcePath:    claim.SourcePath,
@@ -662,12 +631,10 @@ func newClaimShowCmd() *cobra.Command {
 				Trigger:       trigger,
 				Readiness:     assessment,
 				Edges: claimEdgesData{
-					Mirrors:        emptyIfNil(claim.Mirrors),
-					RestsOn:        emptyIfNil(claim.RestsOn),
-					GovernedBy:     claim.Governed.Type,
-					GovernedReason: claim.Governed.Reason,
-					MirroredBy:     emptyIfNil(mirroredBy),
-					DependedOnBy:   emptyIfNil(dependedOnBy),
+					RestsOn:       emptyIfNil(claim.RestsOn.IDs),
+					RestsOnNone:   claim.RestsOn.None,
+					RestsOnReason: claim.RestsOn.Reason,
+					DependedOnBy:  emptyIfNil(dependedOnBy),
 				},
 				ImplementedIn: links,
 				Comments:      counts,
@@ -713,18 +680,11 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 	if d.Ledger != nil && d.Ledger.Recorded && !d.Ledger.Released && !d.Ledger.ContentMatches {
 		fmt.Fprintln(out, "  lock ledger:        CONTENT DOES NOT MATCH THE APPROVAL ON RECORD (see dossierx check --validate)")
 	}
-	fmt.Fprintf(out, "  outgoing mirrors:   %v\n", d.Edges.Mirrors)
-	fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
-	if d.Edges.GovernedBy != "" {
-		fmt.Fprintf(out, "  governed_by:        %s", d.Edges.GovernedBy)
-		if d.Edges.GovernedReason != "" {
-			fmt.Fprintf(out, " (%s)", d.Edges.GovernedReason)
-		}
-		fmt.Fprintln(out)
+	if d.Edges.RestsOnNone {
+		fmt.Fprintf(out, "  outgoing rests_on:  none (%s)\n", d.Edges.RestsOnReason)
 	} else {
-		fmt.Fprintln(out, "  governed_by:        (unset)")
+		fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
 	}
-	fmt.Fprintf(out, "  incoming mirrors:   %v\n", d.Edges.MirroredBy)
 	fmt.Fprintf(out, "  incoming rests_on:  %v\n", d.Edges.DependedOnBy)
 	if len(d.ImplementedIn) == 0 {
 		fmt.Fprintln(out, "  implemented in:     (nothing linked)")
@@ -794,6 +754,16 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 			fmt.Fprintf(out, "    %s\n", a)
 		}
 	}
+	// The claim's own words close the block, after the state an agent acts
+	// on, so a long body never pushes the next actions off the screen. The
+	// body prints one indented line per authored line.
+	fmt.Fprintf(out, "  summary:            %s\n", d.Summary)
+	if d.Body != "" {
+		fmt.Fprintln(out, "  body:")
+		for _, line := range strings.Split(strings.TrimRight(d.Body, "\n"), "\n") {
+			fmt.Fprintf(out, "    %s\n", line)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------
@@ -830,6 +800,9 @@ type claimListEntry struct {
 	// and a filter nothing acts on is surface that has to be maintained forever.
 	// The count is on every row, so a caller that wants that set has it already.
 	Sources int `json:"sources"`
+	// Summary is the claim's required one-line description. A list that
+	// cannot print it cannot describe the card (NIT-8).
+	Summary string `json:"summary,omitempty"`
 	// Score is populated only under --match: the fuzzy relevance the row was
 	// ranked by. It is exposed rather than hidden so an agent resolving "the
 	// retry card" can tell a confident single hit from a three-way tie it
@@ -883,15 +856,15 @@ func newClaimListCmd() *cobra.Command {
 			// --facet gets the same membership test --module has, and for the
 			// reason cliout.CodeUnknownModule already states about modules: "an
 			// empty report for a typo'd module looks exactly like success". A
-			// human says "show me the contracts facet", the project declares
+			// human says "show me the contracts facet", the engine has
 			// `contract`, and an unchecked filter answers ok:true / count 0 /
 			// exit 0 — indistinguishable from the truth, and every decision after
-			// it is made against an empty set. The config declares facets: the
-			// same way it declares modules:, and "claim new" already refuses an
-			// undeclared facet with this exact shape (see parseClaimID).
-			if facet != "" && !containsStr(cfg.Facets, facet) && facet != config.ReservedOverviewFacet {
+			// it is made against an empty set. Facets are engine-fixed
+			// (contract | internals); "claim new" already refuses any other
+			// name (see parseClaimID).
+			if facet != "" && !config.IsEngineFacet(facet) {
 				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
-					"claim list: unknown facet %q; this project declares: %s", facet, strings.Join(cfg.Facets, ", ")).
+					"claim list: unknown facet %q; engine-fixed facets are %s", facet, strings.Join(config.EngineFacets(), ", ")).
 					WithHint("run: dossierx claim list (unfiltered) to see what is there")
 			}
 			store, storeErr := lock.LoadStore(storePath(cfg))
@@ -963,6 +936,7 @@ func newClaimListCmd() *cobra.Command {
 					Drifted:       driftedIDs[c.ID],
 					OpenThreads:   len(c.OpenThreadIDs()),
 					Sources:       len(c.Sources),
+					Summary:       c.Summary,
 					Score:         score,
 				})
 			}
@@ -1008,7 +982,7 @@ func newClaimListCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&drifted, "drifted", false, "only claims with at least one implementation link whose file changed since it was linked")
 	cmd.Flags().StringVar(&facet, "facet", "", "only claims in this facet")
 	cmd.Flags().StringVar(&module, "module", "", "only claims in this module")
-	cmd.Flags().StringVar(&match, "match", "", "fuzzy-match against each claim's id and derived title, ranked by relevance")
+	cmd.Flags().StringVar(&match, "match", "", "fuzzy-match against each claim's id, derived title, and summary, ranked by relevance")
 	return cmd
 }
 
@@ -1041,7 +1015,11 @@ func writeClaimListText(cmd *cobra.Command, d claimListData) {
 		if len(flags) > 0 {
 			suffix = " " + strings.Join(flags, " ")
 		}
-		fmt.Fprintf(out, "%s %s%s\n", e.Status, e.ClaimID, suffix)
+		if e.Summary != "" {
+			fmt.Fprintf(out, "%s %s  %s%s\n", e.Status, e.ClaimID, e.Summary, suffix)
+		} else {
+			fmt.Fprintf(out, "%s %s%s\n", e.Status, e.ClaimID, suffix)
+		}
 	}
 	fmt.Fprintf(out, "claim list: %d of %d claim(s) (%.1f%%)\n", d.Count, d.Total, d.PercentOfTotal)
 }
@@ -1061,7 +1039,7 @@ func writeClaimListText(cmd *cobra.Command, d claimListData) {
 // find widget.contract.retry-policy even though neither word alone is the slug.
 func claimMatchScore(query string, c model.Claim) int {
 	title := claimTitle(c.ID)
-	haystack := strings.Join([]string{c.ID, title, c.Facet, c.Module, c.Section}, " ")
+	haystack := strings.Join([]string{c.ID, title, c.Facet, c.Module, c.Section, c.Summary}, " ")
 	best := fuzzyScore(query, c.ID)
 	if s := fuzzyScore(query, title); s > best {
 		best = s
@@ -1202,6 +1180,14 @@ type claimNewData struct {
 // either way, and now every other command in the project fails until someone
 // deletes it by hand — which is precisely the hand-editing this release gates.
 func parseClaimID(cfg *config.Config, id string) (module, facet, slug string, err error) {
+	if model.IsProjectClaimID(id) {
+		_, slug, _ = strings.Cut(id, ".")
+		if !slugPatternMatches(slug) {
+			return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
+				"claim new: id slug %q must be kebab-case (lowercase alphanumerics separated by single hyphens)", slug)
+		}
+		return "", "", slug, nil
+	}
 	segs := strings.Split(id, ".")
 	if len(segs) != 3 || segs[0] == "" || segs[1] == "" || segs[2] == "" {
 		return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
@@ -1216,9 +1202,9 @@ func parseClaimID(cfg *config.Config, id string) (module, facet, slug string, er
 		return "", "", "", cliout.Errorf(cliout.CodeUnknownModule,
 			"claim new: id module segment %q is not one of this project's modules: %s", module, strings.Join(cfg.Modules, ", "))
 	}
-	if !containsStr(cfg.Facets, facet) && facet != config.ReservedOverviewFacet {
+	if !containsStr(cfg.Facets, facet) {
 		return "", "", "", cliout.Errorf(cliout.CodeBadRequest,
-			"claim new: id facet segment %q is not one of this project's facets: %s", facet, strings.Join(cfg.Facets, ", "))
+			"claim new: id facet segment %q is not an engine-fixed facet (contract or internals)", facet)
 	}
 	return module, facet, slug, nil
 }
@@ -1256,6 +1242,24 @@ func slugPatternMatches(slug string) bool {
 // anywhere else would report a cheerful success for a file the project can
 // never see, which is a worse outcome than a clear refusal.
 func claimNewPath(cfg *config.Config, id, override string) (string, error) {
+	if model.IsProjectClaimID(id) {
+		if override == "" {
+			_, slug, _ := strings.Cut(id, ".")
+			return filepath.Join(cfg.ProjectClaimsDirPath(), slug+".yaml"), nil
+		}
+		if filepath.IsAbs(override) {
+			return "", cliout.Errorf(cliout.CodeBadRequest,
+				"claim new: --file %q must be relative to project_claims_dir, not absolute", override)
+		}
+		root := cfg.ProjectClaimsDirPath()
+		path := filepath.Join(root, override)
+		rel, err := filepath.Rel(root, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", cliout.Errorf(cliout.CodeBadRequest,
+				"claim new: --file %q escapes project_claims_dir", override)
+		}
+		return path, nil
+	}
 	if override == "" {
 		return filepath.Join(cfg.ClaimsDir, id+".yaml"), nil
 	}
@@ -1273,21 +1277,24 @@ func claimNewPath(cfg *config.Config, id, override string) (string, error) {
 }
 
 func newClaimNewCmd() *cobra.Command {
-	var body, layout, section, buildRole, governedBy, governedReason, file string
-	var restsOn, mirrors []string
+	var body, summary, layout, section, restsOnNoneReason, file string
+	var restsOn []string
 	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "new <id>",
 		Short: "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
-		Long: "Author a new draft claim at <claims_dir>/<id>.yaml.\n\n" +
+		Long: "Author a new draft claim at <claims_dir>/<id>.yaml or, for project.<slug>,\n" +
+			"<project_claims_dir>/<slug>.yaml.\n\n" +
 			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
-			"governed_by that satisfies the governed-required rule, and a layout chosen to\n" +
-			"suit the facet — card everywhere, except a claim in the reserved overview facet,\n" +
-			"which gets a banner because a card there fails orientation-note-shape. Passing\n" +
-			"--layout overrides that choice. Draft\n" +
-			"authoring is deliberately unfrictioned — no --reason, no confirmation — because\n" +
-			"drafts are the agent's workshop. The gate in this release is on LOCKED claims.",
+			"required --summary, a required rests_on (targets or --rests-on-none-reason),\n" +
+			"and layout: card (or --layout). If claims_dir/<module>/manifest.yaml is\n" +
+			"missing, the command writes a STUB with an empty summary that check and\n" +
+			"claim lock refuse until an agent drafts it from\n" +
+			"`dossierx manifest show <module> --isolation`.\n" +
+			"Draft authoring is deliberately unfrictioned — no --reason, no confirmation —\n" +
+			"because drafts are the agent's workshop. The gate in this release is on\n" +
+			"LOCKED claims.",
 		Args: cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			id := args[0]
@@ -1299,7 +1306,6 @@ func newClaimNewCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
-			layout = defaultLayoutForFacet(facet, layout, cmd.Flags().Changed("layout"))
 			path, err := claimNewPath(cfg, id, file)
 			if err != nil {
 				return cmdResult{}, err
@@ -1313,8 +1319,11 @@ func newClaimNewCmd() *cobra.Command {
 				if strings.TrimSpace(body) == "" {
 					dr.Lacking("--body")
 				}
-				if governedBy == string(model.GovernedNone) && strings.TrimSpace(governedReason) == "" {
-					dr.Lacking("--governed-reason")
+				if strings.TrimSpace(summary) == "" {
+					dr.Lacking("--summary")
+				}
+				if len(restsOn) == 0 && strings.TrimSpace(restsOnNoneReason) == "" {
+					dr.Lacking("--rests-on-none-reason")
 				}
 				// Both details are written for the verdict they are attached to,
 				// not for the failure. A Detail is emitted verbatim whether OK is
@@ -1327,13 +1336,17 @@ func newClaimNewCmd() *cobra.Command {
 				dr.Require("file_is_unused", !fileExists(path), boolDetail(fileExists(path),
 					path+" already exists",
 					path+" does not exist yet"))
-				dr.Effect("creates " + path).
-					Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
+				dr.Effect("creates " + path)
+				if stub := missingModuleManifest(cfg, module); stub != "" {
+					dr.Effect("creates " + stub + " (a module manifest STUB with an empty summary: check and claim lock refuse until it is drafted from dossierx manifest show " + module + " --isolation)")
+				}
+				dr.Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
 				dr.Propose("path", path).
 					Propose("facet", facet).
 					Propose("module", module).
 					Propose("layout", layout).
-					Propose("body", body)
+					Propose("body", body).
+					Propose("summary", summary)
 				return dryRunResult(cmd, "claim new", dr), nil
 			}
 
@@ -1341,9 +1354,13 @@ func newClaimNewCmd() *cobra.Command {
 				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
 					"claim new: --body is required and must be non-empty; a claim with no content states nothing")
 			}
-			if governedBy == string(model.GovernedNone) && strings.TrimSpace(governedReason) == "" {
+			if strings.TrimSpace(summary) == "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
-					"claim new: --governed-reason is required when --governed-by is %q; the governed-required lint refuses an unexplained ungoverned claim", model.GovernedNone)
+					"claim new: --summary is required and must be non-empty; claim list cannot describe a card without one")
+			}
+			if len(restsOn) == 0 && strings.TrimSpace(restsOnNoneReason) == "" {
+				return cmdResult{}, cliout.Errorf(cliout.CodeMissingFlag,
+					"claim new: --rests-on-none-reason is required when --rests-on is empty")
 			}
 
 			// Claim-file write discipline (Phase 0): take the project-wide
@@ -1376,18 +1393,38 @@ func newClaimNewCmd() *cobra.Command {
 				Module:     module,
 				Status:     model.StatusDraft,
 				Layout:     model.Layout(layout),
+				Summary:    strings.TrimSpace(summary),
 				Body:       normalizeClaimBody(body),
 				Section:    section,
-				BuildRole:  model.BuildRole(buildRole),
-				Mirrors:    mirrors,
-				RestsOn:    restsOn,
-				Governed:   model.Governed{Type: governedBy, Reason: governedReason},
 				SourcePath: path,
+			}
+			if model.IsProjectClaimID(id) {
+				claim.Scope = model.ScopeProject
+				claim.Facet = ""
+				claim.Module = ""
+			}
+			if len(restsOn) > 0 {
+				claim.RestsOn = model.RestsOnIDs(restsOn...)
+			} else {
+				claim.RestsOn = model.RestsNone(restsOnNoneReason)
 			}
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: create claim dir: %w", err)
 			}
+			// The manifest stub is written BEFORE the claim, and removed again
+			// if the claim cannot be saved, so a failure on either write leaves
+			// the project as it was: never a claim on disk under a write_failed
+			// that says nothing was created, never an orphan stub.
+			stub := missingModuleManifest(cfg, module)
+			if stub != "" {
+				if err := manifest.WriteStub(cfg.ClaimsDir, module); err != nil {
+					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: write module manifest: %w", err)
+				}
+			}
 			if err := loader.SaveClaim(claim); err != nil {
+				if stub != "" {
+					_ = os.Remove(stub)
+				}
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: %w", err)
 			}
 
@@ -1419,40 +1456,14 @@ func newClaimNewCmd() *cobra.Command {
 		}),
 	}
 	cmd.Flags().StringVar(&body, "body", "", "the claim's markdown body — what it asserts (required)")
+	cmd.Flags().StringVar(&summary, "summary", "", "one-line plain-text description printed by claim list (required)")
 	cmd.Flags().StringVar(&layout, "layout", string(model.LayoutCard), "render layout: card, list, tree, banner (table/steps/mockup need rows/steps/raw_html, which this command does not author)")
 	cmd.Flags().StringVar(&section, "section", "", "optional in-content section heading this claim sits under")
-	cmd.Flags().StringVar(&buildRole, "build-role", "", "optional build phase: orientation, schema, behavior, api, verification, out-of-scope (required only once the claim locks)")
-	cmd.Flags().StringVar(&governedBy, "governed-by", string(model.GovernedNone), "the doctrine claim id backing this claim, or \"none\"")
-	cmd.Flags().StringVar(&governedReason, "governed-reason", "", "why this claim is deliberately ungoverned (required when --governed-by is \"none\")")
-	cmd.Flags().StringSliceVar(&mirrors, "mirrors", nil, "claim ids this claim mirrors")
-	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on")
+	cmd.Flags().StringVar(&restsOnNoneReason, "rests-on-none-reason", "", "why this claim rests on nothing (required when --rests-on is empty)")
+	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on: project.<slug>, any module's *.contract.*, or this module's own *.internals.*")
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what creating this claim would do, and write nothing")
 	return cmd
-}
-
-// defaultLayoutForFacet resolves --layout's default against the facet the id
-// lands in.
-//
-// This command's help text promises "the claim it writes is shaped to pass the
-// lint suite immediately", and for the one reserved facet it did the opposite,
-// every single time. A claim under `overview` IS an orientation note — the facet
-// name is what makes it one (model.Claim.EffectiveKind) — and
-// orientation-note-shape requires every orientation note to render as layout:
-// banner. The flag's default is "card", so `claim new widget.overview.router`
-// wrote a file the very next lint call rejected, and the command's own
-// lint_error_count reported the failure it had just created.
-//
-// The fix is a default, not a refusal: an explicit --layout still wins, because
-// a caller who names a layout is making a choice and this command's job is to
-// carry it out (the lint suite is where a wrong choice gets answered, and it
-// will say so in the same call's lint_error_count). Only the UNSET case moves,
-// which is precisely the case where the command is the one picking.
-func defaultLayoutForFacet(facet, layout string, layoutWasSet bool) string {
-	if layoutWasSet || facet != config.ReservedOverviewFacet {
-		return layout
-	}
-	return string(model.LayoutBanner)
 }
 
 // fileExists is a plain "is something already there" probe. Any stat error
@@ -1482,4 +1493,18 @@ func normalizeClaimBody(body string) string {
 		b += "\n"
 	}
 	return b
+}
+
+// missingModuleManifest returns the path of module's manifest.yaml when
+// "claim new" would have to write a stub there, or "" when the manifest exists
+// or the claim has no module (a project claim).
+func missingModuleManifest(cfg *config.Config, module string) string {
+	if cfg == nil || module == "" {
+		return ""
+	}
+	dest := filepath.Join(cfg.ClaimsDir, filepath.FromSlash(manifest.RequiredRelPath(module)))
+	if fileExists(dest) {
+		return ""
+	}
+	return dest
 }

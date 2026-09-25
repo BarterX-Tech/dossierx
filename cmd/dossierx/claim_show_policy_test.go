@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -44,7 +46,7 @@ func TestClaimShowV1DraftParentAgreesWithSingletonPreview(t *testing.T) {
 	var show claimShowData
 	envData(t, showEnv, &show)
 	actions := strings.Join(show.NextActions, "\n")
-	if strings.Contains(actions, "rest-on-locked") || strings.Contains(actions, "block locking") {
+	if strings.Contains(actions, "block locking") {
 		t.Fatalf("show must not turn a v1 condition into a blocker: %v", show.NextActions)
 	}
 	if !strings.Contains(actions, "ready for local approval") || !strings.Contains(actions, "--dry-run") {
@@ -58,7 +60,7 @@ func TestClaimShowV1DraftParentAgreesWithSingletonPreview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim show text: %v", err)
 	}
-	if strings.Contains(textOut, "rest-on-locked") || !strings.Contains(textOut, "ready for local approval") {
+	if strings.Contains(textOut, "block locking") || !strings.Contains(textOut, "ready for local approval") {
 		t.Fatalf("text and JSON advice disagree:\n%s", textOut)
 	}
 	if after := snapshotFiles(t, root); !reflect.DeepEqual(after, before) {
@@ -66,30 +68,79 @@ func TestClaimShowV1DraftParentAgreesWithSingletonPreview(t *testing.T) {
 	}
 }
 
-func TestClaimShowLegacyDraftParentStillBlocks(t *testing.T) {
+// Lock policy 0 is retired. A store that still records it reads as v1: the
+// draft parent is a dependency condition in show and in the preview alike,
+// neither read rewrites the store, and the first write records the carry-over
+// while keeping what the store already held.
+func TestRetiredPolicy0StoreReadsAsV1AndStampsOnWrite(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 	storeFile := filepath.Join(root, "build", "ledger", "lock-store.json")
-	if err := os.MkdirAll(filepath.Dir(storeFile), 0o755); err != nil {
+	var stored map[string]any
+	raw, err := os.ReadFile(storeFile)
+	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := `{"version":3,"policy_version":0,"hashes":{},"receipts":{},"locked_at":{},"ledger":{}}`
-	if err := os.WriteFile(storeFile, []byte(legacy), 0o644); err != nil {
+	if err := json.Unmarshal(raw, &stored); err != nil {
 		t.Fatal(err)
+	}
+	if stored["constitution"] == nil {
+		t.Fatalf("fixture precondition: the store must carry the locked constitution: %s", raw)
+	}
+	stored["policy_version"] = 0
+	raw, err = json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(storeFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const id = "widget.contract.timeout-budget"
+	before := snapshotFiles(t, root)
+
+	previewEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--dry-run", "--reason", "fixture review")
+	if err != nil {
+		t.Fatalf("lock preview: %v", err)
+	}
+	var preview policyLockPreviewData
+	envData(t, previewEnv, &preview)
+	if preview.Evaluation.PolicyVersion != lock.PolicyLocalApprovalV1 || len(preview.Evaluation.Verdicts) != 1 || !preview.Evaluation.Verdicts[0].LocalAdmissible {
+		t.Fatalf("a policy-0 store must evaluate under v1: %+v", preview.Evaluation)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.timeout-budget")
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
 	var show claimShowData
 	envData(t, env, &show)
 	actions := strings.Join(show.NextActions, "\n")
-	if !strings.Contains(actions, "rest-on-locked") || !strings.Contains(actions, "block locking") {
-		t.Fatalf("legacy policy must keep the existing prerequisite gate: %v", show.NextActions)
+	if strings.Contains(actions, "block locking") || !strings.Contains(actions, "ready for local approval") {
+		t.Fatalf("show must agree with the v1 preview: %v", show.NextActions)
 	}
-	if strings.Contains(actions, "ready for local approval") {
-		t.Fatalf("legacy policy must not be silently migrated: %v", show.NextActions)
+	if got := show.Readiness.DependencyConditions; len(got) != 1 || got[0].Kind != "dependency_unapproved" {
+		t.Fatalf("show readiness must retain the draft-parent condition: %+v", got)
+	}
+	if after := snapshotFiles(t, root); !reflect.DeepEqual(after, before) {
+		t.Fatalf("preview/show rewrote a policy-0 store\nbefore=%v\nafter=%v", before, after)
+	}
+
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "fixture review"); err != nil {
+		t.Fatalf("lock against a draft parent under the carried-over policy: %v", err)
+	}
+	raw, err = os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var written map[string]any
+	if err := json.Unmarshal(raw, &written); err != nil {
+		t.Fatal(err)
+	}
+	if written["policy_version"] != float64(1) || written["policy_migration_reason"] == "" || written["policy_migration_reason"] == nil || written["policy_migrated_at"] == nil {
+		t.Fatalf("the first write must record the carry-over to v1: %s", raw)
+	}
+	if !reflect.DeepEqual(written["constitution"], stored["constitution"]) {
+		t.Fatalf("the carry-over must keep the constitution record\nbefore=%v\nafter=%v", stored["constitution"], written["constitution"])
 	}
 }
 
@@ -124,22 +175,17 @@ func TestClaimShowCorruptStoreCannotClaimReadinessAndWritesNothing(t *testing.T)
 }
 
 func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
-	const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - doctrine\nmodules:\n  - widget\nclaims_dir: claims\ndoctrine_facet: doctrine\n"
-	claimYAML := func(id, facet, status string, rests, mirrors []string) string {
-		body := "id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: " + status + "\nlayout: card\nbuild_role: behavior\nbody: |\n  fixture claim.\n"
+	const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	claimYAML := func(id, facet, status string, rests []string) string {
+		body := "id: " + id + "\nfacet: " + facet + "\nmodule: widget\nstatus: " + status + "\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  fixture claim.\n"
 		if len(rests) > 0 {
 			body += "rests_on:\n"
 			for _, dep := range rests {
 				body += "  - " + dep + "\n"
 			}
+			return body
 		}
-		if len(mirrors) > 0 {
-			body += "mirrors:\n"
-			for _, dep := range mirrors {
-				body += "  - " + dep + "\n"
-			}
-		}
-		return body + "governed_by:\n  type: none\n  reason: fixture\n"
+		return body + "rests_on:\n  none: true\n  reason: fixture\n"
 	}
 	cases := []struct {
 		name        string
@@ -148,32 +194,24 @@ func TestClaimShowPersistedV1UsesActualSingletonRefusals(t *testing.T) {
 		wantAdvice  string
 		admissible  bool
 	}{
-		{"doctrine rests_on", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.doctrine.hub"}, nil),
-			"claims/hub.yaml":   claimYAML("widget.doctrine.hub", "doctrine", "draft", nil, nil),
-		}, "doctrine_dependency_not_locked", "dependency widget.doctrine.hub is doctrine", false},
-		{"doctrine mirror", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", nil, []string{"widget.doctrine.hub"}),
-			"claims/hub.yaml":   claimYAML("widget.doctrine.hub", "doctrine", "draft", nil, nil),
-		}, "doctrine_dependency_not_locked", "dependency widget.doctrine.hub is doctrine", false},
 		{"missing dependency", map[string]string{
-			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.gone"}, nil),
+			"claims/child.yaml": claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.gone"}),
 		}, "missing_dependency", "missing_dependency", false},
 		{"retired dependency", map[string]string{
-			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}, nil),
-			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "retired", nil, nil),
+			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}),
+			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "retired", nil),
 		}, "retired_dependency", "retired_dependency", false},
 		{"unreadable dependency", map[string]string{
-			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}, nil),
-			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "migration-unknown", nil, nil),
+			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}),
+			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "migration-unknown", nil),
 		}, "unreadable_dependency", "unreadable_dependency", false},
 		{"cycle", map[string]string{
-			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}, nil),
-			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "draft", []string{"widget.contract.child"}, nil),
+			"claims/child.yaml":  claimYAML("widget.contract.child", "contract", "draft", []string{"widget.contract.parent"}),
+			"claims/parent.yaml": claimYAML("widget.contract.parent", "contract", "draft", []string{"widget.contract.child"}),
 		}, "dependency_cycle", "dependency_cycle", false},
 		{"unrelated lint scoped out", map[string]string{
-			"claims/child.yaml":     claimYAML("widget.contract.child", "contract", "draft", nil, nil),
-			"claims/unrelated.yaml": claimYAML("widget.unknown.unrelated", "unknown", "draft", nil, nil),
+			"claims/child.yaml":     claimYAML("widget.contract.child", "contract", "draft", nil),
+			"claims/unrelated.yaml": claimYAML("widget.unknown.unrelated", "unknown", "draft", nil),
 		}, "", "ready for local approval", true},
 	}
 	for _, tc := range cases {
@@ -228,10 +266,9 @@ func TestPolicyVerdictAdviceNeverTurnsRefusalsIntoReady(t *testing.T) {
 		verdict lock.CandidateVerdict
 		want    string
 	}{
-		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:build-role-required-for-locked"}, LintFindings: []lint.Finding{{LintName: "build-role-required-for-locked", ClaimID: "child", Message: "missing role"}}}, "build-role-required-for-locked"},
+		{"target lint", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:rests-on-target"}, LintFindings: []lint.Finding{{LintName: "rests-on-target", ClaimID: "child", Message: "bad target"}}}, "rests-on-target"},
 		{"own roll-up", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"lint:roll-up"}, LintFindings: []lint.Finding{{LintName: "roll-up", ClaimID: "child", Message: "draft sibling"}}}, "roll-up"},
 		{"open comments", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"unresolved_comments"}, OpenThreads: []string{"c-1"}}, "open comment thread"},
-		{"doctrine rests_on or mirror", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"doctrine_dependency_not_locked:doctrine:hub"}}, "dependency hub is doctrine"},
 		{"missing prerequisite", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"missing_dependency:gone"}}, "missing_dependency:gone"},
 		{"unreadable prerequisite", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"unreadable_dependency:bad"}}, "unreadable_dependency:bad"},
 		{"cycle", lock.CandidateVerdict{ClaimID: "child", Refusals: []string{"dependency_cycle:parent"}}, "dependency_cycle:parent"},
@@ -283,7 +320,23 @@ func snapshotFiles(t *testing.T, root string) map[string]string {
 }
 
 func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
-	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}}
+	// Each shape is spread over modules of at most 30 claims, so every module
+	// stays inside its isolation budget (a module-manifest refusal otherwise)
+	// and the evaluator is measured on the graph alone. Module boundaries do
+	// not change the rests_on graph. Each module's manifest rides in the
+	// overlay tree: a module with no valid manifest.yaml has no lockable
+	// claims, and this test measures the graph, not the harness file.
+	scaleCap := 30
+	cfgFor := func(claims []model.Claim) *config.Config {
+		cfg := &config.Config{Facets: []string{"contract"}, MaxClaimsPerModule: &scaleCap, ManifestTree: map[string][]byte{}}
+		for _, c := range claims {
+			if _, ok := cfg.ManifestTree[c.Module+"/manifest.yaml"]; !ok {
+				cfg.Modules = append(cfg.Modules, c.Module)
+				cfg.ManifestTree[c.Module+"/manifest.yaml"] = manifesttest.MinimalYAML(c.Module)
+			}
+		}
+		return cfg
+	}
 	store := &lock.Store{PolicyVersion: lock.PolicyLocalApprovalV1}
 	type shape struct {
 		name           string
@@ -292,16 +345,20 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		wantConditions int
 	}
 	claim := func(id string, deps ...string) model.Claim {
-		return model.Claim{ID: id, Facet: "contract", Module: "shape", Status: model.StatusDraft, Layout: model.LayoutCard, BuildRole: model.BuildRoleBehavior, Body: "bounded fixture", RestsOn: deps, Governed: model.Governed{Type: "none", Reason: "fixture"}}
+		ro := model.RestsNone("fixture")
+		if len(deps) > 0 {
+			ro = model.RestsOnIDs(deps...)
+		}
+		return model.Claim{ID: id, Facet: "contract", Module: strings.SplitN(id, ".", 2)[0], Status: model.StatusDraft, Layout: model.LayoutCard, Summary: "bounded fixture", Body: "bounded fixture", RestsOn: ro}
 	}
 
 	makeChain := func(size int) shape {
 		claims := make([]model.Claim, size)
 		for i := range claims {
-			id := fmt.Sprintf("shape.contract.chain%03d", i)
+			id := fmt.Sprintf("shape%d.contract.chain%03d", i/30, i)
 			deps := []string{}
 			if i+1 < len(claims) {
-				deps = []string{fmt.Sprintf("shape.contract.chain%03d", i+1)}
+				deps = []string{fmt.Sprintf("shape%d.contract.chain%03d", (i+1)/30, i+1)}
 			}
 			claims[i] = claim(id, deps...)
 		}
@@ -314,22 +371,24 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		claim("shape.contract.leaf"),
 	}
 	wide := []model.Claim{claim("shape.contract.wideroot")}
+	var wideIDs []string
 	for i := 0; i < 100; i++ {
-		id := fmt.Sprintf("shape.contract.wide%03d", i)
-		wide[0].RestsOn = append(wide[0].RestsOn, id)
+		id := fmt.Sprintf("shape%d.contract.wide%03d", i/30, i)
+		wideIDs = append(wideIDs, id)
 		wide = append(wide, claim(id))
 	}
+	wide[0].RestsOn = model.RestsOnIDs(wideIDs...)
 	makeDense := func(layers, width int) shape {
 		claims := []model.Claim{}
 		for layer := 0; layer < layers; layer++ {
 			deps := []string{}
 			if layer+1 < layers {
 				for node := 0; node < width; node++ {
-					deps = append(deps, fmt.Sprintf("shape.contract.dense%02d%02d", layer+1, node))
+					deps = append(deps, fmt.Sprintf("shape%d.contract.dense%02d%02d", (layer+1)/5, layer+1, node))
 				}
 			}
 			for node := 0; node < width; node++ {
-				claims = append(claims, claim(fmt.Sprintf("shape.contract.dense%02d%02d", layer, node), deps...))
+				claims = append(claims, claim(fmt.Sprintf("shape%d.contract.dense%02d%02d", layer/5, layer, node), deps...))
 			}
 		}
 		return shape{fmt.Sprintf("dense-%dx%d", layers, width), claims, claims[0].ID, width}
@@ -343,6 +402,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 	}
 	for _, s := range shapes {
 		t.Run(s.name, func(t *testing.T) {
+			cfg := cfgFor(s.claims)
 			start := time.Now()
 			evaluation := lock.EvaluateSetWithSemanticConflicts(s.claims, []string{s.root}, cfg, store, nil)
 			verdict := evaluation.Verdicts[0]

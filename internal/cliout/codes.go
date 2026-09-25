@@ -10,7 +10,7 @@ package cliout
 // condition, so a skill that learned "rights_denied means the human owns that
 // thread" from the viewer's API already knows what the terminal is telling it.
 // The CLI-only half names conditions the HTTP API structurally cannot reach
-// (there is no locking, linting, or build-order endpoint).
+// (there is no locking or linting endpoint).
 //
 // Adding a code is cheap and safe. Repurposing or deleting one is a breaking
 // change to every skill in the field, so don't.
@@ -161,13 +161,12 @@ const (
 	//     accepts the edit that caused it, then unlock, edit and lock again.
 	//
 	// Do not reuse this code for a third state without checking that sense (1)
-	// is not what a reader will apply. internal/buildorder's unbacked-flag case
-	// deliberately did not reuse it for exactly that reason.
+	// is not what a reader will apply.
 	CodeAlreadyLocked Code = "already_locked"
-	// CodePreLedgerUnadopted is an approval-recording command — claim lock, claim
-	// reaudit --confirm, build-order lock — refused because this project's lock
-	// store predates the lock ledger and the project still holds locked artifacts
-	// that predate it. It is the write-path twin of the gate's
+	// CodePreLedgerUnadopted is an approval-recording command — claim lock or
+	// claim reaudit --confirm — refused because this project's lock store
+	// predates the lock ledger and the project still holds locked claims that
+	// predate it. It is the write-path twin of the gate's
 	// lock-ledger-pre-ledger finding.
 	//
 	// It is its own code for CodeUntrackedConfig's reason: a deterministic
@@ -176,8 +175,8 @@ const (
 	// loops forever. It is also the one integrity-family condition an agent can
 	// clear by itself once the human has said yes, which is precisely what a code
 	// is for: the skills' recovery table can carry "pre_ledger_unadopted -> show
-	// the human the ordered crossing (re-propose locked build orders, unlock
-	// every locked claim, then re-lock only what they still stand behind)".
+	// the human the ordered crossing (unlock every locked claim, then re-lock
+	// only what they still stand behind)".
 	//
 	// Nothing is grandfathered on the way through. The first lock in a project
 	// holding nothing locked is what stamps the store onto the ledger schema, and
@@ -200,9 +199,16 @@ const (
 	// Resolve in the viewer — that click IS the approval this gate is waiting
 	// for — so an agent must not treat this as something to work around.
 	CodeUnresolvedComments Code = "unresolved_comments"
-	// CodeDependencyNotLocked is doctrine hub gating: a claim cannot lock while
-	// a dependency in the doctrine facet is still draft.
-	CodeDependencyNotLocked Code = "dependency_not_locked"
+	// CodeConstitutionOverCap is check+lock refusing a present constitution.yaml
+	// that exceeds the 800-word cap. The wire token is the Done-when name.
+	CodeConstitutionOverCap Code = "CONSTITUTION_OVER_CAP"
+	// CodeConstitutionNotLocked is the roof gate (NIT-26): `claim lock` and
+	// plain `check` refuse while the constitution is missing, status: draft,
+	// or edited after its lock (stored hash != file hash). Always on, no
+	// config switch. `claim new/show/list`, `serve` and `constitution
+	// show|lock` keep working so the agent can draft and the human can read
+	// and re-lock. Wire token matches the ticket's name, like OVER_CAP.
+	CodeConstitutionNotLocked Code = "CONSTITUTION_NOT_LOCKED"
 	// CodeStructuredLayout is a body-only operation refused on a claim whose
 	// rendered content lives outside body. The test is on CONTENT, not on the
 	// layout name, and that is v0.4.1's widening rather than a detail: any claim
@@ -213,32 +219,6 @@ const (
 	// rewrites body and nothing else, so accepting the flag would clear
 	// review_pending while leaving the actually-rendered content stale.
 	CodeStructuredLayout Code = "structured_layout"
-	// CodeNotProposed is a build-order operation on a module with no artifact
-	// proposed yet.
-	CodeNotProposed Code = "not_proposed"
-	// CodeBuildOrderStale is a locked build-order artifact whose claims have
-	// moved underneath it.
-	CodeBuildOrderStale Code = "build_order_stale"
-	// CodeBuildOrderRefused is buildorder's own refusal of a propose/lock (a
-	// module with unlocked claims, a missing build_role, a dependency cycle).
-	CodeBuildOrderRefused Code = "build_order_refused"
-	// CodeBuildOrderHandEdited is a build-order verb refusing an artifact that
-	// is not what the engine derives: "lock" refusing to freeze one that is not
-	// what a fresh propose computes — the phase sequence, a claim's placement,
-	// its File, or the excluded set was changed by hand — and "show" refusing
-	// one whose own stored entries cannot be laid out at all, which means a
-	// rests_on cycle inside bytes propose never writes.
-	//
-	// It is deliberately NOT CodeBuildOrderRefused. Every documented recovery for
-	// that code is a repair to the CLAIMS (lock the remaining ones, resolve a
-	// thread, set a missing build_role, break a rests_on cycle), and an agent
-	// that reads this refusal as one of those goes and inspects claims that are
-	// already correct, finds nothing to fix, and loops. Here the claims are fine
-	// and the ARTIFACT is wrong, so the recovery is the one move that discards
-	// it: re-run "build-order propose --module <m>" and lock what the engine
-	// derives. Splitting the code is what makes those two situations
-	// distinguishable without parsing the message.
-	CodeBuildOrderHandEdited Code = "build_order_hand_edited"
 	// CodeNoArtifact is an implementation-link operation on a module with no
 	// link artifact yet.
 	CodeNoArtifact Code = "no_artifact"
@@ -247,8 +227,9 @@ const (
 	CodeImplinkRefused Code = "implink_refused"
 
 	// CodeUnlinkedClaims is "dossierx check"'s code-link gate: the project
-	// names its `source_dirs`, and at least one locked schema/behavior/api/
-	// verification claim has no link in source (no `dossierx-claim:` or
+	// names its `source_dirs`, and at least one locked module claim (project
+	// claims and `embodiment: {mode: none}` claims are exempt; see
+	// implink.Expects) has no link in source (no `dossierx-claim:` or
 	// `dossierx-step:` tag, no `claim link`) or, carrying `steps:`, is not
 	// tagged on every step. The catalog and viewer were regenerated before
 	// the refusal; only the exit status is withheld. data.code_links names
@@ -292,10 +273,8 @@ const (
 	// which mean "supplied, but not a legal value".
 	CodeMissingFlag Code = "missing_flag"
 	// CodeUnsupportedFormat is a --format value the command cannot render. The
-	// root's persistent --format accepts json and text; one leaf,
-	// "build-order show", registers a local --format that also accepts mermaid,
-	// because a diagram is a rendering of that one payload and nothing else on
-	// the surface has anything to draw.
+	// root's persistent --format accepts json and text, and no leaf registers a
+	// --format of its own.
 	CodeUnsupportedFormat Code = "unsupported_format"
 	// CodeUsage is an invocation cobra itself rejected: an unknown command, an
 	// unknown flag, the wrong number of positional arguments.
@@ -307,8 +286,9 @@ const (
 	// exact block of moves to run; error.details.moves[] carries the same
 	// list as {from, to, tracked}. See internal/layout.
 	CodeLayoutLegacy Code = "layout_legacy"
-	// CodeStoreGitignored is an approval-recording verb (claim lock, claim
-	// flag, claim reaudit --confirm, build-order lock, batch claim lock)
+	// CodeStoreGitignored is an approval-recording verb (claim lock, batch
+	// claim lock, claim flag, claim reaudit --confirm, claim
+	// recover-approved-content, constitution lock)
 	// refusing because a store it is about to write under build/ is matched
 	// by .gitignore and not in the index — the approval would never reach a
 	// collaborator — or because the project is inside a git work tree and git
@@ -341,6 +321,11 @@ const (
 	// completed report and, in write mode, its generated projections remain the
 	// evidence for recovery; this code never describes claim approval/readiness.
 	CodeConformanceFailed Code = "conformance_failed"
+	// CodeViewTooLarge is a read-only assembly (today: manifest show
+	// --isolation) refusing because the emitted view exceeds its hard byte
+	// cap. Nothing was written. Distinct from CodeConformanceCapacityExceeded,
+	// which is the catalog/viewer projection budget.
+	CodeViewTooLarge Code = "view_too_large"
 )
 
 // ExitCode is the DEFAULT process exit status for a code.

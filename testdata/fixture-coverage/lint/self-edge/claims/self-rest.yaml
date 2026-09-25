@@ -1,0 +1,11 @@
+id: selfmod.contract.self-rest
+summary: Fixture claim used by the engine test corpus.
+facet: contract
+module: selfmod
+status: draft
+layout: card
+body: |
+  A claim whose rests_on edge names its own id -- a self-edge that is
+  also the one-node cycle case. Both self-edge and cycle report it.
+rests_on:
+  - selfmod.contract.self-rest

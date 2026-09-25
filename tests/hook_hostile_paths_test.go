@@ -296,10 +296,9 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 	if err := os.MkdirAll(filepath.Join(project, "claims"), 0o755); err != nil {
 		t.Fatalf("could not create the hostile fixture directories under %s: %v (if the OS refuses this name the case belongs in the table's exclusions, declared, not discovered here)", parent, err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(project, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, filepath.Join(project, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, project)
 
 	mustRun := func(dir, what string, name string, args ...string) {
 		t.Helper()
@@ -313,8 +312,9 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 	mustRun(repo, "git config user.name", "git", "config", "user.name", "hostile path corpus")
 	mustRun(repo, "git config commit.gpgsign", "git", "config", "commit.gpgsign", "false")
 	mustRun(project, "claim new", binPath, "--format", "text", "claim", "new", hostileClaimID,
+		"--summary", "Fixture claim used by the engine test corpus.",
 		"--body", "the widget answers within 200ms.",
-		"--governed-reason", "hostile-path fixture, not backed by any doctrine claim")
+		"--rests-on-none-reason", "hostile-path fixture, not backed by any doctrine claim")
 	mustRun(project, "check", binPath, "--format", "text", "check")
 	previewOut, previewErr, previewCode := hostileExec(t, project, env, binPath, "--format", "json", "claim", "lock", hostileClaimID,
 		"--reason", "approved for the hostile-path corpus", "--dry-run")

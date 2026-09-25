@@ -45,6 +45,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -99,7 +100,7 @@ const (
 func newSkillsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skills",
-		Short: "Install the embedded DossierX agent skills (dossierx router, claims, comments, build-order, code-links) in whatever form this repo's harness reads",
+		Short: "Install the embedded DossierX agent skills (the dossierx router and its companions) in whatever form this repo's harness reads",
 	}
 	cmd.AddCommand(newSkillsExportCmd())
 	return commandGroup(cmd)
@@ -117,6 +118,12 @@ type skillsExportForm struct {
 	Path    string   `json:"path"`
 	Action  string   `json:"action"`
 	Written []string `json:"written,omitempty"`
+	// Pruned names every retired bundle directory this export removed from
+	// the tree: one the tree's previous dossierx-skills.lock listed and this
+	// binary no longer ships (dossierx-build-order after v0.7.21, say). A
+	// retired skill left on disk keeps teaching a command surface that is
+	// gone, and a harness loads it exactly like a current one.
+	Pruned []string `json:"pruned,omitempty"`
 }
 
 // skillsExportData is "dossierx skills export"'s machine payload.
@@ -158,7 +165,7 @@ func newSkillsExportCmd() *cobra.Command {
 				}
 				if n := data.differing(); n > 0 {
 					return out, cliout.Errorf(cliout.CodeSkillsDrift, "skills export --check: %d skill file(s) differ from this binary's bundle", n).
-						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release, data.missing was never exported and data.unverified sits in a tree with no dossierx-skills.lock — re-run dossierx skills export for those three")
+						WithHint("data.hand_edited was rewritten on disk (restore it or re-export, and say so); data.stale came from an older release, data.missing was never exported and data.unverified sits in a tree with no dossierx-skills.lock — re-run dossierx skills export for those three; data.forbidden is whole-corpus wording (pack, full corpus) no skill may teach; data.retired is a bundle directory this release no longer ships — re-run dossierx skills export, which removes it when the tree's lock lists it, otherwise delete it after confirming with the human")
 				}
 				return out, nil
 			}
@@ -172,7 +179,7 @@ func newSkillsExportCmd() *cobra.Command {
 			}, nil
 		}),
 	}
-	cmd.Flags().BoolVar(&check, "check", false, "write nothing; compare every exported skill tree against this binary's bundle and its dossierx-skills.lock, and refuse (skills_drift) on a hand-edited, stale or missing file")
+	cmd.Flags().BoolVar(&check, "check", false, "write nothing; compare every exported skill tree against this binary's bundle and its dossierx-skills.lock, and refuse (skills_drift) on a hand-edited, stale, missing or retired file")
 	return cmd
 }
 
@@ -208,6 +215,48 @@ type skillsCheckData struct {
 	Missing    []string `json:"missing"`
 	Unverified []string `json:"unverified"`
 	NoLock     []string `json:"no_lock"`
+	// Forbidden is every line of an exported skill that teaches a
+	// whole-corpus read (NIT-12). The router teaches one module at a time
+	// through manifest show; a skill that says "pack" or "full corpus"
+	// sends an agent back to reading everything, whoever wrote it.
+	Forbidden []skillsForbiddenData `json:"forbidden"`
+	// Retired is every DossierX bundle directory in a checked tree that this
+	// binary does not ship (dossierx-build-order after v0.7.21, say). A
+	// harness loads it like any current skill, and it teaches a surface that
+	// is gone. dossierx skills export removes it when the tree's lock lists it;
+	// otherwise a human deletes it.
+	Retired []string `json:"retired"`
+}
+
+// skillsForbiddenData is one forbidden phrase in one exported file.
+type skillsForbiddenData struct {
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	Wording string `json:"wording"`
+}
+
+// forbiddenSkillWording is the vocabulary no exported skill may use. "pack"
+// was the invented second name for manifest show's bounded view; "full
+// corpus" is the habit the manifest harness exists to stop.
+var forbiddenSkillWording = []struct {
+	name string
+	re   *regexp.Regexp
+}{
+	{"pack", regexp.MustCompile(`(?i)\bpacks?\b`)},
+	{"full corpus", regexp.MustCompile(`(?i)\bfull[- ]corpus\b`)},
+}
+
+// scanForbiddenSkillWording reports each forbidden phrase in text, by line.
+func scanForbiddenSkillWording(file string, text []byte) []skillsForbiddenData {
+	var out []skillsForbiddenData
+	for i, line := range strings.Split(string(text), "\n") {
+		for _, w := range forbiddenSkillWording {
+			if w.re.MatchString(line) {
+				out = append(out, skillsForbiddenData{File: file, Line: i + 1, Wording: w.name})
+			}
+		}
+	}
+	return out
 }
 
 // skillsExportRoot is the directory the AGENTS.md section and the generic guide
@@ -272,6 +321,10 @@ func exportSkillForms(embedded fs.FS, explicitDir, root string) (skillsExportDat
 	// --- Form 1: the SKILL.md tree, verbatim — into the directory named, or
 	// into every skills directory the repo already has. ---
 	for _, tree := range skillTreeTargets(explicitDir, root) {
+		pruned, err := pruneRetiredSkills(embedded, tree.dir)
+		if err != nil {
+			return data, err
+		}
 		written, err := exportSkills(embedded, tree.dir)
 		if err != nil {
 			return data, err
@@ -282,7 +335,7 @@ func exportSkillForms(embedded fs.FS, explicitDir, root string) (skillsExportDat
 		data.Written = append(data.Written, written...)
 		data.Forms = append(data.Forms, skillsExportForm{
 			Harness: tree.harness, Form: "skill-tree", Path: tree.dir,
-			Action: "written", Written: written,
+			Action: "written", Written: written, Pruned: pruned,
 		})
 	}
 	if data.TargetDir == "" {
@@ -348,6 +401,9 @@ func writeSkillsExportText(out io.Writer, data skillsExportData) {
 		fmt.Fprintf(out, "skills export: wrote %s\n", p)
 	}
 	for _, f := range data.Forms {
+		for _, p := range f.Pruned {
+			fmt.Fprintf(out, "skills export: removed retired bundle %s\n", p)
+		}
 		fmt.Fprintf(out, "skills export: %s (%s) -> %s [%s]\n", f.Form, f.Harness, f.Path, f.Action)
 	}
 	for _, s := range data.Skipped {
@@ -401,6 +457,84 @@ func exportSkills(embedded fs.FS, targetDir string) ([]string, error) {
 	return written, nil
 }
 
+// isDossierXBundleName reports whether a directory name is one DossierX could
+// have exported: the router itself or a "dossierx-" companion. Pruning and the
+// retired check touch nothing else, so a project's own skills that happen to
+// sit beside ours are never removed or reported.
+func isDossierXBundleName(name string) bool {
+	return name == dxskills.RouterName || strings.HasPrefix(name, dxskills.RouterName+"-")
+}
+
+// shippedBundles is the set of top-level bundle directories embedded in this
+// binary.
+func shippedBundles(embedded fs.FS) (map[string]bool, error) {
+	entries, err := fs.ReadDir(embedded, ".")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded skills: %w", err)
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() {
+			out[e.Name()] = true
+		}
+	}
+	return out, nil
+}
+
+// pruneRetiredSkills removes, from targetDir, every bundle directory that the
+// tree's previous dossierx-skills.lock listed and this binary does not ship.
+//
+// The lock is the evidence: it names what an earlier "dossierx skills export"
+// wrote here, so a directory it lists is one DossierX put there and may take
+// away again. A directory the lock does not list is left alone even when its
+// name looks like ours — export --check reports it as retired and the human
+// decides — and so is anything whose name is not a DossierX bundle name,
+// whatever the lock says: the lock is a file on disk, not a grant. No lock,
+// or one that does not decode, prunes nothing. Returns the removed paths,
+// sorted.
+func pruneRetiredSkills(embedded fs.FS, targetDir string) ([]string, error) {
+	raw, err := os.ReadFile(filepath.Join(targetDir, skillsLockFile))
+	if err != nil {
+		return nil, nil
+	}
+	var prev skillsLock
+	if json.Unmarshal(raw, &prev) != nil {
+		return nil, nil
+	}
+	shipped, err := shippedBundles(embedded)
+	if err != nil {
+		return nil, err
+	}
+	retired := map[string]bool{}
+	for file := range prev.Files {
+		name, _, found := strings.Cut(file, "/")
+		if !found || !isDossierXBundleName(name) || shipped[name] {
+			continue
+		}
+		retired[name] = true
+	}
+	names := make([]string, 0, len(retired))
+	for name := range retired {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var pruned []string
+	for _, name := range names {
+		dir := filepath.Join(targetDir, name)
+		info, statErr := os.Lstat(dir)
+		if statErr != nil || !info.IsDir() {
+			// Already gone, or not a directory (a symlink, a file): leave
+			// anything that is not plainly our bundle directory to a human.
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return pruned, fmt.Errorf("remove retired skill bundle %s: %w", dir, err)
+		}
+		pruned = append(pruned, dir)
+	}
+	return pruned, nil
+}
+
 // skillTree is one directory the SKILL.md tree is written to (or checked in)
 // and the harness that reads it.
 type skillTree struct {
@@ -437,7 +571,7 @@ func sha256Hex(data []byte) string {
 
 // differing is the number of files the check refuses on.
 func (d skillsCheckData) differing() int {
-	return len(d.HandEdited) + len(d.Stale) + len(d.Missing) + len(d.Unverified)
+	return len(d.HandEdited) + len(d.Stale) + len(d.Missing) + len(d.Unverified) + len(d.Forbidden) + len(d.Retired)
 }
 
 // checkSkillTrees compares every tree skillTreeTargets would write against the
@@ -446,7 +580,7 @@ func (d skillsCheckData) differing() int {
 // as unverified and the tree is named in NoLock. No tree at all is reported
 // as every file missing, which is the honest answer to "is the skill installed".
 func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData, error) {
-	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, Unverified: []string{}, NoLock: []string{}}
+	data := skillsCheckData{Trees: []string{}, HandEdited: []string{}, Stale: []string{}, Missing: []string{}, Unverified: []string{}, NoLock: []string{}, Forbidden: []skillsForbiddenData{}, Retired: []string{}}
 	trees := skillTreeTargets(explicitDir, root)
 	if len(trees) == 0 {
 		if explicitDir == "" && root == "" {
@@ -454,8 +588,21 @@ func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData,
 		}
 		return data, nil
 	}
+	shipped, err := shippedBundles(embedded)
+	if err != nil {
+		return data, err
+	}
 	for _, tree := range trees {
 		data.Trees = append(data.Trees, tree.dir)
+		entries, readErr := os.ReadDir(tree.dir)
+		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+			return data, fmt.Errorf("read skill tree %s: %w", tree.dir, readErr)
+		}
+		for _, e := range entries {
+			if e.IsDir() && isDossierXBundleName(e.Name()) && !shipped[e.Name()] {
+				data.Retired = append(data.Retired, filepath.Join(tree.dir, e.Name()))
+			}
+		}
 		var lock skillsLock
 		lockKnown := false
 		if raw, err := os.ReadFile(filepath.Join(tree.dir, skillsLockFile)); err == nil {
@@ -484,6 +631,7 @@ func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData,
 				data.Missing = append(data.Missing, onDisk)
 				return nil
 			}
+			data.Forbidden = append(data.Forbidden, scanForbiddenSkillWording(onDisk, got)...)
 			gotHash := sha256Hex(got)
 			if gotHash == sha256Hex(want) {
 				return nil
@@ -507,6 +655,7 @@ func checkSkillTrees(embedded fs.FS, explicitDir, root string) (skillsCheckData,
 	sort.Strings(data.Stale)
 	sort.Strings(data.Missing)
 	sort.Strings(data.Unverified)
+	sort.Strings(data.Retired)
 	return data, nil
 }
 
@@ -529,6 +678,12 @@ func writeSkillsCheckText(out io.Writer, data skillsCheckData) {
 	}
 	for _, t := range data.NoLock {
 		fmt.Fprintf(out, "skills check: no %s in %s — re-export to write one\n", skillsLockFile, t)
+	}
+	for _, d := range data.Retired {
+		fmt.Fprintf(out, "skills check: retired %s (this release does not ship it; dossierx skills export removes it when %s lists it, otherwise delete it)\n", d, skillsLockFile)
+	}
+	for _, f := range data.Forbidden {
+		fmt.Fprintf(out, "skills check: forbidden wording %q at %s:%d (teach manifest show, one module at a time)\n", f.Wording, f.File, f.Line)
 	}
 	n := data.differing()
 	if n == 0 {
@@ -675,7 +830,7 @@ func buildAgentGuide(embedded fs.FS) (string, error) {
 // or not DossierX is what the agent is working on, so the budget is far tighter
 // than a skill file's — and the router is precisely the part that must always be
 // resident (the contract, the two roles, the rules that never bend, and where to
-// read the rest). Inlining all six would pay for five skills' worth of context
+// read the rest). Inlining every bundle would pay for all the companions' context
 // on every unrelated turn.
 func buildAgentsSection(embedded fs.FS) (string, error) {
 	docs, err := loadSkillDocs(embedded)

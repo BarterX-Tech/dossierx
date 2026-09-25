@@ -27,9 +27,8 @@ package viewertests
 // viewer-tests/testdata/three-facets rendered fresh by the engine under test,
 // at 1280px, in light and dark, in the two selection states (the default facet
 // selected, and a different facet selected after a real click). It does not
-// cover the mobile form of the strip (02 § 5), the sidebar module row that
-// shares .sec-tab__count, or the build-order strip (.bo-modules), which is a
-// different component that reuses the .subtab class.
+// cover the mobile form of the strip (02 § 5) or the sidebar module row that
+// shares .sec-tab__count.
 
 import (
 	"fmt"
@@ -44,14 +43,17 @@ import (
 // threeFacetFacets is the fixture's facet list, in project.config.yaml order,
 // with the claim count each facet actually holds. The counts are deliberately
 // NOT all equal: 2/1/1 is what makes "the tab shows its own facet's count"
-// distinguishable from "the tab shows the module's 4".
+// distinguishable from "the tab shows the module's 4". Count -1 marks the
+// Manifest tab, which holds the module's manifest.yaml and never a claim, so
+// it carries no count at all: a "0" there read as an empty tab over one that
+// has content.
 var threeFacetFacets = []struct {
 	GroupID string
 	Label   string
 	Count   int
 }{
-	{"widget-contract", "Contract", 2},
-	{"widget-interface", "Interface", 1},
+	{"widget-manifest", "Manifest", -1},
+	{"widget-contract", "Contract", 3},
 	{"widget-internals", "Internals", 1},
 }
 
@@ -76,6 +78,11 @@ func renderThreeFacetFixture(t *testing.T) string {
 		t.Fatalf("copy the three-facet fixture: %v\n%s", err, out)
 	}
 	cfg := filepath.Join(dst, "project.config.yaml")
+	// The fixture ships its constitution.yaml as draft; the copy locks it
+	// (NIT-26: no plain check passes until the roof is locked).
+	if out, err := exec.Command(bin, "--config", cfg, "--format", "text", "constitution", "lock", "--reason", "fixture roof").CombinedOutput(); err != nil {
+		t.Fatalf("lock the three-facet fixture's constitution: %v\n%s", err, out)
+	}
 	if out, err := exec.Command(bin, "--config", cfg, "--format", "text", "check").CombinedOutput(); err != nil {
 		t.Fatalf("check the three-facet fixture: %v\n%s", err, out)
 	}
@@ -195,21 +202,21 @@ func TestThreeFacetTabStripPaintsTheSelectedFacetAndACountPerFacet(t *testing.T)
 
 			var r stripReading
 			evalInto(t, ctx, readStripJS, &r)
-			assertThreeFacetStrip(t, r, scheme, "as rendered", 0)
+			assertThreeFacetStrip(t, r, scheme, "as rendered", 1)
 
 			// Selecting a DIFFERENT facet is what proves the selected-state
 			// rules are about selection and not about position: at this point
-			// the first tab must have gone back to the rest treatment and the
-			// second must have taken the selected one.
+			// the Contract tab must have gone back to the rest treatment and
+			// Internals must have taken the selected one.
 			runCDP(t, ctx, chromedp.Click(
-				`.sub-nav .subtab[data-target="#`+threeFacetFacets[1].GroupID+`"]`, chromedp.ByQuery))
+				`.sub-nav .subtab[data-target="#`+threeFacetFacets[2].GroupID+`"]`, chromedp.ByQuery))
 			pollTrue(t, ctx, fmt.Sprintf(
 				`(document.querySelector('.sub-nav .subtab[data-target="#%s"]') || {classList: {contains: function(){return false;}}}).classList.contains('on')`,
-				threeFacetFacets[1].GroupID))
+				threeFacetFacets[2].GroupID))
 
 			var after stripReading
 			evalInto(t, ctx, readStripJS, &after)
-			assertThreeFacetStrip(t, after, scheme, "after clicking the second facet", 1)
+			assertThreeFacetStrip(t, after, scheme, "after clicking Internals", 2)
 		})
 	}
 }
@@ -268,11 +275,18 @@ func assertThreeFacetStrip(t *testing.T, r stripReading, scheme, when string, wa
 		}
 
 		// ---- the count (02 § 4.9, nodes 6F-0 / 6I-0) ----
-		if !tab.HasCount {
+		switch {
+		case want.Count < 0:
+			if tab.HasCount {
+				t.Errorf("%s, %s: tab %q carries a count %q. It holds the module's manifest, "+
+					"not claims, so a claim count there misstates what is behind it.",
+					scheme, when, tab.Label, tab.Count)
+			}
+		case !tab.HasCount:
 			t.Errorf("%s, %s: tab %q carries no .sec-tab__count. 02 § 4.9 gives every facet tab "+
 				"a count beside its label; without one a reader cannot see how much is behind "+
 				"the tab they are not looking at.", scheme, when, tab.Label)
-		} else {
+		default:
 			if tab.Count != fmt.Sprint(want.Count) {
 				t.Errorf("%s, %s: tab %q shows count %q, want %q — this facet's OWN claims. "+
 					"The fixture's module holds 4 claims across 2/1/1; a tab that reports 4 "+

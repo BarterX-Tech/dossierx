@@ -25,12 +25,11 @@ func writeSourcedClaimFixture(t *testing.T) string {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 
-	sourced := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	sourced := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  requests retry three times with backoff [1], and the ceiling is fixed [2].\n" +
 		"sources:\n" +
 		"  - ref: 1\n    kind: external\n    title: Vendor retry guidance\n" +
@@ -40,14 +39,14 @@ func writeSourcedClaimFixture(t *testing.T) string {
 		"  - ref: 2\n    kind: internal\n    title: Extraction ledger row\n" +
 		"    path: research/ledger.jsonl\n    record_id: r-17\n" +
 		"    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim\n"
+		"rests_on:\n  none: true\n  reason: fixture claim\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "retry.yaml"), []byte(sourced), 0o644); err != nil {
 		t.Fatalf("write sourced claim: %v", err)
 	}
 
-	bare := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	bare := "id: widget.contract.timeout-budget\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the total time budget across retries.\n" +
-		"governed_by:\n  type: none\n  reason: fixture claim\n"
+		"rests_on:\n  none: true\n  reason: fixture claim\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "timeout.yaml"), []byte(bare), 0o644); err != nil {
 		t.Fatalf("write unsourced claim: %v", err)
 	}
@@ -117,6 +116,41 @@ func TestClaimShowCarriesEverySourceWithItsAnchor(t *testing.T) {
 	}
 	if len(bareData.Sources) != 0 {
 		t.Fatalf("expected no sources, got %+v", bareData.Sources)
+	}
+}
+
+// TestClaimShowCarriesTheClaimsOwnWords: the isolation view and the skills send
+// an agent to "claim show <id>" to read a neighbor's contract, so show must
+// carry the summary and the body exactly as authored (the body's trailing
+// newline and its "[n]" markers included), in both the envelope and the text.
+func TestClaimShowCarriesTheClaimsOwnWords(t *testing.T) {
+	cfgPath := writeSourcedClaimFixture(t)
+	const wantBody = "requests retry three times with backoff [1], and the ceiling is fixed [2].\n"
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.retry-policy")
+	if err != nil {
+		t.Fatalf("claim show: %v (%+v)", err, env)
+	}
+	var data claimShowData
+	envData(t, env, &data)
+	if data.Summary != "Fixture claim used by the engine test corpus." {
+		t.Fatalf("summary must be the authored summary, got %q", data.Summary)
+	}
+	if data.Body != wantBody {
+		t.Fatalf("body must be exactly as authored, got %q", data.Body)
+	}
+
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "show", "widget.contract.retry-policy")
+	if err != nil {
+		t.Fatalf("claim show --format text: %v (out %q)", err, out)
+	}
+	for _, want := range []string{
+		"summary:            Fixture claim used by the engine test corpus.",
+		"body:\n    " + wantBody,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the text rendering must carry %q, got:\n%s", want, out)
+		}
 	}
 }
 

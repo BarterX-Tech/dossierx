@@ -19,9 +19,9 @@ import (
 func writeLockedFixtureClaim(t *testing.T, claimsDir, id, module, body string) string {
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
-	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
+	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  " + body + "\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}
@@ -39,9 +39,8 @@ func TestCLI_Flag_RequiresAllThreeFlags(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "original body")
 
 	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main", "--claim-says", "x"); err == nil {
@@ -84,9 +83,8 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	claimPath := writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the old assertion")
 
 	flagOut, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
@@ -160,9 +158,8 @@ func TestCLI_Flag_AnyLockedClaimCanBeReflagged(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 
 	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
@@ -182,9 +179,8 @@ func TestCLI_ClaimLink_ThenShow(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 
 	srcPath := filepath.Join(root, "widget.go")
@@ -254,7 +250,7 @@ func TestCLI_ClaimShow_NothingLinkedYet(t *testing.T) {
 // TestCLI_Check_ImplinkLine_ZeroCostWhenUnused proves "dossierx check" prints
 // no impl-links line at all for a project that has never called "dossierx
 // implink set" — the zero-cost/silent-when-unused contract this step must
-// uphold, mirroring build_order's own graceful-degradation precedent.
+// uphold.
 func TestCLI_Check_ImplinkLine_ZeroCostWhenUnused(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
@@ -281,9 +277,8 @@ func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.unlinked", "widget", "never gets an implink Set call")
 	armLedgerFixture(t, cfgPath) // both are legitimately locked, not hand-flipped
@@ -309,7 +304,7 @@ func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 	if !strings.Contains(out, "check: OK") {
 		t.Fatalf("expected check: OK regardless of implink drift, got: %s", out)
 	}
-	if !strings.Contains(out, "impl-links: 1 linked, 1 drifted, 0 partial, 1 unlinked-in-schema/behavior/api/verification-phases") {
+	if !strings.Contains(out, "impl-links: 1 linked, 1 drifted, 0 partial, 1 unlinked locked claims") {
 		t.Fatalf("expected an impl-links summary line reporting the drift and the unlinked claim, got: %s", out)
 	}
 	if !strings.Contains(out, "drifted: widget.contract.main widget.go") {
@@ -337,12 +332,11 @@ func icWriteScanFixtureProject(t *testing.T, root, module, claimID string) (cfgP
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatalf("mkdir src dir: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - " + module +
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module +
 		"\nclaims_dir: claims\nsource_dirs:\n  - src\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, claimID, module, "fixture for source-scan tests")
 	// The claim above is hand-authored "status: locked", which the v0.3.0
 	// lock-ledger gate reads as a status flipped outside the approval path.
@@ -372,7 +366,7 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidTag(t *testing.T) {
 	if !strings.Contains(out, "check: OK") {
 		t.Fatalf("expected check: OK, got: %s", out)
 	}
-	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases") {
+	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims") {
 		t.Fatalf("expected the status line to reflect the auto-reconciled link, got: %s", out)
 	}
 }
@@ -400,11 +394,11 @@ func TestCLI_Check_ScansSourceDirs_UnknownClaimIsHardFailure(t *testing.T) {
 func writeLockedStepsFixtureClaim(t *testing.T, claimsDir, id, module string, steps []string) {
 	t.Helper()
 	path := filepath.Join(claimsDir, strings.ReplaceAll(id, ".", "_")+".yaml")
-	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: steps\nbuild_role: behavior\nsteps:\n"
+	src := "id: " + id + "\nfacet: contract\nmodule: " + module + "\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\nsteps:\n"
 	for _, s := range steps {
 		src += "  - " + s + "\n"
 	}
-	src += "governed_by:\n  type: none\n  reason: fixture\n"
+	src += "rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim %s: %v", id, err)
 	}
@@ -420,11 +414,10 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidStepTag(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatalf("mkdir src: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
 	armLedgerFixture(t, cfgPath)
 	hash := implink.StepContentHash("do the thing")
@@ -440,7 +433,7 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidStepTag(t *testing.T) {
 	if !strings.Contains(out, "impl-links: scanned 1 file(s), found 1 tag(s), reconciled 1 link(s) (0 error(s))") {
 		t.Fatalf("expected a scan summary line, got: %s", out)
 	}
-	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases") {
+	if !strings.Contains(out, "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims") {
 		t.Fatalf("expected the status line to reflect the step link, got: %s", out)
 	}
 }
@@ -455,11 +448,10 @@ func TestCLI_Check_ScansSourceDirs_StepHashMismatchIsHardFailure(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatalf("mkdir src: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
 	armLedgerFixture(t, cfgPath)
 	bad := strings.Repeat("0", 64)
@@ -487,11 +479,10 @@ func TestCLI_ClaimShow_ExposesStepLink(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatalf("mkdir src: %v", err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedStepsFixtureClaim(t, claimsDir, "widget.contract.main", "widget", []string{"do the thing"})
 	armLedgerFixture(t, cfgPath)
 	hash := implink.StepContentHash("do the thing")

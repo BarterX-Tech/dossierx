@@ -45,29 +45,54 @@ func openReadinessPanel(t *testing.T, ctx context.Context, doorSelector string) 
 	pollTrue(t, ctx, `(function(){ var d = document.querySelector(`+strconv.Quote(doorSelector)+`); return !!d && d.open; })()`)
 }
 
+// readinessScaleModuleSize caps each module of the scale fixture at 30
+// claims, so every module's isolation view stays inside check's module
+// budget. Claims fill modules in layer-major order (k = layer*width + node,
+// module = k / 30). The rests_on fan-out is the same as a single-module
+// fixture's; it simply crosses module boundaries.
+const readinessScaleModuleSize = 30
+
+func readinessScaleModules(layers, width int) int {
+	return (layers*width + readinessScaleModuleSize - 1) / readinessScaleModuleSize
+}
+
+func readinessScaleID(width, layer, node int) string {
+	k := layer*width + node
+	return fmt.Sprintf("m%02d.contract.l%03d-n%02d", k/readinessScaleModuleSize, layer, node)
+}
+
 func readinessScaleProject(t *testing.T, layers, width int) *project {
 	t.Helper()
-	p := newProjectRaw(t, defaultConfigYAML)
+	var config strings.Builder
+	config.WriteString("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n")
+	for m := 0; m < readinessScaleModules(layers, width); m++ {
+		fmt.Fprintf(&config, "  - m%02d\n", m)
+	}
+	config.WriteString("claims_dir: claims\nmax_claim_body_chars: 20000\n")
+	p := newProjectRaw(t, config.String())
 	for layer := layers - 1; layer >= 0; layer-- {
 		for node := 0; node < width; node++ {
-			id := fmt.Sprintf("widget.contract.l%03d-n%02d", layer, node)
+			id := readinessScaleID(width, layer, node)
+			module, _, _ := strings.Cut(id, ".")
 			var restsOn strings.Builder
 			if layer+1 < layers {
 				restsOn.WriteString("rests_on:\n")
 				for dependency := 0; dependency < width; dependency++ {
-					fmt.Fprintf(&restsOn, "  - widget.contract.l%03d-n%02d\n", layer+1, dependency)
+					fmt.Fprintf(&restsOn, "  - %s\n", readinessScaleID(width, layer+1, dependency))
 				}
+			}
+			restsBlock := restsOn.String()
+			if restsBlock == "" {
+				restsBlock = "rests_on:\n  none: true\n  reason: viewer-test fixture, not backed by any doctrine claim\n"
 			}
 			p.writeClaim(id+".yaml", fmt.Sprintf(`id: %s
 facet: contract
-module: widget
+module: %s
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   browser scale fixture at layer %d, node %d.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
-%s`, id, layer, node, restsOn.String()))
+%s`, id, module, layer, node, restsBlock))
 		}
 	}
 	return p
@@ -146,13 +171,14 @@ func scopeCounts(t *testing.T, text string) (facts, modules int) {
 // budget or lazily render any more — every .claim-readiness-map/-trace/-route
 // selector is now permanently absent (dead-selector regression guard below).
 // (2) Grouping moved from "the representative-route claim" to "the module
-// that owns the fix" (06 §7.6): this fixture's every claim shares one module
-// (widget), so each claim's readiness panel now has exactly ONE module group
-// holding its COMPLETE fact list, rather than many small per-dependency
-// groups. The within-module cap (06 §4.4's "Show 9 more in this module"; 2
-// rendered up front) is what keeps a project whose fan-out reaches thousands
-// of facts under the DOM-node budget: viewer-runtime.js's readinessModule
-// builds the tail lazily, on the "Show N more" click, never up front.
+// that owns the fix" (06 §7.6): this fixture packs its claims into modules of
+// 30 (check's per-module isolation budget), so the root's readiness panel has
+// one group per module, each holding that module's COMPLETE fact list. The
+// within-module cap (06 §4.4's "Show 9 more in this module"; 2 rendered up
+// front) and the module-list cap (06 §8 item 9; 4 disclosures, the rest as
+// one-line rows) are what keep a project whose fan-out reaches thousands of
+// facts under the DOM-node budget: viewer-runtime.js builds each tail
+// lazily, on its "Show N more" click, never up front.
 func TestReadinessBrowserScaleBudgets(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -169,10 +195,21 @@ func TestReadinessBrowserScaleBudgets(t *testing.T) {
 
 			ctx := browserContext(t)
 			runCDP(t, ctx,
-				chromedp.Navigate(p.renderStatic()+"#widget.contract.l000-n00"),
+				chromedp.Navigate(p.renderStatic()+"#m00.contract.l000-n00"),
 			)
-			openReadinessPanel(t, ctx, "#widget\\.contract\\.l000-n00 details.claim-readiness-door")
 			pollTrue(t, ctx, `document.readyState === 'complete' && performance.getEntriesByType('navigation')[0].loadEventEnd > 0`)
+			// A corpus this size soft-mounts: only the linked module's
+			// surface is cloned at load. Visit every module (surfaces stay
+			// mounted once visited) so the DOM budget and the per-claim
+			// counts below cover the whole corpus, not one module of it.
+			for m := 0; m < readinessScaleModules(tc.layers, tc.width); m++ {
+				k := m * readinessScaleModuleSize
+				first := readinessScaleID(tc.width, k/tc.width, k%tc.width)
+				runCDP(t, ctx, chromedp.Evaluate(`location.hash = `+strconv.Quote("#"+first), nil))
+				pollTrue(t, ctx, `!!document.getElementById(`+strconv.Quote(first)+`)`)
+			}
+			runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#m00.contract.l000-n00'`, nil))
+			openReadinessPanel(t, ctx, "#m00\\.contract\\.l000-n00 details.claim-readiness-door")
 
 			before := readReadinessScaleMetrics(t, ctx)
 			if before.LoadMS < 0 || before.LoadMS > readinessScaleMaxLoadMS {
@@ -203,24 +240,42 @@ func TestReadinessBrowserScaleBudgets(t *testing.T) {
 			// count is the authoritative total FOR THIS ONE CLAIM — always
 			// correct even though only READINESS_VISIBLE_CAP rows are in
 			// the DOM at load.
-			root := `document.getElementById('widget.contract.l000-n00').querySelector('.claim-readiness')`
+			root := `document.getElementById('m00.contract.l000-n00').querySelector('.claim-readiness')`
 			scopeText := evalString(t, ctx, root+`.querySelector('.claim-readiness-scope').textContent`)
 			rootFacts, rootModules := scopeCounts(t, scopeText)
-			if rootModules != 1 {
-				t.Fatalf("root scope modules = %d, want 1 (fixture uses a single module)", rootModules)
+			// The root rests, transitively, on every other claim, and those
+			// claims fill every module of the fixture.
+			if want := readinessScaleModules(tc.layers, tc.width); rootModules != want {
+				t.Fatalf("root scope modules = %d, want %d (every module of the fixture holds a blocker)", rootModules, want)
 			}
 			if rootFacts <= 0 {
 				t.Fatalf("root scope facts = %d, want at least one", rootFacts)
 			}
-			if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length`); got > 2 {
-				t.Fatalf("initial visible blocker rows = %d, want the within-module cap of 2 or fewer", got)
+			const modulesVisibleCap = 4 // viewer-runtime.js MODULES_VISIBLE_CAP
+			wantGroups := min(rootModules, modulesVisibleCap)
+			if got := evalInt(t, ctx, root+`.querySelectorAll('details.claim-readiness-module').length`); got != wantGroups {
+				t.Fatalf("module disclosures = %d, want %d (06 §8 item 9 caps them at %d)", got, wantGroups, modulesVisibleCap)
+			}
+			if got := evalInt(t, ctx, `Math.max.apply(null, Array.from(`+root+`.querySelectorAll('details.claim-readiness-module')).map(function(d){ return d.querySelectorAll('.claim-readiness-blocker').length; }))`); got > 2 {
+				t.Fatalf("initial blocker rows in one module = %d, want the within-module cap of 2 or fewer", got)
 			}
 
-			// "Show N more" must reveal EVERY remaining fact — the cap
-			// defers rendering, it never drops data (06/07's standing
-			// "nothing is deleted").
-			runCDP(t, ctx, chromedp.Evaluate(root+`.querySelector('.claim-readiness-more') && `+root+`.querySelector('.claim-readiness-more').click()`, nil))
-			pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length === `+strconv.Itoa(rootFacts))
+			// "Show N more" must reveal EVERY remaining fact — the caps
+			// defer rendering, they never drop data (06/07's standing
+			// "nothing is deleted"). Each disclosure's Show more fills it
+			// to its pill count; the module-list Show more adds a one-line
+			// row per remaining module; and every pill together must
+			// account for the root's whole scope count.
+			runCDP(t, ctx, chromedp.Evaluate(`Array.from(`+root+`.querySelectorAll('.claim-readiness-more')).forEach(function(b){ b.click(); })`, nil))
+			pollTrue(t, ctx, `Array.from(`+root+`.querySelectorAll('details.claim-readiness-module')).every(function(d){
+				return d.querySelectorAll('.claim-readiness-blocker').length === Number(d.querySelector('.claim-readiness-module-count').textContent);
+			})`)
+			wantFlat := rootModules - wantGroups
+			pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-module-row-flat').length === `+strconv.Itoa(wantFlat))
+			pillTotal := evalInt(t, ctx, `Array.from(`+root+`.querySelectorAll('.claim-readiness-module-count')).reduce(function(n, p){ return n + Number(p.textContent); }, 0)`)
+			if pillTotal != rootFacts {
+				t.Fatalf("module pills total %d, want the root's scope count %d", pillTotal, rootFacts)
+			}
 
 			after := readReadinessScaleMetrics(t, ctx)
 			if after.JSHeapBytes < 0 || after.JSHeapBytes > readinessScaleMaxJSHeapBytes {
@@ -238,11 +293,9 @@ const readinessRootYAML = `id: widget.contract.root
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the claim whose readiness a reviewer is deciding.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.alpha
   - widget.contract.beta
@@ -252,10 +305,11 @@ const readinessAlphaYAML = `id: widget.contract.alpha
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a direct prerequisite awaiting approval.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -263,11 +317,9 @@ const readinessBetaYAML = `id: widget.contract.beta
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a direct prerequisite with an upstream prerequisite.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.gamma
 `
@@ -276,10 +328,11 @@ const readinessGammaYAML = `id: widget.contract.gamma
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   an upstream prerequisite awaiting approval.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -312,10 +365,11 @@ func TestReadinessShowMoreRevealsTheAuthoritativeList(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   an upstream prerequisite awaiting approval.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `, id))
 	}
@@ -323,22 +377,18 @@ governed_by:
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   the single first-hop route to many upstream blockers.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - `+strings.Join(leafIDs, "\n  - ")+"\n")
 	p.writeClaim("root.yaml", `id: widget.contract.root
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a root with one grouped module.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.hub
 `)
@@ -463,14 +513,9 @@ func TestReadinessTreatsFlagDetailsAsText(t *testing.T) {
 	}
 }
 
-// TestLiveReadinessRefreshesAfterAnUpstreamApproval re-pins the same test's
-// original Mermaid-error assertion away: R09.9 removed the inline trace, so
-// there is no `window.__boErrors` global for a project with no locked Build
-// order (build-order-ui.js is no longer injected at all — see render.go's
-// HasReadinessMaps field comment). The live-refresh guarantee itself is
-// unchanged: an upstream approval must drop the resolved fact from the
-// COMPLETE list on the next poll, not just from whichever page happened to
-// be open.
+// TestLiveReadinessRefreshesAfterAnUpstreamApproval: an upstream approval
+// must drop the resolved fact from the COMPLETE list on the next poll, not
+// just from whichever page happened to be open.
 func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 	p := newReadinessProject(t)
 	ctx := browserContext(t)

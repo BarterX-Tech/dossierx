@@ -13,6 +13,6 @@ body: |
       ```
 
   - Second top level item.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - the loose-list rule at depth; blank lines before a nested item and before a fence indented under that nested item, with the fence still landing inside the nested item

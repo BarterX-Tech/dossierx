@@ -1,10 +1,11 @@
 id: ambmod.contract.dup
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: ambmod
 status: draft
 layout: card
 body: |
   Second, independently-authored claim reusing the same id (copy B).
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture claim, not backed by any real doctrine

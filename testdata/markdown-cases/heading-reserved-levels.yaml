@@ -7,6 +7,6 @@ body: |
   # One
 
   ## Two
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - # and ## are reserved for viewer chrome and stay literal

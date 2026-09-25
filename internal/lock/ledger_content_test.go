@@ -59,22 +59,22 @@ func TestApprovedContentReportsALegacyRecordAsUnretained(t *testing.T) {
 	}
 }
 
-// A build-order record is not a claim approval, and its key space is separate.
+// A leftover v0.7.20 "build-order" row is not a claim approval.
 // ApprovedContent filters on Subject rather than on the key's shape.
 func TestApprovedContentIgnoresNonClaimSubjects(t *testing.T) {
 	store := &Store{Ledger: map[string]LedgerRecord{
-		"build-order:fixture": {Subject: SubjectBuildOrder, Hash: "abc"},
+		"build-order:fixture": {Subject: "build-order", Hash: "abc", Content: &model.Claim{ID: "build-order:fixture"}},
 	}}
 	if _, ok := store.ApprovedContent("build-order:fixture"); ok {
-		t.Fatal("a build-order record must never answer as claim content")
+		t.Fatal("a non-claim record must never answer as claim content")
 	}
 }
 
 func TestSignedFieldsDifferingNamesOnlySignedFields(t *testing.T) {
-	a := model.Claim{ID: "fixture.contract.d", Status: model.StatusLocked, Body: "one", BuildRole: "rule"}
+	a := model.Claim{ID: "fixture.contract.d", Status: model.StatusLocked, Body: "one"}
 	b := a
 	b.Body = "two"
-	b.RestsOn = []string{"fixture.contract.other"}
+	b.RestsOn = model.RestsOnIDs("fixture.contract.other")
 	// status, review_pending and comments are the three fields
 	// LockedClaimHash does not sign; a difference in them is not a reason the
 	// hash moved and must not be reported as one.

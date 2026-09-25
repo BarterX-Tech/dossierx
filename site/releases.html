@@ -50,13 +50,34 @@
         carries this as a checklist item.
       -->
       <div class="ledger">
-        <article class="release release--current" data-version="v0.7.20" data-current="true">
+        <article class="release release--current" data-version="v0.7.21" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.21</span>
+            <time datetime="2026-09-25">2026-09-25</time>
+          </p>
+          <div>
+            <h2 class="release__title">Constitution, module manifests and claim caps<span class="release__badge">Latest</span></h2>
+            <p class="release__note">
+              One lockable <code>constitution.yaml</code> roofs the project, and
+              project claims sit under it. Each module gets a
+              <code>manifest.yaml</code>, and <code>dossierx manifest show</code>
+              gives an agent one module in isolation or its integration view.
+              Claims need a summary, carry facet <code>contract</code> or
+              <code>internals</code>, and meet hard caps. Build order,
+              <code>build_role</code>, <code>governed_by</code>, mirrors, the
+              doctrine hub and lock policy 0 are gone. Follow the
+              <code>dossierx-upgrading</code> skill after upgrade; every locked
+              claim re-locks once.
+            </p>
+          </div>
+        </article>
+        <article class="release" data-version="v0.7.20">
           <p class="release__meta">
             <span class="release__version">v0.7.20</span>
             <time datetime="2026-09-22">2026-09-22</time>
           </p>
           <div>
-            <h2 class="release__title">Code-link gate; build order stale on the order<span class="release__badge">Latest</span></h2>
+            <h2 class="release__title">Code-link gate; build order stale on the order</h2>
             <p class="release__note">
               <code>dossierx check</code> refuses a locked code-producing claim
               with no link, and a stepped claim whose tags miss a step, when

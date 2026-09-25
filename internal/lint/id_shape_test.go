@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -41,9 +42,8 @@ func TestIDShapeLint(t *testing.T) {
 			wantFindings: 6,
 		},
 		{
-			// Row: claim's facet segment is not in the project's configured
-			// facets, in isolation (no other defect on the id).
-			name: "failing: facet not in configured facets, reported alone",
+			// Row: claim's facet segment is not engine-fixed, in isolation.
+			name: "failing: facet is not engine-fixed, reported alone",
 			claims: []model.Claim{
 				{ID: "widget.doctrine.overview", Module: "widget", Facet: "doctrine"},
 			},
@@ -81,13 +81,16 @@ func TestIDShapeLint(t *testing.T) {
 	}
 }
 
-func TestIDShape_ReservedOverviewFacetAlwaysValid(t *testing.T) {
+func TestIDShape_OverviewFacetIsUndeclared(t *testing.T) {
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
 	claims := []model.Claim{
 		{ID: "widget.overview.router", Module: "widget", Facet: "overview"},
 	}
 	findings := IDShapeLint{}.Check(claims, cfg)
-	if len(findings) != 0 {
-		t.Fatalf("got findings %#v, want none — overview must be valid even though it's not in cfg.Facets", findings)
+	if len(findings) != 1 {
+		t.Fatalf("got %d findings, want 1 — overview is no longer a reserved facet: %#v", len(findings), findings)
+	}
+	if findings[0].LintName != "id-shape" || !strings.Contains(findings[0].Message, "overview") {
+		t.Fatalf("unexpected finding: %#v", findings[0])
 	}
 }

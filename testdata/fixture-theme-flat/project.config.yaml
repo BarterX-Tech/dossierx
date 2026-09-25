@@ -1,13 +1,12 @@
 # Shared viewer-regression corpus. Its claims cover the reader structures that
 # Curtainly does not instantiate in one module: tables, steps, a mockup, an
-# open review thread, tracks, sources, and a locked build order.
+# open review thread, tracks, and sources.
 schema_version: 1
 title: Viewer Regression Corpus
 eyebrow: shared reader structures on one page
 facets:
   - contract
   - internals
-  - decision
 modules:
   - widget
   - panel

@@ -113,7 +113,7 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 		Status: model.StatusLocked,
 		// One real edge gives the footer a populated relationship door while the
 		// comments chip still remains in its fixed final slot.
-		RestsOn: []string{"widget.contract.dep"},
+		RestsOn: model.RestsOnIDs("widget.contract.dep"),
 		Comments: []model.Comment{
 			openThread("c-aaaaaa", "please clarify the retry bound"),
 			openThread("c-bbbbbb", "second open thread"),
@@ -274,14 +274,14 @@ func TestEdgesHTMLWithLinks_PanelSurvivesFooterSuppression(t *testing.T) {
 	}
 }
 
-// The comment markup must contribute ZERO id= attributes anywhere: an overview
-// claim renders N times and only one copy may keep its id (see
-// render.stripOverviewIDs), so the chip/panel identify claims and threads via
-// data-claim-id / data-thread-id only.
+// The comment markup must contribute ZERO id= attributes anywhere: a claim
+// rendered a second time on a track page may keep only one document id (see
+// render.stripDuplicateClaimIDs), so the chip/panel identify claims and
+// threads via data-claim-id / data-thread-id only.
 func TestEdgesHTMLWithLinks_CommentMarkupHasNoIDAttributes(t *testing.T) {
 	c := model.Claim{
-		ID:     "widget.overview.router",
-		Facet:  "overview",
+		ID:     "widget.contract.router",
+		Facet:  "contract",
 		Status: model.StatusDraft,
 		Comments: []model.Comment{
 			openThread("c-aaaaaa", "open one"),
@@ -405,7 +405,7 @@ func TestCommentChip_AppearsForEveryLayoutExceptBanner(t *testing.T) {
 		Body:   "some prose so every layout renders something",
 		// One edge keeps a populated footer door in the fixture; the chip stays
 		// in its final footer slot independently of the door.
-		RestsOn: []string{"widget.contract.dep"},
+		RestsOn: model.RestsOnIDs("widget.contract.dep"),
 		Comments: []model.Comment{
 			openThread("c-aaaaaa", "an open thread"),
 		},

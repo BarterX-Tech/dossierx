@@ -9,6 +9,6 @@ body: |
   > | a | b |
   > | --- | --- |
   > | 1 | 2 |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a table is legal inside a blockquote, via the block scanner's own recursion

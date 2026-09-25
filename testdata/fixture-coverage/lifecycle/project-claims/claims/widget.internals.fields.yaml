@@ -1,0 +1,10 @@
+id: widget.internals.fields
+summary: A widget row carries an id and a created_at timestamp.
+facet: internals
+module: widget
+status: draft
+layout: card
+body: |
+  A widget row carries an id and a created_at timestamp.
+rests_on:
+  - widget.contract.overview

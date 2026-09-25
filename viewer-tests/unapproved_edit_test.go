@@ -19,12 +19,13 @@ const approvedBodyYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
   A widget without an id is not a widget.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -32,12 +33,13 @@ const editedBodyYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
   An object with no identifier is not a widget and is not stored.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -200,13 +202,11 @@ func TestEditedClaimIsARowOnThePhoneBannerCard(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim that rests on something nobody approved.
 rests_on:
   - `+testClaimID+`
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	ctx := browserContext(t)
 
@@ -316,12 +316,13 @@ const rewrappedApprovedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   **The field is outward, not internal.** A claim in the support authority already depends on it.
   An observer revision changing is enumerated there among the material changes that revoke a
   support verdict. A change nobody can see revokes nothing.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -329,12 +330,13 @@ const rewrappedEditedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   **The field is outward, not private.** A claim in the support authority already depends on
   it. An observer revision changing is enumerated there among the material changes that
   revoke a support verdict. A change nobody can see revokes nothing.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -441,13 +443,11 @@ func blockedDependentYAML() string {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim that rests on something nobody approved.
 rests_on:
   - ` + testClaimID + `
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -885,6 +885,7 @@ const longEditedApprovedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents, and every part of it is
   written down here rather than inferred from the code that implements it.
@@ -897,8 +898,8 @@ body: |
 
   The catalogue is the only place a widget may be declared. A widget that exists
   in code and not in the catalogue is a defect in the catalogue, not a widget.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -906,6 +907,7 @@ const longEditedCurrentYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents, and every part of it is
   written down here rather than inferred from the code that implements it.
@@ -918,8 +920,8 @@ body: |
 
   The catalogue is the only place a widget may be declared. A widget that exists
   in code and not in the catalogue is a defect in the catalogue, not a widget.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -936,6 +938,7 @@ const metadataOnlyApprovedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
@@ -944,8 +947,8 @@ steps:
   - the store returns the widget or a stated absence
 audit_notes:
   - 2026-01-01 approved against the schema as written
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -953,6 +956,7 @@ const metadataOnlyEditedYAML = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   Every widget carries an identifier and a creation timestamp.
@@ -962,8 +966,8 @@ steps:
 audit_notes:
   - 2026-01-01 approved against the schema as written
   - 2026-02-01 unlocked to retarget step one after the code audit
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 
@@ -1105,24 +1109,26 @@ func TestEditedFieldsShowFileTextAndNotRenderedMarkup(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
 audit_notes:
   - "before <b>bold</b> and **stars**"
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 	const edited = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
 audit_notes:
   - "after <b>bold</b> and **stars**"
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 	p.writeClaim("overview.yaml", approved)
@@ -1163,26 +1169,28 @@ func TestEditedBodyAndFieldsShowBothInTheChangesView(t *testing.T) {
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   A widget without an id is not a widget.
 steps:
   - the shell resolves the widget id
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 	const edited = `id: widget.contract.overview
 facet: contract
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget is the smallest unit this project documents.
   An object with no identifier is not a widget and is not stored.
 steps:
   - the shell resolves the widget handle
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `
 	p.writeClaim("overview.yaml", approved)

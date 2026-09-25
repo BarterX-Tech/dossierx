@@ -1,0 +1,9 @@
+id: summarymod.contract.missing
+facet: contract
+module: summarymod
+status: draft
+layout: card
+rests_on:
+  - summarymod.contract.helper
+body: |
+  A draft claim with no summary, so summary-required fires on any status.

@@ -49,10 +49,9 @@ func adoptableCommentFixture(t *testing.T) string {
 	// lock ledger, and its own comment thread is what makes armLedgerFixture
 	// create the digest store (it skips a project with no comments anywhere).
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
-			"build_role: schema\n" +
+		"claims/locked.yaml": "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a locked claim, present so the project is ledger- and digest-covered.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-11aa22\n    status: resolved\n    author: human\n" +
 			"    created: \"2026-07-26T09:00:00Z\"\n    body: looks right.\n    edited: false\n" +
@@ -63,9 +62,8 @@ func adoptableCommentFixture(t *testing.T) string {
 	// seen. It has to be written afterwards — the fixture helper adopts every
 	// claim it can see when it arms the store, so a claim present at that moment
 	// would already have an entry and there would be nothing left to adopt.
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim the comment digest store has never seen.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
 		"rests_on:\n  - widget.contract.main\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "a.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write the late claim: %v", err)
@@ -162,23 +160,25 @@ func TestCheckIsSilentAboutAdoptionWhenNothingWasAdopted(t *testing.T) {
 func TestFirstCheckOfANewProjectDoesNotWarnAboutAdoption(t *testing.T) {
 	root := t.TempDir()
 	// Deliberately NOT writeCheckFixture: no locked claim, so nothing arms the
-	// ledger or the digest store, and this run is the one that creates it.
+	// ledger or the digest store before the roof lock below creates them.
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, parityConfig)
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatalf("mkdir claims: %v", err)
 	}
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a brand new claim that already carries a thread.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-8136dd\n    status: open\n    author: human\n" +
 		"    created: \"2026-07-26T10:00:00Z\"\n    body: is this true?\n    edited: false\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "a.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
+	// The roof lock is the project's first ledger write now (NIT-26), so IT
+	// is the crossing that takes the thread on disk into coverage — silently,
+	// as the first check used to. The check below finds nothing to adopt.
+	lockFixtureConstitution(t, cfgPath)
 
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
 	if err != nil {

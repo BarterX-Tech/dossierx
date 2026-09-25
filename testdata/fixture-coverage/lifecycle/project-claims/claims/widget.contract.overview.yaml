@@ -1,0 +1,10 @@
+id: widget.contract.overview
+summary: A widget is the smallest unit this fixture project documents.
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A widget is the smallest unit this fixture project documents.
+rests_on:
+  - project.scope

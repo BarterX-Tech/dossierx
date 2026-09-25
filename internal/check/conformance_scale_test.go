@@ -28,9 +28,9 @@ func TestConformanceEndToEndGraphScaleBounds(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			files, declared, checks := graphScaleFiles(tc.layers, tc.width)
+			files, cfgBody, declared, checks := graphScaleFiles(tc.layers, tc.width)
 			files["observations.json"] = `{"format_version":1,"snapshot":"scale","observations":[{"adapter":"neutral/v1","target":"widget://shared/set","shape":"set","value":["waiting","ready"]},{"adapter":"neutral/v1","target":"widget://shared/scalar","shape":"scalar","value":"ready"}]}`
-			cfg, claims := project(t, baseConfig+"conformance:\n  observations: observations.json\n", files)
+			cfg, claims := project(t, cfgBody+"conformance:\n  observations: observations.json\n", files)
 
 			runtime.GC()
 			var before, after runtime.MemStats
@@ -112,21 +112,37 @@ func TestConformanceEndToEndGraphScaleBounds(t *testing.T) {
 	}
 }
 
-func graphScaleFiles(layers, width int) (files map[string]string, declared, checks int) {
+// graphScaleFiles spreads the graph over modules of at most
+// graphScaleModuleSize claims, so each module stays inside its isolation
+// budget (a module-manifest refusal otherwise); module boundaries do not
+// change the rests_on graph. cfgBody declares those modules.
+const graphScaleModuleSize = 30
+
+func graphScaleID(index int) string {
+	return fmt.Sprintf("w%d.contract.c%03d", index/graphScaleModuleSize, index)
+}
+
+func graphScaleFiles(layers, width int) (files map[string]string, cfgBody string, declared, checks int) {
 	files = make(map[string]string, layers*width+1)
+	var modules []string
+	for index := 0; index < layers*width; index += graphScaleModuleSize {
+		modules = append(modules, fmt.Sprintf("w%d", index/graphScaleModuleSize))
+	}
+	cfgBody = fmt.Sprintf("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules: [%s]\nclaims_dir: claims\nmax_claims_per_module: %d\n", strings.Join(modules, ", "), graphScaleModuleSize)
 	for layer := 0; layer < layers; layer++ {
 		for column := 0; column < width; column++ {
 			index := layer*width + column
-			id := fmt.Sprintf("widget.contract.c%03d", index)
+			id := graphScaleID(index)
 			var b strings.Builder
-			fmt.Fprintf(&b, "id: %s\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: bounded scale fixture\n", id)
+			fmt.Fprintf(&b, "id: %s\nfacet: contract\nmodule: w%d\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: bounded scale fixture\n", id, index/graphScaleModuleSize)
 			if layer > 0 {
 				b.WriteString("rests_on:\n")
 				for previous := 0; previous < width; previous++ {
-					fmt.Fprintf(&b, "  - widget.contract.c%03d\n", (layer-1)*width+previous)
+					fmt.Fprintf(&b, "  - %s\n", graphScaleID((layer-1)*width+previous))
 				}
+			} else {
+				b.WriteString("rests_on:\n  none: true\n  reason: fixture\n")
 			}
-			b.WriteString("governed_by:\n  type: none\n  reason: fixture\n")
 			switch {
 			case index%5 == 0:
 				b.WriteString("embodiment:\n  mode: none\n  reason: generated documentation claim\n")
@@ -139,5 +155,5 @@ func graphScaleFiles(layers, width int) (files map[string]string, declared, chec
 			files[fmt.Sprintf("claims/c%03d.yaml", index)] = b.String()
 		}
 	}
-	return files, declared, checks
+	return files, cfgBody, declared, checks
 }

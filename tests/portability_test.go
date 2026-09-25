@@ -28,10 +28,8 @@ package tests
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"debug/elf"
 	"debug/pe"
-	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -122,42 +120,37 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Five facets (fixture-basic has two), two modules (fixture-basic has
-	// one), names sharing nothing with fixture-basic's "contract"/
-	// "internals"/"widget" vocabulary.
+	// Engine-fixed facets, two modules (fixture-basic has one), names
+	// sharing nothing with fixture-basic's "widget" vocabulary.
 	cfg := "schema_version: 1\n" +
-		"facets:\n  - blueprint\n  - lineage\n  - risk\n  - onboarding\n  - retirement\n" +
+		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - sprocket\n  - gizmo\n" +
 		"claims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, root)
 
 	claims := map[string]string{
-		"sprocket-blueprint.yaml": "id: sprocket.blueprint.overview\n" +
-			"facet: blueprint\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
-			"body: sprocket blueprint overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
-			"rests_on:\n  - gizmo.lineage.overview\n",
-		"gizmo-lineage.yaml": "id: gizmo.lineage.overview\n" +
-			"facet: lineage\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
-			"body: gizmo lineage overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n",
-		"gizmo-risk.yaml": "id: gizmo.risk.overview\n" +
-			"facet: risk\nmodule: gizmo\nstatus: draft\nlayout: card\n" +
-			"body: gizmo risk overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
-			"rests_on:\n  - gizmo.lineage.overview\n",
-		"sprocket-onboarding.yaml": "id: sprocket.onboarding.steps\n" +
-			"facet: onboarding\nmodule: sprocket\nstatus: draft\n" +
+		"sprocket-contract.yaml": "id: sprocket.contract.overview\n" +
+			"facet: contract\nmodule: sprocket\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: sprocket contract overview.\n" +
+			"rests_on:\n  - gizmo.contract.overview\n",
+		"gizmo-contract.yaml": "id: gizmo.contract.overview\n" +
+			"facet: contract\nmodule: gizmo\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: gizmo contract overview.\n" +
+			"rests_on:\n  none: true\n  reason: toy project fixture\n",
+		"gizmo-internals.yaml": "id: gizmo.internals.overview\n" +
+			"facet: internals\nmodule: gizmo\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: gizmo internals overview.\n" +
+			"rests_on:\n  - gizmo.contract.overview\n",
+		"sprocket-steps.yaml": "id: sprocket.internals.steps\n" +
+			"facet: internals\nmodule: sprocket\nstatus: draft\n" +
+			"summary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - unbox the sprocket\n  - attach to the gizmo\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
-			"rests_on:\n  - sprocket.blueprint.overview\n",
-		"sprocket-retirement.yaml": "id: sprocket.retirement.overview\n" +
-			"facet: retirement\nmodule: sprocket\nstatus: draft\nlayout: card\n" +
+			"rests_on:\n  - sprocket.contract.overview\n",
+		"sprocket-retire.yaml": "id: sprocket.internals.retire\n" +
+			"facet: internals\nmodule: sprocket\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: sprocket retirement overview.\n" +
-			"governed_by:\n  type: none\n  reason: toy project fixture\n" +
-			"rests_on:\n  - sprocket.onboarding.steps\n",
+			"rests_on:\n  - sprocket.internals.steps\n",
 	}
 	for name, body := range claims {
 		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
@@ -167,7 +160,7 @@ func TestSecondToyProjectDifferentFacetsChecksClean(t *testing.T) {
 
 	stdout, stderr, code := run(t, root, "check")
 	if code != 0 {
-		t.Fatalf("check on second toy project (different facets/modules): expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("check on second toy project (different modules): expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "check: OK") {
 		t.Fatalf("expected check to report OK, got: %s", stdout)
@@ -587,96 +580,6 @@ func scanForNetworkRefs(label, content string) []string {
 	return offenders
 }
 
-// vendoredMermaidPath is the ONLY file under internal/render that is not
-// engine source: the mermaid build the Build order tab renders with. Its
-// version, licence, hash record and re-vendoring notes live in
-// third_party/mermaid/ (not beside the file, because everything tracked
-// under internal/render must be embedded and fingerprinted, and metadata is
-// neither).
-const vendoredMermaidPath = "internal/render/viewer/template/vendor/mermaid.min.js"
-
-func vendoredMermaidSHA256(t *testing.T, data []byte) string {
-	t.Helper()
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-
-func recordedMermaidSHA256(t *testing.T, root string) string {
-	t.Helper()
-	rec, err := os.ReadFile(filepath.Join(root, "third_party", "mermaid", "mermaid.SHA256"))
-	if err != nil {
-		t.Fatalf("read the recorded mermaid hash: %v", err)
-	}
-	fields := strings.Fields(string(rec))
-	if len(fields) == 0 || len(fields[0]) != 64 {
-		t.Fatalf("third_party/mermaid/mermaid.SHA256 does not hold a sha256 hex digest: %q", rec)
-	}
-	return fields[0]
-}
-
-// TestVendoredMermaidHashMatchesRecord is its own named test so a re-vendor
-// without a hash update is a named failure: the offline allowlist in
-// TestNoNetworkReferencesAnywhereInEngine was measured against the recorded
-// build and is only as true as that record.
-func TestVendoredMermaidHashMatchesRecord(t *testing.T) {
-	root := moduleRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(vendoredMermaidPath)))
-	if err != nil {
-		t.Fatalf("the vendored mermaid build must exist at %s: %v", vendoredMermaidPath, err)
-	}
-	if len(data) < 1<<20 {
-		t.Fatalf("vendored mermaid.min.js is %d bytes; a real mermaid build is several MB", len(data))
-	}
-	got, want := vendoredMermaidSHA256(t, data), recordedMermaidSHA256(t, root)
-	if got != want {
-		t.Fatalf("vendored mermaid.min.js sha256 = %s, third_party/mermaid/mermaid.SHA256 = %s: re-vendored without updating the record (and re-measuring the offline allowlist)", got, want)
-	}
-	version, err := os.ReadFile(filepath.Join(root, "third_party", "mermaid", "mermaid.VERSION"))
-	if err != nil || strings.TrimSpace(string(version)) == "" {
-		t.Fatalf("third_party/mermaid/mermaid.VERSION must name the vendored version: %v %q", err, version)
-	}
-	if _, err := os.Stat(filepath.Join(root, "third_party", "mermaid", "mermaid.LICENSE")); err != nil {
-		t.Fatalf("third_party/mermaid/mermaid.LICENSE must be present: %v", err)
-	}
-}
-
-// TestVendoredMermaidIsAClassicScript is the cheap, non-browser half of the
-// vendoring check. The bundle is injected inline as template.JS into a plain
-// <script> (no type="module"), so two shapes of a re-vendored file would ship a
-// viewer whose diagrams never render with nothing but the browser suite to
-// notice: an ESM-only dist file (a top-level `export`/`import` statement is a
-// syntax error in a classic script), and a bundle carrying a literal `<script`
-// or `</script` inside a string, which the HTML tokenizer reads as the end of
-// the script element and swallows the rest of the document as script text — a
-// blank viewer over file:// and under serve alike. `<!--` is tolerated in
-// script data and only counted here.
-func TestVendoredMermaidIsAClassicScript(t *testing.T) {
-	root := moduleRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(vendoredMermaidPath)))
-	if err != nil {
-		t.Fatalf("the vendored mermaid build must exist at %s: %v", vendoredMermaidPath, err)
-	}
-	src := string(data)
-	lower := strings.ToLower(src)
-	for _, tag := range []string{"<script", "</script"} {
-		if n := strings.Count(lower, tag); n != 0 {
-			t.Errorf("%s contains %q %d time(s); injected inline into a <script> element it would end the element early and the browser would read the rest of the viewer as script text", vendoredMermaidPath, tag, n)
-		}
-	}
-	// A classic script cannot carry a top-level import/export. The bundle is
-	// minified, so "top level" is approximated by a statement boundary: the
-	// start of the file, or a `;`, `}` or newline immediately before the
-	// keyword, followed by a space, `{` or `*`, which is how an ESM statement
-	// begins and how a property named "export"/"import" (obj.export, "import":)
-	// does not.
-	esm := regexp.MustCompile(`(?m)(^|[;}
-])\s*(export|import)\s*(\{|\*|\s+[A-Za-z_$"'])`)
-	if m := esm.FindAllString(src, 5); len(m) > 0 {
-		t.Errorf("%s carries what looks like a top-level ESM statement (%q); a plain <script> cannot load it and every diagram would fail to render", vendoredMermaidPath, m)
-	}
-	t.Logf("%s: %d `<!--` sequence(s), tolerated in script data", vendoredMermaidPath, strings.Count(src, "<!--"))
-}
-
 func TestNoNetworkReferencesAnywhereInEngine(t *testing.T) {
 	root := moduleRoot(t)
 
@@ -710,105 +613,14 @@ func TestNoNetworkReferencesAnywhereInEngine(t *testing.T) {
 		offenders = append(offenders, scanForNetworkRefs(path, string(data))...)
 		return nil
 	}
-	vendored := filepath.Join(root, filepath.FromSlash(vendoredMermaidPath))
 	for _, dir := range []string{"cmd", "internal"} {
-		if err := filepath.Walk(filepath.Join(root, dir), func(path string, info os.FileInfo, err error) error {
-			if err == nil && path == vendored {
-				// The ONE exempted path. It is not skipped: the block after
-				// this walk scans it with the full pattern against an
-				// allowlist measured from the file actually vendored.
-				return nil
-			}
-			return scan(path, info, err)
-		}); err != nil {
+		if err := filepath.Walk(filepath.Join(root, dir), scan); err != nil {
 			t.Fatalf("walk %s/: %v", dir, err)
 		}
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("found network-shaped references, violating the offline requirement:\n%s", strings.Join(offenders, "\n"))
 	}
-
-	// The vendored mermaid build (internal/render/viewer/template/vendor/
-	// mermaid.min.js, mermaid 11.17.2 — third_party/mermaid/ records it) is a
-	// 3.5 MB third-party bundle whose minified source carries http:// strings
-	// that make no request: SVG/XML namespaces, licence pointers, and
-	// runtime error-message strings a comment stripper cannot remove. It is
-	// the one file the walk above hands to this block instead of the scan,
-	// and the exemption is an ALLOWLIST over the same pattern, not a weaker
-	// pattern and not "skip this file": the file must exist, its SHA-256 must
-	// equal third_party/mermaid/mermaid.SHA256 (TestVendoredMermaidHashMatchesRecord
-	// is the same pin as its own named test), and every match of the FULL
-	// networkRefPattern, widened to the token around it, must be on the list
-	// below. The list was produced by running
-	//   grep -oE 'https?://[A-Za-z0-9.-]+' vendor/mermaid.min.js | sort | uniq -c
-	// and each of the six other arms individually over 11.17.2, and it is
-	// regenerated and re-justified whenever mermaid.SHA256 changes — which the
-	// hash test forces by failing on a re-vendor without a hash update.
-	t.Run("vendored_mermaid_is_scanned_against_a_measured_allowlist", func(t *testing.T) {
-		data, err := os.ReadFile(vendored)
-		if err != nil {
-			t.Fatalf("the vendored mermaid build must exist: %v", err)
-		}
-		if got, want := vendoredMermaidSHA256(t, data), recordedMermaidSHA256(t, root); got != want {
-			t.Fatalf("vendored mermaid.min.js sha256 %s != third_party/mermaid/mermaid.SHA256 %s; the allowlist below was measured against the recorded build", got, want)
-		}
-		allowed := map[string]string{
-			// https?:// arm — hosts, with the count measured on 11.17.2.
-			"http://www.w3.org":        "34: SVG/XML/XHTML namespace URIs on created elements",
-			"https://chevrotain.io":    "20: parser-library error-message strings (\"For further details see: ...\")",
-			"https://github.com":       "10: licence pointers for bundled jquery/d3/dagre code",
-			"https://lodash.com":       "4: lodash licence header",
-			"https://openjsf.org":      "2: OpenJS Foundation licence text",
-			"http://underscorejs.org":  "2: underscore licence header",
-			"http://en.wikipedia.org":  "2: algorithm citations in comments the minifier kept as strings",
-			"https://en.wikipedia.org": "1: same",
-			"https://tldrlegal.com":    "1: licence pointer",
-			"https://langium.org":      "1: langium licence pointer",
-			"https://jquery.org":       "1: jquery licence pointer",
-			"http://opensource.org":    "1: MIT licence pointer",
-			"http://engelschall.com":   "1: sprintf.js licence header",
-			"http://":                  "1: marked's autolink prefix, prepended to a bare www. link in label markdown; a string, never a fetch",
-			// telemetry arm — langium's LSP protocol constant, not a call.
-			"e.TelemetryEventNotification": "2: LSP message-type identifier",
-			"telemetry/event":              "1: LSP method name string",
-			// cdn., fonts.googleapis, fonts.gstatic, analytics, sentry and
-			// segment.io: zero matches in 11.17.2.
-		}
-		tokenRe := regexp.MustCompile(`[A-Za-z0-9_./:-]+`)
-		seen := map[string]int{}
-		var unexplained []string
-		text := string(data)
-		for _, loc := range networkRefPattern.FindAllStringIndex(text, -1) {
-			// Widen the match to the token around it so "telemetry" is judged
-			// as the identifier it sits in and a URL as its scheme+host.
-			start, end := loc[0], loc[1]
-			for start > 0 && tokenRe.MatchString(text[start-1:start]) {
-				start--
-			}
-			for end < len(text) && tokenRe.MatchString(text[end:end+1]) {
-				end++
-			}
-			token := text[start:end]
-			if hostMatch := regexp.MustCompile(`^https?://[A-Za-z0-9.-]+`).FindString(token); hostMatch != "" {
-				token = hostMatch
-			}
-			if _, ok := allowed[token]; !ok {
-				unexplained = append(unexplained, token)
-			}
-			seen[token]++
-		}
-		if len(unexplained) > 0 {
-			t.Fatalf("vendored mermaid.min.js carries network-shaped tokens not on the measured allowlist (re-measure after a re-vendor and justify each): %v", unexplained)
-		}
-		for token := range allowed {
-			if seen[token] == 0 {
-				t.Errorf("allowlist entry %q matched nothing in the vendored file; the list is stale against the vendored build", token)
-			}
-		}
-		if len(seen) == 0 {
-			t.Fatal("the full pattern matched nothing in a 3.5 MB bundle known to carry namespace URIs; the scan is not looking at the file")
-		}
-	})
 
 	// Positive control: the scoped walk above must not have weakened
 	// detection. Run the very same scan predicate against synthetic
@@ -1013,14 +825,13 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - offlinemod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - offlinemod\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, root)
 	claim := "id: offlinemod.contract.overview\n" +
-		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: offlinemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: offline fixture claim.\n" +
-		"governed_by:\n  type: none\n  reason: offline fixture\n"
+		"rests_on:\n  none: true\n  reason: offline fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1087,14 +898,13 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - collidemod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(projectRoot, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - collidemod\nclaims_dir: claims\n"
+	writeProjectConfigFile(t, filepath.Join(projectRoot, "project.config.yaml"), cfg)
+	lockFixtureConstitution(t, projectRoot)
 	claim := "id: collidemod.contract.overview\n" +
-		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: collidemod\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: fixture claim exercised from a colliding-parent-path build.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "overview.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatal(err)
 	}

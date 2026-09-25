@@ -1,12 +1,10 @@
 id: widget.contract.uncheckable
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: widget
 status: draft
 layout: card
 body: The adapter reported a per-target failure.
-governed_by:
-  type: none
-  reason: neutral fixture
 embodiment:
   mode: compare
   checks:
@@ -16,3 +14,6 @@ embodiment:
       expectation:
         shape: scalar
         value: ready
+rests_on:
+  none: true
+  reason: neutral fixture

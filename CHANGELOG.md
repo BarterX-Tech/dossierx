@@ -7,6 +7,256 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.21] - 2026-09-25
+
+This release replaces the doctrine hub, `governed_by`, `build_role`, the
+`mirrors` edge and the build-order sequencer with a smaller model: one locked
+constitution above every module, project claims, a required `rests_on`, a
+`manifest.yaml` per module, and hard size caps. A v0.7.20 corpus does not load
+until it is folded, and every locked claim re-locks once.
+
+**Surface:** 24 leaves under 9 nouns (was 25 under 8), 36 lint rules (was
+38), 50 error codes (was 52), graph payload schema 3, seven skill bundles
+(was five).
+
+**Viewer size** (committed fixture viewers, bytes, v0.7.20 → v0.7.21):
+basic 1,234,179 → 1,229,461; conformance-v1 1,288,309 → 1,284,733;
+graph-demo 1,496,790 → 1,486,876; portability 1,238,682 → 1,233,700;
+theme-flat 4,877,586 → 1,273,896 (the viewer no longer inlines Mermaid).
+
+### Upgrading from v0.7.20
+
+By hand, one pass, with the human approving every re-lock. The
+`dossierx-upgrading` skill carries the full recipe; re-export it first.
+
+1. `dossierx skills export`, then `dossierx skills export --check`. The
+   export removes the retired `dossierx-build-order` bundle.
+2. Delete `build_role:`, `governed_by:` and `mirrors:` from every claim file,
+   draft and locked. Each now fails to load (`invalid_claim`,
+   `stopped_at: load`) until it is gone.
+3. Set `facets: [contract, internals]` and remove `doctrine_facet:` from
+   `project.config.yaml`. Fold the doctrine hub: critical system law becomes
+   an entry in `constitution.yaml`, a fact other claims rest on becomes a
+   project claim (`project-claims/<slug>.yaml`, id `project.<slug>`), the
+   rest becomes a project claim or is deleted. Delete the hub module.
+4. Write `constitution.yaml` beside the config (invariants / glossary /
+   decisions, under 800 words) and have the human run
+   `dossierx constitution lock --reason "…"`. No claim locks until then.
+5. Write `claims/<module>/manifest.yaml` for every module: a `summary`, the
+   `provides` list of this module's contract ids, and `depends_on`. Draft it
+   from `dossierx manifest show <module> --isolation`.
+6. Give every claim a one-line `summary` and a `rests_on`: claim ids
+   (`project.<slug>`, any module's `*.contract.*`, this module's own
+   `*.internals.*`) or `{none: true, reason: "…"}`. Where `governed_by` named
+   a claim the dependent relies on, name it under `rests_on`; where it named
+   a doctrine claim that became a constitution entry, name nothing.
+7. Fit the caps: 10 claims per module, 200-character summaries,
+   2000-character bodies, 6144 bytes of module summaries and manifest in the
+   isolation view. Split or trim; raising a config value is the human's call.
+8. `dossierx check --validate` until it is clean apart from
+   `lock-content-drift`. Every locked claim reports that: the signed schema
+   lost `governed_by` and `build_role`, so every lock hash moved.
+9. Re-lock each locked claim the human still stands behind:
+   `claim unlock` → `claim lock --dry-run` →
+   `claim lock --reason "…" --proposal "<snapshot>"`.
+10. With `source_dirs` set, run plain `dossierx check` and link code for every
+    locked module claim. A claim with no code behind it declares
+    `embodiment: {mode: none, reason: "…"}` in its re-lock, on the human's yes.
+
+Restoring an old claim file from git is not a recovery: it is the file that no
+longer loads.
+
+### Added
+
+- **The constitution.** One `constitution.yaml` beside `project.config.yaml`,
+  outside `claims_dir`: invariants, glossary and decisions, capped at **800
+  words** (`constitution-near-cap` warns from 720; `CONSTITUTION_OVER_CAP` on
+  `check` and `constitution lock`). It is not a module and never a
+  `rests_on` target, and editing it never touches a claim. `dossierx
+  constitution show` prints the text, digest and lock state; `dossierx
+  constitution lock --reason "…"` records its hash and the human's words in
+  `build/ledger/lock-store.json`, re-locks a roof edited since its lock, and
+  refuses `already_locked` only when locked and unchanged. **The roof gate:**
+  `claim lock`, `claim reaudit --confirm` and plain `check` refuse
+  `CONSTITUTION_NOT_LOCKED` while the constitution is missing, `status:
+  draft`, unrecorded, or edited since its lock. Plain `check` regenerates the
+  catalog and viewer first and stops at `constitution`; `check --validate`
+  and `--staged` report `constitution-not-locked` (the staged gate reads the
+  roof from the index). There is no switch to turn it off. `claim new`,
+  `show`, `list`, `serve` and `constitution show|lock` keep working. The
+  viewer pins **Constitution** above Modules with two tabs, The file and
+  Project claims, and an "N of 800 words" meter.
+- **Project claims.** `project-claims/<slug>.yaml` (`project_claims_dir`,
+  default `project-claims`, never inside `claims_dir`), id `project.<slug>`,
+  `scope: project`, no module and no facet. A project claim is a graph node
+  like any claim, has no cap and no manifest, and may rest on `project.*` and
+  any module's `*.contract.*`, never `*.internals.*`. `claim new
+  project.<slug>` writes into the store. `manifest show` carries an index of
+  them (id and summary). The viewer lists them under the constitution's
+  Project claims tab only. `check --staged` reads the store from the git
+  index, so the pre-commit hook agrees with plain `check`.
+- **`rests_on` is required.** Every claim carries a list of claim ids or
+  `{none: true, reason}`; `rests-on-required` refuses neither and both.
+  Targets are `project.<slug>`, any module's `*.contract.*` and this module's
+  own `*.internals.*`; `rests-on-target` refuses a foreign module's internals.
+  `claim new --rests-on-none-reason` writes the stated absence, and `claim
+  show` reports it as `rests_on_none` and `rests_on_reason`. The claim card's
+  row reads **RESTS ON**. A locked claim that names targets keeps its lock
+  hash; one that gains `none: true` is a real edit and re-locks.
+- **Required `summary` and size caps.** Every claim needs a one-line
+  plain-text `summary`. `max_claim_body_chars` (default **2000**) and
+  `max_claim_summary_chars` (default **200**) are counted in Unicode code
+  points; `summary-required`, `summary-oversize` and `body-oversize` are
+  errors on every status, and `claim lock` refuses them. `body-oversize`
+  counts `body`, `steps` and `rows` cells; `raw_html` is exempt. `claim new`
+  requires `--summary`, and `claim list` prints it. The summary is signed:
+  changing it on a locked claim is unlock, edit, lock. Zero and negative caps
+  are refused when the config loads.
+- **Max claims per module.** `max_claims_per_module` (default **10**).
+  `module-claim-cap` fails `check` when a module holds more, and `claim lock`
+  refuses every claim in that module. There is no per-module override, and
+  project claims never count.
+- **Module manifest.** Every configured module needs exactly one
+  `claims_dir/<module>/manifest.yaml`: a `summary` (why and where to start,
+  at most 280 characters), `provides` (this module's contract claim ids) and
+  `depends_on` (other modules' contract ids, each in its provider's
+  `provides`), at most 4096 bytes. `check`, `claim lock` and `manifest show`
+  refuse a missing, oversize, malformed or invalid manifest with
+  `module-manifest`, which blocks every claim of that module and no other.
+  `claim new` writes an empty-summary stub that fails until someone drafts
+  it. `provides` and `depends_on` are not graph edges, and cycles are legal.
+- **`dossierx manifest show` and `manifest list`.** `manifest show <module>`
+  prints one manifest and the constitution digest. `--isolation` adds the
+  constitution text, the project claims index, the manifest, each claim's
+  `summary` (never bodies) and draft hints, within 16384 bytes: 10240 shared
+  (constitution plus project claims index, enforced by `shared-context-budget`
+  on the project claim that crosses it) and 6144 owned by the module, whose
+  overflow refuses `view_too_large`. `--integration` adds, for each module in
+  `depends_on`, its manifest summary, its `provides` ids and each provided
+  contract claim's summary. `manifest list` is the summaries-only module
+  catalog. The viewer's Manifest tab renders the manifest read-only, with
+  links from each id to its claim and a raw-YAML toggle; a broken manifest
+  shows the `module-manifest` message and the command to draft it.
+- **Skills teach one module at a time.** `manifest show <module>
+  --isolation`, then `--integration` for neighbors, then `claim show <id>`
+  only when a summary is not enough. `skills export --check` also refuses
+  (`skills_drift`, `data.forbidden[]`) an exported skill that teaches a
+  whole-corpus read.
+
+### Changed
+
+- **`dossierx skills export` prunes retired bundles.** Before writing a tree,
+  the export removes every bundle its previous `dossierx-skills.lock` listed
+  that this binary no longer ships (`dossierx-build-order`), and reports it as
+  `pruned`. Only `dossierx` / `dossierx-*` directories are ever removed.
+  `skills export --check` reports any other `dossierx-*` directory it does not
+  ship as `data.retired[]` and refuses `skills_drift`.
+- **Seven skill bundles.** New: `dossierx-modules` (reading order, manifest
+  drafting, every cap and its recovery), `dossierx-constitution` (the roof,
+  its lock, project claims) and `dossierx-upgrading` (re-export, layout moves,
+  the pre-ledger crossing, recovering approved wording, and every fold this
+  release needs). The router and `dossierx-claims` are shorter; the claims
+  skill now carries a claim-writing guide, and `dossierx-code-links` teaches
+  implementing from a locked module.
+- **Facets are engine-fixed.** `project.config.yaml` must list exactly
+  `contract` and `internals`; anything else is refused when the config loads.
+  Only `contract` may be cited from another module. `catalog.json` omits
+  internals claims and every edge that targets one. The viewer's module tabs
+  are Manifest | Contract | Internals, and a module opens on Contract.
+- **The code-link gate covers every locked module claim.** With
+  `source_dirs` set, plain `check` refuses `unlinked_claims` for any locked
+  module claim without a link. Project claims are exempt, and so is a claim
+  declaring `embodiment: {mode: none, reason}`, which the human approves at
+  lock.
+- **Lock policy v1 is the only policy.** A lock store that records
+  `policy_version: 0`, or predates the field, loads as v1, and its next write
+  adds `policy_version: 1`, `policy_migrated_at` and
+  `policy_migration_reason`. Commit that diff. No approval, baseline or
+  review cause changes. A locked claim resting on a draft reports
+  `dependency_unapproved` and is not dependency-ready. `claim lock` always
+  previews with `--dry-run` and writes with `--reason` and `--proposal`.
+  Catalog and viewer readiness entries report `"policy_version": 1`.
+
+### Removed
+
+- **`build_role`.** The claim field, `claim new --build-role`, `claim show`'s
+  `build_role`, the graph payload's `build_role` key and the graph pane's
+  missing-phase hint. A claim file that still carries it fails to load.
+  Lint rule `build-role-required-for-locked` is gone.
+- **`governed_by`.** The field, `claim new --governed-by` /
+  `--governed-reason`, `claim show`'s `governed_by` / `governed_reason`, and
+  the relation in the catalog, the graph payload and the viewer (footer row,
+  toggle, overlay, wedge marker). Lint rules `governed-cycle`,
+  `governed-required`, `mixed-cycle` and `validated-on-missing` are gone. A
+  claim file that still carries the block fails to load, and every locked
+  claim's lock hash moved.
+- **`mirrors`.** `claim new --mirrors`, `claim show`'s `mirrors` /
+  `mirrored_by`, and the relation in the catalog, graph payload and viewer.
+  Lint rules `mirror-mismatch`, `mirror-reciprocal` and `mirror-unanchored`
+  are gone. A claim file that still carries `mirrors:` now fails to load.
+  Dependency drift walks `rests_on` only.
+- **The doctrine hub.** The `doctrine_facet` config key (a config still
+  setting it fails to load), gating a lock on draft doctrine dependencies,
+  the `doctrine_dependencies_locked` dry-run precondition and the
+  `dependency_not_locked` error code.
+- **Build order.** The `dossierx build-order` noun and its `propose`,
+  `status`, `lock` and `show` leaves, their `build_order_hand_edited`,
+  `build_order_refused`, `build_order_stale` and `not_proposed` error codes,
+  the viewer's Build order tab and the `dossierx-build-order` skill. There is
+  no replacement sequencer: implement from locked claims, module
+  `depends_on` and claim `rests_on`. Leftover build-order files and ledger
+  rows do not fail `check`.
+- **`dossierx claim migrate-lock-policy`.** Policy 0 stores carry over on
+  their next write instead.
+- **The `rest-on-locked` lint.** A locked claim resting on a draft is a
+  `dependency_unapproved` condition, not a lint error.
+- **`kind: orientation-note` and the `overview` facet.** The only legal
+  `kind` is `fact` (or none); `kind-shape` refuses any other. Listing
+  `overview` in `facets` is a config error, and a leftover `facet: overview`
+  claim fails `id-shape`. Lint rules `orientation-note-order` and
+  `orientation-note-shape` are gone, and `check` no longer reports
+  `orientation_notes`. A module's why and start-here belong in its
+  `manifest.yaml` `summary`.
+
+### Fixed
+
+- `claim lock` read the lock store from `<project>/lock-store.json` instead
+  of `build/ledger/lock-store.json`, so on a store still recording policy 0
+  it applied a different rule from `claim show` and `check`. Every command
+  now reads the real store.
+- On Windows, `claim lock` could fail with a sharing violation replacing
+  `lock-store.json` while another process was reading it, and its rollback
+  could fail the same way. Both writes now retry.
+- `claim show` returns the claim's `summary` and `body`, so reading one body
+  after `manifest show` works as the skills describe.
+- `claim new --dry-run` lists the `manifest.yaml` stub it would write for a
+  module that has none.
+- A claim file carrying a retired field (`invalid_claim`) and a config setting
+  `doctrine_facet` (`invalid_config`) now hint at the `dossierx-upgrading`
+  skill instead of leaving the agent to hunt for what it broke.
+- The unlinked-claims report no longer names retired build phases.
+- `rests_on` in mapping form refuses an unknown key, and refuses
+  `none: true` alongside claim ids, instead of ignoring them.
+- A `rests_on: {none: true}` claim's signed content no longer repeats the
+  `none` line.
+- `constitution lock` keeps the comments in `constitution.yaml` and writes
+  the file atomically.
+- `catalog.json` never lists an internals claim id, including in edges, and
+  reports how many edges it dropped. A readiness path or dependency that
+  runs through an internals claim shows `"(internals)"` in place of the id,
+  so a blocked contract claim still says it is blocked; the new
+  `edges.rests_on_internals_omitted` counts the dropped edges. `check`'s catalog count now equals the
+  entries actually exported.
+- `manifest list` reports the same findings for a module as `manifest show`.
+- `check --staged` computes the shared isolation budget from the
+  constitution in the git index, not the working tree.
+- A module whose isolation view overflows its 6144-byte part is reported by
+  `check`, not only by `manifest show --isolation`. The hint says that
+  summaries within the character cap can still overflow the byte budget when
+  they use multibyte characters. Because the check is an error on the
+  module, a module no longer fits much beyond about 40 short-summary claims,
+  whatever `max_claims_per_module` allows: split it.
+
 ## [0.7.20] - 2026-09-22
 
 ### Changed

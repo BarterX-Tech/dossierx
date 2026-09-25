@@ -30,19 +30,18 @@ func TestCheckExitCode_Parity(t *testing.T) {
 	}
 	writeConfig := func(t *testing.T, root string) {
 		t.Helper()
-		cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
-		if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-			t.Fatalf("write config: %v", err)
-		}
+		cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+		writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
+		lockFixtureConstitution(t, root)
 	}
 
 	t.Run("clean project exits 0", func(t *testing.T) {
 		root := t.TempDir()
 		writeConfig(t, root)
 		writeClaim(t, root, "locked.yaml",
-			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n"+
+			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
 				"body: |\n  a locked claim.\n"+
-				"governed_by:\n  type: none\n  reason: fixture\n")
+				"rests_on:\n  none: true\n  reason: fixture\n")
 		// "Clean" now includes the lock-ledger gate: a hand-written
 		// "status: locked" with no approval record is exactly what it refuses,
 		// so record the approval this fixture always implied.
@@ -57,10 +56,9 @@ func TestCheckExitCode_Parity(t *testing.T) {
 		root := t.TempDir()
 		writeConfig(t, root)
 		writeClaim(t, root, "broken.yaml",
-			"id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
+			"id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+
 				"body: |\n  broken fixture.\n"+
-				"rests_on:\n  - widget.contract.does-not-exist\n"+
-				"governed_by:\n  type: none\n  reason: fixture\n")
+				"rests_on:\n  - widget.contract.does-not-exist\n")
 		stdout, stderr, code := run(t, root, "check")
 		if code != 1 {
 			t.Fatalf("expected exit 1 on a lint-error check, got %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)

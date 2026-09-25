@@ -34,7 +34,7 @@ import (
 const railConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
   - gadget
@@ -46,15 +46,18 @@ func railClaim(id, facet, module, restsOn string) string {
 facet: ` + facet + `
 module: ` + module + `
 status: draft
+summary: Fixture claim used by the engine test corpus.
 `
 	if restsOn != "" {
 		body += "rests_on:\n  - " + restsOn + "\n"
+	} else {
+		body += `rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
+`
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -62,9 +65,9 @@ governed_by:
 // NON-EMPTY answer at both granularities, and a DIFFERENT one at each:
 //
 //	widget.contract.base   no edges at all, and one open comment thread
-//	widget.design.thing    rests_on gadget.contract.core — the one cross-module edge
+//	widget.internals.thing    rests_on gadget.contract.core — the one cross-module edge
 //	gadget.contract.core   two inbound edges
-//	gadget.design.extra    rests_on gadget.contract.core — an intra-module edge
+//	gadget.internals.extra    rests_on gadget.contract.core — an intra-module edge
 //
 // At claims granularity `open_threads` answers "widget.contract.base"; at module
 // granularity it answers "module:widget", because that is the node standing for
@@ -73,9 +76,9 @@ func newRailProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, railConfig)
 	p.writeClaim("base.yaml", railClaim("widget.contract.base", "contract", "widget", ""))
-	p.writeClaim("thing.yaml", railClaim("widget.design.thing", "design", "widget", "gadget.contract.core"))
+	p.writeClaim("thing.yaml", railClaim("widget.internals.thing", "internals", "widget", "gadget.contract.core"))
 	p.writeClaim("core.yaml", railClaim("gadget.contract.core", "contract", "gadget", ""))
-	p.writeClaim("extra.yaml", railClaim("gadget.design.extra", "design", "gadget", "gadget.contract.core"))
+	p.writeClaim("extra.yaml", railClaim("gadget.internals.extra", "internals", "gadget", "gadget.contract.core"))
 	// An open thread is engine-managed state the rail reports on, and the only
 	// one a test can create from the CLI. Without it `open_threads` is empty
 	// at both granularities and proves nothing about which vocabulary it uses.
@@ -182,7 +185,7 @@ func TestGraphRailNamesOnlyNodesTheCanvasDraws(t *testing.T) {
 			granularity: "claims",
 			want: map[string][]string{
 				"isolated":      {"widget.contract.base"},
-				"weakly_linked": {"gadget.design.extra", "widget.design.thing"},
+				"weakly_linked": {"gadget.internals.extra", "widget.internals.thing"},
 				"open_threads":  {"widget.contract.base"},
 			},
 		},
@@ -373,9 +376,9 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 	openGraphPane(t, ctx)
 
 	// Re-pinned for 13 §4.5 (RETRY fix list item 12): "Legend order,
-	// exactly" puts governed by first, then depends on, then mirrors —
+	// exactly" puts governed by first, then depends on —
 	// not graph-core.js's EDGE_TYPES declaration order.
-	wantEdges := []string{"governed_by", "rests_on", "mirrors"}
+	wantEdges := []string{"rests_on"}
 
 	cases := []struct {
 		name     string
@@ -388,7 +391,7 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 			name:    "no overlay: the facets",
 			overlay: "none",
 			group:   "facets",
-			facets:  []string{"contract", "design"},
+			facets:  []string{"contract", "internals"},
 		},
 		{
 			name:     "an overlay describes what it painted, not the facets",
@@ -398,9 +401,9 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 		},
 		{
 			name:     "and it changes again with the overlay",
-			overlay:  "governance",
-			group:    "governance",
-			overlays: []string{"governed", "dim"},
+			overlay:  "review",
+			group:    "review pending",
+			overlays: []string{"halo", "dim"},
 		},
 		{
 			name:     "isolated",
@@ -412,7 +415,7 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 			name:    "and back",
 			overlay: "none",
 			group:   "facets",
-			facets:  []string{"contract", "design"},
+			facets:  []string{"contract", "internals"},
 		},
 	}
 
@@ -420,16 +423,16 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setOverlay(t, ctx, tc.overlay)
 
-			// ALL THREE RELATIONS, ALWAYS. The strip used to name governed_by
-			// alone, leaving rests_on and mirrors to be told apart by an
+			// BOTH REMAINING RELATIONS, ALWAYS. The strip used to name
+			// governed_by alone, leaving rests_on to be told apart by an
 			// arrowhead — the part of an edge most often hidden under the node
 			// it points at. An overlay recolours fills and never changes what
 			// a line means, so this block is invariant across the table.
 			if got := legendEdgeRows(t, ctx); fmt.Sprint(got) != fmt.Sprint(wantEdges) {
 				t.Fatalf("legend edge rows under overlay %q = %v, want %v", tc.overlay, got, wantEdges)
 			}
-			if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-legend [data-dxg-edge] svg').length`); n != 3 {
-				t.Fatalf("legend edge samples that actually draw a line = %d, want 3", n)
+			if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-legend [data-dxg-edge] svg').length`); n != 1 {
+				t.Fatalf("legend edge samples that actually draw a line = %d, want 1", n)
 			}
 
 			// Re-pinned for screen 13 §4.5 / §6: the legend's second caption
@@ -456,14 +459,14 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 
 	// An edge type the reader turned off is not on the canvas, and the strip
 	// says so rather than describing a line that is not there.
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-type="mirrors"]`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Click(`[data-dxg-type="rests_on"]`, chromedp.ByQuery))
 	hidden := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-legend [data-dxg-edge]'))
 		.filter(function (e) { return e.textContent.indexOf('(hidden)') >= 0; })
 		.map(function (e) { return e.getAttribute('data-dxg-edge'); })`)
-	if fmt.Sprint(hidden) != fmt.Sprint([]string{"mirrors"}) {
-		t.Fatalf("legend rows marked hidden = %v, want [mirrors] after toggling it off", hidden)
+	if fmt.Sprint(hidden) != fmt.Sprint([]string{"rests_on"}) {
+		t.Fatalf("legend rows marked hidden = %v, want [rests_on] after toggling it off", hidden)
 	}
 	if got := legendEdgeRows(t, ctx); fmt.Sprint(got) != fmt.Sprint(wantEdges) {
-		t.Fatalf("legend edge rows after a toggle = %v, want all three still described %v", got, wantEdges)
+		t.Fatalf("legend edge rows after a toggle = %v, want both remaining relations still described %v", got, wantEdges)
 	}
 }

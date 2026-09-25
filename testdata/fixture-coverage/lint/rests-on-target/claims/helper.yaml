@@ -1,0 +1,10 @@
+id: other.internals.secret
+summary: Foreign internals a local claim must not rest on.
+facet: internals
+module: other
+status: draft
+layout: card
+body: Foreign internals a local claim must not rest on.
+rests_on:
+  none: true
+  reason: helper

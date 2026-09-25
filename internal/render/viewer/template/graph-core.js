@@ -31,14 +31,13 @@
   // suite off these names.
   //
   // Constants (all frozen, all JSON-able):
-  //   EDGE_TYPES           ["rests_on", "mirrors", "governed_by"]
-  //   DIRECTED_EDGE_TYPES  ["rests_on", "governed_by"] — the SCC edge set
+  //   EDGE_TYPES           ["rests_on"]
+  //   DIRECTED_EDGE_TYPES  ["rests_on"] — the SCC edge set
   //   GHOST_PREFIX         "ghost:" — id prefix of an out-of-scope endpoint
   //   FACET_SLOT_COUNT     20 — the categorical palette's slot count
   //   FACT_RULE_IDS        the eight fact rule ids, in emission order
-  //   HINT_RULE_IDS        the two heuristic rule ids, in emission order
-  //   OVERLAYS             the closed overlay set — six, plus "none"
-  //   BUILD_PHASES         the build roles missing_build_phase looks for
+  //   HINT_RULE_IDS        the heuristic rule ids, in emission order
+  //   OVERLAYS             the closed overlay set — five, plus "none"
   //
   // Helpers:
   //   groupId(groupType, name)            -> "module:engine" / "facet:contract"
@@ -59,10 +58,8 @@
   //   scc(nodeIds, edges)                 -> [[id, ...]]
   //   selfEdges(nodeIds, edges)           -> [id, ...]
   //
-  // Encoding channels (design sections 4.2 and 4.3):
+  // Encoding channels (design section 4.2):
   //   facetSlot(facets, facet)            -> 0..19, or -1
-  //   governors(edges)                    -> [id, ...]
-  //   governanceScope(edges)              -> {nodeIds, edgeKeys}
   //
   // Verdicts (design section 5):
   //   gapRules(nodes, edges, options)     -> {facts: [...], hints: [...]}
@@ -81,18 +78,21 @@
   // The array form exists so a one-liner harness can call scc() without
   // building objects. An edge with no type is treated as a DIRECTED edge of
   // unnamed type: it participates in scc(), and it is excluded from the
-  // by-type filters (governed_by in particular) that name a type explicitly.
+  // by-type filters that name a type explicitly.
   //
   // Returned edges are always the object form.
 
   // EDGE_TYPES is the closed set of relations model.Claim declares. It is the
-  // canonical ordering used by encodeState and by every by-type sort.
-  var EDGE_TYPES = Object.freeze(['rests_on', 'mirrors', 'governed_by']);
+  // canonical ordering used by encodeState and by every by-type sort. One
+  // entry since the governed_by edge retired (NIT-29); the list stays a list
+  // because the toggles, the hash codec and viewer-tests all key off it.
+  var EDGE_TYPES = Object.freeze(['rests_on']);
 
-  // DIRECTED_EDGE_TYPES is the subset scc() walks. `mirrors` is excluded
-  // because it is reciprocal by design — a mirrored pair is not a dependency
-  // loop, and counting it as one would ring every mirrored claim red.
-  var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on', 'governed_by']);
+  // DIRECTED_EDGE_TYPES is the subset scc() walks. Today that is every
+  // remaining edge kind; the name is kept because gapRules and the pane
+  // still distinguish "types that participate in cycles" from display-only
+  // filters if a later kind is added.
+  var DIRECTED_EDGE_TYPES = Object.freeze(['rests_on']);
 
   // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
   // representative. aggregateEdges() emits "ghost:<claim id>" for it rather
@@ -119,7 +119,7 @@
     'sink_group',
     'orphan_group'
   ]);
-  var HINT_RULE_IDS = Object.freeze(['missing_build_phase', 'density_outlier']);
+  var HINT_RULE_IDS = Object.freeze(['density_outlier']);
 
   // ------------------------------------------------------------------
   // Internal helpers — none of these cross the exported boundary.
@@ -223,8 +223,8 @@
     return asString(groupType) + ':' + asString(name);
   }
 
-  // edgeKey is the stable identity of one edge, used by governanceScope's
-  // edgeKeys and by any caller that needs a set of edges as plain strings.
+  // edgeKey is the stable identity of one edge, used by any caller that
+  // needs a set of edges as plain strings.
   // The separator is "|", which no claim id can contain (ids are dotted
   // slugs), so the key is unambiguous.
   function edgeKey(edge) {
@@ -657,11 +657,9 @@
   // ------------------------------------------------------------------
 
   // isDirectedType reports whether an edge type participates in cycle
-  // detection. `mirrors` does not: reciprocity is the lint's job and a
-  // mirrored pair is a two-cycle by construction, so including it would ring
-  // every correctly mirrored claim red. An untyped edge ("") is treated as
-  // directed, which is what makes the [from, to] pair form usable in a
-  // one-liner harness.
+  // detection. The one remaining edge type does (`rests_on`).
+  // An untyped edge ("") is treated as directed, which is what makes
+  // the [from, to] pair form usable in a one-liner harness.
   function isDirectedType(type) {
     if (type === '') {
       return true;
@@ -819,7 +817,8 @@
   }
 
   // selfEdges returns the ids in nodeIds that are their own target under ANY
-  // edge type — rests_on, mirrors or governed_by. It is reported separately
+  // edge type — rests_on, plus any retired kind still present in a
+  // payload. It is reported separately
   // from scc() and never merged into the cycle list, because the engine
   // already has a dedicated error-severity `self-edge` lint distinct from
   // `cycle`, and a pane that folded the two together would be telling a
@@ -875,59 +874,6 @@
     return -1;
   }
 
-  // GOVERNED_TYPE is the one edge type the governance channels key off.
-  var GOVERNED_TYPE = 'governed_by';
-
-  // governors returns the sorted ids that are the TARGET of at least one
-  // governance edge — the claims that govern something.
-  //
-  // This is the wedge-marker set. The wedge sits on the governing node rather
-  // than on the edge because it is the one governance signal a reader can use
-  // without following a line at all: a doctrine claim is findable at a glance
-  // on a 400-node canvas, which is exactly the tracing work this pane exists
-  // to remove.
-  //
-  // Direction matters and is easy to get backwards: a claim declares
-  // `governed_by: {type: X}`, so the edge runs claim -> governor and the
-  // governor is `to`.
-  function governors(edges) {
-    var list = asArray(edges);
-    var hits = [];
-    for (var i = 0; i < list.length; i++) {
-      var e = normalizeEdge(list[i]);
-      if (e && e.type === GOVERNED_TYPE) {
-        hits.push(e.to);
-      }
-    }
-    return sortedUnique(hits);
-  }
-
-  // governanceScope returns everything the governance overlay keeps lit:
-  //
-  //   nodeIds   sorted ids of every governor and every claim they govern
-  //   edgeKeys  sorted edgeKey() of every governance edge
-  //
-  // Only governance edges are in scope. A rests_on edge that happens to join
-  // two governance participants is dimmed with everything else, because the
-  // question this overlay answers is "what does this doctrine actually
-  // reach?", and reach is carried by the governance edges alone — lighting up
-  // an unrelated dependency between two governed claims would answer a
-  // different question badly.
-  function governanceScope(edges) {
-    var list = asArray(edges);
-    var nodes = [];
-    var keys = [];
-    for (var i = 0; i < list.length; i++) {
-      var e = normalizeEdge(list[i]);
-      if (!e || e.type !== GOVERNED_TYPE) {
-        continue;
-      }
-      nodes.push(e.from);
-      nodes.push(e.to);
-      keys.push(e.from + '|' + e.type + '|' + e.to);
-    }
-    return { nodeIds: sortedUnique(nodes), edgeKeys: sortedUnique(keys) };
-  }
 
   // ------------------------------------------------------------------
   // Gap rules (design section 5)
@@ -1023,12 +969,6 @@
   // endpoints in scope, which is also why aggregation inside this function
   // can never produce a ghost.
 
-  // BUILD_PHASES is the ordered set of real build phases a module is expected
-  // to cover. model.BuildRole also defines "out-of-scope", which is
-  // deliberately NOT here: it marks a deferred claim, not a phase whose
-  // absence is a gap.
-  var BUILD_PHASES = Object.freeze(['orientation', 'schema', 'behavior', 'api', 'verification']);
-
   function finding(rule, nodeIds, kind) {
     return { rule: rule, node_ids: nodeIds, kind: kind };
   }
@@ -1047,65 +987,17 @@
   }
 
   // ------------------------------------------------------------------
-  // The two heuristics (design section 5)
+  // The heuristic (design section 5)
   // ------------------------------------------------------------------
   //
   // These are GUESSES and they are kept in their own array for that reason.
-  // False positives here are guaranteed, not merely possible: a module that
-  // legitimately has no verification phase will be listed every single time.
-  // A separate array is what stops the panel rendering a guess in the same
+  // False positives here are guaranteed, not merely possible. A separate array is what stops the panel rendering a guess in the same
   // block as a fact by accident — the wording and the visual separation are
   // the only things that keep a heuristic honest rather than annoying, and a
   // shared array would eventually lose both.
   //
-  // Both emit the same {rule, node_ids, kind} shape with kind "hint", and
-  // both always appear, with an empty node_ids when they found nothing.
-
-  // missingBuildPhase: a module with at least one LOCKED claim and zero
-  // claims in some build phase. The locked precondition is what keeps this
-  // from firing on every module a project has merely started — a module with
-  // nothing locked is not missing a phase, it is unfinished, and the reader
-  // already knows that. Verification is the usual absentee.
-  //
-  // Grouping is always by module regardless of the rail's groupBy: the phase
-  // vocabulary is a property of a module's build, and a facet has no build.
-  function missingBuildPhase(nodes) {
-    var lockedIn = new Set();
-    var phasesIn = new Map(); // module -> Set of build roles present
-    var moduleNames = [];
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i] || {};
-      var mod = asString(n.module);
-      moduleNames.push(mod);
-      if (asString(n.status) === 'locked') {
-        lockedIn.add(mod);
-      }
-      var seen = phasesIn.get(mod);
-      if (!seen) {
-        seen = new Set();
-        phasesIn.set(mod, seen);
-      }
-      var role = asString(n.build_role);
-      if (role !== '') {
-        seen.add(role);
-      }
-    }
-    var hits = [];
-    var names = sortedUnique(moduleNames);
-    for (var j = 0; j < names.length; j++) {
-      if (!lockedIn.has(names[j])) {
-        continue;
-      }
-      var present = phasesIn.get(names[j]) || new Set();
-      for (var k = 0; k < BUILD_PHASES.length; k++) {
-        if (!present.has(BUILD_PHASES[k])) {
-          hits.push(groupId('module', names[j]));
-          break;
-        }
-      }
-    }
-    return hits;
-  }
+  // Each emits the {rule, node_ids, kind} shape with kind "hint", and always
+  // appears, with an empty node_ids when it found nothing.
 
   // densityOutlier: a facet whose claim count in one module sits far below its
   // median across the other modules — the shape of "this module forgot to
@@ -1399,14 +1291,12 @@
     facts.push(finding('sink_group', sinks.sort(cmpStr), 'fact'));
     facts.push(finding('orphan_group', orphans.sort(cmpStr), 'fact'));
 
-    // Heuristics, in their own array. Both take the scoped CLAIM nodes only —
-    // no edges, no representatives — and both always appear. They are
-    // deliberately granularity-independent: a build phase is a property of a
-    // module's build whatever the canvas is currently collapsed to, and the
-    // ids they emit are module group ids at every granularity. Their labels
-    // say "module" out loud for exactly that reason.
+    // Heuristics, in their own array. They take the scoped CLAIM nodes only —
+    // no edges, no representatives — and always appear. They are
+    // deliberately granularity-independent: the ids they emit are module
+    // group ids at every granularity, and their labels say "module" out loud
+    // for exactly that reason.
     var hints = [
-      finding('missing_build_phase', missingBuildPhase(scopedNodes), 'hint'),
       finding('density_outlier', densityOutlier(scopedNodes), 'hint')
     ];
 
@@ -1466,21 +1356,25 @@
   // string it produced before this axis existed. encodeState remains a
   // function of meaning alone: the same state always yields the same string.
 
-  // OVERLAYS is the closed set: six overlays plus "none". Anything else
-  // decodes to "none" rather than leaving the pane in a state it cannot draw.
+  // OVERLAYS is the closed set: five overlays plus "none". Anything else
+  // decodes to "none" rather than leaving the pane in a state it cannot draw
+  // — including the retired "governance" overlay (NIT-29), which an old hash
+  // may still carry.
   var OVERLAYS = Object.freeze([
     'none',
     'isolated',
     'cycles',
-    'governance',
     'review',
     'comments',
     'status'
   ]);
 
-  // TYPE_LETTERS keeps the enabled-type set to three characters in the URL.
-  // The mapping is positional against EDGE_TYPES, so the two cannot drift.
-  var TYPE_LETTERS = 'rmg';
+  // TYPE_LETTERS keeps the enabled-type set to one character per EDGE_TYPES
+  // entry in the URL. The mapping is positional against EDGE_TYPES, so the
+  // two cannot drift. Letter identity is stable across the retired `mirrors`
+  // and `governed_by` kinds: r = rests_on. An old hash carrying `m` or `g` is
+  // ignored.
+  var TYPE_LETTERS = 'r';
 
   // defaultState returns a fresh state object — everything on, nothing
   // filtered, nothing selected. Fresh rather than shared: a caller that
@@ -1666,7 +1560,6 @@
     FACT_RULE_IDS: FACT_RULE_IDS,
     HINT_RULE_IDS: HINT_RULE_IDS,
     OVERLAYS: OVERLAYS,
-    BUILD_PHASES: BUILD_PHASES,
 
     groupId: groupId,
     edgeKey: edgeKey,
@@ -1682,8 +1575,6 @@
     selfEdges: selfEdges,
 
     facetSlot: facetSlot,
-    governors: governors,
-    governanceScope: governanceScope,
 
     gapRules: gapRules,
 

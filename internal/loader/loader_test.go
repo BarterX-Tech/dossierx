@@ -29,10 +29,15 @@ func writeFile(t *testing.T, dir, name, contents string) string {
 
 func TestLoadClaims_Basic(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n")
-	writeFile(t, dir, "b.yml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
+	writeFile(t, dir, "b.yml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 	// Non-YAML files must be ignored.
 	writeFile(t, dir, "README.md", "not a claim")
+	// Module manifests are not claims.
+	if err := os.MkdirAll(filepath.Join(dir, "widget"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "widget"), "manifest.yaml", "summary: skip me\nprovides: []\ndepends_on: []\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -59,7 +64,7 @@ func TestLoadClaims_RecursesSubdirectories(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, sub, "c.yaml", "id: widget.contract.c\nfacet: contract\nmodule: widget\nstatus: draft\nbody: nested claim\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, sub, "c.yaml", "id: widget.contract.c\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: nested claim\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -92,7 +97,7 @@ func TestLoadClaims_DirIsAFile(t *testing.T) {
 
 func TestLoadClaims_UnknownFieldIsStrictError(t *testing.T) {
 	dir := t.TempDir()
-	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: x\nsome_typo_field: true\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: x\nsome_typo_field: true\nrests_on:\n  none: true\n  reason: fixture\n")
 	_, err := LoadClaims(dir)
 	if err == nil {
 		t.Fatal("expected strict-decode error for an unknown claim field, got nil")
@@ -112,7 +117,7 @@ func TestLoadClaims_ValidYAMLWrongTopLevelShape(t *testing.T) {
 		name     string
 		contents string
 	}{
-		{"sequence", "- id: widget.contract.a\n- id: widget.contract.b\n"},
+		{"sequence", "- widget.contract.a\n- widget.contract.b\n"},
 		{"scalar_string", "just a plain string, not a claim\n"},
 		{"scalar_number", "42\n"},
 		{"null_document", "null\n"},
@@ -158,9 +163,9 @@ func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
 	t.Run("two documents in one file is an error naming the file", func(t *testing.T) {
 		dir := t.TempDir()
 		p := writeFile(t, dir, "two.yaml",
-			"id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n"+
+			"id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n"+
 				"---\n"+
-				"id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\ngoverned_by:\n  type: none\n  reason: fixture\n")
+				"id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 		_, err := LoadClaims(dir)
 		if err == nil {
 			t.Fatal("expected an error for a file with two YAML documents, got nil")
@@ -173,7 +178,7 @@ func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
 	t.Run("a single document still loads exactly as before", func(t *testing.T) {
 		dir := t.TempDir()
 		writeFile(t, dir, "one.yaml",
-			"---\nid: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n")
+			"---\nid: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
 		claims, err := LoadClaims(dir)
 		if err != nil {
 			t.Fatalf("LoadClaims on a single-document file: unexpected error: %v", err)
@@ -186,7 +191,7 @@ func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
 
 func TestSaveClaim_RoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: original\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: original\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -218,10 +223,10 @@ func TestSaveClaim_RoundTrips(t *testing.T) {
 
 func TestLoadClaims_OrderFieldRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\norder: 5\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\norder: 5\nrests_on:\n  none: true\n  reason: fixture\n")
 	// A claim that omits order entirely must decode with the zero value
 	// (unset), not error — order is optional.
-	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -286,10 +291,10 @@ func TestFindByID(t *testing.T) {
 
 func TestLoadClaims_SectionFieldRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nbody: claim a\nsection: 5 - workflows / lifecycle\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nsection: 5 - workflows / lifecycle\nrests_on:\n  none: true\n  reason: fixture\n")
 	// A claim that omits section entirely must decode with the zero value
 	// (unset), not error — section is optional and project-agnostic.
-	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nbody: claim b\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -330,10 +335,10 @@ func TestLoadClaims_SectionFieldRoundTrips(t *testing.T) {
 
 func TestLoadClaims_RawHTMLFieldsAndMockupLayoutRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\nraw_html: \"<div>mock</div>\"\nraw_html_reviewed: true\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\nraw_html: \"<div>mock</div>\"\nraw_html_reviewed: true\nrests_on:\n  none: true\n  reason: fixture\n")
 	// A claim that omits raw_html/raw_html_reviewed entirely must decode
 	// with the zero value (unset/false), not error — both are optional.
-	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nbody: claim b\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "b.yaml", "id: widget.contract.b\nfacet: contract\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -393,7 +398,7 @@ func TestLoadClaims_TableRowsPreserveAuthoredColumnOrder(t *testing.T) {
 	dir := t.TempDir()
 	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: table\n"+
 		"rows:\n  - zeta: 1\n    alpha: 2\n    middle: 3\n  - zeta: 4\n    alpha: 5\n    middle: 6\n"+
-		"governed_by:\n  type: none\n  reason: fixture\n")
+		"rests_on:\n  none: true\n  reason: fixture\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {
@@ -458,7 +463,6 @@ func TestLoadClaims_CommentsRoundTrip(t *testing.T) {
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim a
 comments:
   - id: c-8f3a2b
@@ -476,8 +480,8 @@ comments:
         edited: false
     resolved_by: human
     resolved_at: 2026-07-24T11:02:00Z
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 	writeFile(t, dir, "a.yaml", src)
@@ -523,7 +527,7 @@ governed_by:
 // comment-free form (so adding the feature never rewrites an uncommented claim).
 func TestSaveClaim_CommentFreeStaysByteIdentical(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim a\nrests_on:\n  none: true\n  reason: fixture\n")
 	claims, err := LoadClaims(dir)
 	if err != nil {
 		t.Fatalf("LoadClaims: %v", err)
@@ -586,8 +590,8 @@ comments:
     body: x
     edited: false
     bodyy: misspelled
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `)
 	_, err := LoadClaims(dir)
@@ -596,5 +600,59 @@ governed_by:
 	}
 	if !strings.Contains(err.Error(), "bodyy") {
 		t.Fatalf("expected the error to name the unknown field 'bodyy', got: %v", err)
+	}
+}
+
+// TestLoadClaims_RetiredClaimKeys_FailStrictDecode: governed_by (NIT-29),
+// build_role (NIT-32) and mirrors left model.Claim with no shadow field, so a
+// claim file still carrying any of them must fail strict decode naming the
+// key (the error the upgrading skill's hand folds start from) rather than
+// load with the key silently dropped.
+func TestLoadClaims_RetiredClaimKeys_FailStrictDecode(t *testing.T) {
+	for _, tc := range []struct{ key, yaml string }{
+		{"governed_by", "governed_by:\n  type: none\n  reason: fixture\n"},
+		{"build_role", "build_role: api\n"},
+		{"mirrors", "mirrors:\n  - widget.contract.b\n"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a.yaml", `id: widget.contract.a
+facet: contract
+module: widget
+status: draft
+body: claim a
+`+tc.yaml+`rests_on:
+  none: true
+  reason: fixture
+`)
+			_, err := LoadClaims(dir)
+			if err == nil {
+				t.Fatalf("a claim carrying retired %s must fail strict decode, got nil", tc.key)
+			}
+			if want := "field " + tc.key + " not found in type model.Claim"; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error must contain %q, got: %v", want, err)
+			}
+		})
+	}
+}
+
+// TestLoadClaims_RestsOnNoneMappingIsStrict: the {none, reason} mapping is
+// decoded by RestsOn's own UnmarshalYAML, which the claim decoder's
+// KnownFields does not reach. A misspelled reason must fail the load rather
+// than decode to a blank one, and ids beside none: true must fail rather than
+// be silently dropped, leaving a claim that rests on nothing.
+func TestLoadClaims_RestsOnNoneMappingIsStrict(t *testing.T) {
+	for _, tc := range []struct{ name, restsOn, want string }{
+		{"misspelled reason", "  none: true\n  reson: fixture\n", "rests_on: field reson not found"},
+		{"none beside ids", "  none: true\n  reason: fixture\n  ids:\n    - widget.contract.b\n", "rests_on: none: true cannot also name targets"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n"+tc.restsOn)
+			_, err := LoadClaims(dir)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("load error = %v, want one containing %q", err, tc.want)
+			}
+		})
 	}
 }

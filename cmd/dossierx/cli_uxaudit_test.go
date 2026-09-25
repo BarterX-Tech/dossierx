@@ -1,7 +1,7 @@
 // cli_uxaudit_test.go covers the in-process (execCLI / direct-helper) half
 // of the CLI/UX audit fixes (DX-AUD-17..22): the empty-findings envelope shape
-// for a clean validate run, the version subcommand and --version flag, and the
-// unknown-module rejection shared by build-order status and claim list. The
+// for a clean validate run, the version subcommand and --version flag, the
+// unknown-command rejection, and claim list's unknown-module rejection. The
 // exit-code-sensitive half (claim lock/unlock/flag not-found -> exit 2, unknown
 // module -> non-zero exit) lives in tests/cli_uxaudit_test.go, which execs
 // the built binary as a subprocess (see cli_inprocess_test.go's package doc
@@ -104,6 +104,21 @@ func TestCLI_VersionFlag(t *testing.T) {
 	}
 }
 
+// TestCLI_UnknownCommandRejected: a removed top-level noun (build-order, killed
+// in v0.7.21 with no retired stub) is an unknown command like any other.
+func TestCLI_UnknownCommandRejected(t *testing.T) {
+	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  leftover.\nrests_on:\n  none: true\n  reason: fixture\n",
+	})
+	_, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "nope")
+	if err == nil {
+		t.Fatalf("an unknown command must fail")
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("expected an unknown command, got: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------
 // DX-AUD-21: a command taking --module rejects an unknown one instead of
 // silently reporting an empty state and exiting 0. A known-but-unused module
@@ -114,26 +129,6 @@ func TestCLI_VersionFlag(t *testing.T) {
 // the surviving command where a typo'd module would otherwise produce an
 // empty, success-looking answer.
 // ---------------------------------------------------------------------
-
-func TestCLI_BuildOrderStatus_UnknownModuleRejected(t *testing.T) {
-	root := t.TempDir()
-	cfgPath := boWriteConfig(t, root, "widget")
-
-	_, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "nope")
-	if err == nil {
-		t.Fatalf("expected build-order status to reject an unknown module")
-	}
-	if !strings.Contains(err.Error(), "unknown module") {
-		t.Fatalf("expected an unknown-module error, got: %v", err)
-	}
-
-	// A known module with no artifact yet must still report normally.
-	if out, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "widget"); err != nil {
-		t.Fatalf("known-but-unproposed module should not error: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "not proposed yet") {
-		t.Fatalf("expected a not-proposed-yet report for a known module, got: %s", out)
-	}
-}
 
 func TestCLI_ClaimList_UnknownModuleRejected(t *testing.T) {
 	root := t.TempDir()

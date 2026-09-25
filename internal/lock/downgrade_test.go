@@ -58,7 +58,7 @@ func TestMigrateLegacyStoreRefusesADowngradedStoreCarryingLedgerRecords(t *testi
 	path := filepath.Join(dir, "store.json")
 
 	dep := model.Claim{ID: "widget.contract.overview", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "the drifted body"}
-	dependent := model.Claim{ID: "widget.internals.fields", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	dependent := model.Claim{ID: "widget.internals.fields", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	// A store that says schema 0 (so both existing guards are satisfied: no
 	// hashes, diskVersion 0) while carrying a ledger record, which no genuine
@@ -116,7 +116,7 @@ func TestMigrateLegacyStoreRefusesADowngradeBesideADigestStore(t *testing.T) {
 	}
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "v2"}
-	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	store, err := LoadStore(path)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestMigrateLegacyStoreStillReArmsAnHonestLegacyStoreAndSaysSo(t *testing.T)
 	}
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "v2"}
-	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(dep.ID)}
 
 	store, err := LoadStore(path)
 	if err != nil {
@@ -307,7 +307,7 @@ func TestAnEmptiedLedgerKeyIsStillEvidenceOfADowngrade(t *testing.T) {
 	// A downgraded store is left exactly as found: CrossPreLedger returns nil
 	// and writes nothing, because RuleLockLedgerDowngraded owns this diagnosis
 	// and its recovery is version control, never a crossing.
-	if err := CrossPreLedger(store, []model.Claim{tampered}, 0); err != nil {
+	if err := CrossPreLedger(store, []model.Claim{tampered}); err != nil {
 		t.Fatalf("CrossPreLedger on a downgraded store must be a silent no-op, got %v", err)
 	}
 	if store.OnDiskVersion() >= ledgerSchemaVersion {
@@ -345,11 +345,11 @@ func TestAStoreWithNoLedgerKeyStillCrosses(t *testing.T) {
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 	// While it still holds a locked claim it is REFUSED — nothing is
 	// grandfathered any more — and the refusal is the crossing instructions.
-	if err := CrossPreLedger(store, []model.Claim{locked}, 0); !errors.Is(err, ErrPreLedgerUnadopted) {
+	if err := CrossPreLedger(store, []model.Claim{locked}); !errors.Is(err, ErrPreLedgerUnadopted) {
 		t.Fatalf("a pre-ledger project holding a locked claim must be refused, got %v", err)
 	}
 	// Emptied of everything that predates the ledger, the same store crosses.
-	if err := CrossPreLedger(store, nil, 0); err != nil {
+	if err := CrossPreLedger(store, nil); err != nil {
 		t.Fatalf("a genuine pre-ledger project holding nothing locked must cross, got %v", err)
 	}
 	if store.OnDiskVersion() != ledgerSchemaVersion {

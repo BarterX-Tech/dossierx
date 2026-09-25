@@ -164,6 +164,7 @@ func startServerWarn(t *testing.T, cfgBody string, files map[string]string) (srv
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+	armConstitution(t, cfg)
 	srv = serve.New(cfg, testVersion)
 	warn = &syncBuf{}
 	srv.SetWarnWriter(warn)

@@ -1,12 +1,11 @@
 // status_shape.go implements the "status-shape" lint: a claim's Status must
 // be exactly one of the two lifecycle values model.Status defines —
 // "draft" or "locked" — and must not be empty. This mirrors the
-// enum-legality checks build-role-required-for-locked and
-// layout-shape-mismatch already perform for BuildRole and Layout: an
+// enum-legality check layout-shape-mismatch already performs for Layout: an
 // out-of-enum status (a typo, or a value like "published" borrowed from
 // some other system) would otherwise flow past load-time and silently
 // misclassify a claim in every status-aware code path (the lock gate,
-// build-order's completeness check, the viewer's draft/locked styling).
+// readiness, the viewer's draft/locked styling).
 //
 // Per this codebase's convention, enum-legality lives in lint rather than
 // in the model or loader, so this is enforced here rather than by rejecting

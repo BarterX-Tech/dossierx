@@ -56,7 +56,7 @@ func TestBuildTargetStatusLookup_CapturesStatusAndReviewPending(t *testing.T) {
 func targetPillTestConfig(t *testing.T, module string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()
-	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - " + module + "\nclaims_dir: claims\n"
 	cfgPath := dir + "/project.config.yaml"
 	writeFile(t, cfgPath, cfgYAML)
 	cfg, err := config.LoadConfig(cfgPath)
@@ -73,15 +73,12 @@ func TestRender_TargetPill_ActionableRestsOnTargetGetsPill(t *testing.T) {
 		{
 			ID: module + ".contract.main", Module: module, Facet: "contract",
 			Status: model.StatusLocked, Layout: model.LayoutCard, Body: "main claim",
-			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
-			RestsOn:   []string{module + ".contract.dep"},
+			RestsOn: model.RestsOnIDs(module + ".contract.dep"),
 		},
 		{
 			ID: module + ".contract.dep", Module: module, Facet: "contract",
 			Status: model.StatusDraft, Layout: model.LayoutCard, Body: "dep claim",
-			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
+			RestsOn: model.RestsNone("test fixture"),
 		},
 	}
 
@@ -109,15 +106,12 @@ func TestRender_TargetPill_HealthyLockedTargetGetsNoPillOnEdge(t *testing.T) {
 		{
 			ID: module + ".contract.main", Module: module, Facet: "contract",
 			Status: model.StatusLocked, Layout: model.LayoutCard, Body: "main claim",
-			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
-			RestsOn:   []string{module + ".contract.dep"},
+			RestsOn: model.RestsOnIDs(module + ".contract.dep"),
 		},
 		{
 			ID: module + ".contract.dep", Module: module, Facet: "contract",
 			Status: model.StatusLocked, Layout: model.LayoutCard, Body: "dep claim",
-			BuildRole: model.BuildRoleBehavior,
-			Governed:  model.Governed{Type: string(model.GovernedNone), Reason: "test fixture"},
+			RestsOn: model.RestsNone("test fixture"),
 		},
 	}
 

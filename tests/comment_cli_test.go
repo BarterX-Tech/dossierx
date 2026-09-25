@@ -1,7 +1,7 @@
 // comment_cli_test.go exercises the "dossierx comment" verb group end to end
 // via the built binary (reusing cli_test.go's run/binPath and
 // lock_lifecycle_test.go's llWriteConfig/llWriteClaim/llClaimSpec/llReadFile
-// helpers), plus the lock gate, the buildorder/check integration, and the
+// helpers), plus the lock gate, the check integration, and the
 // reaudit comment-only refusal that all consume the same open-thread state.
 //
 // v0.3.0 removed edit, delete, resolve and reopen from the CLI (they live in
@@ -77,8 +77,9 @@ func writeBannerClaim(t *testing.T, root, id, module string) string {
 	t.Helper()
 	body := "id: " + id + "\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: banner\n" +
+		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  Section divider.\n" +
-		"governed_by:\n  type: none\n  reason: fixture banner claim\n"
+		"rests_on:\n  none: true\n  reason: fixture banner claim\n"
 	path := filepath.Join(root, "claims", lastSegment(id)+".yaml")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write banner claim: %v", err)
@@ -92,7 +93,7 @@ func writeBannerClaim(t *testing.T, root, id, module string) string {
 
 func TestComment_AddLockRefusedResolveLockSucceeds(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.overview", facet: "contract", module: "widget", status: "draft", body: "a claim under review."})
 
 	addOut, addErr, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "please clarify the retry policy")
@@ -143,7 +144,7 @@ func TestComment_AddLockRefusedResolveLockSucceeds(t *testing.T) {
 
 func TestComment_LockBSucceedsWhileLockedAHasOpenThread(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	aPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
 	bPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.b", facet: "contract", module: "widget", status: "draft", body: "claim B."})
 
@@ -178,7 +179,7 @@ func TestComment_LockBSucceedsWhileLockedAHasOpenThread(t *testing.T) {
 
 func TestComment_OnLockedSetsReviewPendingClearedOnResolve(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a lockable claim."})
 
 	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
@@ -219,7 +220,7 @@ func TestComment_OnLockedSetsReviewPendingClearedOnResolve(t *testing.T) {
 
 func TestComment_ReauditCommentOnlyRefusedExit2ByteIdentical(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a lockable claim."})
 
 	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
@@ -263,7 +264,7 @@ func TestComment_ReauditCommentOnlyRefusedExit2ByteIdentical(t *testing.T) {
 
 func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dependency, v1."})
 	mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main resting on dep.", restsOn: []string{"widget.contract.dep"}})
 
@@ -336,7 +337,7 @@ func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 
 func TestComment_CheckOnLockedOpenThread(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a lockable claim."})
 
 	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
@@ -384,7 +385,7 @@ func TestComment_CheckOnLockedOpenThread(t *testing.T) {
 
 func TestComment_ListFormatAndEnvelope(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a claim."})
 
 	addOut, _, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "clarify the retry policy")
@@ -469,7 +470,7 @@ func TestComment_ListFormatAndEnvelope(t *testing.T) {
 
 func TestComment_RetiredVerbsAreGoneFromTheCLI(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a claim."})
 
 	// The group's own help IS the surface an agent discovers: cobra lists every
@@ -495,7 +496,7 @@ func TestComment_RetiredVerbsAreGoneFromTheCLI(t *testing.T) {
 
 func TestComment_RetiredVerbsStillWorkThroughTheirPackage(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a claim."})
 
 	addOut, _, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "original")
@@ -551,7 +552,7 @@ func TestComment_RetiredVerbsStillWorkThroughTheirPackage(t *testing.T) {
 
 func TestComment_AddRefusedOnBannerClaim(t *testing.T) {
 	root := t.TempDir()
-	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+	cfgPath := llWriteConfig(t, root, []string{"widget"})
 	bannerPath := writeBannerClaim(t, root, "widget.contract.divider", "widget")
 
 	before := llReadFile(t, bannerPath)
@@ -588,7 +589,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 	for _, tc := range unsafe {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+			cfgPath := llWriteConfig(t, root, []string{"widget"})
 			claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
 			before := llReadFile(t, claimPath)
 
@@ -624,7 +625,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 	// accepted end to end.
 	t.Run("false-reject-now-accepted", func(t *testing.T) {
 		root := t.TempDir()
-		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		cfgPath := llWriteConfig(t, root, []string{"widget"})
 		llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
 
 		out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", " \ncontent below a blank first line")
@@ -646,9 +647,9 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 func writePoisonStoredBodyClaim(t *testing.T, root, id, module string) string {
 	t.Helper()
 	body := "id: " + id + "\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: \"\\tstored prose yaml cannot round-trip\\nsecond line\"\n" +
-		"governed_by:\n  type: none\n  reason: fixture poison claim\n" +
+		"rests_on:\n  none: true\n  reason: fixture poison claim\n" +
 		"comments:\n" +
 		"  - id: c-poison1\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: open thread on a poison claim\n    edited: false\n" +
 		"  - id: c-poison2\n    status: resolved\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: resolved thread on a poison claim\n    edited: false\n    resolved_by: human\n    resolved_at: \"2026-07-24T11:00:00Z\"\n"
@@ -683,7 +684,12 @@ func TestComment_StoredBodyNotRoundTrippable_ClaimScopedError(t *testing.T) {
 	for _, v := range verbs {
 		t.Run(v.name, func(t *testing.T) {
 			root := t.TempDir()
-			cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+			cfgPath := llWriteConfig(t, root, []string{"widget"})
+			// A project that has NOT crossed into the ledger: the roof lock
+			// llWriteConfig performs would make the poison claim's hand-written
+			// threads "unrecorded", which is a different (and correct) refusal
+			// from the one under test here.
+			unroofProject(t, root)
 			claimPath := writePoisonStoredBodyClaim(t, root, claimID, "widget")
 			before := llReadFile(t, claimPath)
 
@@ -764,7 +770,12 @@ func TestComment_StoredBodyNotRoundTrippable_RetiredVerbsRaiseTheSameSentinel(t 
 	for _, op := range ops {
 		t.Run(op.name, func(t *testing.T) {
 			root := t.TempDir()
-			cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+			cfgPath := llWriteConfig(t, root, []string{"widget"})
+			// A project that has NOT crossed into the ledger: the roof lock
+			// llWriteConfig performs would make the poison claim's hand-written
+			// threads "unrecorded", which is a different (and correct) refusal
+			// from the one under test here.
+			unroofProject(t, root)
 			claimPath := writePoisonStoredBodyClaim(t, root, claimID, "widget")
 			before := llReadFile(t, claimPath)
 

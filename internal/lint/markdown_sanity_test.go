@@ -317,40 +317,35 @@ func equalStrings(a, b []string) bool {
 // first stray backtick in any draft in a project freezes every lock in it —
 // including the locks the author needs in order to go fix it.
 func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
-	cfg := &config.Config{
+	cfg := withManifests(&config.Config{
 		SchemaVersion: 1,
 		Facets:        []string{"contract"},
 		Modules:       []string{"widget"},
 		ClaimsDir:     "claims",
-	}
+	})
 	claims := []model.Claim{
 		{
-			ID:     "widget.contract.anchor",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusDraft,
-			Layout: model.LayoutCard,
-			Body:   "An anchor claim with nothing wrong with it.",
-			Governed: model.Governed{
-				Type:   string(model.GovernedNone),
-				Reason: "fixture claim, not backed by any real doctrine",
-			},
+			ID:      "widget.contract.anchor",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusDraft,
+			Layout:  model.LayoutCard,
+			Summary: "An anchor claim with nothing wrong with it.",
+			Body:    "An anchor claim with nothing wrong with it.",
+			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 		{
-			ID:     "widget.contract.crafty",
-			Facet:  "contract",
-			Module: "widget",
-			Status: model.StatusDraft,
-			Layout: model.LayoutCard,
+			ID:      "widget.contract.crafty",
+			Facet:   "contract",
+			Module:  "widget",
+			Status:  model.StatusDraft,
+			Layout:  model.LayoutCard,
+			Summary: "Crafted markdown-sanity findings stay warnings.",
 			Body: "## a reserved heading\n\n" +
 				"a ` that never closes, an *opener with no partner, and a line\n" +
 				"that ends in a break marker with nothing to break to\\\n\n" +
 				"- a\n - b\n",
-			RestsOn: []string{"widget.contract.anchor"},
-			Governed: model.Governed{
-				Type:   string(model.GovernedNone),
-				Reason: "fixture claim, not backed by any real doctrine",
-			},
+			RestsOn: model.RestsNone("fixture claim, not backed by any real doctrine"),
 		},
 	}
 

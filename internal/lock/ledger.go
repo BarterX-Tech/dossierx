@@ -18,7 +18,7 @@
 //	                                       marks a DEPENDENT stale; being stale
 //	                                       is not being tampered with, and this
 //	                                       row still holds.)
-//	flip build_role/section/order/emphasis ContentHash covers none of them
+//	flip section/order/emphasis            ContentHash covers none of them
 //	flip locked -> draft to dodge review   the claim simply looks like a draft
 //
 // The ledger closes all five by recording, at every legitimate approval, the
@@ -51,22 +51,15 @@ import (
 )
 
 // LedgerSubject is what kind of artifact a ledger record covers. The ledger is
-// keyed by a single string map (so it round-trips as plain JSON), and a claim id
-// can never collide with a build-order key by construction — but the audit gate
-// filters on THIS field rather than by parsing keys, so a future subject kind
-// cannot quietly start being audited as a claim.
+// keyed by a single string map (so it round-trips as plain JSON), and the audit
+// gate filters on THIS field rather than by parsing keys, so a row of any other
+// subject — including the "build-order" rows releases up to v0.7.20 wrote, which
+// stay in old stores and are ignored — is never audited as a claim.
 type LedgerSubject string
 
 const (
 	// SubjectClaim: the record covers one locked model.Claim, keyed by its id.
 	SubjectClaim LedgerSubject = "claim"
-
-	// SubjectBuildOrder: the record covers one module's locked build-order
-	// artifact, keyed by BuildOrderLedgerKey(module). A locked build order is a
-	// SECOND class of locked artifact; leaving it outside the approval path
-	// would make this release's headline invariant — "nothing already locked
-	// changes without your approval on the record" — an overclaim.
-	SubjectBuildOrder LedgerSubject = "build-order"
 )
 
 // LedgerRecord is one approval on the record.
@@ -90,8 +83,7 @@ type LedgerRecord struct {
 	// Subject is what this record covers (see LedgerSubject).
 	Subject LedgerSubject `json:"subject"`
 
-	// Hash is LockedClaimHash of the claim as approved (or, for a build-order
-	// record, the caller-supplied signature of the frozen artifact).
+	// Hash is LockedClaimHash of the claim as approved.
 	Hash string `json:"hash"`
 
 	// At is the RFC3339Nano UTC time the approval was recorded.
@@ -195,12 +187,6 @@ type Approval struct {
 	Reason string
 }
 
-// BuildOrderLedgerKey is the ledger key for module's build-order artifact. The
-// "build-order:" prefix cannot collide with a claim id (claim ids are
-// dot-separated kebab-case segments; the id-shape lint refuses a colon), and
-// the record's Subject field is what the audit filters on regardless.
-func BuildOrderLedgerKey(module string) string { return "build-order:" + module }
-
 // DefaultActor resolves the actor string for a ledger write from the
 // environment, in priority order: DOSSIERX_ACTOR (an explicit override, which
 // is what CI and any wrapper should set), then USER (POSIX), then USERNAME
@@ -229,8 +215,7 @@ func DefaultActor() string {
 // should.
 var ledgerAnnounceWriter io.Writer = os.Stderr
 
-// Record returns the ledger record for key (a claim id, or
-// BuildOrderLedgerKey(module)) and whether one exists.
+// Record returns the ledger record for key (a claim id) and whether one exists.
 func (s *Store) Record(key string) (LedgerRecord, bool) {
 	if s.Ledger == nil {
 		return LedgerRecord{}, false
@@ -397,32 +382,11 @@ func recordCommentDigestBeside(s *Store, claims ...model.Claim) {
 	store.Save() //nolint:errcheck // best-effort: see RecordApproval
 }
 
-// RecordBuildOrderApproval writes a module's build-order artifact into the
-// ledger. The hash is supplied by the caller rather than computed here because
-// internal/buildorder imports this package (for ContentHash), so computing it
-// here would invert that dependency into a cycle. The caller passes a signature
-// of the frozen artifact.
-func RecordBuildOrderApproval(store *Store, module, hash string, ap Approval) {
-	if store == nil {
-		return
-	}
-	store.putRecord(BuildOrderLedgerKey(module), LedgerRecord{
-		Subject: SubjectBuildOrder,
-		Hash:    hash,
-		At:      nowFunc().UTC().Format(time.RFC3339Nano),
-		Actor:   ap.Actor,
-		Reason:  ap.Reason,
-	})
-}
-
 // PreLedger reports whether this store was loaded from a file written by a
 // build that PREDATES the lock ledger — the one condition under which crossing
 // onto the ledger is honest rather than a bypass.
 //
-// It is the same predicate CrossPreLedger keys on, exported because build-order
-// artifacts sit under exactly the same exemption and cannot be reached from this
-// package (internal/buildorder imports internal/lock, so the edge cannot run
-// the other way).
+// It is the same predicate CrossPreLedger keys on.
 //
 // Both halves matter. A store at the current version never crosses again: after
 // the crossing, a locked artifact without a record is a finding, not an
@@ -634,65 +598,20 @@ func ReleaseApproval(store *Store, claimID string, ap Approval) bool {
 	return true
 }
 
-// ReleaseBuildOrderApproval marks module's build-order record released, KEEPING
-// the record for the same reason ReleaseApproval keeps a claim's: the evidence
-// that this module's order was ever approved is what a later sweep needs, and
-// deleting it would make removal quieter than editing. It reports whether a
-// record was there to release.
-//
-// It is the build-order twin of ReleaseApproval, and the act that legitimately
-// releases a build order is "dossierx build-order propose": propose overwrites a
-// locked artifact with a fresh, unlocked one, which is precisely "this approved
-// order no longer stands". propose calls this immediately after WriteArtifact,
-// under the same lock-store sentinel, and that call is what makes the orphan
-// half of the check gate safe to state without exceptions: the honest
-// propose-then-lock window is now the only unlocked artifact whose record is
-// RELEASED, so internal/check can refuse every unlocked artifact under a
-// STANDING record (see check.RuleBuildOrderLedgerOrphan). Before that wiring
-// existed the gate had to guess, by re-signing the artifact as if its locked
-// flag were still true — which caught a lone flag flip and missed a flip made
-// together with a content edit.
-func ReleaseBuildOrderApproval(store *Store, module string, ap Approval) bool {
-	if store == nil {
-		return false
-	}
-	key := BuildOrderLedgerKey(module)
-	r, ok := store.Record(key)
-	if !ok || r.Subject != SubjectBuildOrder {
-		return false
-	}
-	r.ReleasedAt = nowFunc().UTC().Format(time.RFC3339Nano)
-	r.ReleasedBy = ap.Actor
-	r.ReleasedReason = ap.Reason
-	store.putRecord(key, r)
-	return true
-}
-
 // preLedgerCrossingSteps is the recovery every pre-ledger refusal names, and it
 // is the same words everywhere so the write path, the audit gate and the CLI
 // hint cannot send a reader three different ways.
-//
-// The ORDER is not cosmetic. "build-order propose" requires the module still
-// FULLY LOCKED, so re-proposing has to happen BEFORE any claim is unlocked; the
-// other order deadlocks — unlock a claim first and propose then refuses, leaving
-// the locked order with no way to be released.
 const preLedgerCrossingSteps = `Cross onto the ledger by emptying the project of everything that predates it, in this order:
-  1. dossierx build-order propose --module <m>
-     for every module whose build order is locked. Do this FIRST: propose requires the module still fully locked, so unlocking a claim first leaves the order stuck.
-  2. dossierx claim unlock <id> --reason "..."
+  1. dossierx claim unlock <id> --reason "..."
      for every locked claim. Unlock is gateless and always has been.
-  3. dossierx claim lock <id> --reason "..."
-     re-lock only what you still stand behind. The FIRST of these crosses the store onto the ledger and records a real approval — locking is what says a human approved these exact bytes.
-  4. dossierx build-order propose --module <m>
-     dossierx build-order lock --module <m> --reason "..."
-     for every module that is fully locked again. A build order exists only over a fully locked module, so a module you re-locked only partially has nothing to propose yet — run this pair for it on the day its last claim locks.`
+  2. dossierx claim lock <id> --reason "..."
+     re-lock only what you still stand behind. The FIRST of these crosses the store onto the ledger and records a real approval — locking is what says a human approved these exact bytes.`
 
 // preLedgerRefusal composes the refusal ErrPreLedgerUnadopted carries, naming
-// how much of the project still predates the ledger so a reader can see which
-// half of the count is keeping them out.
-func preLedgerRefusal(lockedClaims, lockedBuildOrders int) error {
-	return fmt.Errorf("%w: this project's lock store predates the lock ledger, so nothing locked here has an approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more. %d locked claim(s) and %d locked build order(s) still predate it.\n\n%s",
-		ErrPreLedgerUnadopted, lockedClaims, lockedBuildOrders, preLedgerCrossingSteps)
+// how much of the project still predates the ledger.
+func preLedgerRefusal(lockedClaims int) error {
+	return fmt.Errorf("%w: this project's lock store predates the lock ledger, so nothing locked here has an approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more. %d locked claim(s) still predate it.\n\n%s",
+		ErrPreLedgerUnadopted, lockedClaims, preLedgerCrossingSteps)
 }
 
 // CrossPreLedger is the ONE place in this build that raises a store's schema
@@ -732,20 +651,17 @@ func preLedgerRefusal(lockedClaims, lockedBuildOrders int) error {
 //     claim-derived is written. The count is stable for the duration anyway,
 //     because every command that changes a claim's LOCK STATUS takes the
 //     lock-store sentinel this caller is already holding (claim lock, claim
-//     unlock, claim reaudit --confirm, build-order lock).
+//     unlock, claim reaudit --confirm).
 //   - The digest store's own sentinel is taken and released INSIDE this call, as
 //     a leaf, holding nothing else while acquiring it. That is not a new
 //     pattern: Store.Save already does exactly this through
-//     ensureCommentDigestStore, and that path is already reached from
-//     `build-order lock`, which holds the lock-store sentinel and never the
-//     claims sentinel.
+//     ensureCommentDigestStore.
 //
-// Requiring the claims sentinel here would be a DEADLOCK, not a nicety. The
-// project-wide order is claims -> lock-store -> flag-store. `build-order lock`
-// takes only the lock-store sentinel and says so in its own comment; a claims
-// acquisition inside that held lock inverts the order against `claim lock` and
+// Requiring the claims sentinel here could also DEADLOCK: the project-wide
+// order is claims -> lock-store -> flag-store, so a claims acquisition inside a
+// held lock-store sentinel inverts that order against `claim lock` and
 // `claim reaudit --confirm`, both of which take claims FIRST.
-func CrossPreLedger(s *Store, claims []model.Claim, lockedBuildOrders int) error {
+func CrossPreLedger(s *Store, claims []model.Claim) error {
 	if s == nil || !s.PreLedger() {
 		return nil
 	}
@@ -757,8 +673,8 @@ func CrossPreLedger(s *Store, claims []model.Claim, lockedBuildOrders int) error
 		return nil
 	}
 	lockedClaims := countLocked(claims)
-	if lockedClaims+lockedBuildOrders > 0 {
-		return preLedgerRefusal(lockedClaims, lockedBuildOrders)
+	if lockedClaims > 0 {
+		return preLedgerRefusal(lockedClaims)
 	}
 
 	digestStoreExisted := digestStorePresentBeside(s.path)
@@ -774,7 +690,7 @@ func CrossPreLedger(s *Store, claims []model.Claim, lockedBuildOrders int) error
 	// locked_at and the per-dependent baselines are what engineLocked reads as
 	// "this engine locked that claim" (audit.go). In a pre-ledger project they
 	// were written by a build that had no ledger, and the pre-ledger predicate is
-	// what stops RuleLockLedgerDeleted and Lock's ErrLedgerRecordDeleted from
+	// what stops RuleLockLedgerDeleted and the evaluator's ledger_record_deleted from
 	// reading them as a record somebody DELETED. The stamp removes that
 	// suppression while leaving the evidence behind — so without this, the very
 	// first re-lock of step 3 is refused as a deleted record, and `check` accuses
@@ -1174,7 +1090,7 @@ func commentDigestReleased(id, recorded string, store *Store) bool {
 // silent in both directions: a row on Issues with no panel under it, or a
 // panel for a claim nothing reported. The conditions, in order, are that the
 // claim is a draft (Unlock is the only path that makes it one), that the
-// record is a CLAIM approval rather than a build order, that it was released
+// record is a CLAIM approval, that it was released
 // rather than deleted (Released() is what separates an honest unlock from
 // lock-ledger-orphan tampering), that a hash was signed at all, and that the
 // signed hash no longer matches the claim in front of us.

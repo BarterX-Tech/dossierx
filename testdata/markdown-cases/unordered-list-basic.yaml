@@ -7,6 +7,6 @@ body: |
   - First item
   - Second item
   - Third item
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

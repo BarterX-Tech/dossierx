@@ -15,6 +15,6 @@ body: |
   ```
   https://example.com/in-a-fence
   ```
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - every place bare-URL recognition must stay off

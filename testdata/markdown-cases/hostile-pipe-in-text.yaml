@@ -5,6 +5,6 @@ status: draft
 layout: card
 body: |
   Text with pipes | like this | in it.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests pipe character handling

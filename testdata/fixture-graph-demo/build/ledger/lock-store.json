@@ -1,285 +1,426 @@
 {
   "version": 2,
+  "policy_version": 1,
+  "policy_migrated_at": "2026-09-25T18:57:03.210647029Z",
+  "policy_migration_reason": "lock policy 0 retired in v0.7.21; this store now records local approval v1",
   "hashes": {
-    "cli.behavior.dry-run-writes-nothing": {
-      "cli.schema.json-envelope": "d609d22e6fa2fda47f36e621721c610c239068612529a34a63016ca59981c259"
-    },
-    "cli.behavior.exit-codes": {
-      "cli.schema.json-envelope": "d609d22e6fa2fda47f36e621721c610c239068612529a34a63016ca59981c259"
-    },
     "cli.contract.check-noun": {
-      "cli.behavior.exit-codes": "4640b46fd00d92df26ab273579d29d02b99ad89bb2e861dbf343260c1e6e309c",
-      "engine.contract.check-is-fail-fast": "abb5dc475fd45c1d9a93ebb40c007fbf7ec6f87cb8767fcd33d76d958f77aff8"
+      "cli.internals.exit-codes": "9963e969b9667ae62309a8a9dae7b74ddc3aaa685c91ab4b756fd07c7537e0f7",
+      "engine.contract.check-is-fail-fast": "d25fab282878c8a1aa161484299ad8ae0a0bbd60affbb3395a2d28d2abf1c704"
     },
     "cli.contract.noun-list-is-fixed": {
-      "cli.schema.json-envelope": "d609d22e6fa2fda47f36e621721c610c239068612529a34a63016ca59981c259",
-      "engine.decision.single-source-of-truth": "794901ab5bd2114f2dd1a294c42ea6f8e55baa87ac6bf38738100530ca319903"
+      "cli.internals.json-envelope": "f905ead4b60bfc20a1b806e4abc7b5455e2169cd4bd0e401034bf49509353a7c",
+      "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9"
     },
-    "cli.schema.json-envelope": {
-      "engine.schema.claim-shape": "8cf5b91757cf75aff65bbdf3e29278eb2b2cda1459316306a70b48c62ba061bd"
+    "cli.internals.dry-run-writes-nothing": {
+      "cli.internals.json-envelope": "f905ead4b60bfc20a1b806e4abc7b5455e2169cd4bd0e401034bf49509353a7c"
     },
-    "engine.behavior.catalog-groups-by-facet": {
-      "engine.schema.catalog-shape": "66c91f821078d458bbee2db3421753f2a5d6e85100ce152e2979e74c16940009"
+    "cli.internals.exit-codes": {
+      "cli.internals.json-envelope": "f905ead4b60bfc20a1b806e4abc7b5455e2169cd4bd0e401034bf49509353a7c"
     },
-    "engine.behavior.lint-runs-before-catalog": {
-      "engine.schema.edge-kinds": "8248cdad6b5f8cbae00105e219f2057ef52abca3dd25f581d0be386e799bdf55"
-    },
-    "engine.behavior.loader-walks-claims-dir": {
-      "engine.schema.claim-shape": "8cf5b91757cf75aff65bbdf3e29278eb2b2cda1459316306a70b48c62ba061bd"
+    "cli.internals.json-envelope": {
+      "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "engine.contract.build-is-pure": {
-      "engine.schema.catalog-shape": "66c91f821078d458bbee2db3421753f2a5d6e85100ce152e2979e74c16940009"
+      "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
+    },
+    "engine.contract.catalog-shape": {
+      "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "engine.contract.check-is-fail-fast": {
-      "engine.behavior.lint-runs-before-catalog": "51637186194a318b639c18714d2e4973fbfe438d61941017bc593e9cff9fac9e"
+      "engine.internals.lint-runs-before-catalog": "17ab9fafc69e45ef82c43f5ec649d66f7e774530fb05cbdec8feb1d9a271d064"
     },
-    "engine.schema.catalog-shape": {
-      "engine.schema.claim-shape": "8cf5b91757cf75aff65bbdf3e29278eb2b2cda1459316306a70b48c62ba061bd"
+    "engine.contract.claim-shape": {
+      "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9"
     },
-    "engine.schema.claim-shape": {
-      "engine.decision.single-source-of-truth": "794901ab5bd2114f2dd1a294c42ea6f8e55baa87ac6bf38738100530ca319903"
+    "engine.internals.catalog-groups-by-facet": {
+      "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
     },
-    "engine.schema.edge-kinds": {
-      "engine.schema.claim-shape": "8cf5b91757cf75aff65bbdf3e29278eb2b2cda1459316306a70b48c62ba061bd"
+    "engine.internals.determinism-suite": {
+      "engine.contract.build-is-pure": "9d807bce57bcbdffe047d4d641fe3f5dd996c2a7881c71021cfca71e02e17074"
     },
-    "engine.verification.determinism-suite": {
-      "engine.contract.build-is-pure": "abfe655b92711701ae20971e09f5a3eaaff6305cc08740969828f216cd958ca6"
+    "engine.internals.edge-kinds": {
+      "engine.contract.claim-shape": "bf57b7c8f586ec6192c9e161d69e019a57d40f0c0d10501190bca11f5a0dc8ec"
     },
-    "lock.behavior.lock-gates": {
-      "lock.schema.ledger-record": "f0831a3504ccb1e934d3cc41443c5ef73fb14c5e90ca0af82c917cfe785ad072"
+    "engine.internals.lint-runs-before-catalog": {
+      "engine.internals.edge-kinds": "90b3707affe0eab22f9fca4d3d4082d469c3ba6d98b09af1794497d2978f0e08"
     },
-    "lock.behavior.unlock-keeps-the-record": {
-      "lock.schema.ledger-record": "f0831a3504ccb1e934d3cc41443c5ef73fb14c5e90ca0af82c917cfe785ad072"
+    "engine.internals.loader-walks-claims-dir": {
+      "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
     },
     "lock.contract.lock-is-human-approved": {
-      "engine.decision.single-source-of-truth": "794901ab5bd2114f2dd1a294c42ea6f8e55baa87ac6bf38738100530ca319903",
-      "lock.behavior.lock-gates": "1458583db5782f3c5ce85a9e819295913d434c3ce4f7deea08a2832cdbfb6f43"
+      "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9",
+      "lock.internals.lock-gates": "de73ce50129ba4363dbe53299b6ec801164fd125cda9d0b8ee8caa72cb54d2a6"
     },
-    "lock.schema.ledger-record": {
-      "lock.schema.lock-store": "d2297cd0e6875a291911e91ed3216e8de34ab1b956f3dafc2f290cf1413fb6ce"
+    "lock.internals.ledger-record": {
+      "lock.internals.lock-store": "6413f679218b582f0d5e4dc489ab83ce63ac1d420f2546cd4194228b94f36965"
     },
-    "lock.schema.lock-store": {
-      "engine.schema.claim-shape": "8cf5b91757cf75aff65bbdf3e29278eb2b2cda1459316306a70b48c62ba061bd"
+    "lock.internals.lock-gates": {
+      "lock.internals.ledger-record": "d8cace006489c2f15ea8e54ac1a2e284bea07a5706419eabaa411c1b5468f1a0"
     },
-    "viewer.behavior.pane-is-inert-until-opened": {
-      "viewer.schema.payload-shape": "bf03edf588dcca1faa156b9e3daba09e9238d58cce503388b5361e0d667e4a67"
+    "lock.internals.lock-store": {
+      "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
+    },
+    "lock.internals.unlock-keeps-the-record": {
+      "lock.internals.ledger-record": "d8cace006489c2f15ea8e54ac1a2e284bea07a5706419eabaa411c1b5468f1a0"
     },
     "viewer.contract.no-network-at-runtime": {
-      "viewer.schema.payload-shape": "bf03edf588dcca1faa156b9e3daba09e9238d58cce503388b5361e0d667e4a67"
+      "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
     },
     "viewer.contract.render-is-pure": {
-      "engine.contract.build-is-pure": "abfe655b92711701ae20971e09f5a3eaaff6305cc08740969828f216cd958ca6",
-      "engine.decision.single-source-of-truth": "794901ab5bd2114f2dd1a294c42ea6f8e55baa87ac6bf38738100530ca319903"
+      "engine.contract.build-is-pure": "9d807bce57bcbdffe047d4d641fe3f5dd996c2a7881c71021cfca71e02e17074",
+      "engine.contract.single-source-of-truth": "eb2b70ad9a7c06b784c60514c5bdd9a1e9baef9a4c13c0b5343ef82acd69c9b9"
     },
-    "viewer.schema.node-fields": {
-      "viewer.schema.payload-shape": "bf03edf588dcca1faa156b9e3daba09e9238d58cce503388b5361e0d667e4a67"
+    "viewer.internals.node-fields": {
+      "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
     },
-    "viewer.schema.payload-shape": {
-      "engine.schema.catalog-shape": "66c91f821078d458bbee2db3421753f2a5d6e85100ce152e2979e74c16940009"
+    "viewer.internals.pane-is-inert-until-opened": {
+      "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
+    },
+    "viewer.internals.payload-shape": {
+      "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
+    }
+  },
+  "receipts": {
+    "engine.internals.edge-kinds": {
+      "engine.contract.claim-shape": {
+        "hash": "bf57b7c8f586ec6192c9e161d69e019a57d40f0c0d10501190bca11f5a0dc8ec",
+        "content": {
+          "ID": "engine.contract.claim-shape",
+          "Facet": "contract",
+          "Module": "engine",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": true,
+            "Reason": "fixture claim; nothing to rest on",
+            "IDs": null
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/home/claude/dossierx/testdata/fixture-graph-demo/claims/engine-claim-shape.yaml"
+        }
+      }
     }
   },
   "locked_at": {
-    "cli.behavior.dry-run-writes-nothing": "2026-08-05T15:19:18.973833Z",
-    "cli.behavior.exit-codes": "2026-08-05T15:19:18.988807Z",
     "cli.contract.check-noun": "2026-08-05T15:19:19.043108Z",
     "cli.contract.noun-list-is-fixed": "2026-08-05T15:19:19.057264Z",
-    "cli.schema.json-envelope": "2026-08-05T15:19:18.958395Z",
-    "engine.behavior.catalog-groups-by-facet": "2026-08-05T15:19:19.084751Z",
-    "engine.behavior.lint-runs-before-catalog": "2026-08-05T15:19:19.01665Z",
-    "engine.behavior.loader-walks-claims-dir": "2026-08-05T15:19:19.099119Z",
+    "cli.internals.dry-run-writes-nothing": "2026-08-05T15:19:18.973833Z",
+    "cli.internals.exit-codes": "2026-08-05T15:19:18.988807Z",
+    "cli.internals.json-envelope": "2026-08-05T15:19:18.958395Z",
     "engine.contract.build-is-pure": "2026-08-05T15:19:19.111116Z",
+    "engine.contract.catalog-shape": "2026-08-05T15:19:19.071194Z",
     "engine.contract.check-is-fail-fast": "2026-08-05T15:19:19.029619Z",
-    "engine.decision.single-source-of-truth": "2026-08-05T15:19:19.125483Z",
-    "engine.schema.catalog-shape": "2026-08-05T15:19:19.071194Z",
-    "engine.schema.claim-shape": "2026-08-05T15:19:18.937118Z",
-    "engine.schema.edge-kinds": "2026-08-05T15:19:19.002938Z",
-    "engine.verification.determinism-suite": "2026-08-05T15:19:19.138847Z",
-    "lock.behavior.lock-gates": "2026-08-05T15:19:19.177732Z",
-    "lock.behavior.unlock-keeps-the-record": "2026-08-05T15:19:19.192698Z",
+    "engine.contract.claim-shape": "2026-09-24T15:48:39.596218Z",
+    "engine.contract.single-source-of-truth": "2026-09-24T15:48:39.475264Z",
+    "engine.internals.catalog-groups-by-facet": "2026-08-05T15:19:19.084751Z",
+    "engine.internals.determinism-suite": "2026-08-05T15:19:19.138847Z",
+    "engine.internals.edge-kinds": "2026-09-25T18:57:08.873343266Z",
+    "engine.internals.lint-runs-before-catalog": "2026-08-05T15:19:19.01665Z",
+    "engine.internals.loader-walks-claims-dir": "2026-08-05T15:19:19.099119Z",
     "lock.contract.lock-is-human-approved": "2026-08-05T15:19:19.206352Z",
-    "lock.schema.ledger-record": "2026-08-05T15:19:19.16562Z",
-    "lock.schema.lock-store": "2026-08-05T15:19:19.151975Z",
-    "viewer.behavior.pane-is-inert-until-opened": "2026-08-05T15:19:19.234743Z",
+    "lock.internals.ledger-record": "2026-08-05T15:19:19.16562Z",
+    "lock.internals.lock-gates": "2026-08-05T15:19:19.177732Z",
+    "lock.internals.lock-store": "2026-08-05T15:19:19.151975Z",
+    "lock.internals.unlock-keeps-the-record": "2026-08-05T15:19:19.192698Z",
     "viewer.contract.no-network-at-runtime": "2026-08-05T15:19:19.246484Z",
     "viewer.contract.render-is-pure": "2026-08-05T15:19:19.260149Z",
-    "viewer.schema.node-fields": "2026-08-05T15:19:19.274603Z",
-    "viewer.schema.payload-shape": "2026-08-05T15:19:19.220142Z"
+    "viewer.internals.node-fields": "2026-08-05T15:19:19.274603Z",
+    "viewer.internals.pane-is-inert-until-opened": "2026-08-05T15:19:19.234743Z",
+    "viewer.internals.payload-shape": "2026-08-05T15:19:19.220142Z"
   },
   "ledger": {
-    "cli.behavior.dry-run-writes-nothing": {
-      "subject": "claim",
-      "hash": "a02c43debbaf2610fc2959baee6eb3032e3a6fa633b3b07570ec1b882f298cd6",
-      "at": "2026-08-05T15:19:18.973846Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "cli.behavior.exit-codes": {
-      "subject": "claim",
-      "hash": "497ce5adbd4de97999fa65666d4311b03f5c49a53616c9a231977f1e0f4f5838",
-      "at": "2026-08-05T15:19:18.988819Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
     "cli.contract.check-noun": {
       "subject": "claim",
-      "hash": "26cbf64e005d8934648bb00f19f213d24da66f3c352cae0cf078978ff8f279ca",
+      "hash": "c0a1690d8264ce256cd901b6285ab80e91e8e5381ee93f19a04b44668d975ff2",
       "at": "2026-08-05T15:19:19.043119Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "cli.contract.noun-list-is-fixed": {
       "subject": "claim",
-      "hash": "750adc4d1384870614140613f5da01faf514c7627bd31f2690491f0ec1d95010",
+      "hash": "e595f2b54783abc0f8e491f38c2eb4554cc3836bee59a95876739c2b5295712b",
       "at": "2026-08-05T15:19:19.057276Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "cli.schema.json-envelope": {
+    "cli.internals.dry-run-writes-nothing": {
       "subject": "claim",
-      "hash": "5c28c92e2b869c8bad115fa4f3c7337f25414fabca1c2588531ce21a710e4377",
+      "hash": "3e6017d84e5704a00487d96cb709511de2df7dd046daa05a146e3e4c24df9f84",
+      "at": "2026-08-05T15:19:18.973846Z",
+      "actor": "dossierx-fixture",
+      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+    },
+    "cli.internals.exit-codes": {
+      "subject": "claim",
+      "hash": "eeb49d256a137323099e232f242b6ca66bef0950f95ff7fdb957a4813ee04771",
+      "at": "2026-08-05T15:19:18.988819Z",
+      "actor": "dossierx-fixture",
+      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+    },
+    "cli.internals.json-envelope": {
+      "subject": "claim",
+      "hash": "a4ee6bc1b742ef166bfebd47a54410760bed2ae264d53786d084eef145b299e5",
       "at": "2026-08-05T15:19:18.958411Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "engine.behavior.catalog-groups-by-facet": {
-      "subject": "claim",
-      "hash": "2886eb387d5ca98ec59283d8d6725ad85077a2f3571ad511f95928c6d9082a97",
-      "at": "2026-08-05T15:19:19.084761Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "engine.behavior.lint-runs-before-catalog": {
-      "subject": "claim",
-      "hash": "32af2f23705c566f40632dad7ea429e74eeb77e84b09051a934ef8832ad8a604",
-      "at": "2026-08-05T15:19:19.016663Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "engine.behavior.loader-walks-claims-dir": {
-      "subject": "claim",
-      "hash": "a7409acdd9e49b567e9562f110fa4ca58e73a853f95fe710da23aa26f50e60f7",
-      "at": "2026-08-05T15:19:19.099129Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.contract.build-is-pure": {
       "subject": "claim",
-      "hash": "4bb74d0c47f5f54eae3eca2ba62902988b09bc4b7113182db8cf85ddb9371439",
+      "hash": "5a884fa224a8c3ea127132434a59b0761d72a5967ec78fc4925715a967c67cb2",
       "at": "2026-08-05T15:19:19.111127Z",
+      "actor": "dossierx-fixture",
+      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+    },
+    "engine.contract.catalog-shape": {
+      "subject": "claim",
+      "hash": "4929af7e71ff74bf4556c7ff0cb5a0422d79e133a34c424f5eab06f0ca8c4396",
+      "at": "2026-08-05T15:19:19.071206Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "engine.contract.check-is-fail-fast": {
       "subject": "claim",
-      "hash": "8dc6849b16d76be9cb81758784c6a76a07adc2f9a13493b797c21f158e0e8cb1",
+      "hash": "3b64ead0fbf839083de99e2fab8380826ec3e9ff3f1ba88b5031fe9a4e3be5e2",
       "at": "2026-08-05T15:19:19.02963Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "engine.decision.single-source-of-truth": {
+    "engine.contract.claim-shape": {
       "subject": "claim",
-      "hash": "f1174493babeba691090090945d355bc232f1ca44ee03f4f9bbf5b44c014a98a",
-      "at": "2026-08-05T15:19:19.125494Z",
+      "hash": "e4efd17059fa33f5a9988950aa26611ca45a5392e882e9a3b14b023945b2091c",
+      "at": "2026-09-24T15:48:39.59623Z",
+      "actor": "nitinkhanna",
+      "reason": "fixture re-lock: rests_on is required",
+      "content": {
+        "ID": "engine.contract.claim-shape",
+        "Facet": "contract",
+        "Module": "engine",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": true,
+          "Reason": "fixture claim; nothing to rest on",
+          "IDs": null
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-graph-demo/claims/engine-claim-shape.yaml"
+      }
+    },
+    "engine.contract.single-source-of-truth": {
+      "subject": "claim",
+      "hash": "54e7d83b941db38568b0af5f98cd20f679c765b22358b014bc7f3540e94768fc",
+      "at": "2026-09-24T15:48:39.475276Z",
+      "actor": "nitinkhanna",
+      "reason": "fixture re-lock: rests_on is required",
+      "content": {
+        "ID": "engine.contract.single-source-of-truth",
+        "Facet": "contract",
+        "Module": "engine",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "Every fact in this project has exactly one home. A second place that states the same thing is a second place to keep correct, and the two will disagree.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": true,
+          "Reason": "fixture claim; nothing to rest on",
+          "IDs": null
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": true,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-graph-demo/claims/engine-single-source-of-truth.yaml"
+      }
+    },
+    "engine.internals.catalog-groups-by-facet": {
+      "subject": "claim",
+      "hash": "958e92f2e1b008b4e0c139fec5ae43279c9c38d62d7730d7f6ea720974bf7499",
+      "at": "2026-08-05T15:19:19.084761Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "engine.schema.catalog-shape": {
+    "engine.internals.determinism-suite": {
       "subject": "claim",
-      "hash": "c7ff413bbeba8c2db940162a5b2fd5f3745e0caae2b8b1ab3299a42e2ed0df12",
-      "at": "2026-08-05T15:19:19.071206Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "engine.schema.claim-shape": {
-      "subject": "claim",
-      "hash": "4f4bd471fe06b6cf30bfb21ddc61e60fd0a2a6ac326f065fc515c2262de23869",
-      "at": "2026-08-05T15:19:18.937151Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "engine.schema.edge-kinds": {
-      "subject": "claim",
-      "hash": "c294b1bd5515cb9f801ce9b1e02660bf640fbc70e95f76a5ec296ddc9e692978",
-      "at": "2026-08-05T15:19:19.002949Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
-    },
-    "engine.verification.determinism-suite": {
-      "subject": "claim",
-      "hash": "2b8f53f64c4780b8d1d49d33c9fca944c9d49b9817949f377465951af0592e40",
+      "hash": "34a620604e8e94ee7a6cfd1c3da60d7fd61900c45fcdbb7e18ab07f9502d52d0",
       "at": "2026-08-05T15:19:19.138857Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "lock.behavior.lock-gates": {
+    "engine.internals.edge-kinds": {
       "subject": "claim",
-      "hash": "6bc89af0dabd047a122d422927c77c2a5dcb1290cc8d6e028d2c15323b3c9d32",
-      "at": "2026-08-05T15:19:19.177742Z",
+      "hash": "1232767802afbb15e88107bc3a3ab4a1c5cbb11cd252abc3d74699eb7f741397",
+      "at": "2026-09-25T18:57:08.873371408Z",
+      "actor": "unknown",
+      "reason": "release cleanup for v0.7.21: the body described the retired doctrine edge (governed_by); corrected to the one edge kind, rests_on",
+      "content": {
+        "ID": "engine.internals.edge-kinds",
+        "Facet": "internals",
+        "Module": "engine",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "There is one edge kind and no more: a claim rests on another. A claim that rests on nothing states that absence, with a reason, instead of leaving the edge out.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "engine.contract.claim-shape"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/home/claude/dossierx/testdata/fixture-graph-demo/claims/engine-edge-kinds.yaml"
+      }
+    },
+    "engine.internals.lint-runs-before-catalog": {
+      "subject": "claim",
+      "hash": "b4d0b153ffe79e2c1b27ba788fd16acaf8531f19cdf2637e0240ac10246befe3",
+      "at": "2026-08-05T15:19:19.016663Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "lock.behavior.unlock-keeps-the-record": {
+    "engine.internals.loader-walks-claims-dir": {
       "subject": "claim",
-      "hash": "6fac12dc0feafef7c53321b355e9fb9a311d69204ccf40c0ee5522d9e685b756",
-      "at": "2026-08-05T15:19:19.192708Z",
+      "hash": "26163c030e142a6d780ccc3dd2054db1813cac64806d873cb7e350be6b4beade",
+      "at": "2026-08-05T15:19:19.099129Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "lock.contract.lock-is-human-approved": {
       "subject": "claim",
-      "hash": "adce00d88ab88412f2df84b9603768b218d4fc26fba6a5d8fa6547b8d7886576",
+      "hash": "f425ab9feb2ba8159665d1a24840338ae105ec97da69364d13e34297bc178499",
       "at": "2026-08-05T15:19:19.206362Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "lock.schema.ledger-record": {
+    "lock.internals.ledger-record": {
       "subject": "claim",
-      "hash": "67aed46a70a10c0eac515e556a693ed7620c1709c1ec7f6677788ffe74e1501f",
+      "hash": "dd41308bd76b40bddc799304f40deef2eb8f2544e4b30f8854f8012b009d4630",
       "at": "2026-08-05T15:19:19.165631Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "lock.schema.lock-store": {
+    "lock.internals.lock-gates": {
       "subject": "claim",
-      "hash": "5da9dc0212eed844ea48efedd6983fbeb67371d37e335e3883dfcc1d17fcc0f8",
+      "hash": "d3eda1d20c3c8e272f3f4013b32f212ff7c3420d922eaa9946430131cad62701",
+      "at": "2026-08-05T15:19:19.177742Z",
+      "actor": "dossierx-fixture",
+      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+    },
+    "lock.internals.lock-store": {
+      "subject": "claim",
+      "hash": "7346a51c9f3061eb2c79fa3cd0c6fb2657dcbaed0af25562d1d2b00876adbe98",
       "at": "2026-08-05T15:19:19.151985Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "viewer.behavior.pane-is-inert-until-opened": {
+    "lock.internals.unlock-keeps-the-record": {
       "subject": "claim",
-      "hash": "ec0f84b4dd52a50ce01b2a5eecf6b17a4cb19a550bbbec290d141cf1f02dfd84",
-      "at": "2026-08-05T15:19:19.234754Z",
+      "hash": "161640c11fac689abb5ff69ea3bdd3fb03f281c98bc0a2adc99ae7cfe24032b8",
+      "at": "2026-08-05T15:19:19.192708Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.contract.no-network-at-runtime": {
       "subject": "claim",
-      "hash": "fbf19acda85ce9bdb58c0ff14b2999807a565213e0471f7bf610c4bf0ff893da",
+      "hash": "b959b646b49d9d8cb80ddb0416f1faa1f1bb7d120d7b1b72bd0eaf4884e53268",
       "at": "2026-08-05T15:19:19.246495Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
     "viewer.contract.render-is-pure": {
       "subject": "claim",
-      "hash": "72ce27ab0130c561962e024ae053ec6d53536f0f4858d653f8f05c8b823af08f",
+      "hash": "02f111cee993e34250f7ef512a1907095dbedb199894bf7a2ee25304e171093b",
       "at": "2026-08-05T15:19:19.260161Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "viewer.schema.node-fields": {
+    "viewer.internals.node-fields": {
       "subject": "claim",
-      "hash": "e5ff39957e42bf60245f4db22fb398dbcb7e4e6b1949ae86406f9a94b01de8f0",
+      "hash": "b63ff75c4e3b352c1d6dacafc300da49404bf9814b88caaa9bedc0c63cb1cc78",
       "at": "2026-08-05T15:19:19.274614Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     },
-    "viewer.schema.payload-shape": {
+    "viewer.internals.pane-is-inert-until-opened": {
       "subject": "claim",
-      "hash": "d1bd63353a445320be0d715ceede46e1c06a1d9f969a3ca2bf0eba299136b735",
+      "hash": "fe5291cbedc3cb314886051d49d0ba78c8f2f50eacaeec72c20439f171e9eba2",
+      "at": "2026-08-05T15:19:19.234754Z",
+      "actor": "dossierx-fixture",
+      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+    },
+    "viewer.internals.payload-shape": {
+      "subject": "claim",
+      "hash": "89303cd3925817498573459abd5bfd0448f0589d4aba7ddd9bd73f7e7c693ef4",
       "at": "2026-08-05T15:19:19.220152Z",
       "actor": "dossierx-fixture",
       "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
     }
+  },
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-24T15:48:25.190108Z"
   }
 }

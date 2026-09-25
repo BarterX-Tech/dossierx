@@ -3,7 +3,6 @@ package render
 import (
 	"errors"
 	"fmt"
-	"html/template"
 	"runtime"
 	"strings"
 	"testing"
@@ -129,55 +128,6 @@ func TestRenderBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	if bounded != legacy {
 		t.Fatal("bounded render changed under-limit viewer bytes")
 	}
-}
-
-func TestBuildOrderTabDataWithBudget_CapsFragmentAndPayloadAccumulation(t *testing.T) {
-	const module = "widget"
-	cfg := buildOrderTestConfig(t, module)
-	claims := buildOrderTestClaims(module)
-	lockBuildOrder(t, cfg, claims, module)
-	cat, err := catalog.Build(claims, cfg)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	generatedAt := time.Unix(1_700_000_000, 0).UTC()
-
-	t.Run("module fragment", func(t *testing.T) {
-		largeTemplate := template.Must(template.New("large").Parse(strings.Repeat("x", 2<<20)))
-		tab, payload, err := buildOrderTabDataWithBudget(cat, cfg, largeTemplate, generatedAt, &renderByteBudget{remaining: 1 << 20})
-		if !errors.Is(err, ErrIntermediateCapacityExceeded) {
-			t.Fatalf("buildOrderTabDataWithBudget error = %v, want intermediate capacity exceeded", err)
-		}
-		if len(tab.Modules) != 0 || payload != "" {
-			t.Fatal("build-order fragment overflow returned partial tab data")
-		}
-	})
-
-	t.Run("JSON payload", func(t *testing.T) {
-		loaded, err := loadTemplates("")
-		if err != nil {
-			t.Fatalf("loadTemplates: %v", err)
-		}
-		tab, payload, err := buildOrderTabData(cat, cfg, loaded.buildOrder, generatedAt)
-		if err != nil {
-			t.Fatalf("buildOrderTabData: %v", err)
-		}
-		retainedBytes := len(payload)
-		for _, module := range tab.Modules {
-			retainedBytes += len(module.HTML)
-		}
-		if retainedBytes < 2 {
-			t.Fatalf("unexpected retained build-order size %d", retainedBytes)
-		}
-
-		gotTab, gotPayload, err := buildOrderTabDataWithBudget(cat, cfg, loaded.buildOrder, generatedAt, &renderByteBudget{remaining: retainedBytes - 1})
-		if !errors.Is(err, ErrIntermediateCapacityExceeded) {
-			t.Fatalf("buildOrderTabDataWithBudget error = %v, want intermediate payload capacity exceeded", err)
-		}
-		if len(gotTab.Modules) != 0 || gotPayload != "" {
-			t.Fatal("build-order payload overflow returned partial tab data")
-		}
-	})
 }
 
 func TestBuildTrackSectionsWithBudget_ManyTrackRowsStayContained(t *testing.T) {

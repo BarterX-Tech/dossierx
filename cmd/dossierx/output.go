@@ -20,7 +20,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -93,7 +92,7 @@ func markTextOnly(cmd *cobra.Command) *cobra.Command {
 }
 
 // commandPath is the envelope's "command" field: the command path with the
-// binary name stripped, e.g. "build-order lock". A skill correlates a response
+// binary name stripped, e.g. "claim lock". A skill correlates a response
 // with the call it made by this string, so it must name the SUBcommand, not the
 // binary every response would share.
 func commandPath(cmd *cobra.Command) string {
@@ -190,8 +189,8 @@ func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error
 }
 
 // requireSubcommand is the RunE every NOUN carries — the command groups (claim,
-// comment, build-order, track, skills) that exist only to hold leaves and do no work of
-// their own.
+// comment, constitution, manifest, track, skills) that exist only to hold leaves and do
+// no work of their own.
 //
 // Without it, cobra's default for a parent with no Run/RunE is to print its help
 // text and return nil. That breaks the machine contract in both halves at once:
@@ -443,8 +442,6 @@ func errorForCLI(err error) *cliout.Error {
 		code = cliout.CodeCommentDigestDrift
 	case errors.Is(err, loader.ErrClaimFileChanged):
 		code = cliout.CodeClaimFileChanged
-	case errors.Is(err, buildorder.ErrNotProposed):
-		code = cliout.CodeNotProposed
 	case errors.Is(err, implink.ErrNoArtifact):
 		code = cliout.CodeNoArtifact
 	case errors.Is(err, errWrongState):
@@ -457,20 +454,6 @@ func errorForCLI(err error) *cliout.Error {
 		// needs one documented sequence run once. See
 		// cliout.CodePreLedgerUnadopted.
 		code = cliout.CodePreLedgerUnadopted
-	case errors.Is(err, lock.ErrLedgerRecordDeleted):
-		// A lock refused because the claim's ledger record was DELETED. It is
-		// integrity_failed rather than a code of its own because it is the same
-		// condition `check` reports as lock-ledger-deleted and it has that
-		// family's recovery exactly: restore from version control, never
-		// re-lock. Giving it a bespoke code would invite an agent to look for a
-		// bespoke fix, and the whole point of this refusal is that there is no
-		// command that clears it.
-		code = cliout.CodeIntegrityFailed
-	case errors.Is(err, lock.ErrCommentDigestUnrecorded):
-		// Same family, same reason as ErrLedgerRecordDeleted above: `check`
-		// reports this state as comment-digest-unrecorded, and its recovery is
-		// version control rather than any command.
-		code = cliout.CodeIntegrityFailed
 	}
 	return &cliout.Error{Code: code, Message: err.Error()}
 }
@@ -500,16 +483,15 @@ func exitStatusFor(err error) int {
 	return 1
 }
 
-// requireReason enforces --reason on the four verbs that change what the
-// project treats as approved: claim lock, claim unlock, claim reaudit
-// --confirm, and build-order lock.
+// requireReason enforces --reason on the verbs that change what the project
+// treats as approved: claim lock, claim unlock, claim reaudit --confirm, claim
+// recover-approved-content and constitution lock.
 //
 // verb is the full command path, and it names the failure. The HINT is looked up
 // in reasonInvocations rather than composed from verb, because composing it was
-// wrong for all four callers: this used to print `run: dossierx <verb> --reason
-// "…"`, and `claim lock`, `claim unlock` and `claim reaudit` are each declared
-// cobra.ExactArgs(1) while `build-order lock` refuses without --module, so every
-// one of those four lines named an invocation that exits non-zero before it could
+// wrong: this used to print `run: dossierx <verb> --reason "…"`, and `claim
+// lock`, `claim unlock` and `claim reaudit` are each declared cobra.ExactArgs(1),
+// so each of those lines named an invocation that exits non-zero before it could
 // reach the missing --reason. internal/cliout's WithHint doc says a hint is "a
 // literal next command to run"; a shape the reader has to repair first is not one.
 //
@@ -528,17 +510,16 @@ func exitStatusFor(err error) int {
 // `dossierx claim lock --reason "…"` exits 1 on the missing positional id long
 // before --reason is looked at.
 //
-// The four keys are the four call sites, and there are no others:
-// cmd/dossierx/main.go's claim lock, claim unlock and claim reaudit, and
-// cmd/dossierx/build_order.go's build-order lock. Adding a fifth caller without
-// adding its entry here is handled below rather than left to print the old wrong
-// shape.
+// The keys are cmd/dossierx/main.go's claim lock, claim unlock and claim
+// reaudit, and cmd/dossierx/claim_recover.go's claim recover-approved-content.
+// constitution.go's constitution lock is the fifth caller and has no entry, so
+// it gets no hint; a caller without an entry is handled below rather than left
+// to print the old wrong shape.
 var reasonInvocations = map[string]string{
 	"claim lock":                     "dossierx claim lock <id>",
 	"claim recover-approved-content": "dossierx claim recover-approved-content",
 	"claim unlock":                   "dossierx claim unlock <id>",
 	"claim reaudit":                  "dossierx claim reaudit <id> --confirm",
-	"build-order lock":               "dossierx build-order lock --module <module>",
 }
 
 func requireReason(verb, reason string) error {

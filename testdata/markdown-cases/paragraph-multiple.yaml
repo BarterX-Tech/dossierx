@@ -8,6 +8,6 @@ body: |
 
   Second paragraph with more text.
   This line continues the second paragraph.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

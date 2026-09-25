@@ -45,12 +45,20 @@ func blWrite(t *testing.T, path, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if filepath.Base(path) == "project.config.yaml" {
+		seedManifestsFromConfigBody(t, filepath.Dir(path), body)
+	}
 }
 
 // blLegacyProject is icWriteFixtureProject plus the legacy root files.
 func blLegacyProject(t *testing.T, root string, legacy map[string]string) (cfgPath string) {
 	t.Helper()
 	cfgPath, _ = icWriteFixtureProject(t, root, "widget")
+	// The fixture's roof lock wrote the NEW layout's stores; a legacy project
+	// has only the root files below, so drop build/ before placing them.
+	if err := os.RemoveAll(filepath.Join(root, "build")); err != nil {
+		t.Fatalf("drop new-layout build dir: %v", err)
+	}
 	for rel, body := range legacy {
 		blWrite(t, filepath.Join(root, filepath.FromSlash(rel)), body)
 	}
@@ -85,7 +93,7 @@ func blRecoveryLines(msg string) []string {
 }
 
 // TestLegacyLayoutRefusesEveryVerbWithGitMvLines: a legacy root layout
-// refuses check, check --validate, claim list and build-order status alike
+// refuses check, check --validate and claim list alike
 // with layout_legacy, the exact lines from (d), and under --format json one
 // details.moves entry per printed move line in the same order — and then
 // EXECUTES the printed block in a committed copy and requires exit 0.
@@ -111,7 +119,6 @@ func TestLegacyLayoutRefusesEveryVerbWithGitMvLines(t *testing.T) {
 		{"check"},
 		{"check", "--validate"},
 		{"claim", "list"},
-		{"build-order", "status", "--module", "widget"},
 	} {
 		t.Run(strings.Join(verb, " "), func(t *testing.T) {
 			env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, verb...)...)
@@ -189,6 +196,10 @@ func TestLegacyLayoutRefusesEveryVerbWithGitMvLines(t *testing.T) {
 				t.Fatalf("expected %q in git status, got:\n%s", w, status)
 			}
 		}
+		// The migrated store predates the roof (NIT-6): a real legacy project
+		// meets the roof gate next, and locks its constitution once. Then
+		// the tree is clean.
+		lockFixtureConstitution(t, cfgPath)
 		env, _, err = execCLIJSON(t, "--config", cfgPath, "check", "--validate")
 		if err != nil || !env.OK {
 			t.Fatalf("after the block, check --validate must pass: err=%v env=%+v", err, env)
@@ -197,7 +208,7 @@ func TestLegacyLayoutRefusesEveryVerbWithGitMvLines(t *testing.T) {
 		if err != nil {
 			t.Fatalf("re-encode data: %v", err)
 		}
-		for _, prefix := range []string{"lock-ledger-", "comment-digest-", "build-order-"} {
+		for _, prefix := range []string{"lock-ledger-", "comment-digest-"} {
 			if strings.Contains(string(data), `"rule":"`+prefix) {
 				t.Fatalf("no ledger finding may follow a pure move (signatures hash bytes, not paths): %s", data)
 			}
@@ -278,7 +289,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 
 	t.Run("lint red still reports the finding", func(t *testing.T) {
 		root, cfgPath := blIgnoredRepo(t)
-		blWrite(t, filepath.Join(root, "claims", "dangling.yaml"), "id: widget.contract.dangling\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  rests on nothing that exists.\ngoverned_by:\n  type: none\n  reason: fixture\nrests_on:\n  - widget.contract.nowhere\n")
+		blWrite(t, filepath.Join(root, "claims", "dangling.yaml"), "id: widget.contract.dangling\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  rests on nothing that exists.\nrests_on:\n  - widget.contract.nowhere\n")
 		env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
 		if err == nil || env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
 			t.Fatalf("expected lint_failed, got err=%v env=%+v", err, env)
@@ -335,7 +346,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 			}
 		}
 		// And claim lock succeeds with the warning in its envelope.
-		blWrite(t, filepath.Join(root, "claims", "two.yaml"), "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  a second claim.\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "two.yaml"), "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  a second claim.\nrests_on:\n  none: true\n  reason: fixture\n")
 		env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved")
 		if err != nil || !env.OK {
 			t.Fatalf("claim lock over a force-added ledger must succeed, got err=%v env=%+v", err, env)
@@ -363,8 +374,8 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		t.Helper()
 		root = t.TempDir()
 		cfgPath, _ = icWriteFixtureProject(t, root, "widget")
-		blWrite(t, filepath.Join(root, "claims", "one.yaml"), "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  one.\ngoverned_by:\n  type: none\n  reason: fixture\n")
-		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: orientation\nbody: |\n  fixture claim.\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "one.yaml"), "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  one.\nrests_on:\n  none: true\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nembodiment:\n  mode: none\n  reason: context only, no code\nbody: |\n  fixture claim.\nrests_on:\n  none: true\n  reason: fixture\n")
 		blGitInit(t, root)
 		for _, id := range []string{"widget.contract.one", "widget.contract.overview"} {
 			if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
@@ -373,9 +384,6 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		}
 		if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "flag", "widget.contract.one", "--claim-says", "one", "--now-does", "two", "--reason", "changed"); err != nil {
 			t.Fatalf("seed flag: %v", err)
-		}
-		if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-			t.Fatalf("seed propose: %v", err)
 		}
 		blWrite(t, filepath.Join(root, ".gitignore"), "build/\n")
 		return root, cfgPath
@@ -393,7 +401,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	}
 	t.Run("claim lock", func(t *testing.T) {
 		root, cfgPath := seed(t)
-		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  three.\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  three.\nrests_on:\n  none: true\n  reason: fixture\n")
 		refusedAndBlocked(t, cfgPath,
 			[]string{"claim", "lock", "widget.contract.three", "--dry-run", "--reason", "ok"},
 			[]string{"claim", "lock", "widget.contract.three", "--reason", "ok"})
@@ -410,16 +418,10 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 			[]string{"claim", "reaudit", "widget.contract.one", "--dry-run", "--reason", "ok"},
 			[]string{"claim", "reaudit", "widget.contract.one", "--confirm", "--reason", "ok"})
 	})
-	t.Run("build-order lock", func(t *testing.T) {
-		_, cfgPath := seed(t)
-		refusedAndBlocked(t, cfgPath,
-			[]string{"build-order", "lock", "--module", "widget", "--dry-run", "--reason", "ok"},
-			[]string{"build-order", "lock", "--module", "widget", "--reason", "ok"})
-	})
 	t.Run("batch claim lock preview and refusal before the sentinel", func(t *testing.T) {
 		root, cfgPath := seed(t)
 		for _, id := range []string{"a", "b"} {
-			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  "+id+".\ngoverned_by:\n  type: none\n  reason: fixture\n")
+			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  "+id+".\nrests_on:\n  none: true\n  reason: fixture\n")
 		}
 		dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--dry-run", "--reason", "ok")
 		if !dr.Blocked || !hasPrecondition(dr, "stores_are_tracked", false) {
@@ -459,9 +461,10 @@ func TestCLI_CheckReportsGitignoreCheckWhenTheGuardCannotApply(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(repo, "claims"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		blWrite(t, filepath.Join(repo, "project.config.yaml"), "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
-		blWrite(t, filepath.Join(repo, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  fixture.\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		blWrite(t, filepath.Join(repo, "project.config.yaml"), "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nbuild_dir: ../out\n")
+		blWrite(t, filepath.Join(repo, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: |\n  fixture.\nrests_on:\n  none: true\n  reason: fixture\n")
 		blGitInit(t, repo)
+		lockFixtureConstitution(t, filepath.Join(repo, "project.config.yaml"))
 		env, _, err := execCLIJSON(t, "--config", filepath.Join(repo, "project.config.yaml"), "check", "--validate")
 		if err != nil {
 			t.Fatalf("check --validate: %v", err)
@@ -549,6 +552,7 @@ func TestCheckOnAFreshProjectWritesOnlyUnderBuild(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(root, "project.config.yaml")
+	lockFixtureConstitution(t, cfgPath)
 	env, stderr, err := execCLIJSON(t, "--config", cfgPath, "check")
 	if err != nil || !env.OK {
 		t.Fatalf("check on a fresh project must exit 0: err=%v env=%+v stderr=%s", err, env, stderr)
@@ -580,182 +584,12 @@ func TestCheckOnAFreshProjectWritesOnlyUnderBuild(t *testing.T) {
 		"build/.gitignore",
 		"build/catalog/catalog.json",
 		"build/ledger/comment-digest.json",
+		"build/ledger/lock-store.json",
 		"build/viewer/index.html",
+		"constitution.yaml",
 		"project.config.yaml",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("files outside claims/ after check:\n got %q\nwant %q", got, want)
-	}
-}
-
-// TestCheckWarnsWhenAStyleOverrideIsInForceBesideALockedOrder pins the one
-// render-side warning check carries: the Build order tab's diagram colours,
-// its overflow rules and its sticky module strip live in the engine's
-// style.css (the .bo-* rules), and a project that overrides style.css and
-// locks an order would otherwise get mermaid's base-theme lavender nodes and
-// a page that scrolls sideways with nothing said. Present on check with the
-// override and a locked order; absent once the artifact is gone or the file
-// removed. Render has no warnings channel, which is why it is check's line.
-func TestCheckWarnsWhenAStyleOverrideIsInForceBesideALockedOrder(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _, _ := restsOnPairProject(t, root)
-	cfgRaw, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	if err := os.WriteFile(cfgPath, append(cfgRaw, []byte("viewer:\n  template_overrides: tmpl\n")...), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	tmplDir := filepath.Join(root, "tmpl")
-	if err := os.MkdirAll(tmplDir, 0o755); err != nil {
-		t.Fatalf("mkdir tmpl: %v", err)
-	}
-	stylePath := filepath.Join(tmplDir, "style.css")
-	if err := os.WriteFile(stylePath, []byte("body { color: black; }\n"), 0o644); err != nil {
-		t.Fatalf("write style.css: %v", err)
-	}
-	const want = "viewer.template_overrides/style.css is in force: the Build order tab's diagram colours and overflow rules come from the engine's style.css and are not supplied by the override; copy the .bo-* rules into it"
-	hasWarning := func(env cliout.Envelope) bool {
-		for _, w := range env.Warnings {
-			if w == want {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Override in force, no locked order: no warning.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check before any lock: %v", err)
-	}
-	if hasWarning(env) {
-		t.Fatalf("the warning must not fire with no locked order; got %v", env.Warnings)
-	}
-
-	for _, id := range []string{"widget.contract.alpha", "widget.contract.beta"} {
-		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
-			t.Fatalf("claim lock %s: %v", id, err)
-		}
-	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("build-order propose: %v", err)
-	}
-	// Proposed but not locked: still no warning (the tab renders only locked
-	// orders, so there is nothing the override could be mis-painting yet).
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check after propose: %v", err)
-	}
-	if hasWarning(env) {
-		t.Fatalf("the warning must not fire for a proposed-but-unlocked order; got %v", env.Warnings)
-	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("build-order lock: %v", err)
-	}
-
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check with a locked order and a style override: %v", err)
-	}
-	if !env.OK || !hasWarning(env) {
-		t.Fatalf("expected ok:true with the style-override warning, got ok=%v warnings=%v", env.OK, env.Warnings)
-	}
-	// --validate carries it too: the override is in force for whatever the
-	// next check renders, and a CI reader learns it here.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check", "--validate")
-	if err != nil {
-		t.Fatalf("check --validate: %v", err)
-	}
-	if !hasWarning(env) {
-		t.Fatalf("expected the warning on --validate, got %v", env.Warnings)
-	}
-
-	// The file removed: absent.
-	if err := os.Remove(stylePath); err != nil {
-		t.Fatalf("remove style.css: %v", err)
-	}
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check after removing the override: %v", err)
-	}
-	if hasWarning(env) {
-		t.Fatalf("the warning must vanish with the override file; got %v", env.Warnings)
-	}
-}
-
-// TestCheckWarnsAndStillRendersWhenALockedOrderCannotBeDrawn pins the
-// per-module half of the Build order tab's load-error policy at the CLI: a
-// locked artifact whose stored phase name the engine does not know (a
-// hand-edit; the ledger's content-drift finding fails the run for it) costs
-// that module its tab entry and ONE warnings[] line naming the module and
-// the reason — the viewer is still written, with the module's ordinary
-// claims in it. Before this, the same edit failed Render and no viewer was
-// written for any module.
-func TestCheckWarnsAndStillRendersWhenALockedOrderCannotBeDrawn(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _, _ := restsOnPairProject(t, root)
-	for _, id := range []string{"widget.contract.alpha", "widget.contract.beta"} {
-		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
-			t.Fatalf("claim lock %s: %v", id, err)
-		}
-	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("build-order propose: %v", err)
-	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("build-order lock: %v", err)
-	}
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check with a sound locked order: %v", err)
-	}
-	for _, w := range env.Warnings {
-		if strings.Contains(w, "is not drawn in the viewer's Build order tab") {
-			t.Fatalf("a sound locked order must not warn; got %q", w)
-		}
-	}
-	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	before, err := os.ReadFile(viewer)
-	if err != nil {
-		t.Fatalf("read viewer: %v", err)
-	}
-	if !strings.Contains(string(before), `id="dossierx-build-order-widget"`) {
-		t.Fatal("the sound order must render widget's tab entry")
-	}
-
-	artifactPath := filepath.Join(root, "build", "build-order", "widget.json")
-	tamper(t, artifactPath, `"phase": "schema"`, `"phase": "Schema"`)
-	if err := os.Remove(viewer); err != nil {
-		t.Fatalf("remove viewer: %v", err)
-	}
-
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err == nil {
-		t.Fatal("check must fail on the hand-edited artifact (content drift)")
-	}
-	var found []string
-	for _, w := range env.Warnings {
-		if strings.Contains(w, "is not drawn in the viewer's Build order tab") {
-			found = append(found, w)
-		}
-	}
-	if len(found) != 1 {
-		t.Fatalf("warnings[] carries %d build-order lines, want exactly 1: %v", len(found), env.Warnings)
-	}
-	for _, want := range []string{`build order for module "widget"`, `"Schema" is not a phase`, "dossierx build-order propose --module widget"} {
-		if !strings.Contains(found[0], want) {
-			t.Errorf("warning %q lacks %q", found[0], want)
-		}
-	}
-	after, err := os.ReadFile(viewer)
-	if err != nil {
-		t.Fatalf("the viewer must still be written when one module's order cannot be drawn: %v", err)
-	}
-	if strings.Contains(string(after), `id="dossierx-build-order-widget"`) {
-		t.Error("the undrawable order must not appear in the tab")
-	}
-	if !strings.Contains(string(after), "widget.contract.alpha") {
-		t.Error("widget's ordinary claims must still render")
 	}
 }

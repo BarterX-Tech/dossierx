@@ -5,6 +5,6 @@ status: draft
 layout: card
 body: |
   This [link](//evil.example.com/foo) is a network-relative path.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests network path rejection

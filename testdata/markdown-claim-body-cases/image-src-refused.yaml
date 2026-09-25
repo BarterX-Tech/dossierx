@@ -23,7 +23,6 @@ body: |
   ![wrong extension](assets/notes.txt)
 
   ![query](assets/x.png?v=1)
-
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: "markdown renderer test fixture - every refusal shape, rendering as escaped literal text and never as a broken <img> or an anchor"

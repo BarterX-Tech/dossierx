@@ -1,15 +1,15 @@
-// Package lint defines the Lint interface every one of the 38 lints
-// (dangling, ambiguous, id-shape, rest-on-locked, cycle, governed-cycle,
-// mixed-cycle, self-edge, governed-required,
-// mirror-mismatch, mirror-unanchored, mirror-reciprocal, rows-shape,
-// supersede, raw-html-scope, roll-up, validated-on-missing, body-edge-hint,
-// code-orphan, orphan, layout-shape-mismatch, build-role-required-for-locked,
-// orientation-note-order, orientation-note-shape, status-shape,
+// Package lint defines the Lint interface every one of the 36 lints
+// (dangling, ambiguous, id-shape, cycle, self-edge,
+// rests-on-required, rests-on-target,
+// rows-shape,
+// supersede, raw-html-scope, roll-up, body-edge-hint,
+// code-orphan, orphan, layout-shape-mismatch, kind-shape, status-shape,
 // comments-unresolved, markdown-sanity, asset-scope,
 // source-shape, source-ref-undefined, source-ref-unused,
 // source-external-unanchored, source-internal-drift,
 // track-shape, track-unknown, track-multi-owner, track-empty,
-// track-unowned) implements,
+// track-unowned, summary-required, summary-oversize, body-oversize,
+// module-claim-cap, module-manifest, shared-context-budget) implements,
 // one per file
 // in this package. This file only defines the contract and the registry;
 // individual lint implementations are a later phase and Registry starts
@@ -37,7 +37,7 @@ import (
 // here (internal/lint, where Finding actually lives — not internal/model)
 // by the second lint-implementation phase because the "orphan" lint is
 // spec'd as a WARNING, not an error, and callers (dossierx lint's exit code,
-// "dossierx lock"'s lint gate in internal/lock.Lock) need a way to tell the two
+// "dossierx lock"'s lint gate in internal/lock.EvaluateSet) need a way to tell the two
 // apart. Any lint that doesn't set Severity explicitly reports as
 // SeverityError, preserving the original all-findings-are-failures
 // behavior for the lints that came before this field existed.
@@ -85,7 +85,7 @@ func RunAll(claims []model.Claim, cfg *config.Config) []Finding {
 	// emit as Severity:"". Filling every empty Severity with SeverityError
 	// at this single choke point makes that implicit contract explicit for
 	// every downstream consumer (text/JSON reporting, exit-code counting in
-	// reportLintFindings and internal/lock.Lock) without touching each lint.
+	// reportLintFindings and internal/lock.EvaluateSet) without touching each lint.
 	for i := range findings {
 		if findings[i].Severity == "" {
 			findings[i].Severity = SeverityError

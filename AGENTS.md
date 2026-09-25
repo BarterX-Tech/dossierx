@@ -10,7 +10,7 @@
 
 ## Required Skills & Workflows
 - **Graph Safety ([canonical graph-safety skill](.agents/skills/dossierx-graph-safety/SKILL.md))**:
-  - Mandatory before planning, implementing, reviewing, or releasing changes to graph semantics, traversal, state transitions, or projection output (dependency readiness, claim locking, review propagation, build-order graphs, catalog, viewer data).
+  - Mandatory before planning, implementing, reviewing, or releasing changes to graph semantics, traversal, state transitions, or projection output (dependency readiness, claim locking, review propagation, catalog, viewer data).
   - Prose-only spelling or formatting edits that leave behavior unchanged do not require a graph-safety proof.
   - Separate proof obligation: normal unit-test passes, prior release results, or proposed bounded algorithms do not prove non-degradation.
   - Maintainer-only overlay: do not add to consumer skill bundle under `skills/` or `skills/embed.go`.
@@ -27,6 +27,9 @@
 - **Skill Gaps ([skill-gap-review](.agents/skills/skill-gap-review/SKILL.md))**:
   - Use when asked which skills are missing or what a collection of past work should teach.
   - Identify and prioritize evidence-backed improvements before creating more skills.
+- **Test Audit ([test-audit](.agents/skills/test-audit/SKILL.md))**:
+  - Mandatory when writing, changing, or reviewing tests: answer its four authoring-gate questions before adding a test.
+  - Use its audit and campaign modes when asked to sweep tests; report findings before editing.
 - **Local Client Verification ([dossierx-local-client](.agents/skills/dossierx-local-client/SKILL.md))**:
   - Use when the user supplies a local DossierX checkout or worktree and asks to verify its unreleased source against a client project.
   - Keep the client's released Go tool pin unchanged; the skill owns the temporary local-source override and proof boundary.

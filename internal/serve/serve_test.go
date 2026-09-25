@@ -16,27 +16,29 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution/constitutiontest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 
 const testVersion = "v-test-1.2.3"
 
-const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 10000\n"
 
 // draftClaim is a lint-clean draft card used as the target for "add" (adding a
 // thread to a draft never sets review_pending, so the file stays predictable).
 func draftClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 // lockedClaimWithOpenThread is a locked card carrying one open thread c-aaaaaa,
 // the target for reply/resolve/reopen/edit/delete in the admission matrix.
 func lockedClaimWithOpenThread(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"rests_on:\n  none: true\n  reason: fixture\n" +
 		"comments:\n" +
 		"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n"
 }
@@ -76,6 +78,7 @@ func startServerWatch(t *testing.T, cfgBody string, files map[string]string, pol
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+	armConstitution(t, cfg)
 	srv = serve.New(cfg, testVersion)
 	if poll > 0 {
 		srv.SetWatchIntervals(poll, debounce)
@@ -129,6 +132,11 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+	if filepath.Base(path) == "project.config.yaml" {
+		if err := manifesttest.SeedMinimalFromConfigYAML(filepath.Dir(path), []byte(content)); err != nil {
+			t.Fatalf("seed module manifests: %v", err)
+		}
 	}
 }
 
@@ -550,10 +558,9 @@ func TestPing_Shape(t *testing.T) {
 // =============================================================================
 
 func TestRoot_RendersBrokenProjectsNotBlank(t *testing.T) {
-	danglingRef := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	danglingRef := "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  rests on a ghost.\n" +
-		"rests_on:\n  - widget.contract.ghost\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  - widget.contract.ghost\n"
 
 	dupA := draftClaim("widget.contract.dup")
 	dupB := draftClaim("widget.contract.dup") // same id in a second file
@@ -854,9 +861,9 @@ func assertErrorCode(t *testing.T, data []byte, want string) {
 
 func TestListComments_OpenFilter(t *testing.T) {
 	files := map[string]string{
-		"claims/mixed.yaml": "id: widget.contract.mixed\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/mixed.yaml": "id: widget.contract.mixed\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  mixed threads.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-open01\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: still open\n    edited: false\n" +
 			"  - id: c-done01\n    status: resolved\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: all done\n    edited: false\n    resolved_by: human\n    resolved_at: \"2026-07-24T11:00:00Z\"\n",
@@ -885,4 +892,14 @@ func countComments(t *testing.T, data []byte) int {
 		t.Fatalf("decode comments: %v (body=%s)", err, data)
 	}
 	return len(out.Comments)
+}
+
+// armConstitution gives a served fixture the locked roof the gate demands
+// (NIT-26): a minimal constitution.yaml beside the config (unless the fixture
+// wrote its own) and the lock-store record `constitution lock` would leave.
+func armConstitution(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	if err := constitutiontest.Arm(cfg); err != nil {
+		t.Fatal(err)
+	}
 }

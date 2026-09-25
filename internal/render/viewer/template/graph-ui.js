@@ -110,30 +110,24 @@
   // overridable from it — a threshold a reader cannot see and cannot cross is
   // a threshold nobody can report as wrong.
   var AUTO_COLLAPSE_ABOVE = 300;
-  // 13 §4.2 / §6 — the board's own vocabulary for the three relation chips
-  // and the legend's edge rows: "Depends on", "Says the same thing",
-  // "Governed by". Re-pinned from this file's original "Rests On" /
-  // "Mirrors" / "Governed By" — display text only; data-dxg-type keeps the
-  // engine's own rests_on / mirrors / governed_by everywhere a test or a
+  // 13 §4.2 / §6 — the board's own vocabulary for the relation chips
+  // and the legend's edge rows: "Depends on". Display text only;
+  // data-dxg-type keeps the engine's own rests_on everywhere a test or a
   // deep link keys off it.
   var RELATIONSHIP_LABELS = {
     rests_on: 'Depends on',
-    mirrors: 'Says the same thing',
-    governed_by: 'Governed by',
   };
 
   // 13 §4.5/§6, RETRY fix list item 12: the LEGEND's edge marks use their
   // own lower-case vocabulary, deliberately different from the RELATIONS
   // chips' Title Case above — "the two vocabularies differ on purpose".
-  // LEGEND_EDGE_ORDER is "governed by" first, per §4.5's own "Legend order,
-  // exactly"; filtered against graph-core.js's EDGE_TYPES at render time so
-  // an edge type the engine stops declaring cannot leave a stale row.
+  // LEGEND_EDGE_ORDER is filtered against graph-core.js's EDGE_TYPES at
+  // render time so an edge type the engine stops declaring cannot leave a
+  // stale row.
   var LEGEND_EDGE_LABELS = {
-    governed_by: 'governed by',
     rests_on: 'depends on',
-    mirrors: 'says the same thing',
   };
-  var LEGEND_EDGE_ORDER = ['governed_by', 'rests_on', 'mirrors'];
+  var LEGEND_EDGE_ORDER = ['rests_on'];
 
   // ---- Labels ------------------------------------------------------------
   //
@@ -182,13 +176,12 @@
   var FALLBACK_COLOR = '#808080';
 
   // The overlay select's contents, in the frozen order: isolated, cycles,
-  // GOVERNANCE, review, comments, status. The ids are graph-core.js's closed
-  // OVERLAYS set; the text is display only and nothing keys off it.
+  // review, comments, status. The ids are graph-core.js's closed OVERLAYS
+  // set; the text is display only and nothing keys off it.
   var OVERLAY_OPTIONS = [
     ['none', 'none'],
     ['isolated', 'isolated & weakly linked'],
     ['cycles', 'dependency cycles'],
-    ['governance', 'governance'],
     ['review', 'review pending'],
     ['comments', 'open comment threads'],
     ['status', 'draft vs locked']
@@ -213,7 +206,6 @@
     open_threads: 'open comment threads',
     sink_group: 'group nothing links into',
     orphan_group: 'group with no outside edges',
-    missing_build_phase: 'module missing a build phase',
     density_outlier: 'facet thin in one module'
   };
 
@@ -924,38 +916,20 @@
   // carry project data into the document.
   //
   // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
-  // The strip used to name governed_by alone, which left rests_on and mirrors
-  // as two lines a reader had to tell apart by an arrowhead — and an
-  // arrowhead is precisely the part of an edge that disappears under the node
-  // it points at. So mirrors is now DASHED on the canvas as well as
-  // headless, and each sample here draws exactly what the canvas draws:
+  // Each sample here draws exactly what the canvas draws:
   //
   //   rests_on     solid, one chevron
-  //   mirrors      dashed, no chevron — reciprocal by design, so a head on
-  //                either end would be a direction it does not have
-  //   governed_by  the reserved hue, curved, two chevrons
   var EDGE_SAMPLES = {
     rests_on:
       '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
       '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
       '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-      '</svg>',
-    mirrors:
-      '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
-      '<path d="M1 6 L31 6" fill="none" stroke="currentColor" stroke-width="1.6" ' +
-      'stroke-dasharray="5 3"/>' +
-      '</svg>',
-    governed_by:
-      '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
-      '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
-      '<path d="M20 2.5 L25 6 L20 9.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
-      '<path d="M24.5 2.5 L29.5 6 L24.5 9.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
       '</svg>'
   };
 
   // MARK_SAMPLES — the node-state markers, in the MARKS group beside the
-  // three edge samples above (13 §4.5: "governed by · depends on · has an
-  // open comment thread · selected"). Same rule as EDGE_SAMPLES: constant
+  // edge sample above (13 §4.5: "depends on · has an open comment thread
+  // · selected"). Same rule as EDGE_SAMPLES: constant
   // strings, no interpolation, so a payload value can never reach one.
   // Colours are var()s rather than currentColor because each mark is
   // genuinely two-tone (a facet fill plus a state-coloured ring) and the two
@@ -998,10 +972,6 @@
     ],
     cycles: [
       ['cycle', 'in a dependency cycle'],
-      ['dim', 'everything else']
-    ],
-    governance: [
-      ['governed', 'governs, or is governed'],
       ['dim', 'everything else']
     ],
     review: [
@@ -1181,7 +1151,7 @@
   function appendEdgeRows(list) {
     var c = core();
     var known = {};
-    var engineTypes = c ? c.EDGE_TYPES : ['rests_on', 'mirrors', 'governed_by'];
+    var engineTypes = c ? c.EDGE_TYPES : ['rests_on'];
     for (var k = 0; k < engineTypes.length; k++) {
       known[str(engineTypes[k])] = true;
     }
@@ -1191,11 +1161,7 @@
       if (!known[type] || !EDGE_SAMPLES[type]) {
         continue;
       }
-      var cls = 'dxg-legend-item dxg-legend-item--edge';
-      if (type === 'governed_by') {
-        cls += ' dxg-legend-item--governed';
-      }
-      var item = h('li', cls);
+      var item = h('li', 'dxg-legend-item dxg-legend-item--edge');
       item.setAttribute('data-dxg-edge', type);
       var sample = h('span', 'dxg-legend-edge');
       sample.innerHTML = EDGE_SAMPLES[type];
@@ -1890,8 +1856,7 @@
     var deg = c.degrees(nodeIds, drawEdgesList);
 
     // Claim-level edges with BOTH endpoints in scope. The structural rules
-    // and the governance channels run over these, never over the aggregated
-    // set.
+    // run over these, never over the aggregated set.
     var inScopeEdges = [];
     for (i = 0; i < payload.edges.length; i++) {
       var e = payload.edges[i] || {};
@@ -1957,30 +1922,6 @@
       }
     }
 
-    // Governance: the wedge set and the overlay's scope, both scope-relative
-    // and both mapped through the representatives.
-    var governorIds = Object.create(null);
-    var govList = c.governors(inScopeEdges);
-    for (i = 0; i < govList.length; i++) {
-      governorIds[govList[i]] = true;
-    }
-    var govScope = c.governanceScope(inScopeEdges);
-    var govNodeIds = Object.create(null);
-    for (i = 0; i < govScope.nodeIds.length; i++) {
-      govNodeIds[str(reps.repByClaim[govScope.nodeIds[i]])] = true;
-    }
-    var govEdgeKeys = Object.create(null);
-    for (i = 0; i < inScopeEdges.length; i++) {
-      if (str(inScopeEdges[i].type) !== 'governed_by') {
-        continue;
-      }
-      govEdgeKeys[
-        str(reps.repByClaim[str(inScopeEdges[i].from)]) +
-          '|governed_by|' +
-          str(reps.repByClaim[str(inScopeEdges[i].to)])
-      ] = true;
-    }
-
     // Which facets each drawn node stands for. A claim stands for its own; a
     // collapsed group stands for every facet among its members. This is what
     // lets a legend hover dim non-members even at module granularity.
@@ -2024,9 +1965,6 @@
       cycleIds: cycleIds,
       selfIds: selfIds,
       redEdgeKeys: redEdgeKeys,
-      governorIds: governorIds,
-      govNodeIds: govNodeIds,
-      govEdgeKeys: govEdgeKeys,
       facetsOfNode: facetsOfNode,
       trackOwnerIds: trackOwnerIds,
       repByClaim: reps.repByClaim,
@@ -2159,7 +2097,6 @@
       other: cssVar(cs, '--dxg-facet-other'),
       cycle: cssVar(cs, '--dxg-cycle'),
       halo: cssVar(cs, '--dxg-halo'),
-      governed: cssVar(cs, '--dxg-governed'),
       ink: cssVar(cs, '--ink'),
       muted: cssVar(cs, '--muted'),
       faint: cssVar(cs, '--faint'),
@@ -2362,7 +2299,6 @@
         ctx.stroke();
       }
 
-      drawWedge(ctx, pal, node, pos, r);
       drawTrackOwner(ctx, pal, node, pos, r);
     }
     ctx.globalAlpha = 1;
@@ -2373,8 +2309,8 @@
   // own silhouette.
   //
   // WHY THE INSIDE. Everything a node already wears is drawn outside its rim —
-  // the moat at r+1, the halo at r+4, the selection ring at r+7, the
-  // governance wedge from r+1 outward. The interior is the one region no
+  // the moat at r+1, the halo at r+4, the selection ring at r+7. The
+  // interior is the one region no
   // channel has claimed, so a marker there cannot be confused with any of them
   // and cannot be crowded out by them on a node wearing three at once.
   //
@@ -2737,9 +2673,8 @@
   // The result was a pane that looked broken in dark mode and was not:
   // sampling the integration screenshots, the DOM chrome had correctly
   // switched to the near-black --paper while the canvas still held its
-  // light-mode pixels — the light facet ramp painted at full alpha, and the
-  // light governance crimson at 55% alpha compositing against the new dark
-  // backdrop as a muted maroon. The node rings were the LIGHT --ink, a near
+  // light-mode pixels — the light facet ramp painted at full alpha against
+  // the new dark backdrop. The node rings were the LIGHT --ink, a near
   // black, which is why overlapping discs merged: their outlines had become
   // invisible against the background.
   //
@@ -2853,34 +2788,19 @@
   }
 
   // ------------------------------------------------------------------
-  // Edges, and governed_by's FOUR channels (design section 4.3)
+  // Edges (design section 4.3)
   // ------------------------------------------------------------------
   //
-  // governed_by is the relation a reader most often needs to isolate, and the
-  // one an edge style alone cannot make findable. Telling a dashed line from
-  // a dotted line at a glance across a 400-node canvas means tracing lines,
-  // which is precisely the work this pane exists to remove. So it gets four
-  // INDEPENDENT channels, any one of which answers the question on its own:
-  //
-  //   1. STROKE   --dxg-governed, a hue reserved outside the 20-slot facet
-  //               ramp, so a governance edge can never be mistaken for a
-  //               facet's colour at any facet count in either theme
-  //   2. ROUTING  a quadratic curve, where rests_on and mirrors are straight
-  //   3. HEAD     a double chevron, where rests_on has one and mirrors none
-  //   4. MARKER   a wedge on the node that GOVERNS — the target of the edge —
-  //               so a doctrine claim is findable without following any line
-  //
-  // Plus the governance overlay (below), because four channels still leave a
-  // reader answering "what does this doctrine actually reach?" by tracing.
-
-  var CURVE_BOW = 0.16; // how far a governance curve bows off the chord
+  // One relation is drawn: rests_on, a straight muted line with no
+  // arrowhead (the head lives in the legend's "depends on" mark alone, 13
+  // §4.4). A cycle edge is the one exception and takes the cycle hue. The
+  // retired governed_by edge (NIT-29) carried its own hue, a curved route, a
+  // double chevron and a wedge marker on the governor; all four channels
+  // left with it.
 
   function edgeStroke(edge, pal) {
     if (scene.redEdgeKeys[edgeKeyOf(edge)]) {
       return pal.cycle;
-    }
-    if (edge.type === 'governed_by') {
-      return pal.governed;
     }
     return pal.muted;
   }
@@ -2908,81 +2828,31 @@
       if (!a || !b) {
         continue;
       }
-      var curved = edge.type === 'governed_by';
       ctx.globalAlpha = edgeAlpha(edge);
       ctx.strokeStyle = edgeStroke(edge, pal);
       ctx.lineWidth = Math.min(3, 0.9 + Math.log(1 + num(edge.weight)) * 0.5);
-      // A governance edge is drawn heavier as well as curved and coloured.
-      // In dark mode the neutral edge grey lightens far enough that hue alone
-      // stopped carrying the difference, and weight is the one channel that
-      // does not depend on how a theme resolved its tokens.
-      if (curved) {
-        ctx.lineWidth += 0.6;
-      }
-      // MIRRORS IS DASHED, and that is the fix for two lines that used to be
-      // tellable apart only by an arrowhead — the part of an edge most often
-      // hidden under the node it points at. mirrors is reciprocal by design
-      // and so carries no head at all; a dash says "no direction here" at a
-      // glance and at any zoom, without pretending the relation has one.
-      ctx.setLineDash(edge.type === 'mirrors' ? [5, 3] : []);
+      ctx.setLineDash([]);
 
       var target = scene.byId[edge.to];
       var stop = target ? radiusOf(target) + 2 : 4;
-      var ctrl = controlPoint(a, b, curved);
-      var end = shorten(ctrl, b, stop);
+      var end = shorten(a, b, stop);
 
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
-      if (curved) {
-        ctx.quadraticCurveTo(ctrl.x, ctrl.y, end.x, end.y);
-      } else {
-        ctx.lineTo(end.x, end.y);
-      }
+      ctx.lineTo(end.x, end.y);
       ctx.stroke();
 
-      // Arrowheads. mirrors gets none: it is reciprocal by design, and a head
-      // on both ends of a symmetric relation is noise. RETRY fix list item
-      // 19 / 13 §4.4: a dependency edge is a plain 1.4px line on the
-      // canvas — no chevron — the same way the spec's own edge table
-      // carries no arrowhead column for either edge kind. The head lives in
-      // the legend's "depends on" mark alone. Governance keeps its double
-      // chevron: it is what makes a governance arc readable as directed at
-      // a glance among hundreds of undirected-looking dependency lines, and
-      // the spec (13 §4.4, node A7D-0) already draws it on every board this
-      // lane verifies; a broader removal was raised as a dispute rather
-      // than made unilaterally here.
-      var angle = Math.atan2(end.y - ctrl.y, end.x - ctrl.x);
-      if (edge.type === 'governed_by') {
-        chevron(ctx, end.x, end.y, angle, 6.5);
-        chevron(
-          ctx,
-          end.x - Math.cos(angle) * 4.5,
-          end.y - Math.sin(angle) * 4.5,
-          angle,
-          6.5
-        );
-      }
+      // No arrowhead. RETRY fix list item 19 / 13 §4.4: a dependency edge is
+      // a plain 1.4px line on the canvas — no chevron — the same way the
+      // spec's own edge table carries no arrowhead column for rests_on.
+      // The head lives in the legend's "depends on" mark alone.
     }
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
 
-  // controlPoint is the midpoint for a straight edge and a point bowed off
-  // the chord's perpendicular for a governance edge. Bowing by a FRACTION of
-  // the chord keeps short and long governance edges equally recognisable.
-  function controlPoint(a, b, curved) {
-    var mx = (a.x + b.x) / 2;
-    var my = (a.y + b.y) / 2;
-    if (!curved) {
-      return { x: mx, y: my };
-    }
-    var dx = b.x - a.x;
-    var dy = b.y - a.y;
-    return { x: mx - dy * CURVE_BOW, y: my + dx * CURVE_BOW };
-  }
-
-  // shorten pulls the endpoint back off the target node's rim so an
-  // arrowhead lands on the circle rather than inside it.
+  // shorten pulls the endpoint back off the target node's rim so the line
+  // ends on the circle rather than inside it.
   function shorten(from, to, by) {
     var dx = to.x - from.x;
     var dy = to.y - from.y;
@@ -2993,61 +2863,14 @@
     return { x: to.x - (dx / len) * by, y: to.y - (dy / len) * by };
   }
 
-  function chevron(ctx, x, y, angle, size) {
-    var spread = 0.42;
-    ctx.beginPath();
-    ctx.moveTo(x - Math.cos(angle - spread) * size, y - Math.sin(angle - spread) * size);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x - Math.cos(angle + spread) * size, y - Math.sin(angle + spread) * size);
-    ctx.stroke();
-  }
-
-  // drawWedge is channel four: a filled wedge on every node that is the
-  // TARGET of at least one governed_by edge in scope. Direction is easy to
-  // get backwards — a claim declares `governed_by: {type: X}`, so the edge
-  // runs claim -> governor and the GOVERNOR is the target. graph-core.js's
-  // governors() is the single place that direction is decided.
-  function drawWedge(ctx, pal, node, pos, r) {
-    if (!coversAny(node, scene.governorIds)) {
-      return;
-    }
-    var tip = r + 6.5;
-    var base = r + 1;
-    var angle = -Math.PI / 4; // up and to the right, clear of the label below
-    var spread = 0.34;
-    ctx.beginPath();
-    ctx.moveTo(pos.x + Math.cos(angle) * tip, pos.y + Math.sin(angle) * tip);
-    ctx.lineTo(
-      pos.x + Math.cos(angle - spread) * base,
-      pos.y + Math.sin(angle - spread) * base
-    );
-    ctx.lineTo(
-      pos.x + Math.cos(angle + spread) * base,
-      pos.y + Math.sin(angle + spread) * base
-    );
-    ctx.closePath();
-    ctx.fillStyle = pal.governed;
-    ctx.fill();
-  }
-
   // ------------------------------------------------------------------
   // Overlays — the node fill is swapped WHOLESALE, never overloaded
   // ------------------------------------------------------------------
   //
-  // Six overlays plus "none", and while one is active every non-matching node
-  // and edge is dimmed rather than recoloured with a second signal. Cramming
-  // four meanings into one dot is what makes a graph unreadable; asking one
-  // question at a time is what makes it answerable.
-  //
-  // THE GOVERNANCE OVERLAY is the one that could not be replaced by an edge
-  // style. It dims everything except the governors, the claims they govern,
-  // and the governance edges between them — so "what does this doctrine
-  // actually reach?" is answered in one click instead of one trace. Note what
-  // it deliberately does NOT light: a rests_on edge that happens to join two
-  // governance participants stays dimmed, because reach is carried by the
-  // governance edges alone and lighting an unrelated dependency would answer
-  // a different question badly. That decision lives in graph-core.js's
-  // governanceScope(), not here.
+  // Five overlays plus "none", and while one is active every non-matching
+  // node and edge is dimmed rather than recoloured with a second signal.
+  // Cramming four meanings into one dot is what makes a graph unreadable;
+  // asking one question at a time is what makes it answerable.
 
   function overlayMatches(node) {
     switch (state.overlay) {
@@ -3055,8 +2878,6 @@
         return coversAnyRule(node, 'isolated') || coversAnyRule(node, 'weakly_linked');
       case 'cycles':
         return coversAny(node, scene.cycleIds) || coversAny(node, scene.selfIds);
-      case 'governance':
-        return scene.govNodeIds[node.id] === true;
       case 'review':
         return haloKind(node) === 'review';
       case 'comments':
@@ -3071,9 +2892,6 @@
   }
 
   function overlayMatchesEdge(edge) {
-    if (state.overlay === 'governance') {
-      return scene.govEdgeKeys[edgeKeyOf(edge)] === true;
-    }
     if (state.overlay === 'cycles') {
       return scene.redEdgeKeys[edgeKeyOf(edge)] === true;
     }
@@ -3097,8 +2915,6 @@
         return pal.warn;
       case 'cycles':
         return pal.cycle;
-      case 'governance':
-        return pal.governed;
       case 'review':
         return pal.halo;
       case 'comments':
@@ -3828,8 +3644,8 @@
   // panel showing only one of them would make the other look like a bug.
 
   // mobile is 13 §4.12's own set: only STATUS and IN A CYCLE survive the
-  // selected-claim block at 390 ("MODULE, FACET, GOVERNED BY and DEGREE
-  // HERE are dropped per the notes"). Marked with an attribute rather than
+  // selected-claim block at 390 ("MODULE, FACET and DEGREE HERE are
+  // dropped per the notes"). Marked with an attribute rather than
   // filtered out of the row list, so the mobile CSS rule (M9) hides exactly
   // these two and nothing about the row's construction or order has to
   // know which width is looking at it.
@@ -3929,36 +3745,6 @@
     });
   }
 
-  // governedByValue renders the governing claim's TITLE, not its id, as one
-  // or more clickable --color-accent (engine --link) values — 13 §4.7's
-  // "Value, link" row. governorsOf already answers the direction question
-  // (claim -> governor); this only adds the title lookup and the jump.
-  function governedByValue(id) {
-    var ids = governorsOf(id);
-    if (ids.length === 0) {
-      return 'nothing';
-    }
-    var wrap = h('span', 'dxg-detail-links');
-    for (var i = 0; i < ids.length; i++) {
-      if (i > 0) {
-        wrap.appendChild(document.createTextNode(', '));
-      }
-      wrap.appendChild(governorLink(ids[i]));
-    }
-    return wrap;
-  }
-
-  function governorLink(gid) {
-    var gclaim = claimById(gid);
-    var label = gclaim && str(gclaim.title) !== '' ? str(gclaim.title) : gid;
-    var link = h('button', 'dxg-detail-link', label);
-    link.type = 'button';
-    link.title = gid;
-    link.addEventListener('click', function () {
-      jumpTo(gid);
-    });
-    return link;
-  }
 
   // cycleDisplay is the IN A CYCLE row's text and colour together, same
   // reasoning as statusDisplay: 13 §8.2/§8.3 give "Yes" and "Self-edge" the
@@ -4131,12 +3917,9 @@
     return band;
   }
 
-  // buildNeighborhood assembles the whole block: GOVERNED BY, DEPENDS ON,
-  // DEPENDED ON BY, always in that order (13 §6 — "GOVERNED BY is not
-  // dropped; it leaves the rail and becomes its own edge group, where it
-  // always belonged"), then SAYS THE SAME THING only while `mirrors` is
-  // toggled on — "so that group is absent", exactly what the canvas does
-  // with the same toggle.
+  // buildNeighborhood assembles the whole block: DEPENDS ON, DEPENDED ON
+  // BY, always in that order (13 §6). GOVERNED BY led the block until the
+  // edge retired (NIT-29).
   function buildNeighborhood(id, claim) {
     var wrap = h('div', 'dxg-neighborhood');
     wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
@@ -4150,10 +3933,8 @@
 
     var typesOn = state ? state.types : [];
     var plan = [
-      ['governed_by', 'out', 'GOVERNED BY'],
       ['rests_on', 'out', 'DEPENDS ON'],
-      ['rests_on', 'in', 'DEPENDED ON BY'],
-      ['mirrors', 'both', 'SAYS THE SAME THING']
+      ['rests_on', 'in', 'DEPENDED ON BY']
     ];
     var any = false;
     for (var i = 0; i < plan.length; i++) {
@@ -4181,7 +3962,7 @@
     clear(el.detail);
     if (!scene || state.selected === '') {
       el.detail.appendChild(
-        h('p', 'dxg-detail-empty', 'select a node for its facet, status, degree and governors')
+        h('p', 'dxg-detail-empty', 'select a node for its module, facet, status and degree')
       );
       return;
     }
@@ -4260,7 +4041,6 @@
     detailRow(rows, 'facet', facet === '' ? 'no facet' : humaniseSlug(facet));
     var status = railStatusDisplay(claim);
     detailRow(rows, 'status', status.text, status.cls, true);
-    detailRow(rows, 'governed by', governedByValue(id));
     detailRow(rows, 'degree here', degreeValue(id));
     var cycle = cycleDisplay(id);
     detailRow(rows, 'in a cycle', cycle.text, cycle.cls, true);
@@ -4393,18 +4173,6 @@
     return out;
   }
 
-  // Direction, stated once so it cannot be got backwards: a claim declares
-  // `governed_by: {type: X}`, so the edge runs CLAIM -> GOVERNOR.
-  function governorsOf(id) {
-    var out = [];
-    for (var i = 0; i < payload.edges.length; i++) {
-      var e = payload.edges[i];
-      if (str(e.type) === 'governed_by' && str(e.from) === id) {
-        out.push(str(e.to));
-      }
-    }
-    return out;
-  }
 
   // ------------------------------------------------------------------
   // Auto-collapse above AUTO_COLLAPSE_ABOVE claims

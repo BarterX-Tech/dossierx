@@ -9,6 +9,6 @@ body: |
       - L3
     - back to L2
   - back to L1
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a dedent closes levels until the indent matches an open one

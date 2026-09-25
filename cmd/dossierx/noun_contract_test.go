@@ -13,11 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
-	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -30,7 +26,7 @@ import (
 // and the process exited 0. An agent that checked the status concluded its call
 // had succeeded and that the empty result was the answer.
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
-	for _, noun := range []string{"claim", "comment", "build-order", "track", "skills"} {
+	for _, noun := range []string{"claim", "comment", "constitution", "track", "manifest", "skills"} {
 		t.Run(noun, func(t *testing.T) {
 			env, _, err := execReviewedCLIJSON(t, noun)
 			if err == nil {
@@ -219,9 +215,9 @@ func TestThreadLastActivityTracksTheReopen(t *testing.T) {
 func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  the original approved body.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 	claimFile := filepath.Join(root, "claims", "a.yaml")
 
@@ -263,39 +259,6 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	}
 }
 
-// TestBuildOrderSignatureMatchesTheGate is the parity pin between the two sides
-// of the build-order ledger record: cmd/dossierx WRITES the signature and
-// internal/check's gate RE-COMPUTES it to compare. They are separate functions
-// (sharing one would mean cmd/ and check/ importing each other), so nothing but
-// this test stops them drifting — and a one-byte disagreement would report
-// build-order-content-drift on every honestly locked build order in every
-// project, which is a gate firing on correct state.
-func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("lock: %v", err)
-	}
-
-	// The gate's own verdict, through the public seam: silence means the two
-	// signatures agreed on a freshly locked, untouched artifact.
-	cfg, err := config.LoadConfig(cfgPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	claims, err := loader.LoadClaims(cfg.ClaimsDir)
-	if err != nil {
-		t.Fatalf("load claims: %v", err)
-	}
-	for _, f := range check.Status(claims, cfg).LedgerFindings {
-		if strings.HasPrefix(f.Rule, "build-order-") {
-			t.Fatalf("the writer's signature and the gate's disagree on an untouched artifact: %s: %s", f.Rule, f.Message)
-		}
-	}
-}
-
 // TestAPreLedgerProjectCrossesByEmptyingItself is v0.4.0's whole answer to
 // "how does a project that predates the lock ledger ever get onto it", end to
 // end, through the CLI.
@@ -307,9 +270,8 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 // the record it writes evidence of anything.
 //
 // What replaces it costs more and claims less. The project is emptied of
-// everything that predates the ledger, in the order the refusal gives (propose
-// FIRST — propose requires the module still fully locked, so unlocking a claim
-// first would leave the order stuck), and the first re-lock crosses the store.
+// everything that predates the ledger, in the order the refusal gives, and the
+// first re-lock crosses the store.
 // Nothing is grandfathered, because by then there is nothing to grandfather.
 //
 // The last two assertions are the ones that catch a crossing point that stamps
@@ -317,16 +279,13 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 // act, and the finding set is asserted EMPTY rather than merely free of two
 // named rules.
 func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
-	cfgPath := buildOrderFixture(t) // one claim, status: locked, module widget
-	root := filepath.Dir(cfgPath)
+	root := t.TempDir()
+	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: |\n  a locked claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+	})
 	const id = "widget.contract.a"
-
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("propose: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
-		t.Fatalf("lock: %v", err)
-	}
 
 	// Rewind to what a pre-ledger build would have left behind: an existing
 	// store file, at the old schema version, with no ledger at all, and no
@@ -336,31 +295,18 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	storeFile := filepath.Join(root, "build", "ledger", "lock-store.json")
 	rewindStoreToPreLedger(t, storeFile)
 
-	// 1. The refusal, on both write paths, and that it IS the refusal.
+	// 1. The refusal, and that it IS the refusal.
 	lockEnv, _, lockErr := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
 	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
 		t.Fatalf("claim lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
 	}
-	boEnv, _, boErr := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
-	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodePreLedgerUnadopted {
-		t.Fatalf("build-order lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, boEnv.Error)
-	}
 
 	// 2. The recovery, in the order the refusal text gives.
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("re-propose (FIRST: propose needs the module still fully locked): %v", err)
-	}
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "crossing onto the ledger"); err != nil {
 		t.Fatalf("unlock is gateless and always has been: %v", err)
 	}
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved after the crossing"); err != nil {
 		t.Fatalf("the crossing lock: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
-		t.Fatalf("re-propose after the crossing: %v", err)
-	}
-	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "re-approved after the crossing"); err != nil {
-		t.Fatalf("build-order lock after the crossing: %v", err)
 	}
 
 	// 3. The assertions.
@@ -371,14 +317,12 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	if !strings.Contains(string(after), `"version": 3`) {
 		t.Fatalf("the crossing must stamp the ledger schema:\n%s", after)
 	}
-	for _, key := range []string{id, lock.BuildOrderLedgerKey("widget")} {
-		rec, ok := readLedger(t, storeFile)[key]
-		if !ok {
-			t.Fatalf("expected a record for %q:\n%s", key, after)
-		}
-		if rec.Grandfathered {
-			t.Fatalf("%q must hold a real APPROVAL, never a grandfathered adoption: %+v", key, rec)
-		}
+	rec, ok := readLedger(t, storeFile)[id]
+	if !ok {
+		t.Fatalf("expected a record for %q:\n%s", id, after)
+	}
+	if rec.Grandfathered {
+		t.Fatalf("%q must hold a real APPROVAL, never a grandfathered adoption: %+v", id, rec)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "build", "ledger", "comment-digest.json")); statErr != nil {
 		t.Fatalf("the crossing must create the comment digest store in the same act: %v", statErr)
@@ -525,9 +469,38 @@ func TestRetiredVerbsAreNotSurface(t *testing.T) {
 			t.Fatalf("the comment group's leaf list must not advertise the removed verb %q: %q", gone, env.Error.Hint)
 		}
 	}
+	claimEnv, _, claimErr := execReviewedCLIJSON(t, "claim")
+	if claimErr == nil {
+		t.Fatal("a bare noun must fail")
+	}
+	if claimEnv.Error == nil {
+		t.Fatalf("expected an error envelope, got %+v", claimEnv)
+	}
+	if strings.Contains(claimEnv.Error.Hint, "migrate-lock-policy") {
+		t.Fatalf("the claim group's leaf list must not advertise the removed verb %q: %q", "migrate-lock-policy", claimEnv.Error.Hint)
+	}
 	for _, cmd := range newRootCmd().Commands() {
 		if retired(cmd) && !cmd.Hidden {
 			t.Fatalf("a removal stub must be hidden: %q", cmd.Name())
 		}
+	}
+}
+
+// TestDeletedLockPolicyLeafIsUnknownSubcommand pins the kill: the leaf is gone,
+// so the claim group's existing unknown-subcommand path answers it. There is
+// no retired stub and no replacement command.
+func TestDeletedLockPolicyLeafIsUnknownSubcommand(t *testing.T) {
+	env, _, err := execReviewedCLIJSON(t, "claim", "migrate-lock-policy")
+	if err == nil || env.OK {
+		t.Fatalf("a deleted leaf must fail, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
+		t.Fatalf("expected usage, got %+v", env.Error)
+	}
+	if !strings.Contains(env.Error.Message, "unknown subcommand") {
+		t.Fatalf("expected the claim group's unknown-subcommand path, got %+v", env.Error)
+	}
+	if strings.Contains(env.Error.Hint, "migrate-lock-policy") {
+		t.Fatalf("the recovery must not name the deleted leaf: %+v", env.Error)
 	}
 }

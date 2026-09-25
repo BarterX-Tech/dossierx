@@ -7,6 +7,6 @@ body: |
   - [x] Completed task
   - [ ] Incomplete task
   - [x] Another done task
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests task list items

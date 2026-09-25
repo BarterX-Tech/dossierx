@@ -4,7 +4,7 @@
 //
 // This is a gate, NOT a lint, and the distinction is a design decision the
 // release depends on. A lint is registered in lint.Registry, which means it runs
-// inside "dossierx check" and inside lock.Lock's own refusal gate, and an
+// inside "dossierx check" and inside the lock evaluator's refusal gate, and an
 // error-severity finding there stops the whole pipeline: no catalog, no viewer,
 // and no claim in the project can be locked. One tampered claim would take the
 // documentation offline for everybody, which is a denial-of-service handed to
@@ -86,11 +86,7 @@ const (
 	// be a finding on correct state, which is how gates get switched off.
 	//
 	// The condition is therefore the one the WRITE PATH refuses on —
-	// countLocked(claims) + lockedBuildOrders > 0 — and it is emitted from two
-	// disjoint places, because lock.Audit has no build-order input and
-	// structurally cannot have one (internal/buildorder imports internal/lock).
-	// This file owns the claims term; internal/check's ledgerGate owns the
-	// build-orders-only term. See internal/check/ledger.go.
+	// countLocked(claims) > 0.
 	//
 	// It replaces the per-claim lock-ledger-missing findings for these claims
 	// rather than sitting on top of them — one cause, said once, with the recovery
@@ -153,32 +149,15 @@ const (
 	// non-goals"), and the trade the whole gate now rests on: DOSSIERX DETECTS,
 	// THE FORGE ENFORCES.
 	//
-	// TWO IN-DIRECTORY EVIDENCE SOURCES WERE TRIED AND REJECTED, recorded here so
-	// the next round does not re-derive them:
-	//
-	//   - OTHER CLAIMS' BASELINES that name this claim as a dependency
-	//     (hashes[dependent][id]). Unsound in both directions. Baselines are
-	//     recorded for BaselineDependencyIDs = mirrors ++ rests_on ++ a
-	//     claim-valued governed_by.type, and a LOCKED claim may
-	//     legitimately mirror a DRAFT one — mirror-mismatch compares Layout, Body,
-	//     Rows and Steps and documents status as EXPECTED to differ — so the rule
-	//     would fire on correct state, which is the outage this gate exists to
-	//     avoid. Narrowing it to rests_on does not save it: baselines are never
-	//     removed when an edge is removed, so one written while the target sat in
-	//     mirrors outlives a later draft edit that moves it to rests_on. And in
-	//     the one shape where the inference IS sound (the dependent is currently
-	//     locked and currently rests_on the claim) the error-severity
-	//     rest-on-locked lint already refuses, so the rule buys nothing there.
-	//
-	//   - THE BUILD-ORDER RECORD for the claim's module. A standing build-order
-	//     record does prove every claim in that module was locked when it was
-	//     approved (buildorder.Propose's completeness gate). But it does not say
-	//     WHICH claims those were, and authoring a NEW claim in a module whose
-	//     build order is locked is ordinary work — the artifact simply reports
-	//     stale. The rule would accuse a brand-new draft of having had its record
-	//     deleted, and hand it "restore the lock store from version control".
-	//     Making it sound needs the covered claim ids ON the record, a store-schema
-	//     change its one writer (cmd/dossierx) would have to start supplying.
+	// ONE IN-DIRECTORY EVIDENCE SOURCE WAS TRIED AND REJECTED, recorded here so
+	// the next round does not re-derive it: OTHER CLAIMS' BASELINES that name
+	// this claim as a dependency (hashes[dependent][id]). Unsound in both
+	// directions. Baselines are recorded for BaselineDependencyIDs = rests_on and
+	// are never removed when an edge is removed, so one written while the target
+	// sat on a later-deleted edge outlives a later draft edit that re-adds it.
+	// And in the one shape where the inference IS sound (the dependent is
+	// currently locked and currently rests_on the claim) the error-severity
+	// rest-on-locked lint already refuses, so the rule buys nothing there.
 	RuleLockLedgerDeleted = "lock-ledger-deleted"
 
 	// RuleLockLedgerReleased: a LOCKED claim whose record exists but was
@@ -346,7 +325,7 @@ const (
 // next reader believes it is complete. So: no list, and no number.
 //
 // WHAT THE PRINCIPLE MEANS HERE. The claim files, the lock store, the digest
-// store and the build-order artifacts are this gate's entire evidence base, and
+// store are this gate's entire evidence base, and
 // every one of them is a tracked file in the tree the committer is editing. The
 // line therefore falls between UNCOORDINATED and COORDINATED change:
 //
@@ -608,22 +587,15 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 	}
 
 	// The pre-ledger project, reported once for the whole project, and ONLY when
-	// this project still holds a locked CLAIM.
-	//
-	// The claims-only condition is not an oversight: this function has no
-	// build-order input and structurally cannot have one, so the other half of
-	// the union — a pre-ledger project holding a locked BUILD ORDER and zero
-	// locked claims — is emitted by internal/check's ledgerGate, which holds both
-	// inputs. The two conditions are mutually exclusive, so the finding appears
-	// exactly once in every state. See RuleLockLedgerPreLedger for why the
-	// emission is conditional at all.
+	// this project still holds a locked claim. See RuleLockLedgerPreLedger for
+	// why the emission is conditional at all.
 	//
 	// It is DELIBERATELY NOT accompanied by the per-claim findings for the same
 	// claims (see the switch above): the cause is the project's, the recovery is
 	// the project's, and lock-ledger-missing's own advice — set it back to draft
 	// and re-lock — would destroy the very approvals the crossing preserves.
 	if lockedClaims := countLocked(claims); preLedgerUnadopted && lockedClaims > 0 {
-		findings = append(findings, PreLedgerFinding(store, lockedClaims, 0))
+		findings = append(findings, preLedgerFinding(store, lockedClaims))
 	}
 
 	// The downgrade is the other project-scoped rule, and it is deliberately
@@ -649,16 +621,8 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 	return findings
 }
 
-// PreLedgerFinding builds the project-scoped RuleLockLedgerPreLedger finding.
-//
-// It is exported because the finding is emitted from TWO places — this package,
-// for the locked-CLAIMS half, and internal/check's ledgerGate for the locked-
-// BUILD-ORDERS-only half, which is the only package that holds both inputs. One
-// constructor rather than two restatements is what keeps the two emitters from
-// producing different bytes for the same condition.
-//
-// The count is rendered as both terms so a reader can see WHICH half fired.
-func PreLedgerFinding(store *Store, lockedClaims, lockedBuildOrders int) Finding {
+// preLedgerFinding builds the project-scoped RuleLockLedgerPreLedger finding.
+func preLedgerFinding(store *Store, lockedClaims int) Finding {
 	version := 0
 	if store != nil {
 		version = store.OnDiskVersion()
@@ -666,8 +630,8 @@ func PreLedgerFinding(store *Store, lockedClaims, lockedBuildOrders int) Finding
 	return Finding{
 		Rule: RuleLockLedgerPreLedger,
 		Message: fmt.Sprintf(
-			"this project's lock store predates the lock ledger (schema version %d), so %d locked claim(s) and %d locked build order(s) here have no approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more.\n\n%s\n\nCommit the updated %s and %s with the re-locks.",
-			version, lockedClaims, lockedBuildOrders, preLedgerCrossingSteps, config.LockStoreDisplayPath, config.CommentDigestDisplayPath),
+			"this project's lock store predates the lock ledger (schema version %d), so %d locked claim(s) here have no approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more.\n\n%s\n\nCommit the updated %s and %s with the re-locks.",
+			version, lockedClaims, preLedgerCrossingSteps, config.LockStoreDisplayPath, config.CommentDigestDisplayPath),
 	}
 }
 
@@ -710,10 +674,10 @@ func countLocked(claims []model.Claim) int {
 }
 
 // ledgerRecordFor returns the CLAIM record for id, if any. It filters on
-// Subject rather than trusting the key: a build-order record must never be
-// read as a claim's approval, and checking the field (instead of parsing the
-// key's shape) means a subject kind added later cannot silently start being
-// audited by these rules.
+// Subject rather than trusting the key: a row of any other subject (such as a
+// leftover v0.7.20 build-order row) must never be read as a claim's approval,
+// and checking the field (instead of parsing the key's shape) means a subject
+// kind added later cannot silently start being audited by these rules.
 func ledgerRecordFor(store *Store, id string) (LedgerRecord, bool) {
 	if store == nil {
 		return LedgerRecord{}, false

@@ -23,7 +23,7 @@ func legacyProject(t *testing.T, files map[string]string, extraConfig string) *c
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n" + extraConfig
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - panel\nclaims_dir: claims\n" + extraConfig
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -131,9 +131,9 @@ func gitInit(t *testing.T, dir string) {
 	gitIn(t, dir, "config", "user.name", "fixture")
 }
 
-// TestLayoutRefusesEachLegacyKindAlone pins that each of the seven kinds, on
-// its own, refuses; that a fresh project proceeds; and that the one line each
-// kind prints is the one (d) prescribes.
+// TestLayoutRefusesEachLegacyKindAlone pins that each of the six kinds, on its
+// own, refuses; that a fresh project proceeds; and that the one line each kind
+// prints is the one (d) prescribes.
 func TestLayoutRefusesEachLegacyKindAlone(t *testing.T) {
 	requireNoGitAbove(t, t.TempDir())
 	cases := []struct {
@@ -143,7 +143,6 @@ func TestLayoutRefusesEachLegacyKindAlone(t *testing.T) {
 		{".dossierx-lock-store.json", "mv .dossierx-lock-store.json build/ledger/lock-store.json"},
 		{".dossierx-comment-digest.json", "mv .dossierx-comment-digest.json build/ledger/comment-digest.json"},
 		{".dossierx-flag-store.json", "mv .dossierx-flag-store.json build/ledger/flag-store.json"},
-		{".build-order.widget.json", "mv .build-order.widget.json build/build-order/widget.json"},
 		{".implementation.widget.json", "mv .implementation.widget.json build/code-links/widget.json"},
 		{".catalog.json", "rm -f .catalog.json"},
 		{"viewer/index.html", "rm -f viewer/index.html"},
@@ -167,6 +166,17 @@ func TestLayoutRefusesEachLegacyKindAlone(t *testing.T) {
 			t.Fatalf("a project with no legacy file must not be refused: %v", err)
 		}
 	})
+	// A root .build-order.<module>.json from the removed build-order product is
+	// not a legacy kind: nothing reads it, so it is left where it is.
+	t.Run("a leftover root build order proceeds", func(t *testing.T) {
+		cfg := legacyProject(t, map[string]string{".build-order.widget.json": "{}"}, "")
+		if err := layout.Refuse(cfg, false); err != nil {
+			t.Fatalf("a leftover .build-order.widget.json must not be refused: %v", err)
+		}
+		if moves, err := layout.LegacyFiles(cfg); err != nil || len(moves) != 0 {
+			t.Fatalf("LegacyFiles = %+v, %v; want none", moves, err)
+		}
+	})
 }
 
 // TestLayoutRecoveryOrderAndDetails pins the order of the printed block — the
@@ -179,8 +189,6 @@ func TestLayoutRecoveryOrderAndDetails(t *testing.T) {
 		".catalog.json":                 "{}",
 		".implementation.panel.json":    "{}",
 		".implementation.widget.json":   "{}",
-		".build-order.widget.json":      "{}",
-		".build-order.panel.json":       "{}",
 		".dossierx-flag-store.json":     "{}",
 		".dossierx-comment-digest.json": "{}",
 		".dossierx-lock-store.json":     "{}",
@@ -188,12 +196,10 @@ func TestLayoutRecoveryOrderAndDetails(t *testing.T) {
 	err := layout.Refuse(cfg, false)
 	lines := recoveryLines(t, err)
 	want := []string{
-		"mkdir -p build/ledger build/build-order build/code-links",
+		"mkdir -p build/ledger build/code-links",
 		"mv .dossierx-lock-store.json build/ledger/lock-store.json",
 		"mv .dossierx-comment-digest.json build/ledger/comment-digest.json",
 		"mv .dossierx-flag-store.json build/ledger/flag-store.json",
-		"mv .build-order.panel.json build/build-order/panel.json",
-		"mv .build-order.widget.json build/build-order/widget.json",
 		"mv .implementation.panel.json build/code-links/panel.json",
 		"mv .implementation.widget.json build/code-links/widget.json",
 		"rm -f .catalog.json",
@@ -288,7 +294,7 @@ func TestLayoutBlockRunsWhenEveryFileIsTracked(t *testing.T) {
 	cfg := legacyProject(t, map[string]string{
 		".dossierx-lock-store.json":     `{"version":2,"hashes":{},"locked_at":{},"ledger":{}}`,
 		".dossierx-comment-digest.json": `{"version":1,"digests":{}}`,
-		".build-order.widget.json":      "{}",
+		".implementation.widget.json":   `{"module":"widget","links":[]}`,
 		".catalog.json":                 "{}",
 		"viewer/index.html":             "<html>",
 	}, "")
@@ -307,7 +313,7 @@ func TestLayoutBlockRunsWhenEveryFileIsTracked(t *testing.T) {
 		}
 	}
 	lines := recoveryLines(t, layout.Refuse(cfg, false))
-	if lines[0] != "mkdir -p build/ledger build/build-order" {
+	if lines[0] != "mkdir -p build/ledger build/code-links" {
 		t.Fatalf("mkdir line = %q", lines[0])
 	}
 	for _, l := range lines[1:] {
@@ -322,7 +328,7 @@ func TestLayoutBlockRunsWhenEveryFileIsTracked(t *testing.T) {
 	for _, want := range []string{
 		"R  .dossierx-lock-store.json -> build/ledger/lock-store.json",
 		"R  .dossierx-comment-digest.json -> build/ledger/comment-digest.json",
-		"R  .build-order.widget.json -> build/build-order/widget.json",
+		"R  .implementation.widget.json -> build/code-links/widget.json",
 	} {
 		if !strings.Contains(status, want) {
 			t.Fatalf("expected %q in git status, got:\n%s", want, status)
@@ -342,20 +348,20 @@ func TestLayoutBlockMixesGitMvAndMvPerFile(t *testing.T) {
 	gitInit(t, root)
 	gitIn(t, root, "add", "-A")
 	gitIn(t, root, "commit", "-qm", "baseline")
-	// The ordinary state: a proposed-but-unlocked build order and a flag
-	// store, both untracked.
-	for _, f := range []string{".build-order.widget.json", ".dossierx-flag-store.json"} {
+	// The ordinary state: a code-links artifact and a flag store, both
+	// untracked.
+	for _, f := range []string{".implementation.widget.json", ".dossierx-flag-store.json"} {
 		if err := os.WriteFile(filepath.Join(root, f), []byte("{}"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	lines := recoveryLines(t, layout.Refuse(cfg, false))
 	want := []string{
-		"mkdir -p build/ledger build/build-order",
+		"mkdir -p build/ledger build/code-links",
 		"git mv .dossierx-lock-store.json build/ledger/lock-store.json",
 		"git mv .dossierx-comment-digest.json build/ledger/comment-digest.json",
 		"mv .dossierx-flag-store.json build/ledger/flag-store.json",
-		"mv .build-order.widget.json build/build-order/widget.json",
+		"mv .implementation.widget.json build/code-links/widget.json",
 	}
 	if strings.Join(lines, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("block:\n got %q\nwant %q", lines, want)
@@ -380,10 +386,10 @@ func TestLayoutBlockMixesGitMvAndMvPerFile(t *testing.T) {
 
 func TestLayoutBlockHasNoGitOutsideAWorkTree(t *testing.T) {
 	cfg := legacyProject(t, map[string]string{
-		".dossierx-lock-store.json": "{}",
-		".build-order.widget.json":  "{}",
-		".catalog.json":             "{}",
-		"viewer/index.html":         "<html>",
+		".dossierx-lock-store.json":   "{}",
+		".implementation.widget.json": "{}",
+		".catalog.json":               "{}",
+		"viewer/index.html":           "<html>",
 	}, "")
 	requireNoGitAbove(t, cfg.Dir())
 	err := layout.Refuse(cfg, false)
@@ -404,9 +410,9 @@ func TestLayoutBlockHasNoGitOutsideAWorkTree(t *testing.T) {
 
 func TestLayoutBlockHasNoGitWhenGitIsOffPath(t *testing.T) {
 	cfg := legacyProject(t, map[string]string{
-		".dossierx-lock-store.json": "{}",
-		".build-order.widget.json":  "{}",
-		".catalog.json":             "{}",
+		".dossierx-lock-store.json":   "{}",
+		".implementation.widget.json": "{}",
+		".catalog.json":               "{}",
 	}, "")
 	root := cfg.Dir()
 	gitInit(t, root)

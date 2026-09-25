@@ -1,7 +1,8 @@
 // Package config loads and validates project.config.yaml — the single
 // project-specific input that keeps this engine generic. Nothing in this
-// package (or anywhere else in the engine) may hardcode a project name,
-// facet, or module; every project-specific value comes from the Config
+// package (or anywhere else in the engine) may hardcode a project name
+// or module. Claim facets are engine-fixed: exactly contract and internals
+// (NIT-20). Every other project-specific value comes from the Config
 // this package produces.
 package config
 
@@ -20,15 +21,48 @@ import (
 // understands. LoadConfig refuses to run against any other value.
 const CurrentSchemaVersion = 1
 
-// ReservedOverviewFacet is the one facet name every module gets
-// automatically, without a project listing it in Facets: claims under
-// module.overview.* are module-level orientation notes (see
-// model.Claim.EffectiveKind), injected into every one of that module's
-// other facet tabs by internal/render rather than getting their own tab.
-// It deliberately does not need to appear in Facets — validate() below
-// never checks it, and internal/lint.IDShapeLint treats it as always
-// valid regardless of what a project declares.
-const ReservedOverviewFacet = "overview"
+// DefaultMaxClaimBodyChars is the omitted-field default for
+// Config.MaxClaimBodyChars: body + steps + rows cells, counted as
+// Unicode code points. Derived with the module cap (NIT-14): ten claims of
+// 2,000 characters is a 20,000-character full-module read, one OpenClaw
+// bootstrap file.
+const DefaultMaxClaimBodyChars = 2000
+
+// DefaultMaxClaimSummaryChars is the omitted-field default for
+// Config.MaxClaimSummaryChars. One line, counted as Unicode code points.
+const DefaultMaxClaimSummaryChars = 200
+
+// DefaultMaxClaimsPerModule is the hard default for
+// Config.MaxClaimsPerModule when the field is omitted (NIT-14). Ten
+// 200-character summaries are a 2,000-character module index, under
+// Hermes's 2,200-character MEMORY.md; ten 2,000-character bodies are one
+// 20,000-character OpenClaw bootstrap file. A project that already has
+// larger modules sets max_claims_per_module in project.config.yaml.
+const DefaultMaxClaimsPerModule = 10
+
+// removedOverviewFacet is the retired reserved facet name. Listing it in
+// facets[] is refused; leftover claims with facet: overview fail id-shape
+// like any other undeclared facet.
+const removedOverviewFacet = "overview"
+
+// Engine-fixed claim facets (NIT-20). project.config.yaml must list exactly
+// these two names; no other facet is legal. Manifest is a viewer tab, not a
+// claim facet — see internal/visibility.ViewerTabManifest.
+const (
+	FacetContract  = "contract"
+	FacetInternals = "internals"
+)
+
+// EngineFacets is the only legal facets[] value, in viewer-peer order after
+// Manifest.
+func EngineFacets() []string {
+	return []string{FacetContract, FacetInternals}
+}
+
+// IsEngineFacet reports whether name is contract or internals.
+func IsEngineFacet(name string) bool {
+	return name == FacetContract || name == FacetInternals
+}
 
 // ErrNotFound is wrapped into LoadConfig's returned error whenever the
 // config file itself does not exist at the given path (as opposed to
@@ -150,16 +184,33 @@ type Config struct {
 	// mirroring the reference docs explainer page's .eyebrow line. Unset means no
 	// eyebrow line is rendered at all — it is not required the way Title's
 	// generic fallback is.
-	Eyebrow       string      `yaml:"eyebrow,omitempty"`
-	Facets        []string    `yaml:"facets"`
-	Modules       []string    `yaml:"modules"`
-	ClaimsDir     string      `yaml:"claims_dir"`
-	DoctrineFacet string      `yaml:"doctrine_facet,omitempty"`
-	Viewer        Viewer      `yaml:"viewer,omitempty"`
-	Conformance   Conformance `yaml:"conformance,omitempty"`
+	Eyebrow   string   `yaml:"eyebrow,omitempty"`
+	Facets    []string `yaml:"facets"`
+	Modules   []string `yaml:"modules"`
+	ClaimsDir string   `yaml:"claims_dir"`
+	// Constitution is the project-root roof file, default constitution.yaml.
+	// It is not a module and is never walked by LoadClaims.
+	Constitution string `yaml:"constitution,omitempty"`
+	// ProjectClaimsDir is the store for scope: project claims, default
+	// project-claims. Outside claims_dir. Missing directory is empty, not an error.
+	ProjectClaimsDir string `yaml:"project_claims_dir,omitempty"`
+
+	// ManifestTree is claims_dir-relative slash paths to file bytes. When
+	// non-nil, the module-manifest lint reads this tree instead of the
+	// working-tree claims_dir. StatusStaged sets it from the git index so
+	// --staged never judges an unstaged manifest. Not a config field.
+	ManifestTree map[string][]byte `yaml:"-"`
+	Viewer       Viewer            `yaml:"viewer,omitempty"`
+	Conformance  Conformance       `yaml:"conformance,omitempty"`
+
+	// ConstitutionIndex, when non-nil, is constitution.yaml as the git index
+	// carries it. StatusStaged sets it so a lint that reads the roof's text
+	// (shared-context-budget) judges the commit, not the working tree: the
+	// same copy the constitution gate reads. Not a config field.
+	ConstitutionIndex *IndexedFile `yaml:"-"`
 
 	// BuildDir is the directory every runtime-generated file lives under —
-	// the build-order and code-links artifacts, the three ledger stores, the
+	// the code-links artifacts, the three ledger stores, the
 	// catalog and the viewer — one subdirectory per kind (see paths.go for the
 	// layout). Optional; it defaults to "build" and, like ClaimsDir, is
 	// resolved against the config file's own directory, never the process
@@ -213,9 +264,27 @@ type Config struct {
 	// an unset/empty list as "no module may author one", not a vacuous
 	// pass. Every entry must also appear in Modules — an
 	// allowlisted module that isn't even a project module can never gate
-	// anything, which almost certainly indicates a typo (same reasoning as
-	// DoctrineFacet's membership check below).
+	// anything, which almost certainly indicates a typo.
 	MockupModules []string `yaml:"mockup_modules,omitempty"`
+
+	// MaxClaimBodyChars is the project-wide ceiling on one claim's
+	// body+steps+rows cells, counted as Unicode code points. Omit the
+	// field to take DefaultMaxClaimBodyChars (2000). Zero and negatives
+	// are refused at load time — they are not a "no cap" sentinel.
+	MaxClaimBodyChars *int `yaml:"max_claim_body_chars,omitempty"`
+
+	// MaxClaimSummaryChars is the project-wide ceiling on summary,
+	// counted as Unicode code points. Omit the field to take
+	// DefaultMaxClaimSummaryChars (200). Zero and negatives are refused
+	// at load time.
+	MaxClaimSummaryChars *int `yaml:"max_claim_summary_chars,omitempty"`
+
+	// MaxClaimsPerModule is the project-wide ceiling on how many claim
+	// files may sit in one module. Omit the field to take
+	// DefaultMaxClaimsPerModule (10). There is no per-module override:
+	// a fat corpus raises this one number. Zero and negatives are
+	// refused at load time — they are not a "no cap" sentinel.
+	MaxClaimsPerModule *int `yaml:"max_claims_per_module,omitempty"`
 
 	// dir is the absolute directory containing the config file itself;
 	// ClaimsDir and Viewer.TemplateOverrides are resolved against it, never
@@ -303,6 +372,18 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	if !filepath.IsAbs(cfg.ClaimsDir) {
 		cfg.ClaimsDir = filepath.Join(dir, cfg.ClaimsDir)
 	}
+	if strings.TrimSpace(cfg.Constitution) == "" {
+		cfg.Constitution = DefaultConstitution
+	}
+	if !filepath.IsAbs(cfg.Constitution) {
+		cfg.Constitution = filepath.Join(dir, cfg.Constitution)
+	}
+	if strings.TrimSpace(cfg.ProjectClaimsDir) == "" {
+		cfg.ProjectClaimsDir = DefaultProjectClaimsDir
+	}
+	if !filepath.IsAbs(cfg.ProjectClaimsDir) {
+		cfg.ProjectClaimsDir = filepath.Join(dir, cfg.ProjectClaimsDir)
+	}
 	if strings.TrimSpace(cfg.BuildDir) == "" {
 		cfg.BuildDir = DefaultBuildDir
 	}
@@ -334,6 +415,12 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	// a loop with no exit.
 	if err := checkBuildDirContainment(cfg.BuildDir, cfg.ClaimsDir, dir); err != nil {
 		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	if pathContains(cfg.ClaimsDir, filepath.Clean(cfg.Constitution)) {
+		return nil, fmt.Errorf("config: %s: constitution (%s) must sit outside claims_dir (%s)", path, cfg.Constitution, cfg.ClaimsDir)
+	}
+	if pathContains(cfg.ClaimsDir, filepath.Clean(cfg.ProjectClaimsDir)) || pathContains(cfg.ProjectClaimsDir, cfg.ClaimsDir) {
+		return nil, fmt.Errorf("config: %s: project_claims_dir (%s) must sit outside claims_dir (%s)", path, cfg.ProjectClaimsDir, cfg.ClaimsDir)
 	}
 	if cfg.Conformance.Observations != "" {
 		if pathContains(cfg.BuildDir, filepath.Clean(cfg.Conformance.Observations)) {
@@ -384,17 +471,13 @@ func (c *Config) validate() error {
 		return fmt.Errorf("unknown schema_version %d (engine supports %d)", c.SchemaVersion, CurrentSchemaVersion)
 	}
 
-	if len(c.Facets) == 0 {
-		return fmt.Errorf("facets must be non-empty")
+	if err := validateEngineFacets(c.Facets); err != nil {
+		return err
 	}
-	if dup, ok := firstDuplicate(c.Facets); ok {
-		return fmt.Errorf("facets contains duplicate %q", dup)
-	}
-	for i, f := range c.Facets {
-		if strings.TrimSpace(f) == "" {
-			return fmt.Errorf("facets[%d] is empty", i)
-		}
-	}
+	// Normalize declaration order so every loaded config agrees with the
+	// viewer tab strip (Contract then Internals). YAML order is not a
+	// project vocabulary.
+	c.Facets = EngineFacets()
 
 	if len(c.Modules) == 0 {
 		return fmt.Errorf("modules must be non-empty")
@@ -410,13 +493,6 @@ func (c *Config) validate() error {
 
 	if strings.TrimSpace(c.ClaimsDir) == "" {
 		return fmt.Errorf("claims_dir must be set")
-	}
-
-	// doctrine_facet is optional; when set, it must be a facet this project
-	// actually declares (an unknown doctrine facet can never gate anything,
-	// which almost certainly indicates a typo rather than intent).
-	if c.DoctrineFacet != "" && !contains(c.Facets, c.DoctrineFacet) {
-		return fmt.Errorf("doctrine_facet %q is not in facets", c.DoctrineFacet)
 	}
 
 	if dup, ok := firstDuplicate(c.MockupModules); ok {
@@ -454,7 +530,48 @@ func (c *Config) validate() error {
 		return fmt.Errorf("viewer.theme is no longer supported; remove viewer.theme from project.config.yaml to use the built-in Light and Dark viewer themes")
 	}
 
+	if c.MaxClaimBodyChars != nil && *c.MaxClaimBodyChars < 1 {
+		return fmt.Errorf("max_claim_body_chars must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimBodyChars, DefaultMaxClaimBodyChars)
+	}
+	if c.MaxClaimSummaryChars != nil && *c.MaxClaimSummaryChars < 1 {
+		return fmt.Errorf("max_claim_summary_chars must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimSummaryChars, DefaultMaxClaimSummaryChars)
+	}
+	if c.MaxClaimsPerModule != nil && *c.MaxClaimsPerModule < 1 {
+		return fmt.Errorf("max_claims_per_module must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimsPerModule, DefaultMaxClaimsPerModule)
+	}
+
 	return nil
+}
+
+// ClaimBodyCharLimit is the effective body+steps+rows cap: the configured
+// value when set, otherwise DefaultMaxClaimBodyChars. A nil Config still
+// returns the default so a lint called without a config does not silently
+// drop the ceiling.
+func (c *Config) ClaimBodyCharLimit() int {
+	if c == nil || c.MaxClaimBodyChars == nil {
+		return DefaultMaxClaimBodyChars
+	}
+	return *c.MaxClaimBodyChars
+}
+
+// ClaimSummaryCharLimit is the effective summary cap. A nil Config still
+// returns DefaultMaxClaimSummaryChars.
+func (c *Config) ClaimSummaryCharLimit() int {
+	if c == nil || c.MaxClaimSummaryChars == nil {
+		return DefaultMaxClaimSummaryChars
+	}
+	return *c.MaxClaimSummaryChars
+}
+
+// ClaimsPerModuleLimit is the effective module-size cap: the configured
+// value when set, otherwise DefaultMaxClaimsPerModule. A nil Config
+// still returns the default so a lint called without a config does not
+// silently drop the ceiling.
+func (c *Config) ClaimsPerModuleLimit() int {
+	if c == nil || c.MaxClaimsPerModule == nil {
+		return DefaultMaxClaimsPerModule
+	}
+	return *c.MaxClaimsPerModule
 }
 
 // TrackIDs returns every declared track id, in declaration order. Callers
@@ -521,6 +638,32 @@ func pathContains(dir, child string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+func validateEngineFacets(facets []string) error {
+	if len(facets) == 0 {
+		return fmt.Errorf("facets must be exactly %q and %q (engine-fixed)", FacetContract, FacetInternals)
+	}
+	seen := make(map[string]bool, len(facets))
+	for i, f := range facets {
+		if strings.TrimSpace(f) == "" {
+			return fmt.Errorf("facets[%d] is empty", i)
+		}
+		if f == removedOverviewFacet {
+			return fmt.Errorf("facets[%d] %q is not allowed: the reserved overview facet has been removed", i, f)
+		}
+		if !IsEngineFacet(f) {
+			return fmt.Errorf("facets contains %q; the only legal facets are %q and %q", f, FacetContract, FacetInternals)
+		}
+		if seen[f] {
+			return fmt.Errorf("facets contains duplicate %q", f)
+		}
+		seen[f] = true
+	}
+	if !seen[FacetContract] || !seen[FacetInternals] {
+		return fmt.Errorf("facets must be exactly %q and %q (engine-fixed)", FacetContract, FacetInternals)
+	}
+	return nil
+}
+
 func firstDuplicate(ss []string) (string, bool) {
 	seen := make(map[string]bool, len(ss))
 	for _, s := range ss {
@@ -541,9 +684,25 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
-// HubGatingEnabled reports whether doctrine hub-gating logic should run at
-// all. When false, callers must skip the check entirely rather than treat
-// it as a vacuous pass.
-func (c *Config) HubGatingEnabled() bool {
-	return c.DoctrineFacet != ""
+// IndexedFile is one file as the git index holds it. Tracked false means the
+// index has no such file, which readers treat exactly like an absent file.
+type IndexedFile struct {
+	Tracked bool
+	Raw     []byte
+}
+
+// ConstitutionPath is the resolved constitution.yaml path.
+func (c *Config) ConstitutionPath() string {
+	if c == nil {
+		return ""
+	}
+	return c.Constitution
+}
+
+// ProjectClaimsDirPath is the resolved project-claims directory.
+func (c *Config) ProjectClaimsDirPath() string {
+	if c == nil {
+		return ""
+	}
+	return c.ProjectClaimsDir
 }

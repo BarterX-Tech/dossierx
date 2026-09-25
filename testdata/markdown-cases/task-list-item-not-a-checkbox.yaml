@@ -7,6 +7,6 @@ body: |
   - [notacheckbox] text
   - [xx] text
   - \[x] escaped
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - only [ ], [x] and [X] open a task item

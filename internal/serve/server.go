@@ -416,7 +416,7 @@ func (s *Server) routes() http.Handler {
 // readiness assessment. The root handler turns either failure into a 500 error
 // page rather than a blank viewer.
 func (s *Server) renderViewer() ([]byte, error) {
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("serve: load claims: %w", err)
 	}

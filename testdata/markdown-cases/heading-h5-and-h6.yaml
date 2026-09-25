@@ -7,6 +7,6 @@ body: |
   ##### Five
 
   ###### Six
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - level 5 and 6 ATX headings

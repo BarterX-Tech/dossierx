@@ -7,6 +7,6 @@ body: |
   | a \\| b |
   | --- | --- |
   | c \\| d |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - an escaped backslash is followed by a REAL cell boundary

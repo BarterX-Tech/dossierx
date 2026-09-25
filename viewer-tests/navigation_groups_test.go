@@ -83,6 +83,7 @@ func clickNavigationGroupSummary(t *testing.T, ctx context.Context, selector str
 const navigationGroupsConfigYAML = `schema_version: 1
 facets:
   - contract
+  - internals
 modules:
   - module-01
   - module-02
@@ -143,10 +144,11 @@ const navigationGroupsClaimYAML = `id: %[1]s.contract.overview
 facet: contract
 module: %[1]s
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim under review.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 %[2]s
 `

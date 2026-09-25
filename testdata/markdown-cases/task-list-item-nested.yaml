@@ -7,6 +7,6 @@ body: |
   - Parent task list:
     - [ ] child one
     - [x] child two
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - task items inside a nested list

@@ -7,6 +7,6 @@ body: |
   > This is a blockquote with a paragraph.
   >
   > Second paragraph in the blockquote.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests blockquote

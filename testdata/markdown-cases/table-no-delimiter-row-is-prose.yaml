@@ -6,6 +6,6 @@ layout: card
 body: |
   | Header 1 | Header 2 |
   | Cell 1   | Cell 2   |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - the delimiter row is REQUIRED - without one the pipe lines are ordinary paragraph prose

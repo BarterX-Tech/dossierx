@@ -1,9 +1,6 @@
 // Package model's OrderClaims sorts claims for viewer display within a
 // single nav group (one module+facet). It is the single source of truth
-// both internal/render (the viewer) and internal/lint (the
-// orientation-note-order lint, which must agree with the viewer on "what
-// counts as first") consume — see that lint's doc comment for why this
-// used to live only in internal/render and was extracted here.
+// internal/render (the viewer) consumes.
 //
 // Ordering is two-level. Claims are first split into runs: a maximal
 // sequence of consecutive claims (in incoming order) that all share the

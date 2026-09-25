@@ -89,8 +89,7 @@ type Cause struct {
 }
 
 // DependencyCondition is a live readiness obstacle on a required dependency
-// path. A governed_by edge is intentionally absent from this set: governance
-// is a drift edge, not an approval prerequisite.
+// path.
 type DependencyCondition struct {
 	Kind         ConditionKind `json:"kind"`
 	DependencyID string        `json:"dependency_id,omitempty"`
@@ -157,7 +156,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 	sccs := findSCCs(eligible)
 	sccNodesMap := make(map[string]map[string]bool)
 	for _, scc := range sccs {
-		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
+		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn.IDs, scc[0]))
 		if isCyclic {
 			sccID := scc[0] // canonical ID (scc is sorted)
 			nodes := make(map[string]bool, len(scc))
@@ -209,7 +208,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			for _, uID := range currentLevel {
 				uClaim := byID[uID]
 				uPath := paths[uID]
-				uDeps := unique(uClaim.RestsOn)
+				uDeps := unique(uClaim.RestsOn.IDs)
 				sort.Strings(uDeps)
 
 				for _, depID := range uDeps {
@@ -387,7 +386,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		// 4. Reachable cyclic SCCs: globally minimize the complete witness path
 		// len(prefix + cycle) across all reachable entries in the SCC.
 		for _, scc := range sccs {
-			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
+			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn.IDs, scc[0]))
 			if !isCyclic {
 				continue
 			}
@@ -447,7 +446,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 
 		assessment := Assessment{
 			ClaimID:              id,
-			PolicyVersion:        policyVersion(store),
+			PolicyVersion:        lock.PolicyLocalApprovalV1,
 			LocalApproved:        localApproved,
 			LocallyApproved:      localApproved,
 			DependencyReady:      len(conditions) == 0,
@@ -541,30 +540,17 @@ func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags 
 		}
 		return out
 	}
+	// The baseline set and the required chain are the same set — rests_on,
+	// deduplicated — so every baselined dependency is also an approval
+	// prerequisite. (The retired governed_by edge was the one drift-only
+	// input that sat in the first set and not the second; NIT-29.)
 	for _, depID := range lock.BaselineDependencyIDs(c) {
 		dep, exists := byID[depID]
 		if !exists {
-			// A missing governed_by or mirrors input is still reported by the
-			// relevant integrity/lint gate; it is deliberately not turned into
-			// an approval prerequisite here. rests_on is the required chain.
-			if contains(c.RestsOn, depID) {
-				out.conditions = append(out.conditions, DependencyCondition{
-					Kind: ConditionMissingDependency, DependencyID: depID,
-					Path: Path{c.ID, depID}, Detail: "required dependency is missing",
-				})
-			}
-			continue
-		}
-		if !contains(c.RestsOn, depID) {
-			// mirrors and governed_by are comparable drift inputs, but neither
-			// edge creates an approval prerequisite.
-			if stored, known := baseline(store, c.ID, depID); known && stored != lock.ContentHash(dep) {
-				out.causes = append(out.causes, Cause{
-					Kind: CauseDirectDependencyChange, SourceKind: CauseDirectDependencyChange,
-					DependencyID: depID, Path: Path{c.ID, depID}, Direct: true,
-					Detail: "dependency content differs from the reviewed baseline",
-				})
-			}
+			out.conditions = append(out.conditions, DependencyCondition{
+				Kind: ConditionMissingDependency, DependencyID: depID,
+				Path: Path{c.ID, depID}, Detail: "required dependency is missing",
+			})
 			continue
 		}
 		state := dependencyState(dep)
@@ -634,15 +620,6 @@ func baseline(store *lock.Store, dependent, dependency string) (string, bool) {
 	return "", false
 }
 
-func policyVersion(store *lock.Store) lock.PolicyVersion {
-	if store == nil {
-		// LoadStore treats a missing store as a new project. This default also
-		// keeps a read-only assessment useful before the first store is saved.
-		return lock.PolicyLocalApprovalV1
-	}
-	return store.PolicyVersion
-}
-
 func dependencyState(c model.Claim) ConditionKind {
 	switch strings.ToLower(strings.TrimSpace(string(c.Status))) {
 	case "retired":
@@ -705,7 +682,7 @@ func findSCCs(byID map[string]model.Claim) [][]string {
 		state.onStack[v] = true
 
 		c := byID[v]
-		deps := unique(c.RestsOn)
+		deps := unique(c.RestsOn.IDs)
 		sort.Strings(deps)
 
 		for _, w := range deps {
@@ -756,7 +733,7 @@ func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]mo
 	if !ok {
 		return []string{start, start}
 	}
-	for _, depID := range unique(startClaim.RestsOn) {
+	for _, depID := range unique(startClaim.RestsOn.IDs) {
 		if depID == start {
 			return []string{start, start}
 		}
@@ -769,7 +746,7 @@ func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]mo
 	var queue []queueItem
 	visited := map[string]int{start: 0}
 
-	startNeighbors := unique(startClaim.RestsOn)
+	startNeighbors := unique(startClaim.RestsOn.IDs)
 	sort.Strings(startNeighbors)
 
 	for _, depID := range startNeighbors {
@@ -795,7 +772,7 @@ func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]mo
 			continue
 		}
 
-		cNeighbors := unique(c.RestsOn)
+		cNeighbors := unique(c.RestsOn.IDs)
 		sort.Strings(cNeighbors)
 
 		for _, nextID := range cNeighbors {

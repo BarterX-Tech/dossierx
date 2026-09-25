@@ -8,6 +8,6 @@ body: |
      1. Nested one
      2. Nested two
   2. Second top level
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture

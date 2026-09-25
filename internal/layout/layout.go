@@ -35,17 +35,18 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 )
 
-// The seven legacy kinds, by the root names every release before this one
-// wrote. Two are per-module (a prefix and a suffix around the module name),
-// five are fixed.
+// The six legacy kinds, by the root names every release before this one
+// wrote. One is per-module (a prefix and a suffix around the module name),
+// five are fixed. A root-level ".build-order.<module>.json" from the removed
+// build-order product is not one of them: nothing reads it, so it is left
+// where it is rather than moved.
 const (
-	legacyBuildOrderPrefix = ".build-order."
-	legacyCodeLinksPrefix  = ".implementation."
-	legacyLockStore        = ".dossierx-lock-store.json"
-	legacyCommentDigest    = ".dossierx-comment-digest.json"
-	legacyFlagStore        = ".dossierx-flag-store.json"
-	legacyCatalog          = ".catalog.json"
-	legacyViewer           = "viewer/index.html"
+	legacyCodeLinksPrefix = ".implementation."
+	legacyLockStore       = ".dossierx-lock-store.json"
+	legacyCommentDigest   = ".dossierx-comment-digest.json"
+	legacyFlagStore       = ".dossierx-flag-store.json"
+	legacyCatalog         = ".catalog.json"
+	legacyViewer          = "viewer/index.html"
 )
 
 // The three legacy STORE base names, exported so internal/check's staged
@@ -53,8 +54,8 @@ const (
 // same name this package scans for.
 //
 // Only the stores are exported, and that is the distinction rather than an
-// omission: check classifies a staged path by which store it is, and the four
-// legacy ARTIFACT names (catalog, viewer, build-order, code-links) are
+// omission: check classifies a staged path by which store it is, and the three
+// legacy ARTIFACT names (catalog, viewer, code-links) are
 // regenerated rather than staged, so no caller outside this package has ever
 // had a question they answer. They stay unexported beside the stores above.
 var (
@@ -63,7 +64,7 @@ var (
 	LegacyFlagStoreName     = legacyFlagStore
 )
 
-// Kind names one of the seven legacy kinds a Move is about — or, on an
+// Kind names one of the six legacy kinds a Move is about — or, on an
 // IgnoredPath only, the build directory's own .gitignore, which never lived at
 // the root and so is never a Move.
 type Kind string
@@ -73,7 +74,6 @@ const (
 	KindLockStore     Kind = "lock-store"
 	KindCommentDigest Kind = "comment-digest"
 	KindFlagStore     Kind = "flag-store"
-	KindBuildOrder    Kind = "build-order"
 	KindCodeLinks     Kind = "code-links"
 	KindCatalog       Kind = "catalog"
 	KindViewer        Kind = "viewer"
@@ -105,19 +105,19 @@ type Move struct {
 	InWorkTree bool `json:"-"`
 }
 
-// LegacyFiles scans cfg.Dir() for the seven legacy kinds and returns one Move
+// LegacyFiles scans cfg.Dir() for the six legacy kinds and returns one Move
 // per file found, in the order the printed block lists them: the lock store,
-// the comment digest, the flag store, every build order (by module), every
-// code-links artifact (by module), the catalog, the viewer. It returns nil when
+// the comment digest, the flag store, every code-links artifact (by module),
+// the catalog, the viewer. It returns nil when
 // the project is on the current layout.
 //
 // Tracked is decided by asking git ONCE — `git ls-files -z -- <the found files>`
 // from the project directory — when a .git directory or file is found walking
 // up from cfg.Dir() and git is on PATH; otherwise every file is Tracked: false
 // and InWorkTree: false. The distinction is what makes the printed block run:
-// `git mv` exits 128 on an untracked source and outside a work tree, and three
-// of the seven kinds are untracked in the ordinary case (a proposed-but-unlocked
-// build order, the flag store, a code-links artifact).
+// `git mv` exits 128 on an untracked source and outside a work tree, and two
+// of the six kinds are untracked in the ordinary case (the flag store, a
+// code-links artifact).
 func LegacyFiles(cfg *config.Config) ([]Move, error) {
 	root := cfg.Dir()
 	entries, err := os.ReadDir(root)
@@ -127,7 +127,7 @@ func LegacyFiles(cfg *config.Config) ([]Move, error) {
 	buildRel := buildDirRelative(cfg)
 
 	var lockStore, commentDigest, flagStore, catalog bool
-	var buildOrders, codeLinks []string
+	var codeLinks []string
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -142,17 +142,12 @@ func LegacyFiles(cfg *config.Config) ([]Move, error) {
 			flagStore = true
 		case name == legacyCatalog:
 			catalog = true
-		case strings.HasPrefix(name, legacyBuildOrderPrefix) && strings.HasSuffix(name, ".json"):
-			if m := strings.TrimSuffix(strings.TrimPrefix(name, legacyBuildOrderPrefix), ".json"); m != "" {
-				buildOrders = append(buildOrders, m)
-			}
 		case strings.HasPrefix(name, legacyCodeLinksPrefix) && strings.HasSuffix(name, ".json"):
 			if m := strings.TrimSuffix(strings.TrimPrefix(name, legacyCodeLinksPrefix), ".json"); m != "" {
 				codeLinks = append(codeLinks, m)
 			}
 		}
 	}
-	sort.Strings(buildOrders)
 	sort.Strings(codeLinks)
 	viewerInfo, viewerErr := os.Stat(filepath.Join(root, filepath.FromSlash(legacyViewer)))
 	viewer := viewerErr == nil && !viewerInfo.IsDir()
@@ -169,9 +164,6 @@ func LegacyFiles(cfg *config.Config) ([]Move, error) {
 	}
 	if flagStore {
 		add(KindFlagStore, "", legacyFlagStore, path.Join(buildRel, config.LedgerDirName, config.FlagStoreFileName), false)
-	}
-	for _, m := range buildOrders {
-		add(KindBuildOrder, m, legacyBuildOrderPrefix+m+".json", path.Join(buildRel, config.BuildOrderDirName, m+".json"), false)
 	}
 	for _, m := range codeLinks {
 		add(KindCodeLinks, m, legacyCodeLinksPrefix+m+".json", path.Join(buildRel, config.CodeLinksDirName, m+".json"), false)
@@ -278,7 +270,7 @@ func buildDirRelative(cfg *config.Config) string {
 }
 
 // Refuse returns the layout_legacy error when cfg's project keeps any of the
-// seven legacy kinds at the root, and nil otherwise. buildDirIgnored appends
+// six legacy kinds at the root, and nil otherwise. buildDirIgnored appends
 // the "build/ is ignored" hint — a verdict this package cannot compute (it
 // needs the runner in internal/check), so each caller supplies it from
 // check.Gitignored.
@@ -330,9 +322,6 @@ func RefuseTracked(cfg *config.Config, names []string) error {
 			m = Move{From: base, To: path.Join(buildRel, config.CatalogDirName, "catalog.json"), Kind: KindCatalog, Regenerated: true}
 		case base == legacyViewer:
 			m = Move{From: base, To: path.Join(buildRel, config.ViewerDirName, "index.html"), Kind: KindViewer, Regenerated: true}
-		case strings.HasPrefix(base, legacyBuildOrderPrefix) && strings.HasSuffix(base, ".json"):
-			mod := strings.TrimSuffix(strings.TrimPrefix(base, legacyBuildOrderPrefix), ".json")
-			m = Move{From: base, To: path.Join(buildRel, config.BuildOrderDirName, mod+".json"), Kind: KindBuildOrder, Module: mod}
 		case strings.HasPrefix(base, legacyCodeLinksPrefix) && strings.HasSuffix(base, ".json"):
 			mod := strings.TrimSuffix(strings.TrimPrefix(base, legacyCodeLinksPrefix), ".json")
 			m = Move{From: base, To: path.Join(buildRel, config.CodeLinksDirName, mod+".json"), Kind: KindCodeLinks, Module: mod}
@@ -343,7 +332,7 @@ func RefuseTracked(cfg *config.Config, names []string) error {
 		m.InWorkTree = true
 		byKind[m.Kind] = append(byKind[m.Kind], m)
 	}
-	for _, k := range []Kind{KindLockStore, KindCommentDigest, KindFlagStore, KindBuildOrder, KindCodeLinks, KindCatalog, KindViewer} {
+	for _, k := range []Kind{KindLockStore, KindCommentDigest, KindFlagStore, KindCodeLinks, KindCatalog, KindViewer} {
 		ms := byKind[k]
 		sort.Slice(ms, func(i, j int) bool { return ms[i].Module < ms[j].Module })
 		moves = append(moves, ms...)
@@ -354,7 +343,7 @@ func RefuseTracked(cfg *config.Config, names []string) error {
 	return refusal(cfg, moves, false)
 }
 
-// IsLegacyName reports whether a project-relative path names one of the seven
+// IsLegacyName reports whether a project-relative path names one of the six
 // legacy kinds at the project root. It is the predicate "check --staged" runs
 // over the index listing of the project's own subtree.
 func IsLegacyName(rel string) bool {
@@ -364,8 +353,6 @@ func IsLegacyName(rel string) bool {
 		return true
 	case strings.Contains(rel, "/"):
 		return false
-	case strings.HasPrefix(rel, legacyBuildOrderPrefix) && strings.HasSuffix(rel, ".json"):
-		return len(rel) > len(legacyBuildOrderPrefix)+len(".json")
 	case strings.HasPrefix(rel, legacyCodeLinksPrefix) && strings.HasSuffix(rel, ".json"):
 		return len(rel) > len(legacyCodeLinksPrefix)+len(".json")
 	}
@@ -488,15 +475,13 @@ const RecommendedGitignore = `build/*
 !build/.gitignore
 !build/ledger
 !build/ledger/*
-!build/build-order
-!build/build-order/*
 !build/code-links
 !build/code-links/*`
 
 // BuildGitignoreContent is what EnsureBuildGitignore writes into
 // <build_dir>/.gitignore: the historical generated kinds (catalog, viewer) and the
 // transient files (sentinels, temp and probe files) are ignored; the tracked
-// kinds under ledger/, build-order/ and code-links/ are not.
+// kinds under ledger/ and code-links/ are not.
 const BuildGitignoreContent = `# Written by dossierx check. Generated kinds are ignored; tracked kinds are not.
 catalog/
 viewer/
@@ -643,8 +628,8 @@ func EnsureBuildGitignoreForConformance(cfg *config.Config, enabled bool) error 
 type IgnoredPath struct {
 	Path         string
 	Kind         Kind
-	Module       string // the module, for KindBuildOrder and KindCodeLinks
-	What         string // "the lock ledger", "module widget's build order", ...
+	Module       string // the module, for KindCodeLinks
+	What         string // "the lock ledger", "module widget's code links", ...
 	Source       string
 	Line         int
 	Pattern      string
@@ -667,7 +652,7 @@ type IgnoredPath struct {
 //
 // The harm clause is per Kind. The sentence that is true of the lock ledger —
 // a clone has no approval record, check fails there with lock-ledger-absent —
-// is false of a build order, of the flag store and of build/.gitignore, and a
+// is false of the flag store and of build/.gitignore, and a
 // stated harm that can be refuted on the evidence is the report that teaches
 // people to bypass the gate (internal/check/ledger.go's rule on false reports).
 func StoreGitignoredMessage(p IgnoredPath) string {
@@ -675,8 +660,8 @@ func StoreGitignoredMessage(p IgnoredPath) string {
 	fmt.Fprintf(&b, "%s is ignored by .gitignore (pattern %q at %s:%d), so %s never reaches the repository: %s ",
 		p.Path, p.Pattern, p.Source, p.Line, p.What, storeGitignoredHarm(p))
 	// The negation caveat names the directory holding the reported path, so
-	// the obvious "!build/build-order/" a reader would try for a build order
-	// is explained before they try it. A file directly under the build
+	// the obvious "!build/code-links/" a reader would try for a code-links
+	// artifact is explained before they try it. A file directly under the build
 	// directory (build/.gitignore) has no directory of its own to negate.
 	if dir := path.Dir(p.Path); dir == p.BuildRel || dir == "." {
 		fmt.Fprintf(&b, "Git never re-enters an excluded directory, so \"!%s\" alone does nothing. ", p.Path)
@@ -708,8 +693,6 @@ func storeGitignoredHarm(p IgnoredPath) string {
 		return "a collaborator or CI cloning this project has no record of which comment threads each approval covered, so check fails there with comment-digest-absent (or with lock-ledger-absent when the ledger beside it is ignored too), and no thread digested here can be compared against its approval there."
 	case KindFlagStore:
 		return "a collaborator or CI cloning this project has no record that any claim was flagged: claim reaudit there finds no pending flag to confirm, and every flag written here vanishes on the next clone with nothing to say so."
-	case KindBuildOrder:
-		return fmt.Sprintf("a collaborator or CI cloning this project has no approved build order for module %q: an agent there builds in whatever order the claims imply now, and check reports build-order-ledger-abandoned for that module there when its ledger record did travel — and nothing at all when it did not.", p.Module)
 	case KindCodeLinks:
 		return fmt.Sprintf("a collaborator or CI cloning this project has no code links for module %q: check there prints no code-link status for it at all, drift between its claims and the source files linked here goes unreported, and the links vanish on the next clone with nothing to say so.", p.Module)
 	case KindBuildGitignore:
@@ -727,7 +710,7 @@ func storeGitignoredHarm(p IgnoredPath) string {
 // pattern was written). It is not the finding's harm — that ledger does reach
 // every collaborator — but nothing will stage the next NEW artifact.
 func IgnoredButTrackedWarning(p IgnoredPath) string {
-	return fmt.Sprintf("%s is in the repository but matched by .gitignore pattern %q (%s:%d): it was force-added, so nothing will stage the next NEW artifact under %s/ (a new module's %s/build-order/<m>.json, or a first flag store) and git add -A will never pick one up; replace the pattern with the block under store-gitignored, or set build_dir to a directory the pattern does not match",
+	return fmt.Sprintf("%s is in the repository but matched by .gitignore pattern %q (%s:%d): it was force-added, so nothing will stage the next NEW artifact under %s/ (a new module's %s/code-links/<m>.json, or a first flag store) and git add -A will never pick one up; replace the pattern with the block under store-gitignored, or set build_dir to a directory the pattern does not match",
 		p.Path, p.Pattern, p.Source, p.Line, p.BuildRel, p.BuildRel)
 }
 

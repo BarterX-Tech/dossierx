@@ -1,4 +1,5 @@
 id: supersedemod.contract.new
+summary: Fixture claim used by the engine test corpus.
 facet: contract
 module: supersedemod
 status: draft
@@ -9,6 +10,3 @@ body: |
 migrated_from: supersedemod.contract.old
 rests_on:
   - supersedemod.contract.old
-governed_by:
-  type: none
-  reason: fixture claim, not backed by any real doctrine

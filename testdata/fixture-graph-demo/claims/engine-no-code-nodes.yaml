@@ -1,10 +1,11 @@
-id: engine.decision.no-code-nodes
-facet: decision
+id: engine.internals.no-code-nodes
+summary: Fixture claim used by the engine test corpus.
+facet: internals
 module: engine
 status: draft
 layout: card
-build_role: orientation
 body: |
   The graph audits claims, not code. Whether a claim is grounded in a real implementation is answered elsewhere, with its own vocabulary and its own exit code.
-governed_by:
-  type: engine.decision.single-source-of-truth
+rests_on:
+  none: true
+  reason: fixture claim; nothing to rest on

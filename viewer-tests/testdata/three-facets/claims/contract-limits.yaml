@@ -3,10 +3,8 @@ facet: contract
 module: widget
 status: draft
 layout: card
+summary: Fixture claim used by the engine test corpus.
 body: |
   A widget holds at most one value at a time.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 rests_on:
   - widget.contract.overview

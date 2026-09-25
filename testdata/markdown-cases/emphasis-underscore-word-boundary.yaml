@@ -11,6 +11,6 @@ body: |
   snake_case_word and target_blank stay literal.
 
   But _two that legitimately pair_ do emphasise, and \_two that are escaped\_ do not.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - the residual word-boundary exposure, in both directions

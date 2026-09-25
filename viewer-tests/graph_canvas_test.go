@@ -135,9 +135,8 @@ const canvasRecorderJS = `(function () {
 // the file strokes that colour at that width (a label's halo is strokeText, not
 // stroke). So a paper-coloured width-2 stroke starts a node and everything
 // until the next one decorates it — fill, then the status/cycle ring, then any
-// halo, selection ring and governance wedge, in drawNodes's own order. Ops
-// before the first node belong to drawEdges; two-point strokes are the edge
-// lines and three-point ones its chevrons.
+// halo and selection ring, in drawNodes's own order. Ops before the first
+// node belong to drawEdges; two-point strokes are the edge lines.
 const frameSummaryJS = `(function () {
 	var R = window.__dxgRec;
 	if (!R || R.frames.length === 0) { return null; }
@@ -155,7 +154,7 @@ const frameSummaryJS = `(function () {
 	var pal = {
 		paper: tok('--paper'), ink: tok('--ink'), muted: tok('--muted'), faint: tok('--faint'),
 		accent: tok('--accent'), warn: tok('--warn'), link: tok('--link'),
-		cycle: tok('--dxg-cycle'), halo: tok('--dxg-halo'), governed: tok('--dxg-governed')
+		cycle: tok('--dxg-cycle'), halo: tok('--dxg-halo')
 	};
 
 	function shape(p) {
@@ -534,7 +533,7 @@ func TestGraphCanvasBackingStoreFollowsDevicePixelRatio(t *testing.T) {
 const overlayConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -548,8 +547,8 @@ func newOverlayProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, overlayConfig)
 	p.writeClaim("hub.yaml", graphClaim("widget.contract.hub", "contract", ""))
-	p.writeClaim("leaf1.yaml", graphClaim("widget.design.leaf-one", "design", "widget.contract.hub"))
-	p.writeClaim("leaf2.yaml", graphClaim("widget.design.leaf-two", "design", "widget.contract.hub"))
+	p.writeClaim("leaf1.yaml", graphClaim("widget.internals.leaf-one", "internals", "widget.contract.hub"))
+	p.writeClaim("leaf2.yaml", graphClaim("widget.internals.leaf-two", "internals", "widget.contract.hub"))
 	p.writeClaim("lone.yaml", graphClaim("widget.contract.lone", "contract", ""))
 	return p
 }
@@ -656,34 +655,37 @@ func TestGraphEmptyOverlayIsStatedAndDoesNotGhostTheGraph(t *testing.T) {
 // Finding 1 — labels are laid out, not merely drawn
 // ---------------------------------------------------------------------
 
-// newLabelProject is deliberately dense and deliberately wordy: eighty claims
-// in one module, chained, with derived titles seven words long. At the fitted
+// newLabelProject is deliberately dense and deliberately wordy: eighty claims,
+// with derived titles seven words long. They are spread over four modules of
+// twenty because check refuses a module whose isolation view is over its
+// 6,144-byte budget (about 22 claims with these ids and titles); the default
+// claims granularity still draws all eighty on one canvas. At the fitted
 // zoom their label boxes come nowhere near all fitting, which is the state that
 // used to render as glyph soup — about a third of the labels overprinting each
 // other and running through the node discs. Keep this claim set out of
 // readiness dependencies: this is a canvas-label fixture, and draft rests_on
 // edges now correctly opt the generated viewer into the independent readiness
 // UI (and its deliberately complete diagnostic payload), which would make this
-// test measure that workload too. Reciprocal mirrors keep the graph connected
-// without creating readiness dependencies.
+// test measure that workload too. Isolated claims still draw labels.
+const labelGraphConfig = `schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - widget
+  - gadget
+  - gizmo
+  - doohickey
+claims_dir: claims
+`
+
 func newLabelProject(t *testing.T) *project {
 	t.Helper()
-	p := newProjectRaw(t, graphConfig)
-	ids := make([]string, 80)
+	p := newProjectRaw(t, labelGraphConfig)
+	modules := []string{"widget", "gadget", "gizmo", "doohickey"}
 	for i := 0; i < 80; i++ {
-		ids[i] = fmt.Sprintf("widget.contract.the-claim-that-carries-a-long-title-%02d", i)
-	}
-	for i, id := range ids {
-		var mirrors []string
-		if i > 0 {
-			mirrors = append(mirrors, ids[i-1])
-		}
-		if i+1 < len(ids) {
-			mirrors = append(mirrors, ids[i+1])
-		}
-		claim := graphClaim(id, "contract", "")
-		claim = strings.Replace(claim, "body: |\n", "mirrors:\n  - "+strings.Join(mirrors, "\n  - ")+"\nbody: |\n", 1)
-		p.writeClaim(fmt.Sprintf("c%02d.yaml", i), claim)
+		id := fmt.Sprintf("%s.contract.the-claim-that-carries-a-long-title-%02d", modules[i%len(modules)], i)
+		p.writeClaim(fmt.Sprintf("c%02d.yaml", i), graphClaim(id, "contract", ""))
 	}
 	return p
 }

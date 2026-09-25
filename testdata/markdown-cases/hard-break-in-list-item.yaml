@@ -8,6 +8,6 @@ body: |
     Second
   - Another  
     Item
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - both hard-break spellings thread through list-item continuation

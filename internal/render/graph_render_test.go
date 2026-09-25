@@ -8,7 +8,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
-	"github.com/BarterX-Tech/dossierx/internal/readiness"
 )
 
 // ---------------------------------------------------------------------
@@ -41,60 +40,6 @@ var graphInjectionWitnesses = map[string]string{
 	"graph.css":     "\n#dxgPane {\n",
 	"graph-core.js": "\n  root.dossierxGraphCore = api;\n",
 	"graph-ui.js":   "\n  var PANE_ID = 'dxgPane';\n",
-}
-
-// TestReadinessNeverPullsInTheMermaidBundle re-pins this file's original
-// TestMermaidAssetsAreGuardedByTraceableReadiness, which asserted the
-// OPPOSITE of what it is named now: docs/design/screens/
-// 06-claim-blocked-across-four-modules.md's R09.9 ("no inline dependency
-// map") retired the claim-readiness dependency trace this guard existed
-// for. viewer-runtime.js's renderClaimReadiness (lane L5) renders a
-// two-slug dependency path with plain text and no diagram source — see
-// its own doc comment and render.go's HasReadinessMaps field comment — so
-// a traceable readiness condition alone must no longer pull in the ~3.5 MB
-// vendored renderer at all. Build order's own locked artifact (untouched by
-// this lane) is the only remaining reason shell.html's
-// `{{if or .BuildOrders.Modules .HasReadinessMaps}}` guard ever passes.
-func TestReadinessNeverPullsInTheMermaidBundle(t *testing.T) {
-	claims := []model.Claim{
-		groupedClaim("widget.contract.one", "widget", "contract", model.StatusDraft),
-		groupedClaim("widget.contract.two", "widget", "contract", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}
-	cat, err := catalog.Build(claims, cfg)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-
-	healthy, err := Render(cat, cfg)
-	if err != nil {
-		t.Fatalf("Render healthy catalog: %v", err)
-	}
-	if strings.Contains(healthy, "__esbuild_esm_mermaid_nm") {
-		t.Fatal("a catalog with no readiness routes must not carry the Mermaid bundle")
-	}
-
-	cat.SetReadiness(map[string]readiness.Assessment{
-		"widget.contract.one": {
-			ClaimID:         "widget.contract.one",
-			DependencyReady: false,
-			DependencyConditions: []readiness.DependencyCondition{{
-				Kind:         readiness.ConditionDependencyUnapproved,
-				DependencyID: "widget.contract.two",
-				Path:         readiness.Path{"widget.contract.one", "widget.contract.two"},
-			}},
-		},
-	})
-	blocked, err := Render(cat, cfg)
-	if err != nil {
-		t.Fatalf("Render blocked catalog: %v", err)
-	}
-	if strings.Contains(blocked, "__esbuild_esm_mermaid_nm") {
-		t.Fatal("06 §R09.9: a traceable readiness condition must not pull in the retired inline-map Mermaid bundle")
-	}
-	if strings.Contains(blocked, "shared lazy Mermaid renderer") {
-		t.Fatal("06 §R09.9: a traceable readiness condition alone must not include the shared Mermaid renderer glue")
-	}
 }
 
 const (
@@ -221,8 +166,6 @@ func TestEngineOwnedViewerAssetsHaveNoTrailingWhitespace(t *testing.T) {
 		"viewer/template/viewer-runtime.js",
 		"viewer/template/graph-core.js",
 		"viewer/template/graph-ui.js",
-		"viewer/template/build-order-ui.js",
-		"viewer/template/vendor/mermaid.min.js",
 	}
 	for _, path := range paths {
 		b, err := shellFS.ReadFile(path)
@@ -234,20 +177,6 @@ func TestEngineOwnedViewerAssetsHaveNoTrailingWhitespace(t *testing.T) {
 				t.Fatalf("engine asset %s has trailing whitespace at line %d", path, lineNo+1)
 			}
 		}
-	}
-
-	// The guarded Mermaid asset is injected as its exact engine-owned bytes,
-	// once, when a locked Build order is present.
-	cfg := buildOrderTestConfig(t, "widget")
-	claims := buildOrderTestClaims("widget")
-	lockBuildOrder(t, cfg, claims, "widget")
-	out := renderClaimsFor(t, cfg, claims)
-	mermaid, err := shellFS.ReadFile(mermaidTemplatePath)
-	if err != nil {
-		t.Fatalf("read embedded Mermaid: %v", err)
-	}
-	if got := strings.Count(out, string(mermaid)); got != 1 {
-		t.Fatalf("rendered Mermaid asset count = %d, want one exact injection", got)
 	}
 }
 
@@ -271,8 +200,8 @@ func TestGraphPayloadBlockParsesAsJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &payload); err != nil {
 		t.Fatalf("payload block does not parse as JSON: %v\n%.400s", err, text)
 	}
-	if payload.Schema != 1 {
-		t.Errorf("payload schema = %d, want 1", payload.Schema)
+	if payload.Schema != 3 {
+		t.Errorf("payload schema = %d, want 3", payload.Schema)
 	}
 	if payload.GeneratedAt == "" {
 		t.Errorf("payload generated_at is empty; the render path must stamp it (graph.Build deliberately does not)")

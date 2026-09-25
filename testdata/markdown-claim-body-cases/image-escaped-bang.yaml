@@ -5,7 +5,6 @@ status: draft
 layout: card
 body: |
   \![Alt](assets/a.png)
-
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: "markdown renderer test fixture - an escaped \"!\" can never open an image — the escapable set reaches this construct for free, leaving an ordinary link behind it"

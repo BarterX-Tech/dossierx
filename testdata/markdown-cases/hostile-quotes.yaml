@@ -5,6 +5,6 @@ status: draft
 layout: card
 body: |
   This text has "double quotes" and 'single quotes' in it.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests quote characters

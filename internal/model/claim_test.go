@@ -25,7 +25,7 @@ func decodeClaim(t *testing.T, doc string) Claim {
 }
 
 func TestClaim_SectionField_RoundTrips(t *testing.T) {
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nsection: 5 - workflows / lifecycle\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nsection: 5 - workflows / lifecycle\nrests_on:\n  none: true\n  reason: fixture\n")
 	if c.Section != "5 - workflows / lifecycle" {
 		t.Fatalf("Section = %q, want %q", c.Section, "5 - workflows / lifecycle")
 	}
@@ -41,7 +41,7 @@ func TestClaim_SectionField_RoundTrips(t *testing.T) {
 }
 
 func TestClaim_SectionField_OptionalAndOmitted(t *testing.T) {
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nrests_on:\n  none: true\n  reason: fixture\n")
 	if c.Section != "" {
 		t.Fatalf("Section = %q, want empty when omitted", c.Section)
 	}
@@ -56,7 +56,7 @@ func TestClaim_SectionField_OptionalAndOmitted(t *testing.T) {
 }
 
 func TestClaim_RawHTMLFields_RoundTrip(t *testing.T) {
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\nraw_html: \"<div>mock</div>\"\nraw_html_reviewed: true\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\nraw_html: \"<div>mock</div>\"\nraw_html_reviewed: true\nrests_on:\n  none: true\n  reason: fixture\n")
 	if c.Layout != LayoutMockup {
 		t.Fatalf("Layout = %q, want %q", c.Layout, LayoutMockup)
 	}
@@ -84,7 +84,7 @@ func TestClaim_RawHTMLFields_RoundTrip(t *testing.T) {
 }
 
 func TestClaim_RawHTMLFields_OptionalAndOmitted(t *testing.T) {
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nrests_on:\n  none: true\n  reason: fixture\n")
 	if c.RawHTML != "" {
 		t.Fatalf("RawHTML = %q, want empty when omitted", c.RawHTML)
 	}
@@ -105,7 +105,7 @@ func TestLayoutMockup_IsAValidLayoutValue(t *testing.T) {
 	if LayoutMockup != "mockup" {
 		t.Fatalf("LayoutMockup = %q, want %q", LayoutMockup, "mockup")
 	}
-	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	c := decodeClaim(t, "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: mockup\nrests_on:\n  none: true\n  reason: fixture\n")
 	if c.Layout != LayoutMockup {
 		t.Fatalf("Layout = %q, want %q", c.Layout, LayoutMockup)
 	}
@@ -257,9 +257,8 @@ func TestClaim_EffectiveKind(t *testing.T) {
 		want Kind
 	}{
 		{"default fact", Claim{Facet: "contract"}, KindFact},
-		{"explicit orientation-note", Claim{Facet: "contract", Kind: KindOrientationNote}, KindOrientationNote},
-		{"overview facet implies orientation-note", Claim{Facet: "overview"}, KindOrientationNote},
-		{"overview facet with explicit kind stays orientation-note", Claim{Facet: "overview", Kind: KindOrientationNote}, KindOrientationNote},
+		{"explicit fact", Claim{Facet: "contract", Kind: KindFact}, KindFact},
+		{"unknown authored kind is returned as-is (kind-shape refuses it)", Claim{Facet: "contract", Kind: Kind("orientation-note")}, Kind("orientation-note")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -273,7 +272,7 @@ func TestClaim_EffectiveKind(t *testing.T) {
 func TestClaim_RowsField_PreservesAuthoredOrderThroughFullClaimRoundTrip(t *testing.T) {
 	doc := "id: widget.contract.a\nfacet: contract\nstatus: draft\nlayout: table\n" +
 		"rows:\n  - zeta: 1\n    alpha: 2\n    middle: 3\n  - zeta: 4\n    alpha: 5\n    middle: 6\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 	c := decodeClaim(t, doc)
 
 	if len(c.Rows) != 2 {

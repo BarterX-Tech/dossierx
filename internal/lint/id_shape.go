@@ -1,7 +1,7 @@
 // id_shape.go implements the "id-shape" lint: a claim's id must be exactly
 // three dot-separated segments, module.facet.slug, where module is one of
-// the project's configured modules, facet is one of the project's
-// configured facets, those two segments agree with the claim's own Module
+// the project's configured modules, facet is an engine-fixed name
+// (contract or internals), those two segments agree with the claim's own Module
 // and Facet fields, and slug is a non-empty kebab-case identifier.
 package lint
 
@@ -26,14 +26,24 @@ func (IDShapeLint) Name() string { return "id-shape" }
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 func (IDShapeLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
-	var modules, facets map[string]bool
+	var modules map[string]bool
 	if cfg != nil {
 		modules = toSet(cfg.Modules)
-		facets = toSet(cfg.Facets)
 	}
 
 	var findings []Finding
 	for _, c := range claims {
+		if c.IsProjectClaim() {
+			findings = append(findings, projectIDFindings(c)...)
+			continue
+		}
+		if c.Scope != "" && c.Scope != model.ScopeProject {
+			findings = append(findings, Finding{
+				LintName: "id-shape",
+				ClaimID:  c.ID,
+				Message:  "scope must be omitted or \"project\"",
+			})
+		}
 		segs := strings.Split(c.ID, ".")
 		if len(segs) != 3 {
 			findings = append(findings, Finding{
@@ -62,11 +72,11 @@ func (IDShapeLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 				Message:  "id module segment " + module + " is not in the project's configured modules",
 			})
 		}
-		if facets != nil && !facets[facet] && facet != config.ReservedOverviewFacet {
+		if !config.IsEngineFacet(facet) {
 			findings = append(findings, Finding{
 				LintName: "id-shape",
 				ClaimID:  c.ID,
-				Message:  "id facet segment " + facet + " is not in the project's configured facets",
+				Message:  "id facet segment " + facet + " is not an engine-fixed facet (contract or internals)",
 			})
 		}
 		if c.Module != "" && c.Module != module {
@@ -90,6 +100,41 @@ func (IDShapeLint) Check(claims []model.Claim, cfg *config.Config) []Finding {
 				Message:  "id slug segment " + slug + " must be kebab-case (lowercase alphanumerics separated by single hyphens)",
 			})
 		}
+	}
+	return findings
+}
+
+func projectIDFindings(c model.Claim) []Finding {
+	var findings []Finding
+	if c.Module != "" || c.Facet != "" {
+		findings = append(findings, Finding{
+			LintName: "id-shape",
+			ClaimID:  c.ID,
+			Message:  "project claims must omit module and facet",
+		})
+	}
+	if c.Scope != "" && c.Scope != model.ScopeProject {
+		findings = append(findings, Finding{
+			LintName: "id-shape",
+			ClaimID:  c.ID,
+			Message:  "project claims must set scope: project",
+		})
+	}
+	if !model.IsProjectClaimID(c.ID) {
+		findings = append(findings, Finding{
+			LintName: "id-shape",
+			ClaimID:  c.ID,
+			Message:  "project claim id must be project.<slug> (exactly two segments)",
+		})
+		return findings
+	}
+	_, slug, _ := strings.Cut(c.ID, ".")
+	if !slugPattern.MatchString(slug) {
+		findings = append(findings, Finding{
+			LintName: "id-shape",
+			ClaimID:  c.ID,
+			Message:  "id slug segment " + slug + " must be kebab-case (lowercase alphanumerics separated by single hyphens)",
+		})
 	}
 	return findings
 }

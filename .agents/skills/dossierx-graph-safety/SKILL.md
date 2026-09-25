@@ -1,6 +1,6 @@
 ---
 name: dossierx-graph-safety
-description: Audit and harden changes to DossierX graph behavior against semantic degradation and combinatorial blowups. Use for dependency readiness, claim locking, review propagation, build-order graphs, catalog or viewer graph projections, and traversal behavior; documentation-only typo or formatting edits do not require runtime graph proofs.
+description: Audit and harden changes to DossierX graph behavior against semantic degradation and combinatorial blowups. Use for dependency readiness, claim locking, review propagation, catalog or viewer graph projections, and traversal behavior; documentation-only typo or formatting edits do not require runtime graph proofs.
 ---
 
 # DossierX Graph Safety
@@ -33,8 +33,8 @@ baseline from a historical faulty implementation used for a regression test.
 
 Read the current contract, implementation, and tests from the exact candidate.
 Start with `docs/approval-policy.md`, `internal/readiness/`, `internal/lock/`, and
-the affected caller paths; include `internal/buildorder/`, catalog, render, and
-serve code when relevant. Inspect other traversal contracts when those change.
+the affected caller paths; include catalog, render, and serve code when
+relevant. Inspect other traversal contracts when those change.
 Do not infer safety from an older checkout, generated artifact, or prior green
 run. Identify the tree actually tested, including any uncommitted patch; a result
 for that tree is not a result for the named commit alone.
@@ -59,8 +59,11 @@ For changes touching approval or readiness, preserve these current boundaries:
 
 - Local approval, dependency readiness, and integrated proof are different.
 - Under policy v1, a readable draft prerequisite can support local approval;
-  that does not make the dependent ready. Legacy stores retain their policy
-  until explicit migration. Do not silently apply v1 rules to legacy evidence.
+  that does not make the dependent ready. v1 is the only policy: a store that
+  records the retired policy 0 loads as v1 and stamps the carry-over on its
+  next write. That is sound only because every policy-0 approval satisfied the
+  stricter rule; the carry-over must never refresh baselines, rewrite
+  approvals or clear review causes.
 - A claim can retain `status: locked` and local approval while live readiness
   reports `review_pending: true` or `dependency_ready: false`. Standing ledger
   integrity and live causes, not the saved review bit alone, determine truth.
@@ -69,8 +72,10 @@ For changes touching approval or readiness, preserve these current boundaries:
 - Clearing one boundary must not clear another independent boundary.
 - Readiness computation must not refresh baselines, rewrite approvals, or mutate
   claims, receipts, flags, or graph edges.
-- `governed_by` and `mirrors` are drift inputs, not lock prerequisites solely
-  because their target is unapproved. Existing integrity and lint gates remain.
+- `rests_on` is the only claim-to-claim edge: the drift baseline set and the
+  hub-gating chain are the same set since `governed_by` and `mirrors`
+  retired. A later drift-only edge kind joins `BaselineDependencyIDs`, not
+  the gate. Existing integrity and lint gates remain.
 - Singleton and batch locking use the same evaluator and snapshot rules. Refused
   batches write nothing; write failures follow the contract's rollback or
   explicit recovery behavior and never look like successful partial approval.

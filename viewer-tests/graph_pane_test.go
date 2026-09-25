@@ -46,27 +46,33 @@ import (
 const graphConfig = `schema_version: 1
 facets:
   - contract
-  - design
+  - internals
 modules:
   - widget
 claims_dir: claims
 `
 
-// graphClaim writes a claim in module widget, optionally resting on another.
+// graphClaim writes a claim, optionally resting on another. Its module is the
+// id's first segment, the one the id-shape lint holds it to (widget for every
+// caller but the label corpus, which spreads over four modules).
 func graphClaim(id, facet, restsOn string) string {
+	module, _, _ := strings.Cut(id, ".")
 	body := "id: " + id + `
 facet: ` + facet + `
-module: widget
+module: ` + module + `
 status: draft
+summary: Fixture claim used by the engine test corpus.
 `
 	if restsOn != "" {
 		body += "rests_on:\n  - " + restsOn + "\n"
+	} else {
+		body += `rests_on:
+  none: true
+  reason: viewer-test fixture, not backed by any doctrine claim
+`
 	}
 	return body + `body: |
   a claim in the ` + facet + ` facet.
-governed_by:
-  type: none
-  reason: viewer-test fixture, not backed by any doctrine claim
 `
 }
 
@@ -76,7 +82,7 @@ func newGraphProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, graphConfig)
 	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
-	p.writeClaim("thing.yaml", graphClaim("widget.design.thing", "design", "widget.contract.base"))
+	p.writeClaim("thing.yaml", graphClaim("widget.internals.thing", "internals", "widget.contract.base"))
 	return p
 }
 
@@ -178,7 +184,7 @@ func injectedCyclePayload(t *testing.T) string {
 	node := func(id string) map[string]any {
 		return map[string]any{
 			"id": id, "title": id, "module": "core", "facet": "contract",
-			"status": "draft", "kind": "fact", "build_role": "", "emphasis": false,
+			"status": "draft", "kind": "fact", "emphasis": false,
 			"review_pending": false, "open_comments": 0, "in_degree": 1, "out_degree": 1,
 		}
 	}
@@ -194,7 +200,7 @@ func injectedCyclePayload(t *testing.T) string {
 			map[string]any{"from": "core.contract.c1", "to": "core.contract.c2", "type": "rests_on"},
 			map[string]any{"from": "core.contract.c2", "to": "core.contract.c1", "type": "rests_on"},
 			map[string]any{"from": "core.contract.m1", "to": "core.contract.m2", "type": "rests_on"},
-			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "governed_by"},
+			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "rests_on"},
 			map[string]any{"from": "core.contract.s1", "to": "core.contract.s1", "type": "rests_on"},
 			// Into a cycle but not part of one. Its line must NOT be drawn as
 			// a cycle edge: a cycle edge is one whose endpoints share a
@@ -360,7 +366,7 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 	p := newProjectRaw(t, graphConfig)
 	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
 	p.writeClaim("two.yaml", graphClaim("widget.contract.two", "contract", "widget.contract.base"))
-	p.writeClaim("thing.yaml", graphClaim("widget.design.thing", "design", "widget.contract.base"))
+	p.writeClaim("thing.yaml", graphClaim("widget.internals.thing", "internals", "widget.contract.base"))
 	ctx := staticGraphTab(t, p)
 
 	if !evalBool(t, ctx, `!!document.getElementById('dossierx-graph')`) {
@@ -370,8 +376,8 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 	if n := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).nodes.length`); n != 3 {
 		t.Fatalf("payload nodes = %d, want 3 (one per claim file)", n)
 	}
-	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 1 {
-		t.Fatalf("payload schema = %d, want 1", v)
+	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 3 {
+		t.Fatalf("payload schema = %d, want 3", v)
 	}
 
 	openGraphPane(t, ctx)
@@ -408,17 +414,19 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 // call in this repository.
 const hostileFacet = `</script><img src=x>`
 
-// hostileConfig declares that facet. THIS CORPUS IS SERVED, NOT RENDERED
-// STATICALLY, and that is forced rather than chosen: the id-shape lint
-// requires a claim's id facet segment to equal its facet field and to be a
-// configured facet, at error severity, so `dossierx check` refuses to render
-// this corpus at all. `dossierx serve` never lints — it loads, builds,
-// renders — which is exactly the surface design section 2.6 names as
-// reachable: under serve no lint has run to constrain what an author wrote.
+// hostileConfig declares only the engine-fixed facets (NIT-20: config load
+// refuses any other list), so the breakout string reaches the payload
+// through the claim's own facet field instead. THIS CORPUS IS SERVED, NOT
+// RENDERED STATICALLY, and that is forced rather than chosen: the id-shape
+// lint requires a claim's facet to be an engine facet, at error severity, so
+// `dossierx check` refuses to render this corpus at all. `dossierx serve`
+// never lints — it loads, builds, renders — which is exactly the surface
+// design section 2.6 names as reachable: under serve no lint has run to
+// constrain what an author wrote.
 const hostileConfig = `schema_version: 1
 facets:
   - contract
-  - "</script><img src=x>"
+  - internals
 modules:
   - widget
 claims_dir: claims
@@ -431,10 +439,11 @@ func TestGraphPayloadSurvivesScriptClose(t *testing.T) {
 facet: "</script><img src=x>"
 module: widget
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   a claim whose facet is a script-closing breakout attempt.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `)
 
@@ -552,8 +561,8 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// EDGE_TYPES rather than a literal, plus the two View controls.
 	types := evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-type]'))
 		.map(function (e) { return e.getAttribute('data-dxg-type'); })`)
-	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on", "mirrors", "governed_by"}) {
-		t.Fatalf("edge-type toggles = %v, want the three relation types", types)
+	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on"}) {
+		t.Fatalf("edge-type toggles = %v, want rests_on", types)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-labels], [data-dxg-relayout]').length`); n != 2 {
 		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
@@ -563,7 +572,7 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// governance — the channel that answers "what does this doctrine reach?"
 	overlays := evalStrings(t, ctx, `Array.from(document.querySelectorAll('#dxgOverlay option'))
 		.map(function (o) { return o.value; })`)
-	wantOverlays := []string{"none", "isolated", "cycles", "governance", "review", "comments", "status"}
+	wantOverlays := []string{"none", "isolated", "cycles", "review", "comments", "status"}
 	if fmt.Sprint(overlays) != fmt.Sprint(wantOverlays) {
 		t.Fatalf("overlay options = %v, want %v", overlays, wantOverlays)
 	}
@@ -575,16 +584,16 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		.map(function (e) { return e.textContent; })`)
 	// Re-pinned for 13 §4.5/§6 (RETRY fix list item 12): legend facet names
 	// are Title Case ("contract" -> "Contract").
-	if fmt.Sprint(facets) != fmt.Sprint([]string{"Contract", "Design"}) {
+	if fmt.Sprint(facets) != fmt.Sprint([]string{"Contract", "Internals"}) {
 		t.Fatalf("legend facet names = %v, want the project's own facets, Title Case", facets)
 	}
 
 	// Selecting a node fills the detail panel — facet identity's THIRD
 	// channel, which names the facet in TEXT so a reader never has to resolve
 	// a colour to answer "which facet is this?".
-	clickJump(t, ctx, "widget.design.thing")
-	if got := evalString(t, ctx, `document.querySelector('.dxg-detail-id').textContent`); got != "widget.design.thing" {
-		t.Fatalf("detail panel id = %q, want widget.design.thing", got)
+	clickJump(t, ctx, "widget.internals.thing")
+	if got := evalString(t, ctx, `document.querySelector('.dxg-detail-id').textContent`); got != "widget.internals.thing" {
+		t.Fatalf("detail panel id = %q, want widget.internals.thing", got)
 	}
 	facetRow := evalString(t, ctx, `(function () {
 		var dts = document.querySelectorAll('.dxg-detail-rows dt');
@@ -594,19 +603,19 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		return '';
 	})()`)
 	// Re-pinned for 13 §6 (RETRY fix list item 7): the rail's FACET value is
-	// humanised ("design" -> "Design"), same sentence-case rule as MODULE.
-	if facetRow != "Design" {
-		t.Fatalf("detail panel facet row = %q, want Design", facetRow)
+	// humanised ("internals" -> "Internals"), same sentence-case rule as MODULE.
+	if facetRow != "Internals" {
+		t.Fatalf("detail panel facet row = %q, want Internals", facetRow)
 	}
-	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.design.thing"]').length`); n != 1 {
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.internals.thing"]').length`); n != 1 {
 		t.Fatalf("detail panel open-claim links = %d, want 1", n)
 	}
 
 	// The gaps rail keeps facts and heuristics in separate blocks, and the
 	// heuristics are labelled as guesses. False positives among them are
 	// guaranteed rather than merely possible.
-	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="hint"]').length`); n != 2 {
-		t.Fatalf("hint blocks inside the hints section = %d, want 2", n)
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="hint"]').length`); n != 1 {
+		t.Fatalf("hint blocks inside the hints section = %d, want 1", n)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="fact"]').length`); n != 0 {
 		t.Fatalf("fact blocks inside the hints section = %d, want 0 — facts and guesses never mix", n)
@@ -629,27 +638,29 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 // and collapse it to modules. Every claim is now the default at every size;
 // aggregation remains available as an explicit Granularity choice.
 func TestGraphPaneLargeCorpusDefaultsToClaims(t *testing.T) {
-	const total = 301
-	p := newProjectRaw(t, `schema_version: 1
-facets:
-  - contract
-modules:
-  - m1
-  - m2
-  - m3
-claims_dir: claims
-`)
+	// 301 claims over 11 modules of at most 28: check refuses a module whose
+	// isolation view is over its 6,144-byte budget (about 38 claims with this
+	// summary), and the corpus size is the thing under test, not one module's.
+	const total, modules = 301, 11
+	var config strings.Builder
+	config.WriteString("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n")
+	for m := 1; m <= modules; m++ {
+		fmt.Fprintf(&config, "  - m%d\n", m)
+	}
+	config.WriteString("claims_dir: claims\n")
+	p := newProjectRaw(t, config.String())
 	for i := 0; i < total; i++ {
-		module := fmt.Sprintf("m%d", i%3+1)
+		module := fmt.Sprintf("m%d", i%modules+1)
 		id := fmt.Sprintf("%s.contract.c%03d", module, i)
 		p.writeClaim(fmt.Sprintf("c%03d.yaml", i), "id: "+id+`
 facet: contract
 module: `+module+`
 status: draft
+summary: Fixture claim used by the engine test corpus.
 body: |
   one of many claims.
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	}
@@ -811,7 +822,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	openGraphPane(t, ctx)
 
 	// On load the first module is the visible one.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section').length === 2 && !document.querySelectorAll('.module-section')[0].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`)
 
 	// Change a graph filter. The pane writes its segment through
 	// history.replaceState ONLY, which does not fire hashchange — so the
@@ -826,21 +837,21 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	if !strings.Contains(hash, "!g=") || !strings.Contains(hash, "ov=cycles") {
 		t.Fatalf("hash = %q, want a !g= segment carrying the graph state", hash)
 	}
-	if evalBool(t, ctx, `document.querySelectorAll('.module-section')[0].hidden`) {
+	if evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`) {
 		t.Fatal("a graph filter change must not move the reading view")
 	}
 
 	// Now paste a full deep link: a reading-view target AND a graph state.
 	// Both halves must apply.
-	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=rmg&lb=1&ex=&se=';`)
-	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'governance'`)
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
+	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=review&ty=r&lb=1&ex=&se=';`)
+	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'review'`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
 		t.Fatalf("granularity from the pasted hash = %q, want module", got)
 	}
 	// The reading view rewrote the hash for its own target and preserved the
 	// graph half byte for byte.
-	if got := evalString(t, ctx, `window.location.hash`); !strings.Contains(got, "!g=") || !strings.Contains(got, "ov=governance") {
+	if got := evalString(t, ctx, `window.location.hash`); !strings.Contains(got, "!g=") || !strings.Contains(got, "ov=review") {
 		t.Fatalf("hash after the deep link = %q, want the graph segment preserved", got)
 	}
 }
@@ -852,7 +863,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 func TestGraphPaneSurvivesFragmentSwap(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
-	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
+	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
 	ctx := serveAndOpenLive(t, p)
 	desktopViewport(t, ctx)
 	openGraphPane(t, ctx)

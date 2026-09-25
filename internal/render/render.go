@@ -28,11 +28,16 @@ import (
 	"strings"
 	"time"
 
+	"html"
+
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
+	"github.com/BarterX-Tech/dossierx/internal/visibility"
 )
 
 // The graph and viewer-runtime paths are named individually rather than embedding the
@@ -42,7 +47,7 @@ import (
 // exactly the same mistake — a client file deleted, renamed or never
 // written — into a silently empty pane.
 //
-//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/build-order.html viewer/template/build-order-ui.js viewer/template/vendor/mermaid.min.js viewer/template/fonts/inter-latin-wght.woff2 viewer/template/fonts/source-serif-4-latin-opsz-wght.woff2 viewer/template/fonts/ibm-plex-mono-latin-400.woff2 viewer/template/fonts/ibm-plex-mono-latin-500.woff2 viewer/template/fonts/ibm-plex-mono-latin-600.woff2
+//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/fonts/inter-latin-wght.woff2 viewer/template/fonts/source-serif-4-latin-opsz-wght.woff2 viewer/template/fonts/ibm-plex-mono-latin-400.woff2 viewer/template/fonts/ibm-plex-mono-latin-500.woff2 viewer/template/fonts/ibm-plex-mono-latin-600.woff2
 var shellFS embed.FS
 
 // shellFileName and styleFileName are the override-lookup names for the
@@ -65,19 +70,6 @@ const (
 	graphCSSFileName      = "graph.css"
 	systemRecordFileName  = "system-record.js"
 	viewerRuntimeFileName = "viewer-runtime.js"
-
-	// buildOrderFileName is the Build order tab's per-module partial. It is
-	// parsed from the embedded FS ONLY — it is not an override point (see
-	// loadTemplates' refusal of a legacy build_order.html override), so it
-	// lives beside the shell rather than under components/.
-	buildOrderFileName = "build-order.html"
-	// buildOrderUIFileName and mermaidFileName are the tab's two client
-	// files: the engine's own renderer glue and the vendored mermaid build
-	// (third_party/mermaid/ records its version, licence and hash). Both are
-	// injected as template.JS and only into a viewer with at least one
-	// locked build order — see shell.html's guard.
-	buildOrderUIFileName = "build-order-ui.js"
-	mermaidFileName      = "vendor/mermaid.min.js"
 )
 
 // shellTemplatePath and styleTemplatePath are the embedded paths backing
@@ -92,9 +84,6 @@ const (
 	graphCSSTemplatePath      = "viewer/template/" + graphCSSFileName
 	systemRecordTemplatePath  = "viewer/template/" + systemRecordFileName
 	viewerRuntimeTemplatePath = "viewer/template/" + viewerRuntimeFileName
-	buildOrderTemplatePath    = "viewer/template/" + buildOrderFileName
-	buildOrderUITemplatePath  = "viewer/template/" + buildOrderUIFileName
-	mermaidTemplatePath       = "viewer/template/" + mermaidFileName
 )
 
 // generatedHeader returns the comment prepended to every rendered document
@@ -186,38 +175,6 @@ type shellData struct {
 	// part of ViewerRuntimeJS so no-feature viewer bytes remain unchanged.
 	ConformanceStatusGuardJS template.JS
 
-	// BuildOrders is the Build order tab: one entry per module with a LOCKED
-	// build-order artifact, in module order (see build_order_view.go). Its
-	// Modules slice is nil for a project with no locked order, and shell.html
-	// guards every byte of the tab — the sidebar group, the section, the
-	// payload block and the two script tags — on that, so such a project
-	// renders not one byte of it and never carries the vendored renderer.
-	BuildOrders BuildOrderTab
-	// HasReadinessMaps used to extend the Mermaid asset guard so a project
-	// with at least one traceable dependency condition or review cause paid
-	// the vendored renderer's ~3.5 MB cost. docs/design/screens/
-	// 06-claim-blocked-across-four-modules.md's R09.9 ("no inline dependency
-	// map") retired the inline claim-readiness trace this field guarded —
-	// viewer-runtime.js's renderClaimReadiness now renders a two-slug
-	// dependency path with no Mermaid source at all, so this is always
-	// false. The field stays (permanently false, never removed) because
-	// shell.html's `{{if or .BuildOrders.Modules .HasReadinessMaps}}` guard
-	// (shell.html:339, not L5-owned) still reads it by name; Build order's
-	// own diagrams are the only remaining reason that guard ever passes.
-	HasReadinessMaps bool
-	// BuildOrderPayload is the tab's JSON payload (buildOrderPayloadJSON),
-	// injected into <script type="application/json" id="dossierx-build-orders">
-	// under the same escaping contract as GraphPayload: encoding/json's
-	// default HTML escaping is the whole guard, applied before these bytes
-	// exist. It sits INSIDE <main class="content-area"> so a serve fragment
-	// swap re-delivers it beside the diagrams it describes.
-	BuildOrderPayload template.JS
-	// MermaidJS is the vendored mermaid build and BuildOrderUIJS the engine's
-	// shared lazy renderer glue, both engine-owned bytes off the embedded FS.
-	// shell.html injects them for a locked Build order or readiness map.
-	MermaidJS      template.JS
-	BuildOrderUIJS template.JS
-
 	// ModuleGroups is cat.Claims folded into the two-level Module -> []Facet
 	// shape fix 5 describes (one sidebar entry per module, a nested
 	// .sub-nav/.subtab strip per module with more than one facet), computed
@@ -243,6 +200,20 @@ type shellData struct {
 	// every byte of track markup on that — a corpus with no tracks must render
 	// exactly as it did before the axis existed. See track_view.go.
 	Tracks []TrackSection
+
+	// Constitution is the project roof, pinned above Modules. Always present
+	// as a nav target; Present is false when the file is absent (NIT-11).
+	Constitution ConstitutionView
+}
+
+// ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.
+type ConstitutionView struct {
+	Present       bool
+	Status        string
+	Words         int
+	WordCap       int
+	FileHTML      template.HTML
+	ProjectClaims []template.HTML
 }
 
 // Group is one module/facet section of the sidebar nav + content area, as
@@ -269,8 +240,7 @@ type Group struct {
 	// exists because at least one claim produced it), but the check is
 	// written defensively regardless.
 	AllLocked bool
-	// ClaimCount and LockedCount are catalog facts for this facet (plus
-	// overview claims, counted once on the module's first facet). The
+	// ClaimCount and LockedCount are catalog facts for this facet. The
 	// viewer header reads the module-level sums, not live DOM cards.
 	ClaimCount  int
 	LockedCount int
@@ -291,6 +261,14 @@ type Group struct {
 	// compiler enforces (a template accessing it would fail at execute time)
 	// rather than something only a comment asserts.
 	firstInModule bool
+}
+
+// CountsClaims reports whether this tab holds claims, and so whether its tab
+// carries a claim count. The Manifest tab renders the module's manifest.yaml,
+// never a claim, so a count there would always read "0" over a tab that has
+// content.
+func (g Group) CountsClaims() bool {
+	return g.Facet != visibility.ViewerTabManifest
 }
 
 // ModuleGroup is one module's sidebar nav entry together with the one or
@@ -317,19 +295,16 @@ type ModuleGroup struct {
 	// a single-facet module); resolving a bare "#module" hash to
 	// FirstFacetID's section is the later shell.html step's job.
 	ID string
-	// Facets are this module's facet-level groups, already in the nav
-	// order buildGroups computed for them (declared facets first, then any
-	// remaining present facets alphabetically). Always non-empty — a
-	// ModuleGroup only ever exists because at least one Group produced it.
+	// Facets are this module's peer tabs in engine-fixed order:
+	// Manifest | Contract | Internals. Always three — empty tabs stay
+	// peers so Manifest is never a banner above the other two.
 	Facets []Group
-	// FirstFacetID is Facets[0].ID — the facet section that should render
+	// FirstFacetID is the Contract section's ID — the section that renders
 	// visible-by-default when this module's sec-tab is chosen, whether by
 	// click or by a bare "#module" hash with no facet suffix.
 	FirstFacetID string
-	// HasSubNav is true only when len(Facets) > 1. A module with exactly
-	// one facet renders no .sub-nav/.subtab strip at all — there is
-	// nothing to switch between — per fix 5's "skip the sub-nav entirely
-	// for a module with exactly 1 facet" requirement.
+	// HasSubNav is true when the module has more than one peer tab. With
+	// engine-fixed Manifest | Contract | Internals that is always true.
 	HasSubNav bool
 	// AllLocked is true only when every facet in Facets has AllLocked ==
 	// true (which itself requires every claim within that facet to be
@@ -372,24 +347,37 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 
 	for i := range out {
 		out[i].HasSubNav = len(out[i].Facets) > 1
-		out[i].FirstFacetID = out[i].Facets[0].ID
+		out[i].FirstFacetID = defaultPeerTabID(out[i].Facets)
 
-		allLocked := true
 		claimCount, lockedCount := 0, 0
 		for _, f := range out[i].Facets {
 			claimCount += f.ClaimCount
 			lockedCount += f.LockedCount
-			if !f.AllLocked {
-				allLocked = false
-			}
 		}
-		out[i].AllLocked = allLocked
+		out[i].AllLocked = claimCount > 0 && lockedCount == claimCount
 		out[i].ClaimCount = claimCount
 		out[i].LockedCount = lockedCount
 		out[i].FacetCount = len(out[i].Facets)
 	}
 
 	return out
+}
+
+// defaultPeerTabID picks the section that should be visible when a module
+// is chosen: always the Contract tab. The strip order is Manifest |
+// Contract | Internals, but a module is read through its contract first,
+// so Contract opens by default even when it is empty. A module with no
+// Contract tab (the ungrouped bucket) falls back to its first tab.
+func defaultPeerTabID(facets []Group) string {
+	if len(facets) == 0 {
+		return ""
+	}
+	for _, f := range facets {
+		if f.Facet == config.FacetContract {
+			return f.ID
+		}
+	}
+	return facets[0].ID
 }
 
 // ungroupedModuleName is the catch-all bucket's Module value for claims
@@ -465,8 +453,6 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
 		generatedAt:              generatedAt,
-		mermaidJS:                tmpl.mermaidJS,
-		buildOrderUIJS:           tmpl.buildOrderUI,
 	}
 
 	var data any
@@ -478,7 +464,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 			// This guard applies only to lazily requested, corpus-sized values.
 			memoryBudget = &renderByteBudget{remaining: maxBoundedRenderIntermediateBytes, exceeded: ErrIntermediateCapacityExceeded}
 		}
-		data = newLazyShellData(inputs, tmpl.partials, tmpl.buildOrder, memoryBudget)
+		data = newLazyShellData(inputs, tmpl.partials, memoryBudget)
 	} else {
 		var outputBudget *renderByteBudget
 		if maxBytes > 0 {
@@ -486,7 +472,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 			// against the output budget is therefore exact lower-bound containment.
 			outputBudget = &renderByteBudget{remaining: maxBytes - len(header), exceeded: conformance.ErrCapacityExceeded}
 		}
-		eager, err := buildEagerShellData(inputs, tmpl.partials, tmpl.buildOrder, outputBudget)
+		eager, err := buildEagerShellData(inputs, tmpl.partials, outputBudget)
 		if err != nil {
 			if errors.Is(err, conformance.ErrCapacityExceeded) {
 				return "", viewerCapacityError(maxBytes)
@@ -552,7 +538,7 @@ func (b *renderByteBudget) consume(n int) error {
 }
 
 // budgetBuffer checks the shared budget before bytes.Buffer grows. Template
-// execution can therefore never allocate a claim or build-order fragment past
+// execution can therefore never allocate a claim fragment past
 // the remaining honest viewer-output budget.
 type budgetBuffer struct {
 	bytes.Buffer
@@ -600,17 +586,6 @@ type loadedTemplates struct {
 	// has a fixed, audited projection contract; a project shell may reference
 	// any subset and must pay only for fields its executed branches request.
 	shellOverridden bool
-	// buildOrder is the Build order tab's per-module partial
-	// (viewer/template/build-order.html), parsed off the embedded FS with NO
-	// override branch — see loadTemplates for the refusal a legacy
-	// build_order.html override meets. Whether it is ever executed depends on
-	// buildOrderTabData finding a module with a locked artifact.
-	buildOrder *template.Template
-	// mermaidJS and buildOrderUI are the tab's two client files, raw bytes
-	// like the graph files above and typed template.JS at the shellData
-	// boundary.
-	mermaidJS    []byte
-	buildOrderUI []byte
 
 	// graphCore, graphUI and graphCSS are the claims-graph client files,
 	// always the embedded engine copies. Unlike css and shell above they have
@@ -633,21 +608,6 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	partials, err := components.Load(overrideDir)
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load component templates: %w", err)
-	}
-
-	// build_order.html was an override point until the Build order tab
-	// replaced the list it rendered; its data shape is gone with the list. A
-	// project still carrying one is TOLD, by name, rather than handed a
-	// template executed against a shape it was never written for — or,
-	// worse, silently ignored.
-	if _, found, err := components.OverrideFile(overrideDir, legacyBuildOrderOverrideName); err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: load %s override: %w", legacyBuildOrderOverrideName, err)
-	} else if found {
-		return loadedTemplates{}, fmt.Errorf("render: viewer.template_overrides contains %s, which is no longer an override point — the Build order tab is not overridable; delete the file", legacyBuildOrderOverrideName)
-	}
-	buildOrderTmpl, err := template.ParseFS(shellFS, buildOrderTemplatePath)
-	if err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: parse %s: %w", buildOrderFileName, err)
 	}
 
 	css, cssOverridden, err := components.OverrideFile(overrideDir, styleFileName)
@@ -707,28 +667,17 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", viewerRuntimeFileName, err)
 	}
-	mermaidJS, err := shellFS.ReadFile(mermaidTemplatePath)
-	if err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", mermaidFileName, err)
-	}
-	buildOrderUI, err := shellFS.ReadFile(buildOrderUITemplatePath)
-	if err != nil {
-		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", buildOrderUIFileName, err)
-	}
 
 	return loadedTemplates{
 		partials:        partials,
 		css:             css,
 		shell:           shell,
 		shellOverridden: shellOverridden,
-		buildOrder:      buildOrderTmpl,
 		graphCore:       graphCore,
 		graphUI:         graphUI,
 		graphCSS:        graphCSS,
 		systemRecord:    systemRecord,
 		viewerRuntime:   viewerRuntime,
-		mermaidJS:       mermaidJS,
-		buildOrderUI:    buildOrderUI,
 	}, nil
 }
 
@@ -829,13 +778,6 @@ type shellInputs struct {
 
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
-
-	// buildOrders and buildOrderPayload are buildOrderTabData's two outputs
-	// for cat; mermaidJS and buildOrderUIJS the tab's two client files.
-	buildOrders       BuildOrderTab
-	buildOrderPayload template.JS
-	mermaidJS         []byte
-	buildOrderUIJS    []byte
 }
 
 // buildShellStaticData assembles the shellData passed to shell.Execute: cfg's
@@ -843,21 +785,12 @@ type shellInputs struct {
 // when cfg is nil or leaves a field blank) and the module/facet groups
 // computed from in.cat via buildGroups/buildModuleGroups, combined with the
 // css/renderedByID inputs loadTemplates and renderClaimsWithBudget already produced.
-// The Build order tab's data arrives already computed (buildOrderTabData,
-// which does the artifact reads) and is copied through.
 //
 // The four graph fields are typed on the way OUT, not on the way in: see
 // shellData.GraphCSS and the block of comments there for why plain strings
 // at those injection sites fail silently.
 func buildShellStaticData(in shellInputs) shellData {
 	cfg := in.cfg
-	// hasReadinessMaps is permanently false: 06 §R09.9 retired the inline
-	// claim-readiness dependency trace this used to gate (see the
-	// HasReadinessMaps field doc comment above). Left as a named constant,
-	// not deleted, so the one call site that still asks for it — the return
-	// below, matching shellData.HasReadinessMaps's own field comment — has
-	// something to name.
-	const hasReadinessMaps = false
 
 	title := "dossierx viewer"
 	eyebrow := ""
@@ -886,18 +819,84 @@ func buildShellStaticData(in shellInputs) shellData {
 		ConformanceStatusGuardJS: template.JS(in.conformanceStatusGuardJS),
 		ModuleGroups:             nil,
 		SoftMount:                claimCount >= softMountClaimThreshold,
-		// The Build order tab. Typed template.JS on the way out like the
-		// graph fields, for the same silent-failure reason.
-		BuildOrders:       in.buildOrders,
-		HasReadinessMaps:  hasReadinessMaps,
-		BuildOrderPayload: in.buildOrderPayload,
-		MermaidJS:         template.JS(in.mermaidJS),
-		BuildOrderUIJS:    template.JS(in.buildOrderUIJS),
 		// Built from the SAME renderedByID the module groups read, so a claim
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.
-		Tracks: nil,
+		Tracks:       nil,
+		Constitution: buildConstitutionView(in.cat, cfg, in.renderedByID),
 	}
+}
+
+func buildConstitutionView(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML) ConstitutionView {
+	view := ConstitutionView{WordCap: constitution.WordCap}
+	// The Project claims tab lists the store whether or not the roof file
+	// exists yet: the two are independent inputs, and a project that authored
+	// project claims before writing its constitution (serve renders it; the
+	// gate only stops check and lock) must not read "No project claims."
+	//
+	// A project claim is a claim like any other, so it renders through the
+	// same layout partial as a module claim (renderedByID): its element id is
+	// what a module claim's RESTS ON link (#project.<slug>) and the graph
+	// navigate to, and the card carries the lock pill, the relationships
+	// footer and the comment chip. buildGroups skips project claims, so this
+	// is the one id-bearing copy on the page. The one addition is the
+	// summary: the project-claims index a module reads is id + summary, so
+	// the tab shows the same line under each card's heading.
+	if cat != nil {
+		for _, c := range orderClaims(cat.Claims) {
+			if !c.IsProjectClaim() {
+				continue
+			}
+			h, ok := renderedByID[c.ID]
+			if !ok {
+				continue
+			}
+			if s := strings.TrimSpace(c.Summary); s != "" {
+				h = template.HTML(insertAfterClaimHead(string(h),
+					`<p class="project-claim-summary">`+html.EscapeString(s)+`</p>`))
+			}
+			view.ProjectClaims = append(view.ProjectClaims, h)
+		}
+	}
+	if cfg == nil {
+		return view
+	}
+	f, err := constitution.LoadOptional(cfg.ConstitutionPath())
+	if err != nil || f == nil {
+		return view
+	}
+	d := constitution.NewDigest(cfg.ConstitutionPath(), f)
+	view.Present = true
+	view.Status = d.Status
+	view.Words = d.Words
+	view.WordCap = d.WordCap
+	var b strings.Builder
+	writeSection := func(title string, entries []constitution.Entry, section string) {
+		if len(entries) == 0 {
+			return
+		}
+		b.WriteString("<h3>")
+		b.WriteString(html.EscapeString(title))
+		b.WriteString("</h3>")
+		for _, e := range entries {
+			b.WriteString(`<article class="constitution-entry" id="`)
+			b.WriteString(html.EscapeString("constitution-" + section + "-" + e.Slug))
+			b.WriteString(`"><h4>`)
+			if e.Title != "" {
+				b.WriteString(html.EscapeString(e.Title))
+			} else {
+				b.WriteString(html.EscapeString(e.Slug))
+			}
+			b.WriteString(`</h4><p>`)
+			b.WriteString(html.EscapeString(e.Body))
+			b.WriteString(`</p></article>`)
+		}
+	}
+	writeSection("Invariants", f.Invariants, constitution.SectionInvariants)
+	writeSection("Glossary", f.Glossary, constitution.SectionGlossary)
+	writeSection("Decisions", f.Decisions, constitution.SectionDecisions)
+	view.FileHTML = template.HTML(b.String())
+	return view
 }
 
 // softMountClaimThreshold is the corpus size at which shell.html starts
@@ -915,25 +914,26 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 		return nil
 	}
 
-	var declaredModules, declaredFacets []string
+	var declaredModules []string
 	if cfg != nil {
 		declaredModules = cfg.Modules
-		declaredFacets = cfg.Facets
 	}
-
-	knownModule, knownFacet := newMembershipPredicates(declaredModules, declaredFacets)
+	declaredFacets := visibility.ViewerTabs()
+	knownModule, knownFacet := newMembershipPredicates(declaredModules, config.EngineFacets())
 
 	type groupKey struct{ module, facet string }
 	claimsByKey := map[groupKey][]model.Claim{}
-	overviewByModule := map[string][]model.Claim{}
 	moduleSeen := map[string]bool{}
-	facetSeenByModule := map[string]map[string]bool{}
 	var ungrouped []model.Claim
 
 	for _, c := range cat.Claims {
-		if c.Facet == config.ReservedOverviewFacet && knownModule(c.Module) {
-			overviewByModule[c.Module] = append(overviewByModule[c.Module], c)
-			moduleSeen[c.Module] = true
+		// A project claim (NIT-25) has no module and no facet by design, not
+		// by omission: it is rendered under the constitution's "Project
+		// claims" tab (buildConstitutionView), so it is not dropped here and
+		// it must not become an "ungrouped" module either — the sidebar's
+		// Modules group would then count and list a pseudo-module directly
+		// under the pin that says PROJECT — NOT A MODULE.
+		if c.IsProjectClaim() {
 			continue
 		}
 		if !knownModule(c.Module) || !knownFacet(c.Facet) {
@@ -943,41 +943,40 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 		k := groupKey{c.Module, c.Facet}
 		claimsByKey[k] = append(claimsByKey[k], c)
 		moduleSeen[c.Module] = true
-		if facetSeenByModule[c.Module] == nil {
-			facetSeenByModule[c.Module] = map[string]bool{}
+	}
+
+	// The Manifest tab's data (NIT-19): one small file per declared module,
+	// judged by the module-manifest lint's own rules. Computed once here, not
+	// per module, so claims_dir is walked once per render.
+	manifests := manifest.Viewer(cat.Claims, cfg)
+	var byID map[string]model.Claim
+	if len(manifests) > 0 {
+		byID = make(map[string]model.Claim, len(cat.Claims))
+		for _, c := range cat.Claims {
+			byID[c.ID] = c
 		}
-		facetSeenByModule[c.Module][c.Facet] = true
 	}
 
 	var groups []Group
 	for _, m := range orderedNames(declaredModules, moduleSeen) {
-		overview := model.OrderClaims(overviewByModule[m])
-		// The overview note renders on every facet tab of its module, but a
-		// given claim id may appear only once in a valid document: the first
-		// (default) facet keeps the canonical, id-bearing copy, every other
-		// facet gets an id-less, purely-presentational copy (DX-AUD-16).
-		canonicalOverview := renderOverviewHTML(overview, renderedByID)
-		idlessOverview := stripOverviewIDs(canonicalOverview, overview)
-		for fi, f := range orderedNames(declaredFacets, facetSeenByModule[m]) {
-			overviewHTML := idlessOverview
-			if fi == 0 {
-				overviewHTML = canonicalOverview
-			}
-			g := newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID, overviewHTML)
-			if fi == 0 {
-				for _, c := range overview {
-					g.ClaimCount++
-					if c.Status == model.StatusLocked {
-						g.LockedCount++
-					}
+		// Every seen module gets the three peer tabs. Manifest holds no
+		// claims: it renders the module's manifest.yaml (manifest_view.go);
+		// do not inject retired overview notes onto any tab.
+		for _, f := range declaredFacets {
+			if f == visibility.ViewerTabManifest {
+				g := newGroup(m, f, nil, renderedByID)
+				if v, ok := manifests[m]; ok {
+					g.Claims = []template.HTML{manifestTabHTML(v, byID)}
 				}
+				groups = append(groups, g)
+				continue
 			}
-			groups = append(groups, g)
+			groups = append(groups, newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID))
 		}
 	}
 
 	if len(ungrouped) > 0 {
-		groups = append(groups, newGroup(ungroupedModuleName, "", ungrouped, renderedByID, nil))
+		groups = append(groups, newGroup(ungroupedModuleName, "", ungrouped, renderedByID))
 	}
 
 	markFirstInModule(groups)
@@ -985,78 +984,12 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 	return groups
 }
 
-// renderOverviewHTML pulls the already-rendered HTML (from renderedByID,
-// keyed by claim ID, same lookup newGroup itself uses) for a module's
-// overview claims, in the given order. It never re-renders — renderClaimsWithBudget
-// already rendered every catalog claim, including overview-facet ones,
-// exactly once.
-func renderOverviewHTML(overview []model.Claim, renderedByID map[string]template.HTML) []template.HTML {
-	if len(overview) == 0 {
-		return nil
-	}
-	out := make([]template.HTML, 0, len(overview))
-	for _, c := range overview {
-		out = append(out, renderedByID[c.ID])
-	}
-	return out
-}
-
-// stripOverviewIDs returns copies of a module's already-rendered overview
-// HTML (canonical, from renderOverviewHTML) with each claim's root
-// id="<claim-id>" attribute removed — one entry per input, in the same
-// order (canonical and overview are index-aligned, both built from the same
-// ordered claim slice). buildGroups injects a module's overview claims into
-// every one of that module's facet groups so the orientation note stays
-// visible on every facet tab (see newGroup); but a given id may appear only
-// once in a valid document, so only the module's first/default facet keeps
-// the canonical (id-bearing) copy and every other facet gets these id-less,
-// purely-presentational copies (DX-AUD-16). Only the exact ` id="<claim-id>"`
-// attribute — and only its first occurrence, the root element's — is
-// removed, so the visible content is untouched: a #<claim-id> deep-link
-// resolves to the single canonical copy while the note still renders
-// identically on every tab. Claim ids are constrained to [A-Za-z0-9_.-]
-// (internal/lint's id-shape lint), none of which html/template escapes in a
-// double-quoted attribute value, so the literal match is exact.
-//
-// The leading space in the match pattern is load-bearing, and more so since
-// the claim-edge label work: the .k header now also carries the claim id, as
-// data-claim-id="<claim-id>" and title="<claim-id>" (its visible text is the
-// derived label — see components.ClaimLabel). Neither is preceded by a space
-// immediately before `id="`, so neither can be mistaken for the root
-// attribute, and both survive on every copy on purpose — a data-* hook and a
-// tooltip are not document-unique the way id= is, and the reader of an
-// injected copy still needs the machine id to act on it.
-//
-// The comment chip is the final footer control inside
-// <span class="claim-comments-slot"> (components.CommentChipHTML).
-// Re-verified against the new
-// markup, and the code below is unchanged: the slot span and the chip <button>
-// it wraps carry class / hidden / data-claim-id / aria-* only — no ` id="`
-// sequence anywhere — so the single Replace still lands on the root
-// <section>'s id and nothing else. A third data-claim-id per copy is exactly
-// the intended fan-out, for the reason above: shell.html's chip handlers
-// address claims by data-claim-id precisely so an overview note injected into
-// N facet tabs stays clickable in all N, while only one copy keeps id=.
-func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []template.HTML {
-	if len(canonical) == 0 {
-		return nil
-	}
-	out := make([]template.HTML, len(canonical))
-	for i, h := range canonical {
-		out[i] = stripDuplicateClaimIDs(h, overview[i])
-	}
-	return out
-}
-
 // stripDuplicateClaimIDs returns one already-rendered claim with every element
 // id it carries removed, for use as a NON-CANONICAL copy: the same claim is
 // also rendered somewhere else on the page, and that copy keeps the ids.
 //
-// It exists because two features now inject a second copy of a claim — a
-// module's overview note, repeated on each of that module's facet tabs, and a
-// track section, which renders the claims the track owns inline while their
-// modules keep guaranteeing them. Both need exactly this, and a claim id may
-// appear only once in a valid document.
+// Tracks render the claims they own inline while their modules keep
+// guaranteeing them. A claim id may appear only once in a valid document.
 //
 // TWO KINDS OF ID, BOTH FROM THE SAME PLACE THAT WROTE THEM. The root
 // <section>'s ` id="<claim-id>"` is matched with its leading space and its
@@ -1069,8 +1002,7 @@ func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []templ
 //
 // The consequence for the duplicate copy is a degraded, never wrong, landing:
 // its citation markers still name the canonical copy's rows, so a reader
-// clicking one is taken to the same evidence in the claim's own module. That
-// is the same trade the overview note has always made with `#<claim-id>`.
+// clicking one is taken to the same evidence in the claim's own module.
 //
 // Claim ids are constrained to [A-Za-z0-9_.-] (internal/lint's id-shape lint),
 // none of which html/template escapes in a double-quoted attribute value, so
@@ -1197,17 +1129,15 @@ func orderClaims(claims []model.Claim) []model.Claim {
 // of renderedByID (keyed by claim ID) so claims are rendered exactly once
 // regardless of how many places reference them. A claim's Section remains
 // part of the ordering model, but the Reading View does not repeat that
-// metadata as a visible heading between cards. overviewHTML, if non-empty,
-// is the calling
-// module's already-rendered overview-facet claims (see renderOverviewHTML)
-// and is prepended ahead of any section heading — a module-level
-// orientation note isn't its own tab, so buildGroups renders it once per
-// module and injects the same HTML into every one of that module's facet
-// groups.
-func newGroup(module, facet string, claims []model.Claim, renderedByID map[string]template.HTML, overviewHTML []template.HTML) Group {
+// metadata as a visible heading between cards.
+func newGroup(module, facet string, claims []model.Claim, renderedByID map[string]template.HTML) Group {
 	claims = orderClaims(claims)
-	htmls := make([]template.HTML, 0, len(claims)+len(overviewHTML))
-	htmls = append(htmls, overviewHTML...)
+	htmls := make([]template.HTML, 0, len(claims)+1)
+	// Fallback only: buildGroups replaces this with the module's manifest
+	// view whenever the config declares the module (manifest_view.go).
+	if facet == visibility.ViewerTabManifest && len(claims) == 0 {
+		htmls = append(htmls, template.HTML(`<p class="claims-empty">No module manifest yet.</p>`))
+	}
 	allLocked := len(claims) > 0
 	lockedCount := 0
 	for _, c := range claims {
@@ -1257,6 +1187,20 @@ func insertEngineBlockBeforeClose(host, block string) string {
 		}
 	}
 	return host + block
+}
+
+// insertAfterClaimHead places block directly after a rendered claim's .k
+// heading line, where every default layout partial's heading is one <div>
+// holding only spans. A project override without that heading gets the block
+// ahead of the card instead, so the text is never dropped.
+func insertAfterClaimHead(host, block string) string {
+	if i := strings.Index(host, `<div class="k"`); i >= 0 {
+		if j := strings.Index(host[i:], "</div>"); j >= 0 {
+			at := i + j + len("</div>")
+			return host[:at] + block + host[at:]
+		}
+	}
+	return block + host
 }
 
 // displayCase renders a raw module/facet value (e.g. "token-ledger" or

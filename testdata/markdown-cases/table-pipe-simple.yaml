@@ -8,6 +8,6 @@ body: |
   |----------|----------|
   | Cell 1   | Cell 2   |
   | Cell 3   | Cell 4   |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - tests the basic GFM pipe table shape

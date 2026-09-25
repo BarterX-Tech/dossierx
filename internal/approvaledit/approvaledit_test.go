@@ -90,7 +90,7 @@ func TestComputeNamesNonBodyFieldsWhenTheWordingHeld(t *testing.T) {
 	approved := locked("fixture.contract.b", "Unchanged wording.")
 	store := approvedThenReleased(approved)
 	edited := draft(approved, approved.Body)
-	edited.RestsOn = []string{"fixture.contract.other"}
+	edited.RestsOn = model.RestsOnIDs("fixture.contract.other")
 
 	change, ok := Compute([]model.Claim{edited}, store)[edited.ID]
 	if !ok {

@@ -115,9 +115,10 @@ check / refused at lint by a dangling edge, writing
     argv          check
     exit          1
     ok            false
-    envelope      command data error ok stopped_at
+    envelope      command data error ok stopped_at warnings
     command       check
-    data          gitignore_check:string
+    data          comment_digests_adopted:[string]
+                  gitignore_check:string
                   ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
@@ -146,9 +147,10 @@ claim show / a draft claim
     ok            true
     envelope      command data ok
     command       claim show
-    data          claim_id:string
+    data          body:string
+                  claim_id:string
                   comments:{open:number,open_thread_ids:[],replies:number,resolved:number,threads:number}
-                  edges:{depended_on_by:[],governed_by:string,governed_reason:string,mirrored_by:[],mirrors:[],rests_on:[]}
+                  edges:{depended_on_by:[],rests_on:[],rests_on_none:bool,rests_on_reason:string}
                   facet:string
                   implemented_in:[]
                   kind:string
@@ -162,6 +164,7 @@ claim show / a draft claim
                   source_path:string
                   sources:[]
                   status:string
+                  summary:string
                   title:string
                   tracks:[]
 
@@ -181,14 +184,14 @@ claim list / every claim
     ok            true
     envelope      command data ok
     command       claim list
-    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,readiness:{claim_id:string,dependency_ready:bool,local_approval_issue:string,local_approved:bool,local_reasons:[string],locally_approved:bool,policy_version:number,ready:bool,review_pending:bool},review_pending:bool,sources:number,status:string,title:string}]
+    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,readiness:{claim_id:string,dependency_ready:bool,local_approval_issue:string,local_approved:bool,local_reasons:[string],locally_approved:bool,policy_version:number,ready:bool,review_pending:bool},review_pending:bool,sources:number,status:string,summary:string,title:string}]
                   count:number
                   filters:{drifted:bool,migrated:bool,review_pending:bool}
                   percent_of_total:number
                   total:number
 
 claim new / a fresh draft
-    argv          claim new widget.contract.second --body another fact --governed-reason fixture
+    argv          claim new widget.contract.second --summary Fixture claim used by the engine test corpus. --body another fact --rests-on-none-reason fixture
     exit          0
     ok            true
     envelope      command data ok warnings
@@ -270,16 +273,6 @@ claim lock / already locked
                   message:string
     error.code    already_locked
     error.details claim_id:string
-
-claim migrate-lock-policy / preview
-    argv          claim migrate-lock-policy --dry-run
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       claim migrate-lock-policy
-    data          from:number
-                  reason:string
-                  to:number
 
 claim recover-approved-content / nothing to recover
     argv          claim recover-approved-content --dry-run
@@ -467,78 +460,6 @@ comment reply / on the agent's own thread
                   reply_id:string
                   thread_id:string
 
-build-order propose / one locked claim
-    argv          build-order propose --module widget
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order propose
-    data          excluded:[]
-                  locked:bool
-                  module:string
-                  path:string
-                  phases:[{claims:[string],phase:string}]
-
-build-order status / nothing proposed yet
-    argv          build-order status --module widget
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order status
-    data          covered_claims:number
-                  excluded_count:number
-                  locked:bool
-                  module:string
-                  proposed:bool
-                  stale:bool
-                  stale_ids:[]
-                  total_claims:number
-
-build-order lock / a fresh proposal
-    argv          build-order lock --module widget --reason approved
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order lock
-    data          locked_at:string
-                  module:string
-                  path:string
-                  reason:string
-
-build-order lock / nothing proposed yet
-    argv          build-order lock --module widget --reason approved
-    exit          1
-    ok            false
-    envelope      command error ok
-    command       build-order lock
-    error         code:string
-                  message:string
-    error.code    not_proposed
-
-build-order show / a locked order
-    argv          build-order show --module widget
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       build-order show
-    data          locked:bool
-                  locked_at:string
-                  module:string
-                  path:string
-                  phases:[{claims:[],cross_module:{},definition:string,excluded_deps:[],ghosts:[],levels:[],locked:number,mermaid:string,number:number,phase:string}|{claims:[string],cross_module:{},definition:string,excluded_deps:[],ghosts:[],levels:[[string]],locked:number,mermaid:string,number:number,phase:string}]
-                  stale:bool
-
-build-order show / nothing proposed yet
-    argv          build-order show --module widget
-    exit          1
-    ok            false
-    envelope      command error ok
-    command       build-order show
-    error         code:string
-                  hint:string
-                  message:string
-    error.code    not_proposed
-
 track list / two declared tracks
     argv          track list
     exit          0
@@ -610,6 +531,56 @@ track status / an id the config does not declare
                   message:string
     error.code    unknown_track
 
+manifest show / one module file
+    argv          manifest show widget
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       manifest show
+    data          constitution_digest:{decisions:number,glossary:number,hash:string,invariants:number,near_cap:bool,over_cap:bool,path:string,present:bool,state:string,status:string,word_cap:number,words:number}
+                  depends_on:[]
+                  findings:[]
+                  module:string
+                  path:string
+                  provides:[]
+                  summary:string
+
+manifest show / isolation
+    argv          manifest show widget --isolation
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       manifest show
+    data          constitution_digest:{decisions:number,glossary:number,hash:string,invariants:number,near_cap:bool,over_cap:bool,path:string,present:bool,state:string,status:string,word_cap:number,words:number}
+                  depends_on:[]
+                  findings:[]
+                  isolation:{claims:[{facet:string,id:string,status:string,summary:string,title:string}],draft_hints:{note:string,suggested_provides:[string]},manifest:{depends_on:[],provides:[],summary:string},shared:{constitution_text:string,project_claims:[]}}
+                  isolation_budget:{module_budget:number,module_bytes:number,shared_budget:number,shared_bytes:number}
+                  module:string
+                  path:string
+                  provides:[]
+                  summary:string
+
+manifest show / a module the config does not declare
+    argv          manifest show ghost
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       manifest show
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    unknown_module
+
+manifest list / every configured module
+    argv          manifest list
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       manifest list
+    data          count:number
+                  modules:[{claim_count:number,depends_on:number,findings:number,locked:bool,locked_claims:number,module:string,provides:number,summary:string}]
+
 check / legacy viewer.theme is rejected at config, writing
     argv          check
     exit          1
@@ -656,6 +627,67 @@ skills export / into an explicit directory
                   target_dir:string
                   written:[string]
 
+constitution show / absent file
+    argv          constitution show
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       constitution show
+    data          digest:{decisions:number,glossary:number,hash:string,invariants:number,near_cap:bool,over_cap:bool,path:string,present:bool,status:string,word_cap:number,words:number}
+                  lock:{hash:string,locked_at:string,near_cap:bool,over_cap:bool,path:string,reason:string,state:string,stored_hash:string,word_cap:number,words:number}
+                  path:string
+                  present:bool
+                  sections:[{entries:[{body:string,slug:string,title:string}],name:string}|{entries:null,name:string}]
+                  status:string
+                  text:string
+
+constitution lock / absent file
+    argv          constitution lock --reason fixture
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       constitution lock
+    error         code:string
+                  details:object
+                  hint:string
+                  message:string
+    error.code    already_locked
+    error.details constitution:{hash:string,locked_at:string,near_cap:bool,over_cap:bool,path:string,reason:string,state:string,stored_hash:string,word_cap:number,words:number}
+                  path:string
+                  state:string
+
+manifest show / constitution digest
+    argv          manifest show
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       manifest show
+    error         code:string
+                  message:string
+    error.code    usage
+
+usage / constitution with no leaf
+    argv          constitution
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       constitution
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    usage
+
+usage / manifest with no leaf
+    argv          manifest
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       manifest
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    usage
+
 usage / a noun with no leaf
     argv          claim
     exit          1
@@ -679,7 +711,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 52)
+    pinned by an invocation above (14 of 50)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -688,27 +720,25 @@ ERROR-CODE COVERAGE
         invalid_config            exit 1
         lint_failed               exit 1
         not_locked                exit 2
-        not_proposed              exit 1
         not_review_pending        exit 2
+        unknown_module            exit 1
         unknown_track             exit 1
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (38)
+    reachable only from states no fixture here builds (36)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
+        CONSTITUTION_NOT_LOCKED
+        CONSTITUTION_OVER_CAP
         bad_request
         banner_claim
-        build_order_hand_edited
-        build_order_refused
-        build_order_stale
         claim_file_changed
         claim_not_serializable
         comment_digest_drift
         comment_digest_unavailable
         conformance_capacity_exceeded
         conformance_failed
-        dependency_not_locked
         empty_body
         implink_refused
         integrity_failed
@@ -728,10 +758,10 @@ ERROR-CODE COVERAGE
         thread_not_found
         thread_open
         thread_resolved
-        unknown_module
         unlinked_claims
         unsafe_body
         untracked_config
+        view_too_large
         write_conflict
         write_failed
         wrong_state

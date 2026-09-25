@@ -146,7 +146,7 @@ func TestContainsStr(t *testing.T) {
 func TestPickChangedDependencyPrefersStaleHash(t *testing.T) {
 	fresh := model.Claim{ID: "m.contract.fresh", Body: "fresh"}
 	stale := model.Claim{ID: "m.contract.stale", Body: "stale, changed since lock"}
-	claim := model.Claim{ID: "m.contract.main", RestsOn: []string{"m.contract.fresh", "m.contract.stale"}}
+	claim := model.Claim{ID: "m.contract.main", RestsOn: model.RestsOnIDs("m.contract.fresh", "m.contract.stale")}
 	claims := []model.Claim{claim, fresh, stale}
 
 	store := &lock.Store{Hashes: map[string]map[string]string{
@@ -164,7 +164,7 @@ func TestPickChangedDependencyPrefersStaleHash(t *testing.T) {
 
 func TestPickChangedDependencyFallsBackToFirstDep(t *testing.T) {
 	dep := model.Claim{ID: "m.contract.dep"}
-	claim := model.Claim{ID: "m.contract.main", Mirrors: []string{"m.contract.dep"}}
+	claim := model.Claim{ID: "m.contract.main", RestsOn: model.RestsOnIDs("m.contract.dep")}
 	claims := []model.Claim{claim, dep}
 
 	store := &lock.Store{Hashes: map[string]map[string]string{}}
@@ -245,7 +245,7 @@ func TestReportLintFindingsErrorSeverityFails(t *testing.T) {
 func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 	root := t.TempDir()
 	cfgFile := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgFile, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - m\nclaims_dir: claims\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - m\nclaims_dir: claims\n"), 0o644); err != nil {
 		t.Fatalf("write fixture config: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
@@ -288,7 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFourLeavesUnderEightNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
+// TestSurfaceIsTwentyFourLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
@@ -316,43 +316,35 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // the corpus and no new way to change it, which is why the addition does not
 // touch any lifecycle guarantee the other nineteen make.
 //
-// Custom viewer themes and their CLI noun were removed; the current surface
-// contains twenty-four leaves under eight nouns.
+// Custom viewer themes and their CLI noun were removed; the surface at that
+// point contained twenty-four leaves under eight nouns. It has since grown
+// to nine nouns (constitution, NIT-6; manifest, NIT-7) while holding at
+// twenty-four leaves — build-order's own noun and leaves came and went in
+// between (NIT-15).
 //
-// THE FIFTH MOVE IS "build-order show", and it is a LEAF rather than a noun:
-// twenty-four-under-nine became twenty-five-under-nine, with the noun count
-// unchanged. The argument for it is that the build-order noun could compute an
-// order, report whether one exists, and approve one — and had no way to HAND
-// ONE OVER. `propose` prints the sequence it just wrote and never again;
-// `status` answers proposed/locked/stale and carries no claims at all; the
-// order itself was readable only by opening build/build-order/<m>.json and
-// re-deriving the phase levels by hand, which is the derivation this engine
-// exists to own. `show` is read-only in the strongest sense the noun has: it
-// takes no --reason, writes no file, takes no sentinel and touches neither the
-// artifact nor the ledger. Same argument as track and theme: a way to look, and
-// no new way to change what the project treats as approved.
+// THE FIFTH MOVE WAS a `build-order show` leaf. v0.7.21 killed the whole
+// build-order noun with no retired stub, so `build-order` is now an unknown
+// command like any other.
 //
-// THE SIXTH MOVE IS `claim migrate-lock-policy`, taking twenty-five-under-nine
-// to twenty-six-under-nine. It moves old lock records to the current policy
-// schema without creating an approval or changing a claim. The command is a
-// narrow migration surface because the policy version and historical receipts
-// must remain visible and recoverable rather than being silently rewritten by
-// lock or unlock.
+// THE SIXTH MOVE WAS a lock-policy adoption leaf. Agents treated it as an
+// everyday recovery, so it was deleted. Existing stores stay on their
+// recorded policy and a new project starts on v1. There is no replacement
+// command and no retired stub.
 //
-// THE SEVENTH MOVE IS `claim recover-approved-content`, and it is the same
-// kind of addition as the sixth: a narrow, one-time migration surface that
-// creates no approval. Approvals recorded before the ledger kept the approved
-// WORDING signed a hash and nothing else, so every claim edited after such an
-// approval reaches the viewer with a panel that can only say the wording was
-// not kept — on a corpus that has been locking for months, that is every claim
-// the panel exists for. The verb finds each approval's own revision in the
-// project's git history, identified by hashing it against the hash the record
-// already signed, and records it. It cannot widen an approval (content that
-// does not hash equal is refused), cannot invent one (a claim with no matching
-// revision is reported by name and left alone), and has nothing to do on a
-// corpus it has already swept. It is a LEAF and not a `check` side effect
-// precisely so the lock store is written only by a verb a human asked for.
-func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
+// THE SEVENTH MOVE IS `claim recover-approved-content`, and it is a
+// one-time migration surface that creates no approval. Approvals recorded
+// before the ledger kept the approved WORDING signed a hash and nothing else,
+// so every claim edited after such an approval reaches the viewer with a panel
+// that can only say the wording was not kept — on a corpus that has been
+// locking for months, that is every claim the panel exists for. The verb finds
+// each approval's own revision in the project's git history, identified by
+// hashing it against the hash the record already signed, and records it. It
+// cannot widen an approval (content that does not hash equal is refused),
+// cannot invent one (a claim with no matching revision is reported by name and
+// left alone), and has nothing to do on a corpus it has already swept. It is a
+// LEAF and not a `check` side effect precisely so the lock store is written
+// only by a verb a human asked for.
+func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -364,7 +356,6 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 		"claim flag":                     true,
 		"claim reaudit":                  true,
 		"claim link":                     true,
-		"claim migrate-lock-policy":      true,
 		"claim recover-approved-content": true,
 
 		"comment inbox": true,
@@ -372,18 +363,19 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 		"comment add":   true,
 		"comment reply": true,
 
-		"build-order propose": true,
-		"build-order status":  true,
-		"build-order lock":    true,
-		"build-order show":    true,
-
 		"track list":   true,
 		"track show":   true,
 		"track status": true,
 
+		"manifest show": true,
+		"manifest list": true,
+
 		"serve":         true,
 		"skills export": true,
 		"version":       true,
+
+		"constitution lock": true,
+		"constitution show": true,
 	}
 
 	got := map[string]bool{}
@@ -429,8 +421,8 @@ func TestSurfaceIsTwentyFourLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 25 {
-		t.Errorf("the surface is 25 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 24 {
+		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -527,7 +519,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderEightNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

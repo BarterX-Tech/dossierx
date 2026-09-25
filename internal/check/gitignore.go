@@ -39,7 +39,7 @@ type gitignoreTarget struct {
 }
 
 // gitignoreTargets lists the checked paths in the order the findings are
-// reported: the three ledger stores, then each module's two artifacts, then
+// reported: the three ledger stores, then each module's code-links artifact, then
 // the build directory's own .gitignore LAST — the approval verbs surface the
 // first finding as the store_gitignored refusal's body, so under the ordinary
 // bare `build/` pattern that body is the lock ledger's, and build/.gitignore,
@@ -53,7 +53,6 @@ func gitignoreTargets(cfg *config.Config) []gitignoreTarget {
 	}
 	for _, m := range cfg.Modules {
 		targets = append(targets,
-			gitignoreTarget{cfg.BuildOrderPath(m), fmt.Sprintf("module %q's build order", m), layout.KindBuildOrder, m},
 			gitignoreTarget{cfg.CodeLinksPath(m), fmt.Sprintf("module %q's code links", m), layout.KindCodeLinks, m},
 		)
 	}

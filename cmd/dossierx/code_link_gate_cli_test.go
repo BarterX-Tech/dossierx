@@ -1,6 +1,6 @@
 // code_link_gate_cli_test.go pins the code-link gate at the CLI surface
-// (issue #78): with source_dirs set, a plain `dossierx check` on a locked,
-// code-producing claim nobody tagged exits 1 with error.code unlinked_claims
+// (issue #78): with source_dirs set, a plain `dossierx check` on a locked
+// module claim nobody tagged exits 1 with error.code unlinked_claims
 // and stopped_at links, names the claim in data.code_links AND on the
 // terminal, and still writes the viewer; `check --validate` on the same
 // project stays green but says scanned:false, gated:false with the same
@@ -63,9 +63,8 @@ func codeLinkGateProject(t *testing.T) (cfgPath, srcPath string) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nsource_dirs:\n  - src\n")
+	lockFixtureConstitution(t, cfgPath)
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the widget retries twice")
 	armLedgerFixture(t, cfgPath)
 	srcPath = filepath.Join(root, "src", "widget.go")
@@ -91,7 +90,7 @@ func TestCLI_Check_UnlinkedClaim_RefusesAfterWritingTheViewer(t *testing.T) {
 	if cliout.ExitCode(env.Error.Code) != 1 {
 		t.Fatalf("unlinked_claims must exit 1 (the check-failure family), got %d", cliout.ExitCode(env.Error.Code))
 	}
-	if !strings.Contains(env.Error.Hint, "data.code_links") || !strings.Contains(env.Error.Hint, "dossierx-step:") || !strings.Contains(env.Error.Hint, "build_role") {
+	if !strings.Contains(env.Error.Hint, "data.code_links") || !strings.Contains(env.Error.Hint, "dossierx-step:") || !strings.Contains(env.Error.Hint, "embodiment") {
 		t.Fatalf("the hint must point at data.code_links and name both recoveries (tag, or re-role), got %q", env.Error.Hint)
 	}
 	data := decodeCodeLinksData(t, env)

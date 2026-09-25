@@ -7,6 +7,6 @@ body: |
   | a | b | c |
   | --- | --- |
   | 1 | 2 | 3 |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a delimiter row whose cell count differs from the header's is not a table

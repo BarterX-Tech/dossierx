@@ -8,6 +8,6 @@ body: |
   | --- | --- | --- |
   | 1 | 2 | 3 |
   | short |
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: markdown renderer test fixture - a row with fewer cells than the header renders short - no empty cells are invented, and it stays a table

@@ -83,7 +83,7 @@ func TestStatusConformanceBlockingPolicyStateMatrixRemainsAvailableAndTruthful(t
 
 func TestStatusReportsBlockingConformanceAlongsidePrimaryLedgerFailure(t *testing.T) {
 	cfg := baseConfig + "conformance:\n  observations: observations.json\n  blocking: true\n"
-	locked := "id: widget.contract.state\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbody: neutral unrecorded fixture\ngoverned_by:\n  type: none\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://state\n      expectation:\n        shape: set\n        value: [ready]\n"
+	locked := "id: widget.contract.state\nfacet: contract\nmodule: widget\nstatus: locked\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: neutral unrecorded fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://state\n      expectation:\n        shape: set\n        value: [ready]\n"
 	_, base, _ := startServer(t, cfg, map[string]string{
 		"claims/state.yaml": locked,
 		"observations.json": `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["blocked"]}]}`,

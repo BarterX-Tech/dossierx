@@ -51,15 +51,12 @@ func TestRender_NilCatalog(t *testing.T) {
 
 func claimFor(layout model.Layout) model.Claim {
 	c := model.Claim{
-		ID:     "widget." + string(layout) + ".sample",
-		Facet:  string(layout),
-		Module: "widget",
-		Status: model.StatusDraft,
-		Layout: layout,
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
+		ID:      "widget." + string(layout) + ".sample",
+		Facet:   string(layout),
+		Module:  "widget",
+		Status:  model.StatusDraft,
+		Layout:  layout,
+		RestsOn: model.RestsNone("test fixture"),
 	}
 	switch layout {
 	case model.LayoutCard, model.LayoutTree:
@@ -144,16 +141,13 @@ func TestRender_PreservesAuthoredSignificantWhitespace(t *testing.T) {
 // <table> element.
 func TestRender_TableExplicitEmptyRows(t *testing.T) {
 	claim := model.Claim{
-		ID:     "widget.table.empty-rows",
-		Facet:  "contract",
-		Module: "widget",
-		Status: model.StatusDraft,
-		Layout: model.LayoutTable,
-		Rows:   []model.Row{}, // explicit empty array, not nil/omitted
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
+		ID:      "widget.table.empty-rows",
+		Facet:   "contract",
+		Module:  "widget",
+		Status:  model.StatusDraft,
+		Layout:  model.LayoutTable,
+		Rows:    []model.Row{}, // explicit empty array, not nil/omitted
+		RestsOn: model.RestsNone("test fixture"),
 	}
 
 	cat, err := catalog.Build([]model.Claim{claim}, nil)
@@ -268,16 +262,13 @@ func TestRender_OverrideMissingPartialFallsBack(t *testing.T) {
 
 func groupedClaim(id, module, facet string, status model.Status) model.Claim {
 	return model.Claim{
-		ID:     id,
-		Module: module,
-		Facet:  facet,
-		Status: status,
-		Layout: model.LayoutBanner,
-		Body:   "x",
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
+		ID:      id,
+		Module:  module,
+		Facet:   facet,
+		Status:  status,
+		Layout:  model.LayoutBanner,
+		Body:    "x",
+		RestsOn: model.RestsNone("test fixture"),
 	}
 }
 
@@ -349,10 +340,10 @@ func TestBuildGroups_ModuleOrderFollowsConfigThenFallsBackSorted(t *testing.T) {
 	rendered := map[string]template.HTML{"z.a": "Z", "a.a": "A", "m.a": "M"}
 	groups := buildGroups(cat, cfg, rendered)
 
-	if len(groups) != 3 {
-		t.Fatalf("got %d groups, want 3: %#v", len(groups), groups)
+	if len(groups) != 9 {
+		t.Fatalf("got %d groups, want 9 (3 peer tabs × 3 modules): %#v", len(groups), groups)
 	}
-	gotOrder := []string{groups[0].Module, groups[1].Module, groups[2].Module}
+	gotOrder := []string{groups[0].Module, groups[3].Module, groups[6].Module}
 	wantOrder := []string{"middle", "alpha", "zeta"}
 	for i := range wantOrder {
 		if gotOrder[i] != wantOrder[i] {
@@ -362,14 +353,12 @@ func TestBuildGroups_ModuleOrderFollowsConfigThenFallsBackSorted(t *testing.T) {
 	}
 }
 
-func TestBuildGroups_FacetOrderFallsBackAlphabeticalWhenUndeclared(t *testing.T) {
+func TestBuildGroups_UnknownFacetsLandInUngrouped(t *testing.T) {
 	claims := []model.Claim{
 		groupedClaim("w.z", "widget", "zeta-facet", model.StatusDraft),
 		groupedClaim("w.a", "widget", "alpha-facet", model.StatusDraft),
 	}
-	// No cfg.Facets at all (nil cfg) -> both facets are "recognized" and
-	// must fall back to alphabetical order.
-	cfg := &config.Config{Modules: []string{"widget"}}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
 	cat, err := catalog.Build(claims, nil)
 	if err != nil {
 		t.Fatalf("catalog.Build: %v", err)
@@ -377,11 +366,8 @@ func TestBuildGroups_FacetOrderFallsBackAlphabeticalWhenUndeclared(t *testing.T)
 	rendered := map[string]template.HTML{"w.z": "Z", "w.a": "A"}
 	groups := buildGroups(cat, cfg, rendered)
 
-	if len(groups) != 2 {
-		t.Fatalf("got %d groups, want 2: %#v", len(groups), groups)
-	}
-	if groups[0].Facet != "alpha-facet" || groups[1].Facet != "zeta-facet" {
-		t.Errorf("facet order = [%s, %s], want [alpha-facet, zeta-facet]", groups[0].Facet, groups[1].Facet)
+	if len(groups) != 1 || groups[0].Module != ungroupedModuleName {
+		t.Fatalf("unknown facets must land in ungrouped, got %#v", groups)
 	}
 }
 
@@ -567,7 +553,7 @@ func TestNewGroup_SectionMetadataOrdersClaimsWithoutVisibleHeadings(t *testing.T
 		sectionedClaim("w.c", "widget", "contract", "Beta", 3),
 	}
 	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B", "w.c": "C"}
-	g := newGroup("widget", "contract", claims, rendered, nil)
+	g := newGroup("widget", "contract", claims, rendered)
 
 	want := []template.HTML{
 		"A", "B",
@@ -589,7 +575,7 @@ func TestNewGroup_NoSectionSetEmitsNoHeadings(t *testing.T) {
 		sectionedClaim("w.b", "widget", "contract", "", 2),
 	}
 	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B"}
-	g := newGroup("widget", "contract", claims, rendered, nil)
+	g := newGroup("widget", "contract", claims, rendered)
 
 	for _, h := range g.Claims {
 		if strings.Contains(string(h), "section-heading") {
@@ -608,7 +594,7 @@ func TestNewGroup_MixedSectionAndNoSectionClaimsStayInSemanticOrder(t *testing.T
 		sectionedClaim("w.c", "widget", "contract", "Alpha", 3),
 	}
 	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B", "w.c": "C"}
-	g := newGroup("widget", "contract", claims, rendered, nil)
+	g := newGroup("widget", "contract", claims, rendered)
 
 	want := []template.HTML{
 		"A", "B", "C",
@@ -654,75 +640,29 @@ func TestBuildModuleGroups_TwoLevelShape(t *testing.T) {
 	if widget.Module != "widget" || widget.ID != "widget" {
 		t.Errorf("widget module group = %#v, want Module/ID == widget", widget)
 	}
-	if len(widget.Facets) != 2 {
-		t.Fatalf("widget module group has %d facets, want 2: %#v", len(widget.Facets), widget.Facets)
-	}
-	if widget.Facets[0].Facet != "contract" || widget.Facets[1].Facet != "internals" {
-		t.Errorf("widget facets = [%s, %s], want [contract, internals]", widget.Facets[0].Facet, widget.Facets[1].Facet)
-	}
-	if widget.FirstFacetID != widget.Facets[0].ID {
-		t.Errorf("FirstFacetID = %q, want %q (Facets[0].ID)", widget.FirstFacetID, widget.Facets[0].ID)
-	}
 
+	// gadget has no internals claim, yet still carries the empty Internals
+	// peer tab: the tab set is the config's, not the claims'.
 	gadget := moduleGroups[1]
-	if gadget.Module != "gadget" || len(gadget.Facets) != 1 {
-		t.Fatalf("gadget module group = %#v, want exactly 1 facet", gadget)
+	if gadget.Module != "gadget" || len(gadget.Facets) != 3 {
+		t.Fatalf("gadget module group = %#v, want 3 peer tabs", gadget)
 	}
 }
 
-func TestBuildModuleGroups_SingleFacetModuleSkipsSubNav(t *testing.T) {
+func TestBuildModuleGroups_PeerTabsManifestContractInternals(t *testing.T) {
 	claims := []model.Claim{
-		groupedClaim("w.a", "widget", "contract", model.StatusDraft),
-		groupedClaim("w.b", "widget", "internals", model.StatusDraft),
-		groupedClaim("g.a", "gadget", "contract", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget", "gadget"}, Facets: []string{"contract", "internals"}}
-	cat, err := catalog.Build(claims, nil)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B", "g.a": "G"}
-	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, rendered))
-
-	byModule := map[string]ModuleGroup{}
-	for _, mg := range moduleGroups {
-		byModule[mg.Module] = mg
-	}
-
-	if !byModule["widget"].HasSubNav {
-		t.Errorf("widget has 2 facets, want HasSubNav=true: %#v", byModule["widget"])
-	}
-	if byModule["gadget"].HasSubNav {
-		t.Errorf("gadget has 1 facet, want HasSubNav=false (no sub-nav rendered): %#v", byModule["gadget"])
-	}
-}
-
-func TestBuildModuleGroups_ThreePlusFacetsOrderingAndSubNav(t *testing.T) {
-	// Facets are declared and claimed out of alphabetical order (diagrams
-	// before contract, extras before internals) so a passing assertion on
-	// declared-config order can't be a coincidental match with alphabetical
-	// order. This exercises buildGroups/orderedNames/buildModuleGroups with
-	// 4 facets, beyond the 2-facet case covered by
-	// TestBuildModuleGroups_TwoLevelShape (knownFacet only admits facets
-	// that appear in cfg.Facets when cfg.Facets is non-empty, so a facet
-	// declared out of order is the realistic stand-in for orderedNames'
-	// preferred-then-alphabetical-fallback path here; the fallback path
-	// itself is already covered directly by TestOrderedNames_* below).
-	claims := []model.Claim{
-		groupedClaim("w.d", "widget", "diagrams", model.StatusDraft),
 		groupedClaim("w.c", "widget", "contract", model.StatusDraft),
-		groupedClaim("w.e", "widget", "extras", model.StatusDraft),
 		groupedClaim("w.i", "widget", "internals", model.StatusDraft),
 	}
 	cfg := &config.Config{
 		Modules: []string{"widget"},
-		Facets:  []string{"contract", "internals", "diagrams", "extras"},
+		Facets:  []string{"contract", "internals"},
 	}
 	cat, err := catalog.Build(claims, nil)
 	if err != nil {
 		t.Fatalf("catalog.Build: %v", err)
 	}
-	rendered := map[string]template.HTML{"w.d": "D", "w.c": "C", "w.e": "E", "w.i": "I"}
+	rendered := map[string]template.HTML{"w.c": "C", "w.i": "I"}
 	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, rendered))
 
 	if len(moduleGroups) != 1 {
@@ -730,22 +670,22 @@ func TestBuildModuleGroups_ThreePlusFacetsOrderingAndSubNav(t *testing.T) {
 	}
 
 	widget := moduleGroups[0]
-	if len(widget.Facets) != 4 {
-		t.Fatalf("widget module group has %d facets, want 4: %#v", len(widget.Facets), widget.Facets)
+	if len(widget.Facets) != 3 {
+		t.Fatalf("widget module group has %d tabs, want 3: %#v", len(widget.Facets), widget.Facets)
 	}
-	wantOrder := []string{"contract", "internals", "diagrams", "extras"}
+	wantOrder := []string{"manifest", "contract", "internals"}
 	gotOrder := make([]string, len(widget.Facets))
 	for i, f := range widget.Facets {
 		gotOrder[i] = f.Facet
 	}
 	if !slices.Equal(gotOrder, wantOrder) {
-		t.Errorf("widget facet order = %v, want %v (declared config order)", gotOrder, wantOrder)
+		t.Errorf("widget tab order = %v, want %v", gotOrder, wantOrder)
 	}
-	if widget.FirstFacetID != widget.Facets[0].ID {
-		t.Errorf("FirstFacetID = %q, want %q (Facets[0].ID)", widget.FirstFacetID, widget.Facets[0].ID)
+	if widget.FirstFacetID != "widget-contract" {
+		t.Errorf("FirstFacetID = %q, want widget-contract when Manifest is empty", widget.FirstFacetID)
 	}
 	if !widget.HasSubNav {
-		t.Errorf("widget has 4 facets, want HasSubNav=true: %#v", widget)
+		t.Errorf("peer tabs require HasSubNav=true: %#v", widget)
 	}
 }
 
@@ -794,8 +734,8 @@ func TestBuildModuleGroups_LockCountsOnTwoFacetLockedModule(t *testing.T) {
 		t.Fatalf("module groups = %d, want 1", len(moduleGroups))
 	}
 	got := moduleGroups[0]
-	if got.ClaimCount != 3 || got.LockedCount != 3 || got.FacetCount != 2 {
-		t.Fatalf("widget counts = claims %d locked %d facets %d, want 3/3/2", got.ClaimCount, got.LockedCount, got.FacetCount)
+	if got.ClaimCount != 3 || got.LockedCount != 3 || got.FacetCount != 3 {
+		t.Fatalf("widget counts = claims %d locked %d facets %d, want 3/3/3", got.ClaimCount, got.LockedCount, got.FacetCount)
 	}
 }
 
@@ -816,7 +756,7 @@ func TestRender_ModuleSectionLockMetricAttrs(t *testing.T) {
 	for _, want := range []string{
 		`data-claim-count="2"`,
 		`data-locked-count="2"`,
-		`data-facet-count="2"`,
+		`data-facet-count="3"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rendered module section missing %q", want)
@@ -969,10 +909,10 @@ func TestRender_OverrideDirMissingEntirelyErrors(t *testing.T) {
 	}
 }
 
-func TestBuildGroups_OverviewFacetInjectedIntoEveryFacetOfItsModule(t *testing.T) {
-	overview := groupedClaim("w.overview.router", "widget", "overview", model.StatusDraft)
+func TestBuildGroups_UndeclaredFacetIsUngroupedNotInjected(t *testing.T) {
+	leftover := groupedClaim("w.overview.router", "widget", "overview", model.StatusDraft)
 	claims := []model.Claim{
-		overview,
+		leftover,
 		groupedClaim("w.a", "widget", "contract", model.StatusDraft),
 		groupedClaim("w.b", "widget", "internals", model.StatusDraft),
 	}
@@ -982,86 +922,48 @@ func TestBuildGroups_OverviewFacetInjectedIntoEveryFacetOfItsModule(t *testing.T
 		t.Fatalf("catalog.Build: %v", err)
 	}
 	rendered := map[string]template.HTML{
-		"w.overview.router": "OVERVIEW",
+		"w.overview.router": "LEFTOVER",
 		"w.a":               "A",
 		"w.b":               "B",
 	}
 	groups := buildGroups(cat, cfg, rendered)
 
-	if len(groups) != 2 {
-		t.Fatalf("got %d groups, want 2 (overview must not become its own tab): %#v", len(groups), groups)
+	if len(groups) != 4 {
+		t.Fatalf("got %d groups, want 3 peer tabs plus ungrouped leftover: %#v", len(groups), groups)
 	}
-	for _, g := range groups {
-		if len(g.Claims) == 0 || g.Claims[0] != template.HTML("OVERVIEW") {
-			t.Errorf("facet %q: Claims[0] = %v, want the overview claim rendered first", g.Facet, g.Claims)
-		}
-	}
-}
-
-func TestBuildGroups_OverviewFacetNeverBecomesItsOwnGroup(t *testing.T) {
-	claims := []model.Claim{
-		groupedClaim("w.overview.router", "widget", "overview", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}
-	cat, err := catalog.Build(claims, nil)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	groups := buildGroups(cat, cfg, map[string]template.HTML{"w.overview.router": "OVERVIEW"})
+	var leftoverCount int
 	for _, g := range groups {
 		if g.Facet == "overview" {
-			t.Fatalf("overview must never appear as its own group: %#v", groups)
+			t.Fatalf("overview must not become a reserved tab: %#v", groups)
 		}
+		for _, html := range g.Claims {
+			if html == template.HTML("LEFTOVER") {
+				leftoverCount++
+			}
+		}
+	}
+	if leftoverCount != 1 {
+		t.Fatalf("undeclared leftover claim copies = %d, want 1 (ungrouped, not injected): %#v", leftoverCount, groups)
 	}
 }
 
-// TestRender_OverviewCanonicalIDAppearsExactlyOnce covers DX-AUD-16: a
-// module's overview/orientation claim is injected into every facet group of
-// its module (so the note stays visible on every facet tab — desired), but
-// the canonical claim id must be stamped on exactly ONE copy so the rendered
-// document has no duplicate ids and a #<claim-id> deep-link is unambiguous.
-func TestRender_OverviewCanonicalIDAppearsExactlyOnce(t *testing.T) {
-	overview := model.Claim{
-		ID:     "widget.overview.router",
-		Module: "widget",
-		Facet:  "overview",
-		Status: model.StatusDraft,
-		Layout: model.LayoutCard,
-		Body:   "ORIENTATION-NOTE-BODY",
-		Governed: model.Governed{
-			Type:   string(model.GovernedNone),
-			Reason: "test fixture",
-		},
-	}
+func TestBuildModuleGroups_OpensOnContractEvenWhenEmpty(t *testing.T) {
 	claims := []model.Claim{
-		overview,
-		groupedClaim("widget.contract.a", "widget", "contract", model.StatusDraft),
-		groupedClaim("widget.internals.b", "widget", "internals", model.StatusDraft),
+		groupedClaim("w.i", "widget", "internals", model.StatusDraft),
 	}
-	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cfg := &config.Config{
+		Modules: []string{"widget"},
+		Facets:  []string{"contract", "internals"},
+	}
 	cat, err := catalog.Build(claims, nil)
 	if err != nil {
 		t.Fatalf("catalog.Build: %v", err)
 	}
-	out, err := Render(cat, cfg)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
+	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, map[string]template.HTML{"w.i": "I"}))
+	if len(moduleGroups) != 1 {
+		t.Fatalf("got %d module groups, want 1: %#v", len(moduleGroups), moduleGroups)
 	}
-
-	// Exactly one canonical id in the whole document (valid HTML, resolvable
-	// deep-link) even though the note renders on both facet tabs. The leading
-	// SPACE is load-bearing: it pins the real `id="…"` attribute and nothing
-	// else. Since v0.2.1 every non-banner claim carries a comment chip, so each
-	// id-less copy of this note also emits `data-claim-id="widget.overview.router"`
-	// — a bare substring count would score those as duplicate ids and fail on a
-	// document that is in fact perfectly well-formed. (It is also the exact form
-	// stripOverviewIDs removes, so the two stay in lockstep.)
-	if got := strings.Count(out, ` id="widget.overview.router"`); got != 1 {
-		t.Fatalf("overview canonical id appears %d times, want exactly 1:\n%s", got, out)
-	}
-	// The orientation note's visible body must still render once per facet
-	// (two facets => two copies): the duplicate copies are id-less, not gone.
-	if got := strings.Count(out, "ORIENTATION-NOTE-BODY"); got != 2 {
-		t.Fatalf("overview body appears %d times, want 2 (one per facet):\n%s", got, out)
+	if got := moduleGroups[0].FirstFacetID; got != "widget-contract" {
+		t.Errorf("FirstFacetID = %q, want widget-contract: a module always opens on Contract, even with only internals claims", got)
 	}
 }

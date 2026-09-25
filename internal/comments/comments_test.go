@@ -33,8 +33,8 @@ facet: contract
 module: widget
 status: draft
 body: claim a
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -42,10 +42,9 @@ const lockedAYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim a
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -53,13 +52,9 @@ const lockedARestsOnBYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim a
 rests_on:
   - widget.contract.b
-governed_by:
-  type: none
-  reason: fixture
 `
 
 const draftBYAML = `id: widget.contract.b
@@ -67,8 +62,8 @@ facet: contract
 module: widget
 status: draft
 body: claim b
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -78,8 +73,8 @@ module: widget
 status: draft
 layout: banner
 body: a banner
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -686,8 +681,8 @@ comments:
     created: 2026-07-24T10:12:00Z
     body: existing thread
     edited: false
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -709,8 +704,8 @@ comments:
         created: 2026-07-24T10:40:00Z
         body: existing reply
         edited: false
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 
@@ -730,8 +725,8 @@ comments:
         created: 2026-07-24T10:40:00Z
         body: legacy id-less reply
         edited: false
-governed_by:
-  type: none
+rests_on:
+  none: true
   reason: fixture
 `
 

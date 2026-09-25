@@ -1,6 +1,7 @@
 package check_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,10 +11,11 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 10000\n"
 
 // project writes a project.config.yaml (cfgBody) plus every file in files
 // (path relative to root -> content) and returns the loaded config and the
@@ -30,6 +32,20 @@ const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widg
 // has not been said. Tests that WANT a ledger finding tamper after this point;
 // see ledger_test.go.
 func project(t *testing.T, cfgBody string, files map[string]string) (*config.Config, []model.Claim) {
+	t.Helper()
+	return projectWithRoof(t, cfgBody, files, true)
+}
+
+// projectUnroofed is project without the locked constitution: the shape of a
+// project that has not yet locked its roof, which is what the roof gate
+// (NIT-26) refuses and what a test about "never ledger-covered" must now
+// build, since the roof lock is the first ledger write a project makes.
+func projectUnroofed(t *testing.T, cfgBody string, files map[string]string) (*config.Config, []model.Claim) {
+	t.Helper()
+	return projectWithRoof(t, cfgBody, files, false)
+}
+
+func projectWithRoof(t *testing.T, cfgBody string, files map[string]string, roof bool) (*config.Config, []model.Claim) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfgBody), 0o644); err != nil {
@@ -48,9 +64,17 @@ func project(t *testing.T, cfgBody string, files map[string]string) (*config.Con
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+	for _, module := range cfg.Modules {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, module); err != nil {
+			t.Fatalf("write module manifest %s: %v", module, err)
+		}
+	}
 	claims, err := loader.LoadClaims(cfg.ClaimsDir)
 	if err != nil {
 		t.Fatalf("load claims: %v", err)
+	}
+	if roof {
+		armConstitution(t, cfg)
 	}
 	armLedger(t, cfg, claims)
 	armDigestsIfCommented(t, cfg, claims)
@@ -78,24 +102,24 @@ func armDigestsIfCommented(t *testing.T, cfg *config.Config, claims []model.Clai
 }
 
 func draftClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a draft claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 func lockedClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
-// lockedCodeClaim is lockedClaim in a code-producing build_role: the shape the
-// code-link gate holds to account. lockedClaim itself carries no build_role and
-// is therefore never expected to be linked.
+// lockedCodeClaim is a locked claim with code behind it: the shape the
+// code-link gate holds to account. Every locked module claim is, unless it
+// declares `embodiment: {mode: none}`.
 func lockedCodeClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: behavior\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim with code behind it.\n" +
-		"governed_by:\n  type: none\n  reason: fixture\n"
+		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
 func severities(findings []lint.Finding) map[lint.Severity]int {
@@ -110,10 +134,13 @@ func severities(findings []lint.Finding) map[lint.Severity]int {
 // populates the reporting fields.
 func TestRun_SuccessWritesAndReports(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/overview.yaml": "id: widget.overview.router\nfacet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
-			"body: |\n  orientation note.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+		"claims/router.yaml": "id: widget.contract.router\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: |\n  start here.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"claims/one.yaml": draftClaim("widget.contract.one"),
+		"claims/queue.yaml": "id: widget.internals.queue\nfacet: internals\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: |\n  an internals claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -142,11 +169,20 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 	if res.CatalogPath == "" || res.RenderPath == "" {
 		t.Fatalf("expected catalog+render paths to be set, got %q / %q", res.CatalogPath, res.RenderPath)
 	}
-	if res.CatalogCount != len(claims) {
-		t.Fatalf("expected CatalogCount=%d, got %d", len(claims), res.CatalogCount)
+	// catalog_count reports what catalog.json holds, and catalog.json omits
+	// internals: 2 of the 3 claims.
+	raw, readErr := os.ReadFile(res.CatalogPath)
+	if readErr != nil {
+		t.Fatalf("catalog not written at %s: %v", res.CatalogPath, readErr)
 	}
-	if _, statErr := os.Stat(res.CatalogPath); statErr != nil {
-		t.Fatalf("catalog not written at %s: %v", res.CatalogPath, statErr)
+	var written struct {
+		Claims []json.RawMessage `json:"claims"`
+	}
+	if err := json.Unmarshal(raw, &written); err != nil {
+		t.Fatal(err)
+	}
+	if len(claims) != 3 || res.CatalogCount != 2 || len(written.Claims) != res.CatalogCount {
+		t.Fatalf("CatalogCount=%d, catalog.json entries=%d, loaded claims=%d; want 2, 2, 3", res.CatalogCount, len(written.Claims), len(claims))
 	}
 	if _, statErr := os.Stat(res.RenderPath); statErr != nil {
 		t.Fatalf("render not written at %s: %v", res.RenderPath, statErr)
@@ -159,13 +195,9 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 		t.Fatalf("render path %q not under cfg.Dir()", res.RenderPath)
 	}
 
-	// Orientation + next-steps reporting present.
-	if len(res.OrientationNotes) != 1 || res.OrientationNotes[0] != "orientation notes: module \"widget\": 1 (1 in overview)" {
-		t.Fatalf("unexpected orientation notes: %#v", res.OrientationNotes)
-	}
 	foundDraftHint := false
 	for _, h := range res.NextSteps {
-		if h == "2 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)" {
+		if h == "3 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)" {
 			foundDraftHint = true
 		}
 	}
@@ -231,10 +263,9 @@ func TestRun_MalformedFlagStoreStopsBeforeArtifacts(t *testing.T) {
 // file is written (fail-fast happens before catalog/render).
 func TestRun_LintErrorFailsFastNoWrites(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"claims/broken.yaml": "id: widget.contract.broken\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  broken.\n" +
-			"rests_on:\n  - widget.contract.missing\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  - widget.contract.missing\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -270,9 +301,9 @@ func TestRun_LintErrorFailsFastNoWrites(t *testing.T) {
 // still shows but the hint does not, exactly as in the CLI.
 func TestRun_OpenCommentsReported(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a locked claim.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
@@ -304,9 +335,9 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 // vanish from the advisory.
 func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"body: |\n  a locked claim, review_pending with no active trigger.\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
 
 	res, err := check.Run(claims, cfg)
@@ -335,31 +366,6 @@ func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	}
 }
 
-// A fully-locked module with no build-order artifact yet drives the
-// build-order propose next step and leaves OpenComments empty.
-func TestRun_FullyLockedBuildOrderHint(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
-	})
-
-	res, err := check.Run(claims, cfg)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(res.OpenComments) != 0 {
-		t.Fatalf("expected no open comments, got %#v", res.OpenComments)
-	}
-	foundBuildOrderHint := false
-	for _, h := range res.NextSteps {
-		if h == "module \"widget\" is fully locked with no build order yet -> dossierx build-order propose --module widget" {
-			foundBuildOrderHint = true
-		}
-	}
-	if !foundBuildOrderHint {
-		t.Fatalf("expected the build-order next-step, got %#v", res.NextSteps)
-	}
-}
-
 // A tagged source file under source_dirs makes Run scan and report impl-links:
 // ScanFilesScanned/ScanSummary are set and the status line is produced.
 func TestRun_ImplinkScanAndStatus(t *testing.T) {
@@ -381,7 +387,7 @@ func TestRun_ImplinkScanAndStatus(t *testing.T) {
 	if len(res.ScanErrors) != 0 {
 		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
 	}
-	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases" {
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims" {
 		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
 	}
 }
@@ -389,9 +395,9 @@ func TestRun_ImplinkScanAndStatus(t *testing.T) {
 func TestRun_StepTagScanAndStatus(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - do the thing\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
@@ -408,7 +414,7 @@ func TestRun_StepTagScanAndStatus(t *testing.T) {
 	if len(res.ScanErrors) != 0 {
 		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
 	}
-	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases" {
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims" {
 		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
 	}
 }
@@ -483,9 +489,9 @@ func TestRun_CodeLinkGate_RefusesUnlinkedClaim(t *testing.T) {
 func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nbuild_role: behavior\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - do the thing\n  - do the other thing\n" +
-			"governed_by:\n  type: none\n  reason: fixture\n",
+			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
 	})
 
@@ -505,7 +511,7 @@ func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml":  lockedCodeClaim("widget.contract.locked"),
-		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\ngoverned_by:\n  type: none\n  reason: fixture\n",
+		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nembodiment:\n  mode: none\n  reason: context only, no code\nbody: |\n  context, no code.\nrests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go":         "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
 	})
 
@@ -517,7 +523,7 @@ func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
 		t.Fatalf("expected OK, got %+v", res)
 	}
 	if res.CodeLinks == nil || !res.CodeLinks.Gated || res.CodeLinks.Incomplete() != 0 {
-		t.Fatalf("expected a gated, complete report; the orientation claim is not expected to link: %+v", res.CodeLinks)
+		t.Fatalf("expected a gated, complete report; the code-free claim is not expected to link: %+v", res.CodeLinks)
 	}
 }
 

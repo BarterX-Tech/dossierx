@@ -248,7 +248,7 @@ func (s *Server) claimAssets() *assetIndex {
 //
 // TWO SECONDS, TAKEN FROM THE TRANSIENT THE KEEP EXISTS FOR — a claim file being
 // rewritten. Every writer in this codebase renames a temp file over its target
-// (lock, digest and buildorder each spell out atomicWriteFile), so the
+// (lock, digest and loader, among others, spell out atomicWriteFile), so the
 // unparseable state is at worst the few milliseconds an in-place editor leaves a
 // half-written file visible, and it is gone by the following freshness check.
 // Two seconds is FOUR production poll intervals: a legitimate rewrite has to
@@ -353,7 +353,7 @@ func (s *Server) buildAssetIndex(fp map[string]fileStamp) (*assetIndex, bool) {
 	}
 	idx.root = root
 
-	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	claims, err := loader.LoadAll(s.cfg)
 	if err != nil {
 		return nil, false
 	}
