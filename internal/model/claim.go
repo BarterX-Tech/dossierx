@@ -232,14 +232,9 @@ type Claim struct {
 	// dependency chain, and the drift baseline a locked claim is checked
 	// against. It is a list of claim ids, or the stated absence
 	// {none: true, reason} (NIT-24). The retired governed_by edge (NIT-29)
-	// has no field and no shadow key: a claim file that still carries it
-	// fails strict decode.
-	//
-	// Mirrors is not an edge. The field exists only so KnownFields still
-	// names the historical YAML key and LockedClaimHash / ContentHash stay
-	// byte-identical. Nothing walks it.
-	Mirrors []string `yaml:"mirrors,omitempty"`
-	RestsOn RestsOn  `yaml:"rests_on,omitempty"`
+	// and the retired mirrors key have no field and no shadow key: a claim
+	// file that still carries either fails strict decode.
+	RestsOn RestsOn `yaml:"rests_on,omitempty"`
 
 	// Sources is the evidence this claim rests on, cited from Body by "[n]"
 	// markers matching each entry's Ref. See model.Source for the whole

@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -129,10 +130,97 @@ func Parse(raw []byte, sourcePath string) (*File, error) {
 	return &f, nil
 }
 
-// Marshal is the file's canonical on-disk form, used by `constitution lock`
-// when it rewrites the status line.
-func Marshal(f *File) ([]byte, error) {
-	return yaml.Marshal(f)
+// LockedBytes returns raw, a constitution.yaml's bytes, with its status set
+// to locked and every other byte unchanged: the human's comments, key order,
+// quoting and indentation are theirs, and `constitution lock` signs content,
+// not layout. A status: draft value is replaced in place, keeping its
+// quoting; a file without a status key gains a "status: locked" line above
+// its first key; a file already locked is returned as is.
+//
+// The edit is verified, not trusted: the result must parse as locked with
+// the same content hash as raw. A shape the edit cannot make safely (a flow
+// mapping with no status key, say) is refused rather than re-encoded.
+func LockedBytes(raw []byte, sourcePath string) ([]byte, error) {
+	before, err := Parse(raw, sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	if before.Status == model.StatusLocked {
+		return raw, nil
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("constitution: parse %s: %w", sourcePath, err)
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("constitution: %s is not a single mapping", sourcePath)
+	}
+	refuse := fmt.Errorf("constitution: %s: cannot set status to locked without rewriting other bytes; write a plain \"status: draft\" line at the top level and lock again", sourcePath)
+	mapping := doc.Content[0]
+	var out []byte
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != "status" {
+			continue
+		}
+		value := mapping.Content[i+1]
+		quote := ""
+		switch value.Style {
+		case 0:
+		case yaml.DoubleQuotedStyle:
+			quote = `"`
+		case yaml.SingleQuotedStyle:
+			quote = "'"
+		default:
+			return nil, refuse
+		}
+		at, ok := byteOffset(raw, value.Line, value.Column)
+		token := quote + string(model.StatusDraft) + quote
+		if !ok || !bytes.HasPrefix(raw[at:], []byte(token)) {
+			return nil, refuse
+		}
+		out = append(append([]byte{}, raw[:at]...), quote+string(model.StatusLocked)+quote...)
+		out = append(out, raw[at+len(token):]...)
+		break
+	}
+	if out == nil {
+		if mapping.Style&yaml.FlowStyle != 0 || len(mapping.Content) == 0 {
+			return nil, refuse
+		}
+		first := mapping.Content[0]
+		at, ok := byteOffset(raw, first.Line, first.Column)
+		lineStart := at - (first.Column - 1)
+		if !ok || lineStart < 0 || len(bytes.TrimLeft(raw[lineStart:at], " ")) != 0 {
+			return nil, refuse
+		}
+		out = append(append([]byte{}, raw[:at]...), "status: "+string(model.StatusLocked)+"\n"...)
+		out = append(out, raw[lineStart:]...)
+	}
+	after, err := Parse(out, sourcePath)
+	if err != nil || after.Status != model.StatusLocked || Hash(after) != Hash(before) {
+		return nil, refuse
+	}
+	return out, nil
+}
+
+// byteOffset converts yaml.v3's 1-based line and character column into a
+// byte offset in raw.
+func byteOffset(raw []byte, line, column int) (int, bool) {
+	at := 0
+	for l := 1; l < line; l++ {
+		nl := bytes.IndexByte(raw[at:], '\n')
+		if nl < 0 {
+			return 0, false
+		}
+		at += nl + 1
+	}
+	for c := 1; c < column; c++ {
+		if at >= len(raw) || raw[at] == '\n' {
+			return 0, false
+		}
+		_, size := utf8.DecodeRune(raw[at:])
+		at += size
+	}
+	return at, true
 }
 
 func validateEntries(f File) error {

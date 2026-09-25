@@ -13,7 +13,7 @@
     },
     "panel.internals.state": {
       "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
-      "panel.internals.mockup": "9f0c79a3fb2b9d06db3120b1576668edf701032dba73fa563315789e564484df"
+      "panel.internals.mockup": "6b5bfd3f08d3e60b939296124499fcf9040c0aad9a9d4fe5769f305ba08dd140"
     },
     "panel.internals.verification": {
       "panel.contract.api": "31871ca8d478b8562702d2ec99370821fe009ad6942c9edaa610b570c59e6210",
@@ -108,7 +108,7 @@
     },
     "panel.internals.state": {
       "panel.internals.mockup": {
-        "hash": "9f0c79a3fb2b9d06db3120b1576668edf701032dba73fa563315789e564484df",
+        "hash": "6b5bfd3f08d3e60b939296124499fcf9040c0aad9a9d4fe5769f305ba08dd140",
         "content": {
           "ID": "panel.internals.mockup",
           "Facet": "internals",
@@ -203,7 +203,7 @@
     },
     "panel.contract.api": {
       "subject": "claim",
-      "hash": "3e3bf13859619aad2c161b991777825532f3829d4bf8f2bbe4cb61c4984383d8",
+      "hash": "679690e24ed2d3386d189aa08489b638b3511536112ad228fd039ab811bcfeab",
       "at": "2026-09-24T15:43:17.811047Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -245,7 +245,7 @@
     },
     "panel.contract.behavior": {
       "subject": "claim",
-      "hash": "754eaa6012f9b354337e1194be9b166cea14ed1070b70ed3f520cdb8144c7b81",
+      "hash": "82be35afabd744d2c3f68f545e07ee9dc3b4608219118ca7a64157b48184b11f",
       "at": "2026-09-24T15:43:17.968345Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -287,7 +287,7 @@
     },
     "panel.internals.mockup": {
       "subject": "claim",
-      "hash": "970795d5c9785aa4960e8d76c19f2fa9b2033b0db8506e70e55e1866fc345b1e",
+      "hash": "17d437c903c03e978e8d8df6a993fac0fbdd2c0c42bb0c0132e1bf6ab8deada2",
       "at": "2026-09-24T15:43:18.126907Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -327,7 +327,7 @@
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "d9b8747e7ab8d624f135e590a7a83da2dcd0f7ca24ce060c3332dbfdd1264f11",
+      "hash": "76b4c6f1fb33ca84c12bd14b6dd8154c5e9ad8d8fad036f4aa7db4cd64b00f08",
       "at": "2026-09-24T15:43:18.284312Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -371,7 +371,7 @@
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "884003fb99236f79657a1c12fe2ebe0c023c979f9b0d0a6fe1e443876d571e18",
+      "hash": "f82d2dcb2d4afe2d30bbe8a98e6444f62276d4157d32468befae78afc185e612",
       "at": "2026-09-24T15:43:18.445753Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",

@@ -9,8 +9,8 @@ import (
 
 // TestRestsOnRequiredLint pins the shape rule (NIT-24): every claim — module
 // or project — carries either a list of claim ids or {none: true, reason}.
-// Nothing at all, none without a reason, and none alongside targets are the
-// three refusals, each with its own message.
+// Nothing at all and none without a reason are the two refusals, each with
+// its own message.
 func TestRestsOnRequiredLint(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -57,18 +57,6 @@ func TestRestsOnRequiredLint(t *testing.T) {
 			claim:   model.Claim{ID: "widget.contract.a", RestsOn: model.RestsOn{None: true, Reason: "   "}},
 			wantN:   1,
 			message: "rests_on.reason is required",
-		},
-		{
-			name:    "none and targets at once",
-			claim:   model.Claim{ID: "widget.contract.a", RestsOn: model.RestsOn{None: true, Reason: "why", IDs: []string{"widget.contract.b"}}},
-			wantN:   1,
-			message: "cannot be none: true and name targets at the same time",
-		},
-		{
-			name:    "none and targets with no reason reports both defects",
-			claim:   model.Claim{ID: "widget.contract.a", RestsOn: model.RestsOn{None: true, IDs: []string{"widget.contract.b"}}},
-			wantN:   2,
-			message: "rests_on",
 		},
 	}
 

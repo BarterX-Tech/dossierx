@@ -59,7 +59,6 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"raw_html":          {hashed: true, mutate: func(c *model.Claim) { c.RawHTML = `<script>alert(1)</script>` }},
 	"raw_html_reviewed": {hashed: true, mutate: func(c *model.Claim) { c.RawHTMLReviewed = false }},
 	"steps":             {hashed: true, mutate: func(c *model.Claim) { c.Steps = []string{"step one", "step two"} }},
-	"mirrors":           {hashed: true, mutate: func(c *model.Claim) { c.Mirrors = []string{"widget.contract.elsewhere"} }},
 	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = model.RestsOnIDs("widget.contract.elsewhere") }},
 	"scope":             {hashed: true, mutate: func(c *model.Claim) { c.Scope = model.ScopeProject }},
 	"migrated_from":     {hashed: true, mutate: func(c *model.Claim) { c.MigratedFrom = "docs/other.html" }},
@@ -113,7 +112,6 @@ func fullyPopulatedClaim() model.Claim {
 		RawHTML:         `<div class="mockup">approved markup</div>`,
 		RawHTMLReviewed: true,
 		Steps:           []string{"step one"},
-		Mirrors:         []string{"widget.internals.mirror"},
 		RestsOn:         model.RestsNone("a governed reason"),
 		Sources: []model.Source{
 			{Ref: 1, Kind: model.SourceKindExternal, Title: "Vendor API reference", URL: "https://example.invalid/api", AccessedOn: "2026-01-01", Supports: "the approved sentence"},
@@ -323,23 +321,34 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 // "let's just hash everything" edit to ContentHash fails here with the reason
 // attached rather than in a user's project.
 func TestContentHashIsUnchangedByTheLedger(t *testing.T) {
-	c := model.Claim{
+	base := model.Claim{
 		ID: "widget.contract.overview", Facet: "contract", Module: "widget",
 		Status: model.StatusLocked, Layout: model.LayoutCard, Body: "the approved body",
-		Steps: []string{"step one"}, Mirrors: []string{"widget.internals.mirror"},
-		RestsOn: model.RestsOnIDs("widget.contract.dep"),
+		Steps: []string{"step one"},
 	}
-	// The v0.7.21 (NIT-29) value: the retired governed_by line left it then,
-	// and the rests_on shape change (NIT-24) must NOT move it — a target list
-	// hashes exactly as the []string it used to be.
-	const want = "14de6c9efe5ce36286ac5961982262a74dcf831a29fc225f57e0aeedac361584"
-
-	if got := ContentHash(c); got != want {
-		t.Fatalf("ContentHash changed.\n got: %s\nwant: %s\n\n"+
-			"ContentHash is the dependency-drift baseline recorded in every existing project's lock store.\n"+
-			"Changing it flips every locked claim to review_pending on the day they upgrade. If the ledger\n"+
-			"needs to cover more fields, that is what LockedClaimHash is for — it is a separate hash for\n"+
-			"exactly this reason. If this change really is intended, update `want` deliberately.", got, want)
+	// Each want is sha256 of the literal line list, computed outside the
+	// hasher: id, facet, module, layout, body, step, then one rests_on line
+	// per target, or ONE rests_on=none/<reason> line for RESTS ON NONE.
+	for _, tc := range []struct {
+		name    string
+		restsOn model.RestsOn
+		want    string
+	}{
+		// The v0.7.21 value: the retired governed_by and mirrors lines left
+		// it then, and the rests_on shape change (NIT-24) must NOT move it —
+		// a target list hashes exactly as the []string it used to be.
+		{"targets", model.RestsOnIDs("widget.contract.dep"), "f5fec9611b0ce76f58925a61d7bceadb42296321e1e42277781ef8c7353d1003"},
+		{"none", model.RestsNone("first fact in the module"), "1e2c33f96506fe2b57b2ca7bb84c011a27105f53e5f8bee66a90c5a00474071b"},
+	} {
+		c := base
+		c.RestsOn = tc.restsOn
+		if got := ContentHash(c); got != tc.want {
+			t.Fatalf("ContentHash (%s) changed.\n got: %s\nwant: %s\n\n"+
+				"ContentHash is the dependency-drift baseline recorded in every existing project's lock store.\n"+
+				"Changing it flips every locked claim to review_pending on the day they upgrade. If the ledger\n"+
+				"needs to cover more fields, that is what LockedClaimHash is for — it is a separate hash for\n"+
+				"exactly this reason. If this change really is intended, update `want` deliberately.", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -606,10 +615,11 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // them through the current hasher on every run. That fixture is the real
 // proof; this constant is the fast, local statement of it.
 //
-// v0.7.21 moves it on purpose, twice in one release: governed_by (NIT-29) and
-// build_role (NIT-32) both left model.Claim with no shadow key, so every
-// locked claim re-locks once on upgrade, with no migration tooling by decision.
-const lockedClaimHashNoOptionalFields = "39da0ed6b837cc07c88cbf8dfd04cb506c2564354edb460b5354883ee429e77b"
+// v0.7.21 moves it on purpose, three times in one release: governed_by
+// (NIT-29), build_role (NIT-32) and mirrors all left model.Claim with no
+// shadow key, so every locked claim re-locks once on upgrade, with no
+// migration tooling by decision.
+const lockedClaimHashNoOptionalFields = "3baf7120328a942236d60021f11a941503eba8d6cfc5150e97874c4d14002748"
 
 // TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
 // the lockedClaimHashOmitWhenEmpty gate, because each half guards a different

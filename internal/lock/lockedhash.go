@@ -16,9 +16,9 @@
 //
 //   - LockedClaimHash answers "is THIS locked claim still the bytes a human
 //     approved?" That question has no allowlist: every field a claim persists
-//     is part of what was approved. model.Claim persists twenty-three
-//     yaml-tagged fields; ContentHash covers ten. The ten it cannot see —
-//     raw_html_reviewed, kind, embodiment, section, order, emphasis,
+//     is part of what was approved. model.Claim persists twenty-four
+//     yaml-tagged fields; ContentHash covers eleven. The ten it cannot see —
+//     raw_html_reviewed, kind, scope, section, order, emphasis,
 //     migrated_from, audit_notes, sources, tracks — are all signed
 //     here, as are the three no hash covers (status, review_pending,
 //     comments; see lockedClaimHashExcluded for why the engine's own

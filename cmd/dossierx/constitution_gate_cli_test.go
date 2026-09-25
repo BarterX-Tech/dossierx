@@ -240,6 +240,54 @@ func TestEditedAfterLockStopsWorkUntilReLockedAndUnchangedIsAlreadyLocked(t *tes
 	}
 }
 
+// TestConstitutionLockChangesOnlyTheStatus: the roof is the human's file, so
+// `constitution lock` sets status and leaves every other byte alone — their
+// comments, their two-space indentation, their quoting. It used to re-marshal
+// the whole document, which dropped every comment and re-indented to four
+// spaces on the first lock.
+func TestConstitutionLockChangesOnlyTheStatus(t *testing.T) {
+	const body = "# The roof. Keep it short.\n" +
+		"invariants:\n" +
+		"  - slug: one-roof   # why: every module builds toward it\n" +
+		"    title: 'One roof'\n" +
+		"    body: >-\n" +
+		"      This fixture has one lockable\n" +
+		"      constitution above every module.\n" +
+		"\n" +
+		"# decisions come later\n"
+	for _, tc := range []struct{ name, before, after string }{
+		{
+			name:   "status draft is set in place, its comment kept",
+			before: "status: draft  # flip with constitution lock\n" + body,
+			after:  "status: locked  # flip with constitution lock\n" + body,
+		},
+		{
+			name:   "an absent status gains one line above the first key",
+			before: body,
+			after:  "# The roof. Keep it short.\nstatus: locked\n" + strings.TrimPrefix(body, "# The roof. Keep it short.\n"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, cfgPath, _ := unroofedProject(t)
+			roof := filepath.Join(root, "constitution.yaml")
+			if err := os.WriteFile(roof, []byte(tc.before), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			env, _, err := execCLIJSON(t, "--config", cfgPath, "constitution", "lock", "--reason", "read and approved")
+			if err != nil || !env.OK {
+				t.Fatalf("constitution lock: %v %+v", err, env.Error)
+			}
+			got, err := os.ReadFile(roof)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.after {
+				t.Fatalf("constitution lock rewrote more than the status\n got:\n%s\nwant:\n%s", got, tc.after)
+			}
+		})
+	}
+}
+
 func TestOverCapRefusesLockAndCheckAndNearCapWarns(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")

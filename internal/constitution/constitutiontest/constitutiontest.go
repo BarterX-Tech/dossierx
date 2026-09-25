@@ -13,7 +13,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
-	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
 // Roof is the one-entry constitution written when the fixture has none.
@@ -34,19 +33,20 @@ func Arm(cfg *config.Config) error {
 			return fmt.Errorf("arm constitution: write: %w", err)
 		}
 	}
-	f, err := constitution.Load(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("arm constitution: load: %w", err)
+		return fmt.Errorf("arm constitution: read: %w", err)
 	}
-	if f.Status != model.StatusLocked {
-		f.Status = model.StatusLocked
-		raw, err := constitution.Marshal(f)
-		if err != nil {
-			return fmt.Errorf("arm constitution: marshal: %w", err)
-		}
-		if err := os.WriteFile(path, raw, 0o644); err != nil {
-			return fmt.Errorf("arm constitution: rewrite: %w", err)
-		}
+	locked, err := constitution.LockedBytes(raw, path)
+	if err != nil {
+		return fmt.Errorf("arm constitution: lock: %w", err)
+	}
+	if err := os.WriteFile(path, locked, 0o644); err != nil {
+		return fmt.Errorf("arm constitution: rewrite: %w", err)
+	}
+	f, err := constitution.Parse(locked, path)
+	if err != nil {
+		return fmt.Errorf("arm constitution: parse: %w", err)
 	}
 	store, err := lock.LoadStore(cfg.LockStorePath())
 	if err != nil {
