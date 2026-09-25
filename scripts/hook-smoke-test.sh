@@ -167,6 +167,28 @@ reviewed_lock() {
 # is not installed, so point every hook run at the one we just built.
 export DOSSIERX_BIN="$BIN"
 
+# arm_roof <config-dir> — the locked constitution the lock gate demands
+# (NIT-26): no claim locks and no plain check passes until the project's roof
+# is locked, so every fixture here needs one before its first "check". The
+# file lands BESIDE project.config.yaml — in whatever directory the fixture
+# keeps its config, which is not always the repository root (case 17 keeps it
+# in docs/, case 19 in repo/) — and it is locked through the REAL command, so
+# the lock store carries the same record a human's `constitution lock` leaves
+# and the gate judges a roof that was actually approved, not a status line
+# somebody typed.
+arm_roof() {
+	local dir="$1"
+	cat >"$dir/constitution.yaml" <<'YAML'
+status: draft
+invariants:
+  - slug: one-roof
+    title: One roof
+    body: This fixture has one lockable constitution above every module.
+YAML
+	(cd "$dir" && "$BIN" constitution lock --reason "smoke-test roof" --format text >/dev/null) ||
+		fail "constitution lock failed in $dir; no fixture claim can lock without the roof"
+}
+
 CLAIM_ID="widget.contract.overview"
 
 # new_project <dir> — a git repository containing a one-claim dossierx project
@@ -189,8 +211,10 @@ YAML
 		git config user.email hook-smoke@example.invalid
 		git config user.name "hook smoke test"
 		git config commit.gpgsign false
+		arm_roof "$dir"
 		"$BIN" claim new "$CLAIM_ID" \
 			--body "the widget answers within 200ms." \
+			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
 		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -214,8 +238,10 @@ claims_dir: claims
 YAML
 	(
 		cd "$repo/$sub"
+		arm_roof "$repo/$sub"
 		"$BIN" claim new "$CLAIM_ID" \
 			--body "the widget answers within 200ms." \
+			--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
 		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -670,8 +696,10 @@ YAML
 )
 (
 	cd "$SPLIT/docs"
+	arm_roof "$SPLIT/docs"
 	"$BIN" claim new "$CLAIM_ID" \
 		--body "the widget answers within 200ms." \
+		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
 	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
@@ -729,7 +757,7 @@ cp "$UNTRACKED/claims/$CLAIM_ID.yaml" "$UNTRACKED/decoy/"
 # Commit the claims and the ledger WITHOUT the config, before the hook exists —
 # the hook would (correctly, after this fix) refuse to be the thing that creates
 # this state.
-(cd "$UNTRACKED" && git add claims decoy build/ledger/lock-store.json build/ledger/comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
+(cd "$UNTRACKED" && git add claims decoy constitution.yaml build/ledger/lock-store.json build/ledger/comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
 	fail "could not build the untracked-config fixture: $(cat "$TMP/untracked-commit1.out")"
 (cd "$UNTRACKED" && git ls-files --error-unmatch project.config.yaml) >/dev/null 2>&1 &&
 	fail "the fixture tracked project.config.yaml; this case must leave it untracked"
@@ -797,8 +825,10 @@ YAML
 	git config user.email hook-smoke@example.invalid
 	git config user.name "hook smoke test"
 	git config commit.gpgsign false
+	arm_roof "$SKIPPED/repo"
 	"$BIN" claim new "$CLAIM_ID" \
 		--body "the widget answers within 200ms." \
+		--rests-on-none-reason "smoke-test fixture claim, not backed by any other claim" \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
 	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
