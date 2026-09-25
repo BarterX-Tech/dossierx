@@ -72,7 +72,7 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	for i := range modules {
 		modules[i] = fmt.Sprintf("mod%02d", i)
 	}
-	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"
+	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 		modules[i] = fmt.Sprintf("mod%02d", i)
 	}
 	root := t.TempDir()
-	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"
+	cfgBody := "schema_version: 1\nfacets: [contract, internals]\nmodules: [" + strings.Join(modules, ", ") + "]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"
 	configPath := filepath.Join(root, "project.config.yaml")
 	if err := os.WriteFile(configPath, []byte(cfgBody), 0o644); err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
@@ -213,7 +213,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)
@@ -260,7 +260,7 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\n"), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte("schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claim_body_chars: 100000000\nmax_claims_per_module: 10000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.LoadConfig(configPath)

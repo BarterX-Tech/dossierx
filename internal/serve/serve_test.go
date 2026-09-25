@@ -24,7 +24,7 @@ import (
 
 const testVersion = "v-test-1.2.3"
 
-const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+const baseConfig = "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 10000\n"
 
 // draftClaim is a lint-clean draft card used as the target for "add" (adding a
 // thread to a draft never sets review_pending, so the file stays predictable).

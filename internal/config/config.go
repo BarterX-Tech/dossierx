@@ -32,6 +32,14 @@ const DefaultMaxClaimBodyChars = 2000
 // Config.MaxClaimSummaryChars. One line, counted as Unicode code points.
 const DefaultMaxClaimSummaryChars = 200
 
+// DefaultMaxClaimsPerModule is the hard default for
+// Config.MaxClaimsPerModule when the field is omitted (NIT-14). Ten
+// 200-character summaries are a 2,000-character module index, under
+// Hermes's 2,200-character MEMORY.md; ten 2,000-character bodies are one
+// 20,000-character OpenClaw bootstrap file. A project that already has
+// larger modules sets max_claims_per_module in project.config.yaml.
+const DefaultMaxClaimsPerModule = 10
+
 // removedOverviewFacet is the retired reserved facet name. Listing it in
 // facets[] is refused; leftover claims with facet: overview fail id-shape
 // like any other undeclared facet.
@@ -258,6 +266,13 @@ type Config struct {
 	// DefaultMaxClaimSummaryChars (200). Zero and negatives are refused
 	// at load time.
 	MaxClaimSummaryChars *int `yaml:"max_claim_summary_chars,omitempty"`
+
+	// MaxClaimsPerModule is the project-wide ceiling on how many claim
+	// files may sit in one module. Omit the field to take
+	// DefaultMaxClaimsPerModule (10). There is no per-module override:
+	// a fat corpus raises this one number. Zero and negatives are
+	// refused at load time — they are not a "no cap" sentinel.
+	MaxClaimsPerModule *int `yaml:"max_claims_per_module,omitempty"`
 
 	// dir is the absolute directory containing the config file itself;
 	// ClaimsDir and Viewer.TemplateOverrides are resolved against it, never
@@ -509,6 +524,9 @@ func (c *Config) validate() error {
 	if c.MaxClaimSummaryChars != nil && *c.MaxClaimSummaryChars < 1 {
 		return fmt.Errorf("max_claim_summary_chars must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimSummaryChars, DefaultMaxClaimSummaryChars)
 	}
+	if c.MaxClaimsPerModule != nil && *c.MaxClaimsPerModule < 1 {
+		return fmt.Errorf("max_claims_per_module must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimsPerModule, DefaultMaxClaimsPerModule)
+	}
 
 	return nil
 }
@@ -531,6 +549,17 @@ func (c *Config) ClaimSummaryCharLimit() int {
 		return DefaultMaxClaimSummaryChars
 	}
 	return *c.MaxClaimSummaryChars
+}
+
+// ClaimsPerModuleLimit is the effective module-size cap: the configured
+// value when set, otherwise DefaultMaxClaimsPerModule. A nil Config
+// still returns the default so a lint called without a config does not
+// silently drop the ceiling.
+func (c *Config) ClaimsPerModuleLimit() int {
+	if c == nil || c.MaxClaimsPerModule == nil {
+		return DefaultMaxClaimsPerModule
+	}
+	return *c.MaxClaimsPerModule
 }
 
 // TrackIDs returns every declared track id, in declaration order. Callers

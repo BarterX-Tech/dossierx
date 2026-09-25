@@ -251,6 +251,12 @@ claims_dir: claims
 	if got := cfg.ClaimSummaryCharLimit(); got != DefaultMaxClaimSummaryChars {
 		t.Fatalf("ClaimSummaryCharLimit = %d, want %d", got, DefaultMaxClaimSummaryChars)
 	}
+	if cfg.MaxClaimsPerModule != nil {
+		t.Fatalf("omitted max_claims_per_module must stay nil, got %v", *cfg.MaxClaimsPerModule)
+	}
+	if got := cfg.ClaimsPerModuleLimit(); got != DefaultMaxClaimsPerModule {
+		t.Fatalf("ClaimsPerModuleLimit = %d, want %d", got, DefaultMaxClaimsPerModule)
+	}
 
 	raised := writeConfig(t, dir, "raised.yaml", `
 schema_version: 1
@@ -259,6 +265,7 @@ modules: [ledger]
 claims_dir: claims
 max_claim_body_chars: 4000
 max_claim_summary_chars: 80
+max_claims_per_module: 40
 `)
 	cfg, err = LoadConfig(raised)
 	if err != nil {
@@ -276,6 +283,12 @@ max_claim_summary_chars: 80
 	if got := cfg.ClaimSummaryCharLimit(); got != 80 {
 		t.Fatalf("ClaimSummaryCharLimit = %d, want 80", got)
 	}
+	if cfg.MaxClaimsPerModule == nil || *cfg.MaxClaimsPerModule != 40 {
+		t.Fatalf("MaxClaimsPerModule = %v, want 40", cfg.MaxClaimsPerModule)
+	}
+	if got := cfg.ClaimsPerModuleLimit(); got != 40 {
+		t.Fatalf("ClaimsPerModuleLimit = %d, want 40", got)
+	}
 }
 
 func TestLoadConfig_ClaimCharCapsRejectZeroAndNegative(t *testing.T) {
@@ -283,7 +296,7 @@ func TestLoadConfig_ClaimCharCapsRejectZeroAndNegative(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"max_claim_body_chars", "max_claim_summary_chars"} {
+	for _, field := range []string{"max_claim_body_chars", "max_claim_summary_chars", "max_claims_per_module"} {
 		for _, n := range []int{0, -3} {
 			p := writeConfig(t, dir, "bad.yaml", `
 schema_version: 1
