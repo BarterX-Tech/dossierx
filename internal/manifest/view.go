@@ -412,7 +412,12 @@ func IsolationOversizeDetails(err error) map[string]any {
 	}
 }
 
-// List is the locked-module catalog from manifest.yaml blurbs.
+// List is the locked-module catalog from manifest.yaml blurbs. Each row's
+// Findings is the count manifest show reports for that module: check's
+// findings filtered to the module plus the project-wide ones no module owns.
+// It comes from the same Check pass, so list can never read 0 where show and
+// check refuse (the cross-module export rule is only judged there).
+// The manifest tree is walked once for the whole list.
 func List(claims []model.Claim, cfg *config.Config) []CatalogEntry {
 	if cfg == nil {
 		return nil
@@ -421,15 +426,25 @@ func List(claims []model.Claim, cfg *config.Config) []CatalogEntry {
 	for _, c := range claims {
 		byMod[c.Module] = append(byMod[c.Module], c)
 	}
-	byID := map[string]model.Claim{}
-	for _, c := range claims {
-		byID[c.ID] = c
+	tree, extras, walkErr := loadTree(cfg)
+	var findings []Finding
+	if walkErr != nil {
+		findings = []Finding{{Module: "", Message: walkErr.Error()}}
+	} else {
+		findings = checkTree(claims, cfg, tree, extras)
+	}
+	perModule := map[string]int{}
+	projectWide := 0
+	for _, f := range findings {
+		if f.Module == "" {
+			projectWide++
+		} else {
+			perModule[f.Module]++
+		}
 	}
 	out := make([]CatalogEntry, 0, len(cfg.Modules))
 	for _, module := range cfg.Modules {
-		rel := RequiredRelPath(module)
-		raw, ok, _ := LoadModule(cfg, module)
-		entry := CatalogEntry{Module: module}
+		entry := CatalogEntry{Module: module, Findings: perModule[module] + projectWide}
 		modClaims := byMod[module]
 		entry.ClaimCount = len(modClaims)
 		for _, c := range modClaims {
@@ -438,16 +453,12 @@ func List(claims []model.Claim, cfg *config.Config) []CatalogEntry {
 			}
 		}
 		entry.Locked = entry.ClaimCount > 0 && entry.LockedClaims == entry.ClaimCount
-		if !ok {
-			entry.Findings = 1
-			out = append(out, entry)
-			continue
+		if raw, ok := tree[RequiredRelPath(module)]; ok {
+			m, _ := decodeManifest(module, RequiredRelPath(module), raw)
+			entry.Summary = strings.TrimSpace(m.Summary)
+			entry.Provides = len(m.Provides)
+			entry.DependsOn = len(m.DependsOn)
 		}
-		m, findings := ParseBytes(module, rel, raw, byID)
-		entry.Summary = strings.TrimSpace(m.Summary)
-		entry.Provides = len(m.Provides)
-		entry.DependsOn = len(m.DependsOn)
-		entry.Findings = len(findings)
 		out = append(out, entry)
 	}
 	return out

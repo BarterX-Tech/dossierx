@@ -257,6 +257,30 @@ func TestListAndIntegration(t *testing.T) {
 	}
 }
 
+// manifest list's findings column is show's verdict for the same module.
+// The cross-module export rule is only judged by Check, so a depends_on on a
+// contract claim its provider does not export used to list as 0 findings
+// while show and check refused it.
+func TestListFindingsMatchShow(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{Modules: []string{"n", "m"}, ClaimsDir: dir}
+	write(t, dir, "n/manifest.yaml", "summary: n.\nprovides: []\ndepends_on:\n  - m.contract.b\n")
+	write(t, dir, "m/manifest.yaml", "summary: m.\nprovides: []\ndepends_on: []\n")
+	claims := []model.Claim{{ID: "m.contract.b", Facet: "contract", Module: "m", Status: model.StatusDraft, Summary: "B."}}
+	for _, row := range List(claims, cfg) {
+		view, err := Show(claims, cfg, row.Module, ShowOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Findings != len(view.Findings) {
+			t.Fatalf("list says %d finding(s) for %s, show says %+v", row.Findings, row.Module, view.Findings)
+		}
+		if row.Module == "n" && row.Findings != 1 {
+			t.Fatalf("module n depends on an unexported id: findings = %d, want 1", row.Findings)
+		}
+	}
+}
+
 // A neighbor's provides never surfaces its internals or a body, even when its
 // manifest (wrongly) lists an internals id: module-manifest reports that, and
 // the integration view skips it.
