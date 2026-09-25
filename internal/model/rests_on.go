@@ -1,6 +1,8 @@
 package model
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -144,6 +146,38 @@ func (r RestsOn) MarshalYAML() (interface{}, error) {
 	out := make([]string, len(r.IDs))
 	copy(out, r.IDs)
 	return out, nil
+}
+
+// UnmarshalJSON reads the approved-content snapshots a lock store embeds.
+// This binary writes RestsOn there as the struct ({"None","Reason","IDs"});
+// v0.7.20 and earlier wrote rests_on as a plain []string. Both must load, or
+// a store carried across the upgrade becomes unreadable: every approval
+// vanishes and every write refuses. A plain list is read as targets.
+func (r *RestsOn) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*r = RestsOn{}
+		return nil
+	}
+	if trimmed[0] == '[' {
+		var ids []string
+		if err := json.Unmarshal(trimmed, &ids); err != nil {
+			return fmt.Errorf("rests_on: %w", err)
+		}
+		if len(ids) == 0 {
+			*r = RestsOn{}
+			return nil
+		}
+		*r = RestsOn{IDs: ids}
+		return nil
+	}
+	type plain RestsOn // drops this method, so the struct form decodes normally
+	var out plain
+	if err := json.Unmarshal(trimmed, &out); err != nil {
+		return fmt.Errorf("rests_on: %w", err)
+	}
+	*r = RestsOn(out)
+	return nil
 }
 
 // IsProjectClaimID reports the project-claim id grammar: project.<slug>,
