@@ -29,7 +29,7 @@ import (
 // and the process exited 0. An agent that checked the status concluded its call
 // had succeeded and that the empty result was the answer.
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
-	for _, noun := range []string{"claim", "comment", "constitution", "track", "skills"} {
+	for _, noun := range []string{"claim", "comment", "constitution", "track", "manifest", "skills"} {
 		t.Run(noun, func(t *testing.T) {
 			env, _, err := execReviewedCLIJSON(t, noun)
 			if err == nil {

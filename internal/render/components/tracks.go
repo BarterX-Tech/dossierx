@@ -76,6 +76,17 @@ func TrackCitedListHTML(claims []TrackCitedClaim) template.HTML {
 	return template.HTML(b.String())
 }
 
+// ClaimRefHTML is one claim reference anchor, labelled exactly as an edges
+// footer or a track row labels it (writeClaimRef with the reader's module
+// and facet as context). The module Manifest tab (NIT-19) uses it for its
+// provides and depends_on ids, so a manifest id reads like every other
+// pointer to that claim. Escaped here: the id is author input.
+func ClaimRefHTML(targetID, fromModule, fromFacet string) template.HTML {
+	var b strings.Builder
+	writeClaimRef(&b, targetID, fromModule, fromFacet, nil, true)
+	return template.HTML(b.String())
+}
+
 // TrackClaimStateLabel is the word one claim's pill shows on a track page:
 // its status, except that a locked claim flagged for re-review says so
 // instead.

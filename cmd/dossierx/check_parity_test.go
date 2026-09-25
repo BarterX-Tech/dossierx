@@ -41,9 +41,8 @@ import (
 func writeCheckFixture(t *testing.T, root, cfgBody string, files map[string]string) string {
 	t.Helper()
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfgBody), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfgBody)
+	seedManifestsFromConfigBody(t, root, cfgBody)
 	for rel, content := range files {
 		abs := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {

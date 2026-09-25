@@ -446,9 +446,7 @@ func TestClaimShowNeverSuggestsFlaggingAStructuredLayout(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	const id = "widget.contract.tbl"
 	claimPath := filepath.Join(claimsDir, "tbl.yaml")
@@ -556,9 +554,7 @@ func restsOnPairProject(t *testing.T, root string) (cfgPath, alphaPath, betaPath
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	alphaPath = filepath.Join(claimsDir, "alpha.yaml")
 	if err := os.WriteFile(alphaPath, []byte("id: widget.contract.alpha\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n"+

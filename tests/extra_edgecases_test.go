@@ -33,9 +33,7 @@ func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - concmod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	const n = 6
@@ -114,9 +112,7 @@ func TestVeryLongClaimIDHandledEndToEnd(t *testing.T) {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - longidmod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	// A single kebab-case slug segment ~500 characters long: still valid

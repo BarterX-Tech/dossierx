@@ -193,9 +193,15 @@ type Config struct {
 	Constitution string `yaml:"constitution,omitempty"`
 	// ProjectClaimsDir is the store for scope: project claims, default
 	// project-claims. Outside claims_dir. Missing directory is empty, not an error.
-	ProjectClaimsDir string      `yaml:"project_claims_dir,omitempty"`
-	Viewer           Viewer      `yaml:"viewer,omitempty"`
-	Conformance      Conformance `yaml:"conformance,omitempty"`
+	ProjectClaimsDir string `yaml:"project_claims_dir,omitempty"`
+
+	// ManifestTree is claims_dir-relative slash paths to file bytes. When
+	// non-nil, the module-manifest lint reads this tree instead of the
+	// working-tree claims_dir. StatusStaged sets it from the git index so
+	// --staged never judges an unstaged manifest. Not a config field.
+	ManifestTree map[string][]byte `yaml:"-"`
+	Viewer       Viewer            `yaml:"viewer,omitempty"`
+	Conformance  Conformance       `yaml:"conformance,omitempty"`
 
 	// BuildDir is the directory every runtime-generated file lives under —
 	// the build-order and code-links artifacts, the three ledger stores, the

@@ -44,9 +44,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 
 	depPath := filepath.Join(claimsDir, "dep.yaml")
@@ -160,9 +158,7 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 			t.Fatalf("mkdir claims: %v", err)
 		}
 		cfgPath = filepath.Join(root, "project.config.yaml")
-		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-			t.Fatalf("write config: %v", err)
-		}
+		writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 		lockFixtureConstitution(t, cfgPath)
 		claimPath = writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the real body")
 		return root, cfgPath, claimPath
@@ -262,9 +258,7 @@ func TestCLI_Flag_RefusesStructuredLayouts(t *testing.T) {
 				t.Fatalf("mkdir claims: %v", err)
 			}
 			cfgPath := filepath.Join(root, "project.config.yaml")
-			if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-				t.Fatalf("write config: %v", err)
-			}
+			writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 			lockFixtureConstitution(t, cfgPath)
 			claimPath := writeLayoutClaim(t, claimsDir, tc.id, tc.layout, tc.extra)
 
@@ -294,9 +288,7 @@ func TestCLI_Flag_RefusesStructuredLayouts(t *testing.T) {
 			t.Fatalf("mkdir claims: %v", err)
 		}
 		cfgPath := filepath.Join(root, "project.config.yaml")
-		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-			t.Fatalf("write config: %v", err)
-		}
+		writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 		lockFixtureConstitution(t, cfgPath)
 		claimPath := writeLockedFixtureClaim(t, claimsDir, "widget.contract.card", "widget", "a plain card body")
 

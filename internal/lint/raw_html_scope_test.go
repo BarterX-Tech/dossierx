@@ -68,13 +68,13 @@ func TestRawHTMLScope(t *testing.T) {
 // author layout: mockup claims, per the round-3 hardening spec's "start
 // with just one module" instruction.
 func mockupTestConfig() *config.Config {
-	return &config.Config{
+	return withManifests(&config.Config{
 		SchemaVersion: 1,
 		Facets:        []string{"contract", "internals"},
 		Modules:       []string{"widget", "other"},
 		ClaimsDir:     "claims",
 		MockupModules: []string{"widget"},
-	}
+	})
 }
 
 // validMockupClaim is a fully valid layout: mockup claim: allowlisted

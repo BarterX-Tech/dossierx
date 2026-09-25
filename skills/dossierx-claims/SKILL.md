@@ -35,6 +35,15 @@ the five rules are there and are not repeated here.
 | a locked claim drifted from a changed dependency | `dossierx claim reaudit <id>` (preview) then `--confirm --reason "..."` |
 | read the feature axis (read-only; never a gate, never a build sequence) | `dossierx track list` · `show <id>` · `status <id>` — see Feature tracks below |
 
+## Is this worth a claim?
+
+Write a claim only when all three are **yes**: (1) would a competent engineer reading the code be
+surprised by it? (2) if it were wrong, would another module or a locked promise break? (3) is it
+invisible from any single file? Never: language semantics, framework defaults, restating what the
+code says, step-by-step narration of one function, or anything the constitution already states. The
+caps (10 claims, 200-character summary, 2,000-character body) are the backstop; this rubric is what
+makes a module converge on ten claims rather than ten longer ones.
+
 ## A claim
 
 One YAML document per file. A second `---` document in the same file is a hard load error — split
@@ -68,10 +77,10 @@ it out.
   constitution — it is not a target, not a node, not a ref grammar (see **Project claims and the
   constitution** below). Targets are **drift** edges (a target's content changing under a locked
   claim flags `review_pending`). `governed_by` is gone as of v0.7.21 — a claim file that still
-  carries it fails to load; the router's "governed_by is gone" section says what to do.
+  carries it fails to load; the router's "governed_by is gone" section says what to do. **A `rests_on` loop is refused** at ERROR (`cycle`).
 - **Facets are hard law:** exactly `contract` and `internals`. Another module may cite only `contract`;
   foreign `internals` is refused (`rests-on-target`) and never exported (catalog, integration).
-- **A `rests_on` loop is refused** at ERROR (`cycle`).
+- **Module context is `claims/<module>/manifest.yaml`**, not `build_role: orientation` — required YAML, not a claim: `summary` (why / start here + neighbor/product use, ≤280 characters), `provides` (this module's `contract`-facet ids — its export list) and `depends_on` (other modules' contract ids, each listed in that provider's `provides`; never your own ids, never `project.*` or constitution refs), file ≤4096 bytes. **You draft it**, from `dossierx manifest show <module> --isolation` (constitution text, project claims index, claim summaries, `draft_hints.suggested_provides`) plus a short usage note; do not paste claim bodies. `claim new` leaves an empty-summary stub that fails until you do. Missing, stub or invalid fails `check`, `claim lock` (every claim of that module) and `manifest show` (`module-manifest` / `lint_failed`). Neighbors: `manifest show --integration` (each depended-on module's `provides` with those claims' summaries). Catalog blurbs: `manifest list`. The lists are not `rests_on` edges; cycles are legal. Draft or refresh it when a module is new or a neighbor needs a contract id you have not exported yet.
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
   **Citing your evidence** below.
@@ -112,16 +121,19 @@ Three classes of thing, and you author two of them:
   the edited file is what everyone reads meanwhile.
 - **Project claims** — project-wide facts that are not roof law. `dossierx claim new project.<slug>
   --body "..." --rests-on ...` writes `project-claims/<slug>.yaml` with `scope: project`, no `module`
-  and no `facet`. No cap, no manifest: `manifest show` carries a generated index (id + summary) of the
-  whole store. Their `rests_on` may name other `project.*` ids and any module's `*.contract.*`, never
-  `*.internals.*`. Until the `summary` field lands (NIT-8) the index line is the first non-blank line
-  of `body`, so write the gist first.
+  and no `facet`. No count cap, no manifest: `manifest show` carries a generated index (id + authored
+  `summary`) of the whole store, and that index plus the constitution text share one 10240-byte budget
+  (`shared-context-budget` refuses the project claim that crosses it). Their `rests_on` may name
+  other `project.*` ids and any module's `*.contract.*`, never `*.internals.*`.
 - **Module claims** — everything under `claims/`, as below.
 
-**Read in this order and stop as early as you can:** the constitution → the project-claims index →
-the catalog's module blurbs → a module's `provides` → the summaries of the claims it provides →
-`dossierx claim show <id>` only when a summary is not enough. Never a claim body on a first pass, and
-never a foreign module's `*.internals.*` — the one `rests_on` target the lint refuses.
+**Read in this order and stop as early as you can:** (1) the constitution, (2) the project claims
+index, (3) this module's manifest and (4) its claim summaries — all four are one
+`dossierx manifest show <module> --isolation`; (5) neighbors through `--integration` (the catalog is
+`manifest list`); (6) `dossierx claim show <id>` only when a summary is not enough. A summary is
+always the claim's authored `summary` field; there is no `--bodies`. Never walk the claims tree or
+open claim files to orient yourself. Other modules read `contract` only: a foreign module's
+`*.internals.*` is never read, cited or exported — hard law, not style.
 
 **Upgrading a doctrine-hub corpus** (the router's "`governed_by` is gone" section has the four steps):
 a former doctrine claim goes exactly one way. Critical system law becomes a constitution entry — never
@@ -203,33 +215,19 @@ locked claims, module `depends_on`, and claim `rests_on`.
 
 ## Finding the claim the human meant
 
-They will say "the retry card in contract". That is not an id, and guessing costs a
-`claim_not_found` — or worse, acts on the wrong claim. Run
-`dossierx claim list --match "retry" [--facet contract] [--module widget]`.
+They will say "the retry card in contract". That is not an id, and guessing costs a `claim_not_found` — or worse, acts on the wrong claim. Run `dossierx claim list --match "retry" [--facet contract] [--module widget]`.
 
-Each row carries `claim_id`, `title`, `status`, `review_pending`, `drifted`, `open_threads` and a
-`score` — a ranked ladder over the id and derived title, so a confident hit sits well above a tie.
-**Name the winner and its title back to the human and wait** before running anything that writes.
+Each row carries `claim_id`, `title`, `status`, `review_pending`, `drifted`, `open_threads` and a `score` — a ranked ladder over the id and derived title, so a confident hit sits well above a tie. **Name the winner and its title back to the human and wait** before running anything that writes.
 
 ## `dossierx claim show` — one call, the whole picture
 
-Prefer it over reading the YAML. It reports status, lock state and `locked_at`, `review_pending`
-plus **which** trigger caused it, both edge directions (`rests_on` outgoing,
-`depended_on_by` incoming), `implemented_in[]` with per-file drift, comment counts
-with the open thread ids, and `next_actions` — computed from the *same* gate evaluation the write
-path uses, so it can never disagree with what the command would do. Read it rather than re-deriving
-the lifecycle yourself.
+Prefer it over reading the YAML. It reports status, lock state and `locked_at`, `review_pending` plus **which** trigger caused it, both edge directions (`rests_on` outgoing, `depended_on_by` incoming), `implemented_in[]` with per-file drift, comment counts with the open thread ids, and `next_actions` — computed from the *same* gate evaluation the write path uses, so it can never disagree with what the command would do. Read it rather than re-deriving the lifecycle yourself.
 
 ## Locked means locked
 
-A draft claim is yours. A locked claim is the human's. Body-only meaning drift is `claim flag`
-(see the table under `review_pending`), not unlock. Every other change is
-`dossierx claim unlock <id> --reason "<their words>"` → edit the file →
-`dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"`.
+A draft claim is yours. A locked claim is the human's. Body-only meaning drift is `claim flag` (see the table under `review_pending`), not unlock. Every other change is `dossierx claim unlock <id> --reason "<their words>"` → edit the file → `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"`.
 
-Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects`
-(locking records a content baseline; unlocking releases it and can flip dependents), get a yes,
-then run it. `--reason` carries their approval into the record — never fabricate one.
+Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects` (locking records a content baseline; unlocking releases it and can flip dependents), get a yes, then run it. `--reason` carries their approval into the record — never fabricate one.
 
 The window between the two ends is not a steady state. If any source file carries a
 `dossierx-claim:` or `dossierx-step:` tag for that id, a plain `dossierx check` mid-edit fails with `implink_refused`
@@ -292,5 +290,4 @@ so**, do not confirm.
 
 ## Portability
 
-Modules, claims dir, source dirs and template overrides come from `project.config.yaml` — never
-patch the engine. Facets are engine-fixed (`contract`, `internals`); never invent a third.
+Modules, claims dir, source dirs and template overrides come from `project.config.yaml` — never patch the engine. Facets are engine-fixed (`contract`, `internals`); never invent a third.

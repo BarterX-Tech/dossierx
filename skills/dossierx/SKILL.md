@@ -4,7 +4,7 @@ description: >-
   Router and machine contract for DossierX — the CLI that turns a project's atomic YAML "claims"
   into a reviewable HTML viewer, and that an agent OPERATES while a human REVIEWS. Load this FIRST
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
-  any DossierX command. It is short on purpose: the eight nouns, JSON envelope, exit codes, error.code
+  any DossierX command. It is short on purpose: the nine nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, which command (flag vs unlock vs reaudit,
   track vs module depends_on), the v0.7.21 upgrade fold (governed_by and the doctrine hub are gone), and companion skill routing. Load a companion skill only when this one sends you there.
 ---
@@ -17,24 +17,25 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 22 commands | the viewer, via `dossierx serve` — including its **Constitution** pin above Modules (the project roof, not a module: The file \| Project claims), its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`, filters by track, and overlays isolated claims, dependency cycles, review-pending and open threads |
+| Surface | the CLI — all 24 commands | the viewer, via `dossierx serve` — including its **Constitution** pin above Modules (the project roof, not a module: The file \| Project claims), its **Tracks** group and per-track pages, its **claims graph**, the pane that draws `rests_on`, filters by track, and overlays isolated claims, dependency cycles, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The eight nouns, twenty-two leaves
+## The nine nouns, twenty-four leaves
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing — neither proves code links
 dossierx claim  show list new lock unlock flag reaudit link recover-approved-content
 dossierx comment inbox list add reply
 dossierx constitution show lock            # the project-root constitution.yaml — the roof, not a module: show prints the words, lock records the hash
 dossierx track list show status            # read-only: the cross-cutting feature axis
+dossierx manifest show list                # module harness: --isolation = constitution + project claims index + manifest + claim summaries; --integration = neighbors; list = catalog
 dossierx serve                             # the human's one command
 dossierx skills export [dir]
 dossierx version
 ```
 
-A claim joins a track via `tracks:` in its own YAML, so changing membership on a **locked** claim is
-`unlock → fix → lock`. `track` never edits anything and `track status` never gates a lock.
+**Work one module at a time:** `manifest show <module> --isolation` → `manifest list` / `--integration` for neighbors → the human locks. Never walk or read the whole claims tree; the companion claims skill has the full reading order.
+A claim joins a track via `tracks:` in its own YAML, so changing membership on a **locked** claim is `unlock → fix → lock`. `track` never edits anything and `track status` never gates a lock.
 
 `claim recover-approved-content` is a ONE-TIME migration for a project that locked before the ledger
 kept the approved WORDING — those records signed a hash, not the text, so a claim edited after one shows
@@ -98,8 +99,9 @@ synced" in chat is neither and is never a certificate; when the evidence is miss
 | `store_gitignored` | 1 | `claim lock`, `claim flag` or `claim reaudit --confirm` refused, one of two arms, and the recovery differs: **ignored and untracked** — same recovery as the `store-gitignored` finding above, replace the `.gitignore` pattern (or repoint `build_dir`); do not retry the same command unchanged, it fails identically. **git could not be consulted** (missing from PATH, a bare or corrupt repository, a `.git` file whose gitdir is missing) — no pattern or `build_dir` edit touches this; install git, or fix the repository, and run again. |
 | `git_unavailable` | 1 | `claim recover-approved-content` refused because it needs to READ git history and cannot: git is not installed, or the project is not inside a work tree. That is not an empty recovery — nothing was looked for. Install git or run from a work tree; do not treat the refusal as "no approval could be recovered". Distinct from `store_gitignored`, which is a write-path answer from git. |
 | `unknown_module` / `unknown_track` / `unsupported_format` / `usage` | 1 | fix your own invocation. A typo'd track id is the one worth naming: without this code it would answer exactly like a real track nobody has joined yet. |
-| `skills_drift` | 1 | `skills export --check`: a skill file on disk differs from this binary's bundle. `data.hand_edited[]` names files that also differ from `dossierx-skills.lock` (someone rewrote the skill — a rewritten skill can teach a false sync story, so restore or re-export it and say so); `data.stale[]` names files that match the lock but not the binary (exported by an older release — re-run `dossierx skills export`); `data.missing[]` was never exported; `data.unverified[]` differs in a tree with no lock (an export older than the lock, or assembled by hand — the check does not guess). Nothing was written; `dossierx skills export` settles all but the hand edit. |
+| `skills_drift` | 1 | `skills export --check`: a skill file on disk differs from this binary's bundle. `data.hand_edited[]` names files that also differ from `dossierx-skills.lock` (someone rewrote the skill — a rewritten skill can teach a false sync story, so restore or re-export it and say so); `data.stale[]` names files that match the lock but not the binary (exported by an older release — re-run `dossierx skills export`); `data.missing[]` was never exported; `data.unverified[]` differs in a tree with no lock (an export older than the lock, or assembled by hand — the check does not guess). `data.forbidden[]` is a line teaching a whole-corpus read — remove it. Nothing was written; `dossierx skills export` settles all but the hand edit. |
 | `write_failed` | 1 | a write did not land: a permission, a missing directory, a full disk — or, from `skills export`, "no directory given and no `project.config.yaml` found", which is your invocation and not the filesystem. Give the export an explicit directory (`dossierx skills export .claude/skills`). Show the human anything else; retrying an unwritable path just fails again. |
+| `view_too_large` | 1 | `manifest show --isolation`: this module's part of the view (manifest, claim summaries, hints) exceeded its 6144-byte budget. Nothing was written. Shorten the module's claim summaries or manifest, or split the module. |
 | `conformance_capacity_exceeded` | 1 | a status, whole catalog (including readiness), or viewer projection cannot fit DossierX's bounded output budget. No generated artifact was replaced. Read `stopped_at`: reduce total declared checks or check-ID/value bytes at `conformance`, projected catalog/readiness/conformance volume at `catalog`, or viewer content/facet/track duplication at `render`, then run the same check again. The matching detail remains in `data.conformance_error`, `data.catalog_error`, or `data.render_error`; do not treat a catalog/render refusal as an observation failure. |
 | `conformance_failed` | 1 | `conformance.blocking: true` found at least one owed, mismatch, or uncheckable named check. Read the grouped results in `data.conformance`: each check carries its stable id and exact state; set mismatches carry missing/extra members and scalar mismatches carry expected/observed strings. A plain `check` has already refreshed the inspectable status, catalog, and viewer; `--validate` and `--staged` wrote nothing. Fix or produce the project-owned observation and rerun the same command. Do not unlock or relock claims: this gate does not change approval. |
 | `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, nobody is holding it: a process died inside the critical section and left the sentinel file behind, and no timeout clears it — the acquire timeout only makes each failure arrive faster. The message names the file (`build/ledger/claims.lock`, or the `.lock` sitting beside whichever store it names); delete that file and retry. Do not loop on it. |
@@ -180,12 +182,10 @@ command. A claim still carrying `governed_by:` or a config still setting `doctri
 decode** (`stopped_at: load`), and "restore from git" restores the file that no longer loads. **Fold by
 hand, one pass, in this order** (file shapes, the target rule and the reading order: `dossierx-claims`):
 
-1. Write `constitution.yaml` beside `project.config.yaml` from the critical former doctrine claims
-   (invariants / glossary / decisions, plain text, under 800 words); the **human** locks it —
+1. Write `constitution.yaml` beside `project.config.yaml` from the critical former doctrine claims (invariants / glossary / decisions, plain text, under 800 words); the **human** locks it —
    `dossierx constitution lock --reason "…"` — and nothing else locks until then (`CONSTITUTION_NOT_LOCKED`).
 2. Move every other doctrine claim to `project-claims/<slug>.yaml` as `project.<slug>`; delete the hub module and its `doctrine` facet.
-3. In every remaining claim delete `governed_by:` and write `rests_on`: `project.<slug>` where the governor
-   became a project claim, nothing where it became a constitution entry, `{none: true, reason: "…"}` otherwise.
+3. In every remaining claim delete `governed_by:` and write `rests_on`: `project.<slug>` where the governor became a project claim, nothing where it became a constitution entry, `{none: true, reason: "…"}` otherwise.
 4. `dossierx check --validate`; fix every `rests-on-required` / `rests-on-target` finding; re-lock per module —
    `claim unlock` → `claim lock --dry-run` → `claim lock --reason --proposal`. Every locked claim that
    carried `governed_by` re-locks (its hash moved); a list-form `rests_on` alone moves no hash.

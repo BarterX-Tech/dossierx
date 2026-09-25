@@ -33,6 +33,11 @@ func TestLoadClaims_Basic(t *testing.T) {
 	writeFile(t, dir, "b.yml", "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nbody: claim b\nrests_on:\n  none: true\n  reason: fixture\n")
 	// Non-YAML files must be ignored.
 	writeFile(t, dir, "README.md", "not a claim")
+	// Module manifests are not claims.
+	if err := os.MkdirAll(filepath.Join(dir, "widget"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "widget"), "manifest.yaml", "summary: skip me\nprovides: []\ndepends_on: []\n")
 
 	claims, err := LoadClaims(dir)
 	if err != nil {

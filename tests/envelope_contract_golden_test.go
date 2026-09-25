@@ -285,9 +285,7 @@ func envTracked(t *testing.T, dir string) map[string]string {
 		"tracks:\n" +
 		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
 		"  - id: refunds\n    title: Refunds\n"
-	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(dir, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, dir)
 	claims := map[string]string{
 		"owned.yaml": "id: checkout.contract.guest-flow\n" +
@@ -410,9 +408,7 @@ func envDangling(t *testing.T, dir string) map[string]string {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(dir, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, dir)
 	claim := "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\n" +
 		"body: |\n  a claim resting on an id nothing declares.\n" +
@@ -511,6 +507,11 @@ func envelopeCases() []envelopeCase {
 		{"track show / a track nothing has joined", envTracked, []string{"track", "show", "refunds"}},
 		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
 		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
+
+		{"manifest show / one module file", envFresh, []string{"manifest", "show", "widget"}},
+		{"manifest show / isolation", envFresh, []string{"manifest", "show", "widget", "--isolation"}},
+		{"manifest show / a module the config does not declare", envFresh, []string{"manifest", "show", "ghost"}},
+		{"manifest list / every configured module", envFresh, []string{"manifest", "list"}},
 
 		// Removed viewer.theme configuration fails consistently before rendering.
 		{"check / legacy viewer.theme is rejected at config, writing", envRemovedTheme, []string{"check"}},

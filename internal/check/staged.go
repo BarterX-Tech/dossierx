@@ -410,7 +410,28 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	fromIndex := moduleFromIndex
 	fromIndex = append(fromIndex, projectFromIndex...)
 	sp.FromIndex = fromIndex
+
+	// THE MODULE MANIFESTS, FROM THE SAME STAGED claims_dir INDEX. Read
+	// alongside moduleClaims (both come from claimsSpec) rather than folded
+	// into stagedClaimsUnder, because stagedProjectClaims reuses that helper
+	// for project-claims_dir, which never carries a module manifest.yaml.
+	// cfg.ManifestTree lets the module-manifest lint judge the staged
+	// manifest instead of the working tree, exactly like every other
+	// --staged rule.
+	manifestBlobs, err := g.indexBlobs(claimsSpec)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	manifests := map[string][]byte{}
+	for rel, raw := range manifestBlobs {
+		if loader.IsManifestFileName(rel) {
+			manifests[relToClaimsDir(claimsSpec, rel)] = raw
+		}
+	}
+
 	sort.Strings(sp.FromIndex)
+	cfg.ManifestTree = manifests
+	sp.Config.ManifestTree = manifests
 
 	// The two stores and every build-order artifact, from the same index. That
 	// is the LAST thing this function does: everything the gate is evaluated
@@ -761,7 +782,7 @@ func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
 			storeKind[e.path] = dec
 			continue
 		}
-		if isClaimFile(e.path) {
+		if isClaimFile(e.path) || loader.IsManifestFileName(e.path) {
 			candidates = append(candidates, e)
 		}
 	}
@@ -1003,11 +1024,20 @@ func decodeClaim(sourcePath string, raw []byte) (model.Claim, error) {
 	return c, nil
 }
 
-// isClaimFile applies loader.LoadClaims's file filter: *.yaml and *.yml, case
-// insensitive, everything else ignored.
+// isClaimFile applies loader.LoadClaims's file filter: claim *.yaml/*.yml,
+// excluding module manifests.
 func isClaimFile(rel string) bool {
-	ext := strings.ToLower(path.Ext(rel))
-	return ext == ".yaml" || ext == ".yml"
+	return loader.IsClaimFile(rel)
+}
+
+func relToClaimsDir(claimsSpec, repoRel string) string {
+	spec := filepath.FromSlash(claimsSpec)
+	absRel := filepath.FromSlash(repoRel)
+	rel, err := filepath.Rel(spec, absRel)
+	if err != nil {
+		return filepath.ToSlash(repoRel)
+	}
+	return filepath.ToSlash(rel)
 }
 
 // normalizeLineEndings collapses CRLF to LF so the index copy of a claim and the

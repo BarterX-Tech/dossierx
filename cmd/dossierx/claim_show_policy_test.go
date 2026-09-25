@@ -12,6 +12,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -270,7 +271,11 @@ func snapshotFiles(t *testing.T, root string) map[string]string {
 
 func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 	scaleCap := 10000
-	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}, MaxClaimsPerModule: &scaleCap}
+	// The module's manifest rides in the overlay tree: a module with no valid
+	// manifest.yaml has no lockable claims, and this test measures the graph,
+	// not the harness file.
+	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}, MaxClaimsPerModule: &scaleCap,
+		ManifestTree: map[string][]byte{"shape/manifest.yaml": manifest.MinimalYAML("shape")}}
 	store := &lock.Store{PolicyVersion: lock.PolicyLocalApprovalV1}
 	type shape struct {
 		name           string

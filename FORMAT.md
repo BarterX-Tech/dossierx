@@ -189,6 +189,113 @@ refuses `dossierx claim lock` like any other error-severity finding.
 `mockup.html` is the field's documented primary use; the finding's message
 predates that and names three fields rather than four.
 
+### Module `manifest.yaml` — why / start here
+
+The durable module context is **exactly one** required file:
+
+```
+claims_dir/<module>/manifest.yaml
+```
+
+It is YAML only, it is **not a claim**, and the loader never decodes it as one.
+Do not use `build_role: orientation` as the module's "why / start here". An
+**agent** drafts the manifest from the module's claims (contract-surface first)
+plus a short note on how neighbors / the product use this module — not a
+freestyle essay and not a paste of claim bodies. The CLI never drafts it: it
+writes a stub and emits hints.
+
+```yaml
+summary: widget is the public boundary other modules call; start with retry-policy.
+provides:
+  - widget.contract.retry-policy
+depends_on:
+  - lock.contract.store
+```
+
+- `summary` — required, non-empty, at most **280 characters** (Unicode code
+  points, the unit every DossierX cap uses). The single why / start here.
+- `provides` — this module's **export list**: its own `facet: contract` claim
+  ids that other modules may pin. A contract claim left out is still readable
+  and citable (`rests_on`); it is simply not pinnable by a neighbor.
+- `depends_on` — contract-surface claim ids of **other** modules this module
+  consumes. Each must appear in that provider's `provides`: a module may only
+  depend on what its provider exports. Never this module's own ids; never a
+  project claim or a constitution entry (those are `rests_on` targets).
+- Unknown keys, a second YAML document, `manifest.yml`, or a `manifest.yaml`
+  anywhere except `claims_dir/<module>/manifest.yaml` are errors.
+- File size is at most **4096 bytes** — a guard on the file, not the budget.
+  The budget is the summary cap plus `max_claims_per_module`.
+
+`dossierx check`, `dossierx claim lock` and `dossierx manifest show` refuse every
+one of those defects (`module-manifest`, error severity). The finding's claim id
+is the **module**, and it blocks locking every claim of that module — a module
+with no valid manifest has no lockable claims — and never a claim of another
+module. Empty `provides` / `depends_on` lists are legal. Cycles between modules
+are legal: the lists are **not** `rests_on` edges and do not change readiness,
+catalog graph walks, or lock policy. Nothing sets `review_pending` on a manifest;
+the export rule is the staleness rule.
+
+**Create timing.** `dossierx claim new` writes a **stub** when the module has no
+manifest. The stub's `summary` is empty on purpose, so `check` and `claim lock`
+refuse it until an agent drafts it — a placeholder never passes. For a module
+that already exists (adoption), run
+`dossierx manifest show <module> --isolation`: while the file is missing it
+exits 1 with `lint_failed` and still returns `data.isolation.draft_hints`
+(suggested `provides` = the module's contract ids) and the claim summaries to
+draft from. Write the file, re-run `dossierx check --validate`. There is no
+migration tooling.
+
+`check --staged` reads the index copy of each manifest, not the worktree.
+
+`dossierx manifest show <module>` prints the file and always includes a
+`constitution_digest` object (path, word count, hash and the constitution gate's
+`state`). `--isolation` adds the bounded context an agent works a module from:
+
+- `shared.constitution_text`: the whole constitution as text;
+- `shared.project_claims`: the project claims index, one line per
+  `project.<slug>` (id, authored `summary`, status);
+- `manifest`: this module's file;
+- `claims`: each of this module's claims as id, title, facet, status and its
+  authored `summary`, exactly as written. No bodies; read one with
+  `dossierx claim show <id>`;
+- `draft_hints`: suggested `provides` (the module's contract ids).
+
+The view is at most 16384 bytes of compact JSON, split into two budgets that
+`isolation_budget` reports beside it. The **shared** budget (10240 bytes) is
+`shared` itself. Every module carries the same text, so it is never a reason to
+refuse one module's view: `check` enforces it with `shared-context-budget`
+(error), raised on the project claim whose index line pushes the shared context
+over, in id order (project-wide when the constitution text alone is over).
+The **module** budget (6144 bytes) is everything else in the view. Over it,
+`manifest show --isolation` refuses with `view_too_large`, naming the module,
+its bytes and claim count. Ten claims with 200-character summaries fit; a
+`max_claims_per_module` override well above 10, or a manifest near its
+4096-byte file cap, can outgrow it.
+
+`--integration` reads one hop. For each module this module's `depends_on`
+names, it adds that module's manifest `summary`, its `provides` ids and the
+authored `summary` of each provided contract claim (never internals, never
+bodies), so an agent can pick a `rests_on` target without opening the
+neighbor's own view. It also adds the `depends_on` membership edges and the
+same project claims index `--isolation` carries. It never follows a
+neighbor's own `depends_on` and is not a catalog graph walk. It has no byte cap
+in this release: the module's `depends_on` bounds it. `dossierx manifest list` is the summaries-only module
+catalog. The retired `deps` and `catalog` nouns stay retired. No lock exists for
+the manifest itself in this release: the human reviews it in the viewer's
+Manifest tab and approves the module through its claim locks.
+
+The Manifest tab (static and served viewer alike) is read-only. A healthy
+file shows its `summary`, each `provides` id linked to its Contract claim,
+each `depends_on` id linked to its claim and its provider module, and a
+toggle that reveals the raw YAML. A missing, oversize, malformed or invalid
+file shows only the `module-manifest` finding(s) `check` reports for that
+module, verbatim, and the copyable `dossierx manifest show <module>
+--isolation` command; none of the broken file is rendered. There is no
+editing in the viewer.
+
+`build_role: orientation` remains a claim field; it is not a substitute for the
+manifest.
+
 ### `kind`
 
 `kind` is optional and defaults to `fact`: a claim stating something about the
@@ -1532,19 +1639,20 @@ See "`tracks` and the second ownership axis" under Claim above for what a claim'
 own `tracks:` block means, why membership is not an edge, and why it never gates
 `dossierx claim lock`.
 
-### Directory layout is not part of this spec
+### Directory layout is not part of this spec (one exception)
 
-`claims_dir`'s internal structure — subdirectory names, nesting depth,
-how files are grouped on disk — carries no meaning to the engine and is
-entirely the claim author's choice. `internal/loader.LoadClaims` walks
-`claims_dir` recursively and loads every `*.yaml`/`*.yml` file it finds,
-matched purely by file extension; it does no filename or path-segment
-parsing of any kind. A claim's `module` and `facet` come only from that
-claim's own YAML fields (`module:`, `facet:`), never from where the file
-happens to live on disk. This means a project can reorganize its
-`claims_dir` freely — flatten it, rename subdirectories, move files
-between them — without touching claim content or breaking anything the
-engine reads.
+`claims_dir`'s internal structure for **claim files** — subdirectory names,
+nesting depth, how claim YAML is grouped on disk — carries no meaning to the
+engine and is entirely the claim author's choice. `internal/loader.LoadClaims`
+walks `claims_dir` recursively and loads every claim `*.yaml`/`*.yml` file it
+finds; it skips `manifest.yaml` / `manifest.yml`. A claim's `module` and
+`facet` come only from that claim's own YAML fields (`module:`, `facet:`),
+never from where the file happens to live on disk. Claim files can be
+reorganized freely.
+
+The exception is the required module manifest: it **must** live at
+`claims_dir/<module>/manifest.yaml`. That path is load-bearing. See
+"Module `manifest.yaml`" above.
 
 #### Recommended authoring convention (non-enforced)
 

@@ -23,7 +23,8 @@ func conformanceCLIProject(t *testing.T) (root, cfgPath string) {
 	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"
 	claim := "id: widget.contract.state\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: state fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://state\n      expectation:\n        shape: set\n        value: [blocked, ready]\n"
 	observation := `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["ready","paused"]}]}`
-	for path, data := range map[string]string{cfgPath: cfg, filepath.Join(root, "claims", "state.yaml"): claim, filepath.Join(root, "observations.json"): observation} {
+	writeProjectConfigFile(t, cfgPath, cfg)
+	for path, data := range map[string]string{filepath.Join(root, "claims", "state.yaml"): claim, filepath.Join(root, "observations.json"): observation} {
 		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -41,9 +42,7 @@ func conformanceCapacityCLIProject(t *testing.T) (root, cfgPath string) {
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
 	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
 	for i := 0; i < 64; i++ {
 		claim := fmt.Sprintf("id: widget.contract.c%03d\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: capacity fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://shared\n      expectation:\n        shape: set\n        value: [expected]\n", i)
 		if err := os.WriteFile(filepath.Join(claimsDir, fmt.Sprintf("c%03d.yaml", i)), []byte(claim), 0o644); err != nil {

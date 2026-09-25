@@ -214,14 +214,21 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":      8,
-		"commands":   22,
-		"lint_rules": 35,
+		"nouns":    9,
+		"commands": 24,
+		// 36 -> 37 with NIT-10's shared-context-budget (the shared half of
+		// the manifest show --isolation view).
+		"lint_rules": 37,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
 		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):
 		// `skills_drift` names a hand-edited or stale exported skill.
-		"error_codes": 49,
+		// Recomputed here after rebasing onto release/v0.7.21 (#104) and
+		// NIT-7's manifest harness together: the doctrine hub's
+		// `dependency_not_locked` is deleted (NIT-23) and `view_too_large`
+		// is added (`manifest show --isolation` over the 16384-byte view
+		// cap), landing at 50.
+		"error_codes": 50,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

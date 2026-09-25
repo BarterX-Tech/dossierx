@@ -25,9 +25,7 @@ func writeIDsFixtureProject(t *testing.T, root string) (claimsDir string) {
 		"facets:\n  - contract\n  - internals\n" +
 		"modules:\n  - widget\n" +
 		"claims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 	return claimsDir
 }

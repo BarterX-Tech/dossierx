@@ -48,6 +48,16 @@ func llWriteConfig(t *testing.T, root string, facets, modules []string) string {
 	if err := os.WriteFile(cfgPath, []byte(b.String()), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
+	for _, m := range modules {
+		dest := filepath.Join(claimsDir, m, "manifest.yaml")
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			t.Fatalf("mkdir manifest dir: %v", err)
+		}
+		body := "summary: module " + m + " — fixture module context.\nprovides: []\ndepends_on: []\n"
+		if err := os.WriteFile(dest, []byte(body), 0o644); err != nil {
+			t.Fatalf("write manifest %s: %v", m, err)
+		}
+	}
 	lockFixtureConstitution(t, root)
 	return cfgPath
 }

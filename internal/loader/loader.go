@@ -27,11 +27,13 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// LoadClaims recursively reads every *.yaml/*.yml file under dir, strictly
-// decoding each into a model.Claim (unknown fields are a hard error, same
-// discipline as internal/config). Each claim's SourcePath is set to the
-// file it was loaded from. The result is sorted by SourcePath so callers
-// get deterministic ordering regardless of directory-walk order.
+// LoadClaims recursively reads every claim *.yaml/*.yml file under dir,
+// strictly decoding each into a model.Claim (unknown fields are a hard
+// error, same discipline as internal/config). Files named manifest.yaml
+// or manifest.yml are not claims (see FORMAT.md module manifests) and are
+// skipped. Each claim's SourcePath is set to the file it was loaded from.
+// The result is sorted by SourcePath so callers get deterministic ordering
+// regardless of directory-walk order.
 //
 // A dir that does not exist is a hard error: claims_dir is required
 // project configuration, not an optional feature.
@@ -52,8 +54,7 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 		if d.IsDir() {
 			return nil
 		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext != ".yaml" && ext != ".yml" {
+		if !IsClaimFile(path) {
 			return nil
 		}
 
@@ -126,6 +127,32 @@ func MergeClaims(moduleClaims, projectClaims []model.Claim) []model.Claim {
 	out = append(out, projectClaims...)
 	sort.Slice(out, func(i, j int) bool { return out[i].SourcePath < out[j].SourcePath })
 	return out
+}
+
+// IsManifestFileName reports whether the file's base name is a module
+// manifest (manifest.yaml or manifest.yml, any case). Those files are
+// never claims.
+func IsManifestFileName(name string) bool {
+	base := pathBase(name)
+	return strings.EqualFold(base, "manifest.yaml") || strings.EqualFold(base, "manifest.yml")
+}
+
+// IsClaimFile reports whether path is a claim YAML the loader will decode:
+// a .yaml/.yml file that is not a module manifest.
+func IsClaimFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != ".yaml" && ext != ".yml" {
+		return false
+	}
+	return !IsManifestFileName(path)
+}
+
+func pathBase(p string) string {
+	p = strings.ReplaceAll(p, "\\", "/")
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }
 
 // ParseClaim decodes one claim file's BYTES, under exactly the discipline

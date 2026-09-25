@@ -79,6 +79,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Values below 1 are refused when the config loads. Project claims carry no
   module and never count toward a module's cap.
 
+- **Module manifest (NIT-7).** Every configured module now requires exactly one
+  `claims_dir/<module>/manifest.yaml`
+  (YAML only; not a claim). The file is the durable module context: a short
+  `summary` (why / start here plus neighbor/product usage, at most 280
+  characters), `provides` (this module's export list of `contract`-facet claim
+  ids) and `depends_on` (other modules' contract ids, each of which must be in
+  its provider's `provides`). File size is capped at 4096 bytes. `dossierx
+  check`, `claim lock` and `manifest show` refuse a missing, oversize,
+  malformed, misplaced or invalid manifest (`module-manifest`, `lint_failed`);
+  the finding names the module and blocks locking every claim of that module,
+  never a claim of another. `claim new` writes an empty-summary stub that fails
+  until an agent drafts it from `dossierx manifest show <module> --isolation`
+  (exit 1 with `draft_hints` while the file is missing). Do not paste claim
+  bodies. `provides`/`depends_on` are not graph edges and cycles are legal.
+  `dossierx manifest show` prints one file and always a `constitution_digest`.
+  `--isolation` adds the constitution text, the project claims index, this
+  module's manifest, each claim's authored `summary` exactly as written (no
+  bodies; there is no `--bodies`) and draft hints;
+  `--integration` adds, for each module in `depends_on`, its manifest summary,
+  its `provides` ids and each provided contract claim's summary (never
+  internals or bodies), plus the `depends_on` membership edges and the project
+  claims index. It reads one hop and has no byte cap. `manifest list` is the
+  summaries-only module catalog. The 16384-byte isolation view is split: 10240 bytes shared (constitution text plus project
+  claims index), enforced by the new `shared-context-budget` check on the
+  project claim that crosses it, and 6144 bytes owned by the module, whose
+  overflow refuses with `view_too_large` naming the module. The retired `deps` /
+  `catalog` nouns stay retired. Decisions recorded on Linear NIT-7 (2026-09-24).
+  The viewer's Manifest tab (NIT-19) now renders the module's `manifest.yaml`
+  read-only in both the static and the served viewer: the `summary`, each
+  `provides` id linked to its Contract claim, each `depends_on` id linked to
+  its claim and provider module, and a toggle showing the raw YAML. A
+  missing, oversize, malformed or invalid manifest shows the same
+  `module-manifest` message(s) `check` reports for that module and a copyable
+  `dossierx manifest show <module> --isolation`, never the broken file. Tabs
+  stay Manifest | Contract | Internals and a module still opens on Contract.
+- **Skills teach the manifest harness (NIT-12).** The router and the claims
+  skill teach one module at a time: `manifest show <module> --isolation`
+  (constitution, project claims index, manifest, claim summaries), then
+  `--integration` for neighbors, then `claim show <id>` only when a summary is
+  not enough, never a walk of the claims tree. The claims skill adds a
+  claim-worthiness rubric (surprising to a competent reader, load-bearing for
+  another module or a locked promise, invisible from any single file) and
+  states `internals` visibility as hard law. `skills export --check` now also
+  refuses (`skills_drift`, `data.forbidden[]`) an exported skill that says
+  "pack" or "full corpus".
+
 ### Changed
 
 - **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list

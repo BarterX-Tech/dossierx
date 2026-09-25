@@ -1,0 +1,10 @@
+id: project.rule-45
+summary: Fixture project claim whose summary is long on purpose, so that forty of them push the shared isolation context over its ten-kilobyte budget and check refuses the crossing claim.
+scope: project
+status: draft
+layout: card
+body: |
+  Project claim 45 of the shared-context-budget fixture.
+rests_on:
+  none: true
+  reason: fixture
