@@ -65,7 +65,7 @@ func TestReleaseProcedureNamesFinalCandidateGates(t *testing.T) {
 	}
 	for _, required := range []string{
 		"golangci-lint@" + pins[0][1],
-		"DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test -race -json ./...",
+		"DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test -race -timeout=20m -json ./...",
 		"TestRenderedOutputAcrossReleases",
 		"Re-run every tree- and history-dependent pre-tag check on the merge",
 		"Restore stamp-only viewer diffs; do not commit them.",
