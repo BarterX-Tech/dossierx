@@ -112,7 +112,7 @@ func TestSoftMountLockMetricUsesCatalogAttrs(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.Navigate(url))
 	pollTrue(t, ctx, `!!(document.querySelector('.module-section#widget') && document.querySelector('.system-record-head__metric'))`)
-	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '80' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '2'`) {
+	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '80' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '3'`) {
 		t.Fatal("soft-mounted module must stamp catalog lock counts on the section")
 	}
 	// Re-pinned: 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)" replaces the
@@ -228,7 +228,7 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		{"the reading canvas exists and is not hidden", `canvas`},
 		{"the canvas holds at least one claim", `firstClaim`},
 		{"the tabs follow the heading", `header.nextElementSibling === tabs`},
-		{"the canvas follows the tabs", `tabs.nextElementSibling === canvas`},
+		{"the canvas follows the tabs, past hidden peer tabs only", `(function () { var n = tabs.nextElementSibling; while (n && n !== canvas && n.hidden) { n = n.nextElementSibling; } return n === canvas; })()`},
 		{"the strip lives inside the canvas", `strip.parentElement === canvas`},
 		{"the strip is the canvas's first child", `canvas.firstElementChild === strip`},
 		{"the strip precedes the first claim", `!!(strip.compareDocumentPosition(firstClaim) & Node.DOCUMENT_POSITION_FOLLOWING)`},

@@ -90,7 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   include a module's own internals; `catalog.json` (integration) omits
   internals and internals-targeting edges. Viewer module tabs are
   Manifest | Contract | Internals as peers; Manifest is not a banner and not
-  a claim facet.
+  a claim facet. A module opens on its first tab that holds claims, so an
+  empty Manifest tab never hides Contract.
 
 ### Removed
 
