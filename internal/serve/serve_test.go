@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/BarterX-Tech/dossierx/internal/constitution"
-	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"io"
 	"io/fs"
 	"net/http"
@@ -19,6 +16,9 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 

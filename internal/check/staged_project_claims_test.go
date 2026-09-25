@@ -353,13 +353,13 @@ func TestStaged_AgreesWithValidateOnAProjectWithProjectClaims(t *testing.T) {
 
 // rewrite substitutes old with new in the file at path, failing if nothing
 // changed.
-func rewrite(t *testing.T, path, old, new string) {
+func rewrite(t *testing.T, path, old, replacement string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	edited := strings.Replace(string(raw), old, new, 1)
+	edited := strings.Replace(string(raw), old, replacement, 1)
 	if edited == string(raw) {
 		t.Fatalf("fixture precondition: the substitution %q did not apply to %s", old, path)
 	}

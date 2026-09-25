@@ -2,10 +2,10 @@ package main
 
 import (
 	"os"
-
-	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"path/filepath"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/cliout"
 )
 
 // fixtureConstitutionYAML is the smallest roof a fixture can carry: one

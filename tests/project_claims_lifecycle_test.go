@@ -114,17 +114,16 @@ type catalogDocument struct {
 	ByModule map[string][]string `json:"by_module"`
 }
 
-func readCatalog(t *testing.T, root string) (catalogDocument, map[string]catalogEntry) {
+func readCatalog(t *testing.T, root string) (doc catalogDocument, byID map[string]catalogEntry) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(root, "build", "catalog", "catalog.json"))
 	if err != nil {
 		t.Fatalf("read the written catalog: %v", err)
 	}
-	var doc catalogDocument
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("decode catalog.json: %v", err)
 	}
-	byID := make(map[string]catalogEntry, len(doc.Claims))
+	byID = make(map[string]catalogEntry, len(doc.Claims))
 	for _, e := range doc.Claims {
 		byID[e.ID] = e
 	}
@@ -143,7 +142,7 @@ func hasRecord(records []readinessRecord, kind string, path ...string) bool {
 // mustCheck runs a writing `dossierx check` on the copy and returns the
 // re-read catalog. A non-zero exit is fatal: every step below is reached
 // from a state the previous step proved clean.
-func mustCheck(t *testing.T, root, cfgPath, step string) (catalogDocument, map[string]catalogEntry) {
+func mustCheck(t *testing.T, root, cfgPath, step string) (doc catalogDocument, byID map[string]catalogEntry) {
 	t.Helper()
 	stdout, stderr, code := run(t, root, "--config", cfgPath, "check")
 	if code != 0 {
@@ -386,10 +385,10 @@ type stagedEnvelope struct {
 // cfgPath and decodes the envelope. A skipped run is fatal on the spot: the
 // fixture copy is a git repository with the project staged, so "nothing to
 // evaluate" would mean the gate looked at the wrong thing.
-func runStaged(t *testing.T, root, cfgPath, step string) (stagedEnvelope, int) {
+func runStaged(t *testing.T, root, cfgPath, step string) (env stagedEnvelope, code int) {
 	t.Helper()
-	stdout, stderr, code := run(t, root, "--config", cfgPath, "--format", "json", "check", "--staged")
-	var env stagedEnvelope
+	var stdout, stderr string
+	stdout, stderr, code = run(t, root, "--config", cfgPath, "--format", "json", "check", "--staged")
 	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
 		t.Fatalf("%s: check --staged output is not a single envelope: %v\nstdout: %s\nstderr: %s", step, err, stdout, stderr)
 	}

@@ -407,7 +407,9 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 	sp.Claims = loader.MergeClaims(moduleClaims, projectClaims)
-	sp.FromIndex = append(moduleFromIndex, projectFromIndex...)
+	fromIndex := moduleFromIndex
+	fromIndex = append(fromIndex, projectFromIndex...)
+	sp.FromIndex = fromIndex
 	sort.Strings(sp.FromIndex)
 
 	// The two stores and every build-order artifact, from the same index. That
