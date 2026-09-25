@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.21] - 2026-09-25
+
 This release replaces the doctrine hub, `governed_by`, `build_role`, the
 `mirrors` edge and the build-order sequencer with a smaller model: one locked
 constitution above every module, project claims, a required `rests_on`, a
