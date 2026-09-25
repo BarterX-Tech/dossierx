@@ -19,6 +19,11 @@ until it is folded, and every locked claim re-locks once.
 38), 50 error codes (was 52), graph payload schema 3, seven skill bundles
 (was five).
 
+**Viewer size** (committed fixture viewers, bytes, v0.7.20 → v0.7.21):
+basic 1,234,179 → 1,229,461; conformance-v1 1,288,309 → 1,284,733;
+graph-demo 1,496,790 → 1,486,876; portability 1,238,682 → 1,233,700;
+theme-flat 4,877,586 → 1,273,896 (the viewer no longer inlines Mermaid).
+
 ### Upgrading from v0.7.20
 
 By hand, one pass, with the human approving every re-lock. The
