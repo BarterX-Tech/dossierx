@@ -44,14 +44,14 @@ func gitignoreRepo(t *testing.T, ignore string) *config.Config {
 }
 
 // TestGitignored_BareBuildPatternIsOneFindingPerPath: `.gitignore` = "build/"
-// yields one finding per checked path — the three ledger stores, both
-// artifacts of each module, and build/.gitignore LAST — each naming the
+// yields one finding per checked path — the three ledger stores, each
+// module's code-links artifact, and build/.gitignore LAST — each naming the
 // pattern and its line, in the engine's order. The order is load-bearing: the
 // approval verbs print findings[0] as the store_gitignored refusal, so the
 // first finding must be the lock ledger's, whose harm clause is the plan's
 // verbatim one. Each finding's harm clause is its own kind's — the sentence
 // true of the lock ledger (check fails with lock-ledger-absent) is false of a
-// build order, the flag store and build/.gitignore, and a refutable harm is
+// module's code links, the flag store and build/.gitignore, and a refutable harm is
 // the report that teaches people to bypass the gate.
 func TestGitignored_BareBuildPatternIsOneFindingPerPath(t *testing.T) {
 	cfg := gitignoreRepo(t, "build/\n")

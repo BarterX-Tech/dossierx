@@ -393,10 +393,6 @@ func TestDocument_IntegrationOmitsInternals(t *testing.T) {
 	if len(cat.Claims) != 4 {
 		t.Fatalf("in-memory catalog must keep internals: %d", len(cat.Claims))
 	}
-	iso := cat.IsolationClaims("widget")
-	if len(iso) != 2 {
-		t.Fatalf("isolation widget = %d, want 2", len(iso))
-	}
 	doc := cat.Document()
 	if len(doc.Claims) != 2 {
 		t.Fatalf("integration document = %d, want 2 contract claims", len(doc.Claims))

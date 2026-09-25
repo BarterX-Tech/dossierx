@@ -1100,10 +1100,7 @@ func splitClaimID(id string) (module, facet, slug string, ok bool) {
 // Exported both as a Go helper and, via funcMap, as the "claimLabel" template
 // func, so all seven layout partials' <div class="k"> heading share this one
 // implementation instead of each re-deriving a label from {{.ID}} in template
-// syntax. The Build order tab's diagram nodes label claims by the SAME rule
-// through a deliberate duplicate in internal/buildorder/mermaid.go
-// (claimLabel there; the render package cannot be imported from below it),
-// and internal/render/build_order_view_test.go pins the two to agree.
+// syntax.
 func ClaimLabel(id string) string {
 	_, _, slug, ok := splitClaimID(id)
 	if !ok {

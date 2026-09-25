@@ -1,9 +1,8 @@
 // Package visibility is the engine-fixed facet and citation surface.
 //
 // NIT-20 hard-locks claim facets to contract | internals. Other modules may
-// read and cite only contract. Internals stay inside the owning module:
-// check and lock refuse foreign-internals edges. Isolation of a module may
-// include that module's own internals. Integration never includes another
+// read and cite only contract; internals stay inside the owning module (the
+// rests-on-target lint owns that refusal). Integration never includes another
 // module's internals — and a project-wide integration projection therefore
 // omits every internals claim.
 package visibility
@@ -29,39 +28,11 @@ func IsInternals(c model.Claim) bool {
 	return c.Facet == config.FacetInternals
 }
 
-// IsForeignInternals reports whether target is internals owned by a module
-// other than fromModule. A missing or empty module on either side is still
-// foreign when the target is internals: an unscoped cite is not ownership.
-func IsForeignInternals(fromModule string, target model.Claim) bool {
-	return IsInternals(target) && target.Module != fromModule
-}
-
-// IsolationIncludes reports whether claim belongs in module's isolation
-// surface: every claim that module owns, including its internals.
-func IsolationIncludes(module string, claim model.Claim) bool {
-	return module != "" && claim.Module == module
-}
-
 // IntegrationIncludes reports whether claim belongs in a project-wide
 // integration surface. Internals never do — from any other module they are
 // foreign, and a global view has no "own" module.
 func IntegrationIncludes(claim model.Claim) bool {
 	return !IsInternals(claim)
-}
-
-// IsolationClaims returns the isolation surface of module. Order follows
-// claims. Work is one pass over claims: O(V), not a path walk.
-func IsolationClaims(claims []model.Claim, module string) []model.Claim {
-	if module == "" {
-		return nil
-	}
-	out := make([]model.Claim, 0, len(claims))
-	for _, c := range claims {
-		if IsolationIncludes(module, c) {
-			out = append(out, c)
-		}
-	}
-	return out
 }
 
 // IntegrationClaims returns the project-wide integration surface. Order

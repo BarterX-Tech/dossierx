@@ -250,7 +250,7 @@ func TestCLI_ClaimShow_NothingLinkedYet(t *testing.T) {
 // TestCLI_Check_ImplinkLine_ZeroCostWhenUnused proves "dossierx check" prints
 // no impl-links line at all for a project that has never called "dossierx
 // implink set" — the zero-cost/silent-when-unused contract this step must
-// uphold, mirroring build_order's own graceful-degradation precedent.
+// uphold.
 func TestCLI_Check_ImplinkLine_ZeroCostWhenUnused(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")

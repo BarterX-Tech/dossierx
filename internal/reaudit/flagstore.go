@@ -176,9 +176,8 @@ func (s *FlagStore) Save() error {
 // observe a partially-written file: it writes to a temp file created in
 // path's own directory (so the later rename stays on one filesystem, which
 // is what makes it atomic) and then renames it over path. Duplicated here
-// rather than imported from internal/lock (which has its own copy),
-// mirroring internal/buildorder/store.go's same "keep this package's
-// dependency footprint limited" precedent for the identical helper.
+// rather than imported from internal/lock (which has its own copy), to keep
+// this package's dependency footprint limited.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")

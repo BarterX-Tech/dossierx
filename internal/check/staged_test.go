@@ -14,7 +14,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -100,7 +100,7 @@ func monorepoFixture(t *testing.T) *config.Config {
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := manifest.SeedMinimalFromConfigYAML(docs, []byte(body)); err != nil {
+	if err := manifesttest.SeedMinimalFromConfigYAML(docs, []byte(body)); err != nil {
 		t.Fatalf("seed module manifests: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(claims, "locked.yaml"), []byte(lockedClaim("widget.contract.locked")), 0o644); err != nil {
@@ -677,9 +677,8 @@ func TestStaged_AssumeUnchangedCannotSubstituteTheWorktree(t *testing.T) {
 	}
 }
 
-// project.config.yaml names claims_dir, the module list, the doctrine facet and
-// the hub gating switch — every input that decides WHICH files the gate looks at
-// and what it demands of them. Read from the WORKTREE, one unstaged line was a
+// project.config.yaml names claims_dir, the module list and the facets — every
+// input that decides WHICH files the gate looks at and what it demands of them. Read from the WORKTREE, one unstaged line was a
 // complete bypass: stage a tampered locked claim, then point claims_dir at an
 // empty directory in the working tree only. The gate audited nothing, found
 // nothing, and let the commit through — while the commit itself still carried

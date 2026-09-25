@@ -3,8 +3,7 @@
 //
 // Every test here shares one shape, and it is the shape that makes these bugs
 // expensive rather than merely wrong: each of the paths below USED TO SUCCEED.
-// A confirmed reaudit re-signed a tampered claim and returned ok:true; a bare
-// propose destroyed a locked build order and returned ok:true; check on a
+// A confirmed reaudit re-signed a tampered claim and returned ok:true; check on a
 // corrupt ledger returned a write error for a run that wrote nothing; claim show
 // reported a tampered claim as settled and recommended the one recovery the
 // skills forbid for it. A refusal that is missing is invisible — nothing in the
@@ -138,45 +137,8 @@ func TestReauditDryRunPreviewsTheIntegrityGate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// build-order propose may not discard an approved order
+// check on a corrupt ledger reports the ledger, not a write error
 // ---------------------------------------------------------------------
-
-// propose writes the artifact in FULL, with locked:false and a freshly
-// recomputed sequence, and it takes no --reason and touches no ledger. Run
-// against a locked, current order that is a reason-less, read-looking command
-// destroying an implementation sequence a human approved — and the destruction
-// is invisible afterwards, because internal/check only audits artifacts whose
-// locked flag is true. The build-order:<module> approval record was left
-// standing, pointing at content that existed nowhere.
-func TestBuildOrderProposeRefusesToDiscardALockedOrder(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
-func TestBuildOrderProposeStillRecomputesAStaleOrder(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
 
 func TestCheckOnACorruptLedgerReachesTheLedgerRule(t *testing.T) {
 	cfgPath, _, storeFile := ledgerProject(t)
@@ -656,32 +618,6 @@ func hasPrecondition(dr cliout.DryRun, name string, ok bool) bool {
 // Refusals must carry a code whose documented recovery actually applies
 // ---------------------------------------------------------------------
 
-// TestBuildOrderLockHandEditReportsItsOwnCode pins the hand-edit refusal to
-// build_order_hand_edited rather than the generic build_order_refused.
-//
-// The refusal itself already existed; only its classification was wrong, and
-// that is not cosmetic. Every recovery skills/dossierx-build-order/SKILL.md
-// documents for build_order_refused is a repair to the CLAIMS — lock the ones
-// still draft, reply to an open thread, break a
-// rests_on cycle. Here the claims are all fine and the ARTIFACT is what was
-// tampered with, so an agent following any of them inspects correct claims,
-// finds nothing to fix, and loops. The test drives the documented recovery
-// afterwards to prove the code it now reports is the one that works.
-func TestBuildOrderLockHandEditReportsItsOwnCode(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
 func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, alphaPath, _ := restsOnPairProject(t, root)
@@ -717,103 +653,5 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 		if string(after) != string(before) {
 			t.Fatalf("attempt %d: the refusal wrote to the claim; a retry would duplicate the thread", attempt)
 		}
-	}
-}
-
-// ---------------------------------------------------------------------
-// the build-order half may not be re-armed from inside the ledger
-// ---------------------------------------------------------------------
-
-// TestBuildOrderAdoptionRefusesADowngradedLedger closes the last door the
-// downgrade attack still had open, and it was a complete bypass of the
-// release's headline invariant in ONE ordinary command.
-//
-// The claim half of grandfathering has been guarded since it shipped: the
-// pre-ledger predicate keys on the store's own "version" field, so it weighs that
-// claim against evidence the audited file does not own (a sibling comment digest
-// store, or ledger records the old schema could not have held) and refuses when
-// the two contradict. The BUILD-ORDER half — which lives in cmd/, because
-// internal/lock cannot import internal/buildorder — was guarded by nothing but
-// Store.PreLedger.
-//
-// So the whole sequence was: reorder build/build-order/widget.json by hand, set the
-// store's "version" back to 1, delete the single build-order:<module> key, and
-// run `dossierx check`. The run adopted the HAND-REORDERED bytes as a
-// grandfathered approval, re-stamped the version, exited 0 with ok:true — and
-// printed the downgrade refusal ("Nothing was grandfathered") on stderr in the
-// same breath, because the claim half had correctly refused. Every later
-// `check --validate` was clean, and the evidence was gone.
-func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
-func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
-func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
-func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
-func TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
 	}
 }

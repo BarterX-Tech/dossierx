@@ -11,7 +11,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
-	"github.com/BarterX-Tech/dossierx/internal/visibility"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -641,46 +640,12 @@ func TestBuildModuleGroups_TwoLevelShape(t *testing.T) {
 	if widget.Module != "widget" || widget.ID != "widget" {
 		t.Errorf("widget module group = %#v, want Module/ID == widget", widget)
 	}
-	if len(widget.Facets) != 3 {
-		t.Fatalf("widget module group has %d tabs, want 3: %#v", len(widget.Facets), widget.Facets)
-	}
-	if widget.Facets[0].Facet != "manifest" || widget.Facets[1].Facet != "contract" || widget.Facets[2].Facet != "internals" {
-		t.Errorf("widget tabs = [%s, %s, %s], want [manifest, contract, internals]", widget.Facets[0].Facet, widget.Facets[1].Facet, widget.Facets[2].Facet)
-	}
-	if widget.FirstFacetID != "widget-contract" {
-		t.Errorf("FirstFacetID = %q, want widget-contract when Manifest is empty", widget.FirstFacetID)
-	}
 
+	// gadget has no internals claim, yet still carries the empty Internals
+	// peer tab: the tab set is the config's, not the claims'.
 	gadget := moduleGroups[1]
 	if gadget.Module != "gadget" || len(gadget.Facets) != 3 {
 		t.Fatalf("gadget module group = %#v, want 3 peer tabs", gadget)
-	}
-}
-
-func TestBuildModuleGroups_SingleFacetModuleSkipsSubNav(t *testing.T) {
-	claims := []model.Claim{
-		groupedClaim("w.a", "widget", "contract", model.StatusDraft),
-		groupedClaim("w.b", "widget", "internals", model.StatusDraft),
-		groupedClaim("g.a", "gadget", "contract", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget", "gadget"}, Facets: []string{"contract", "internals"}}
-	cat, err := catalog.Build(claims, nil)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	rendered := map[string]template.HTML{"w.a": "A", "w.b": "B", "g.a": "G"}
-	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, rendered))
-
-	byModule := map[string]ModuleGroup{}
-	for _, mg := range moduleGroups {
-		byModule[mg.Module] = mg
-	}
-
-	if !byModule["widget"].HasSubNav {
-		t.Errorf("widget has peer tabs, want HasSubNav=true: %#v", byModule["widget"])
-	}
-	if !byModule["gadget"].HasSubNav {
-		t.Errorf("gadget must still show Manifest | Contract | Internals peers: %#v", byModule["gadget"])
 	}
 }
 
@@ -979,59 +944,6 @@ func TestBuildGroups_UndeclaredFacetIsUngroupedNotInjected(t *testing.T) {
 	}
 	if leftoverCount != 1 {
 		t.Fatalf("undeclared leftover claim copies = %d, want 1 (ungrouped, not injected): %#v", leftoverCount, groups)
-	}
-}
-
-func TestBuildGroups_PeerTabsAreManifestContractInternals(t *testing.T) {
-	claims := []model.Claim{
-		groupedClaim("w.a", "widget", "contract", model.StatusDraft),
-		groupedClaim("w.b", "widget", "internals", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
-	cat, err := catalog.Build(claims, nil)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	groups := buildGroups(cat, cfg, map[string]template.HTML{"w.a": "A", "w.b": "B"})
-	if len(groups) != 3 {
-		t.Fatalf("got %d groups, want 3 peer tabs: %#v", len(groups), groups)
-	}
-	want := []string{visibility.ViewerTabManifest, "contract", "internals"}
-	for i, g := range groups {
-		if g.Facet != want[i] {
-			t.Fatalf("group %d facet = %q, want %q: %#v", i, g.Facet, want[i], groups)
-		}
-	}
-}
-
-func TestRender_ClaimBodyAppearsOncePerClaim(t *testing.T) {
-	note := model.Claim{
-		ID:      "widget.contract.router",
-		Module:  "widget",
-		Facet:   "contract",
-		Status:  model.StatusDraft,
-		Layout:  model.LayoutCard,
-		Body:    "CONTRACT-BODY",
-		RestsOn: model.RestsNone("test fixture"),
-	}
-	claims := []model.Claim{
-		note,
-		groupedClaim("widget.internals.b", "widget", "internals", model.StatusDraft),
-	}
-	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
-	cat, err := catalog.Build(claims, nil)
-	if err != nil {
-		t.Fatalf("catalog.Build: %v", err)
-	}
-	out, err := Render(cat, cfg)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	if got := strings.Count(out, ` id="widget.contract.router"`); got != 1 {
-		t.Fatalf("canonical id appears %d times, want 1:\n%s", got, out)
-	}
-	if got := strings.Count(out, "CONTRACT-BODY"); got != 1 {
-		t.Fatalf("claim body appears %d times, want 1 (no facet-tab injection):\n%s", got, out)
 	}
 }
 

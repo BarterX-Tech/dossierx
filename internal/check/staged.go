@@ -26,14 +26,14 @@
 //
 // WHY THE WHOLE REGISTRY, NOT JUST THE STAGED FILES. Most of the lint suite is
 // whole-corpus by construction — dangling references, cycles, mirror
-// reciprocity, hub gating — so a claim can only be judged against every other
+// reciprocity — so a claim can only be judged against every other
 // claim. Staging one file and linting one file would report a dangling
 // reference for every edge that points outside the commit. So the registry is
 // assembled complete, with the index's content substituted in.
 //
 // ONE THING HERE IS DELIBERATELY NOT FROM THE INDEX. Result.NextSteps —
 // check.Status's non-blocking "what to run next" advisory — reads the flag
-// store and the build-order artifacts off disk, because those are advice about
+// store and the code-links artifacts off disk, because those are advice about
 // what the author should do next, not a verdict on the commit. They cannot
 // change the pass/fail answer (nothing in runCheckStaged consults them), and
 // re-plumbing two more stores through the index to improve the wording of a
@@ -102,7 +102,7 @@
 //	AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE IT.
 //
 // Everything this gate reads — the claim files, the lock store, the digest
-// store, the build-order artifacts — is a tracked file in the tree the committer
+// store — is a tracked file in the tree the committer
 // is editing. So the line falls between UNCOORDINATED and COORDINATED change,
 // not between clumsy and clever:
 //
@@ -212,8 +212,8 @@ var ErrNoIndex = errors.New("no git index to evaluate")
 var ErrUntrackedConfig = errors.New("project.config.yaml is not tracked, but the index holds claims to judge")
 
 // StagedProject is the project exactly as the git index holds it: the config,
-// the full claim registry, the lock ledger, the comment digest store and every
-// locked build order, all read from that one index.
+// the full claim registry, the lock ledger and the comment digest store, all
+// read from that one index.
 type StagedProject struct {
 	// Config is project.config.yaml AS THE INDEX HOLDS IT, and it is what the
 	// rest of this value was assembled against.
@@ -433,7 +433,7 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	cfg.ManifestTree = manifests
 	sp.Config.ManifestTree = manifests
 
-	// The two stores and every build-order artifact, from the same index. That
+	// The two stores, from the same index. That
 	// is the LAST thing this function does: everything the gate is evaluated
 	// against now comes from one tree, and nothing here looks at a second one.
 	// See this file's REMOVED section for the comparison that used to sit at
@@ -459,7 +459,7 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 //
 // The escape hatch survives for the case it was written for and nothing else: a
 // checkout whose claims genuinely live outside the repository AND that carries
-// no lock ledger, no comment digest store and no build-order artifact either. On
+// no lock ledger and no comment digest store either. On
 // that tree the gate really is being asked about content the commit does not
 // have, `check --validate` says nothing either, and refusing would break
 // "run check --staged in CI" for a layout the rest of the product supports.
@@ -487,7 +487,7 @@ func stagedWithUnreachableClaims(g *gitRunner, cfg *config.Config, sp StagedProj
 	}
 	if !holdsGateEvidence(in) {
 		return StagedProject{}, fmt.Errorf(
-			"%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it — and the index holds no lock ledger, no comment digest store and no build-order artifact either, so there is nothing in it to judge",
+			"%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it — and the index holds no lock ledger and no comment digest store either, so there is nothing in it to judge",
 			ErrNoIndex, cfg.ClaimsDir, g.Dir())
 	}
 	projectClaims, projectFromIndex, err := stagedProjectClaims(g, cfg)
@@ -624,11 +624,11 @@ func stagedClaimsUnder(g *gitRunner, dir, spec string) (claims []model.Claim, fr
 }
 
 // holdsGateEvidence reports whether the index carries anything the ledger gate
-// can reach a verdict from WITHOUT any claims — a lock ledger, a comment digest
-// store, or a build-order artifact, present or merely unreadable.
+// can reach a verdict from WITHOUT any claims — a lock ledger or a comment
+// digest store, present or merely unreadable.
 //
 // Unreadable counts, and deliberately: a store that is there and will not decode
-// is reported (lock-ledger-unreadable, build-order-unreadable) precisely so that
+// is reported (lock-ledger-unreadable) precisely so that
 // corrupting the gate's evidence cannot be quieter than deleting it. Treating it
 // as "no evidence" here would restore that inversion through the one door left.
 func holdsGateEvidence(in ledgerInputs) bool {
@@ -677,10 +677,10 @@ func configSource(cfg *config.Config) string {
 // because ErrNoIndex exits 0.
 //
 // The index's CONTENT is decoded but the WORKTREE directory stays the anchor:
-// claims_dir, the stores and the build-order artifacts are still resolved
+// claims_dir and the stores are still resolved
 // against cfg.Dir(), because that is where the files actually live. What comes
 // from the index is the part that decides what the gate looks at — claims_dir,
-// the module list, the doctrine facet, hub gating.
+// the module list.
 //
 // A config that is in the index but does not LOAD is a hard error, not a
 // fallback to the worktree. Falling back would restore the bypass in a slightly
@@ -963,9 +963,9 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 //
 // The copy keeps the file's REPOSITORY PATH under dir, not its base name.
 // Every store is a plain <name>.json under the build directory now, so a
-// module named "lock-store" has a build-order artifact whose base name is the
-// ledger's, and a base-name copy would overwrite one with the other in the
-// temp directory. Keeping the path also keeps the lock store and the digest
+// module-scoped artifact (a module named "lock-store", say) could share the
+// ledger's base name, and a base-name copy would overwrite one with the other
+// in the temp directory. Keeping the path also keeps the lock store and the digest
 // siblings, which digest.StorePathBeside depends on.
 func materializeIndexFile(g *gitRunner, dir, src string) (string, error) {
 	spec, err := g.spec(src)

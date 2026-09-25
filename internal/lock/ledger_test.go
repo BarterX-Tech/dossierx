@@ -211,7 +211,6 @@ func TestLedgerRoundTripsThroughTheStoreFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
-	RecordBuildOrderApproval(store, "widget", "artifact-signature", Approval{Actor: "alice", Reason: "order approved"})
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -229,10 +228,6 @@ func TestLedgerRoundTripsThroughTheStoreFile(t *testing.T) {
 	rec, ok := reloaded.Record(claim.ID)
 	if !ok || rec.Hash != LockedClaimHash(locked) || rec.Reason != "approved" {
 		t.Errorf("claim record did not round-trip: %+v", rec)
-	}
-	bo, ok := reloaded.Record(BuildOrderLedgerKey("widget"))
-	if !ok || bo.Subject != SubjectBuildOrder || bo.Hash != "artifact-signature" {
-		t.Errorf("build-order record did not round-trip: %+v", bo)
 	}
 }
 
@@ -344,7 +339,7 @@ func TestDowngradingTheStoreCannotCrossThePreLedgerLine(t *testing.T) {
 	// no stamp. RuleLockLedgerDowngraded owns this diagnosis and its recovery is
 	// version control, so a crossing here would be the laundering the whole
 	// predicate exists to refuse.
-	if err := CrossPreLedger(reloaded, claims, 0); err != nil {
+	if err := CrossPreLedger(reloaded, claims); err != nil {
 		t.Fatalf("CrossPreLedger on a downgraded store must be a silent no-op, got %v", err)
 	}
 	if reloaded.OnDiskVersion() >= ledgerSchemaVersion {
@@ -386,7 +381,7 @@ func TestAStoreThatPredatesTheLedgerCannotCarryLedgerRecords(t *testing.T) {
 	}
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 
-	if err := CrossPreLedger(store, []model.Claim{locked}, 0); err != nil {
+	if err := CrossPreLedger(store, []model.Claim{locked}); err != nil {
 		t.Fatalf("CrossPreLedger = %v, want a silent no-op: a store carrying ledger records has been through a ledger-aware build, whatever its version says, so the downgrade rule owns it", err)
 	}
 	if store.OnDiskVersion() >= ledgerSchemaVersion {
@@ -541,7 +536,7 @@ func TestPrepareStoreMigratesBaselinesButNeverCrosses(t *testing.T) {
 	// And PrepareStore never crosses the line either, whatever the project holds:
 	// the crossing is CrossPreLedger's alone, and it refuses while anything
 	// locked still predates the ledger.
-	if err := CrossPreLedger(reloaded, claims, 0); !errors.Is(err, ErrPreLedgerUnadopted) {
+	if err := CrossPreLedger(reloaded, claims); !errors.Is(err, ErrPreLedgerUnadopted) {
 		t.Fatalf("a project holding two locked claims must be refused the crossing, got %v", err)
 	}
 	if reloaded.OnDiskVersion() >= ledgerSchemaVersion {
@@ -550,7 +545,7 @@ func TestPrepareStoreMigratesBaselinesButNeverCrosses(t *testing.T) {
 
 	// Emptied of everything that predates the ledger, it crosses — and the gate
 	// goes quiet, because there is nothing left to report.
-	if err := CrossPreLedger(reloaded, nil, 0); err != nil {
+	if err := CrossPreLedger(reloaded, nil); err != nil {
 		t.Fatalf("CrossPreLedger on a project holding nothing locked: %v", err)
 	}
 	if findings := Audit(nil, reloaded, nil); hasRule(findings, RuleLockLedgerPreLedger) {
@@ -654,7 +649,7 @@ func TestCrossPreLedgerCreatesTheCommentDigestStore(t *testing.T) {
 		t.Fatalf("an ordinary command created the digest store beside a pre-ledger lock store: the next run would read that pair as a DOWNGRADE and accuse a project that did nothing")
 	}
 
-	if err := CrossPreLedger(store, claims, 0); err != nil {
+	if err := CrossPreLedger(store, claims); err != nil {
 		t.Fatalf("CrossPreLedger: %v", err)
 	}
 
@@ -1116,7 +1111,7 @@ func TestLockRefusesUntilThePreLedgerProjectHoldsNothingLocked(t *testing.T) {
 	// nothing left to grandfather.
 	released := Unlock(old, store, Approval{Actor: "alice", Reason: "crossing onto the ledger"})
 	claims = []model.Claim{released, fresh}
-	if err := CrossPreLedger(store, claims, 0); err != nil {
+	if err := CrossPreLedger(store, claims); err != nil {
 		t.Fatalf("CrossPreLedger: %v", err)
 	}
 
@@ -1181,7 +1176,7 @@ func TestCrossPreLedger_NotPreLedger(t *testing.T) {
 	}
 
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
-	if err := CrossPreLedger(store, []model.Claim{locked}, 1); err != nil {
+	if err := CrossPreLedger(store, []model.Claim{locked}); err != nil {
 		t.Fatalf("a covered project must not be refused or rewritten, got %v", err)
 	}
 	after, err := os.ReadFile(path)
@@ -1197,7 +1192,7 @@ func TestCrossPreLedger_NotPreLedger(t *testing.T) {
 
 	// And a nil store is the same answer, because the read paths hand one over
 	// whenever the file could not be loaded.
-	if err := CrossPreLedger(nil, []model.Claim{locked}, 0); err != nil {
+	if err := CrossPreLedger(nil, []model.Claim{locked}); err != nil {
 		t.Fatalf("a nil store must be a silent no-op, got %v", err)
 	}
 }
@@ -1223,7 +1218,7 @@ func TestCrossPreLedger_Downgraded(t *testing.T) {
 
 	// No locked claims at all: under row 4 this project would cross. It must not,
 	// because row 2 is evaluated first.
-	if err := CrossPreLedger(store, nil, 0); err != nil {
+	if err := CrossPreLedger(store, nil); err != nil {
 		t.Fatalf("a downgraded store must be a silent no-op, got %v", err)
 	}
 	if store.OnDiskVersion() >= ledgerSchemaVersion {
@@ -1235,9 +1230,7 @@ func TestCrossPreLedger_Downgraded(t *testing.T) {
 }
 
 // Row 3: still locked. The refusal, and the fact that it is a refusal rather
-// than a partial write — plus the build-order term, which is an INDEPENDENT
-// trigger and not belt-and-braces (a locked build order with zero locked claims
-// is reachable: propose, lock, then unlock every claim).
+// than a partial write.
 func TestCrossPreLedger_StillLocked(t *testing.T) {
 	silenceAnnouncements(t)
 
@@ -1251,7 +1244,7 @@ func TestCrossPreLedger_StillLocked(t *testing.T) {
 	}
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 
-	err = CrossPreLedger(store, []model.Claim{locked}, 0)
+	err = CrossPreLedger(store, []model.Claim{locked})
 	if !errors.Is(err, ErrPreLedgerUnadopted) {
 		t.Fatalf("a locked CLAIM must refuse the crossing, got %v", err)
 	}
@@ -1267,12 +1260,6 @@ func TestCrossPreLedger_StillLocked(t *testing.T) {
 		t.Fatalf("a refused crossing must write nothing at all, digest store included")
 	}
 
-	// A locked BUILD ORDER alone, with zero locked claims, refuses on the same
-	// terms. Without this term the project would cross silently with an
-	// unapproved implementation sequence still in place.
-	if err := CrossPreLedger(store, nil, 1); !errors.Is(err, ErrPreLedgerUnadopted) {
-		t.Fatalf("a locked BUILD ORDER must refuse the crossing on its own, got %v", err)
-	}
 }
 
 // Row 4: the crossing. Both lines in one act — the digest store first, the stamp
@@ -1293,7 +1280,7 @@ func TestCrossPreLedger_Crosses(t *testing.T) {
 	}
 	drafted := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "body"}
 
-	if err := CrossPreLedger(store, []model.Claim{drafted}, 0); err != nil {
+	if err := CrossPreLedger(store, []model.Claim{drafted}); err != nil {
 		t.Fatalf("a pre-ledger project holding nothing locked must cross, got %v", err)
 	}
 	if store.OnDiskVersion() != ledgerSchemaVersion {
@@ -1324,7 +1311,7 @@ func TestCrossPreLedger_Crosses(t *testing.T) {
 
 	// Idempotent by construction: the store is no longer pre-ledger, so a second
 	// call takes row 1 and writes nothing.
-	if err := CrossPreLedger(reloaded, []model.Claim{drafted}, 0); err != nil {
+	if err := CrossPreLedger(reloaded, []model.Claim{drafted}); err != nil {
 		t.Fatalf("a second crossing must be a no-op, got %v", err)
 	}
 }

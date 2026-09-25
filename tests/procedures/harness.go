@@ -81,7 +81,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 )
 
 // ---------------------------------------------------------------------------
@@ -450,7 +450,7 @@ func (f *fixture) WriteProjectConfig() {
 	if err := os.WriteFile(filepath.Join(f.root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		f.t.Fatalf("write project.config.yaml: %v", err)
 	}
-	if err := manifest.SeedMinimalFromConfigYAML(f.root, []byte(cfg)); err != nil {
+	if err := manifesttest.SeedMinimalFromConfigYAML(f.root, []byte(cfg)); err != nil {
 		f.t.Fatalf("seed module manifests: %v", err)
 	}
 	f.LockConstitution()

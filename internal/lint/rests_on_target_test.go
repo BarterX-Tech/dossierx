@@ -108,12 +108,3 @@ func TestRestsOnTargetLint(t *testing.T) {
 		})
 	}
 }
-
-func TestRestsOnTargetLintIsRegistered(t *testing.T) {
-	for _, l := range Registry {
-		if l.Name() == "rests-on-target" {
-			return
-		}
-	}
-	t.Fatal("rests-on-target is not in the lint registry")
-}

@@ -24,7 +24,6 @@ Every row below is present in the committed `build/viewer/index.html`.
 | comment chip / composer | `.comment-chip`, `.comment-composer-input`, `.comment-composer-submit` | the open thread above |
 | comments chrome | `.comments-panel`, `.comments-rail`, `.comments-toast`, `.comments-overlay` | the viewer shell (always present, inert until opened) |
 | track head | `.track-head` | the `checkout` track, owned by `widget.contract.overview` and cited by two more |
-| build-order tab | `.bo-phase__head` | `build/build-order/panel.json`: the `panel` module locked end to end across all five phases |
 | project mockup | `.mockup-diagram`, `.gcp-console` | `panel.decision.mockup` — `layout: mockup`, locked, `raw_html_reviewed: true`, module in `mockup_modules` |
 | system record head | `.system-record-head` | every module's record head |
 | sidebar chrome | `.sidebar`, `.logo`, `.sec-tab`, `.facet-toc`, `.facet-toc__item`, `.facet-toc__select`, `.nav-toggle`, `.nav-overlay`, `.system-nav-group__toggle`, `.system-nav-group__count` | the viewer shell |

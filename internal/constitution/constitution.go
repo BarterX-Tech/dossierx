@@ -63,9 +63,9 @@ type File struct {
 // Title is optional; Body is plain text (whether it becomes markdown is an
 // open question on NIT-6 and the viewer escapes it as text until it closes).
 type Entry struct {
-	Slug  string `yaml:"slug"`
-	Title string `yaml:"title,omitempty"`
-	Body  string `yaml:"body"`
+	Slug  string `yaml:"slug" json:"slug"`
+	Title string `yaml:"title,omitempty" json:"title,omitempty"`
+	Body  string `yaml:"body" json:"body"`
 }
 
 // Section is one named group of entries, for the show command and the

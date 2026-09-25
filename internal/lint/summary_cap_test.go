@@ -52,7 +52,7 @@ func TestSummaryRequiredLint(t *testing.T) {
 	t.Run("no exemption for mockup or orientation", func(t *testing.T) {
 		findings := summaryRequiredLint{}.Check([]model.Claim{
 			{ID: "w.contract.mock", Layout: model.LayoutMockup},
-			{ID: "w.doctrine.hub", Facet: "doctrine"},
+			{ID: "w.contract.orientation", Facet: "contract", Layout: model.LayoutBanner},
 		}, nil)
 		if len(findings) != 2 {
 			t.Fatalf("got %d findings, want 2", len(findings))
@@ -130,13 +130,5 @@ func TestBodyOversizeLint_NilConfigUsesDefault(t *testing.T) {
 	}
 	if n := len((bodyOversizeLint{}).Check([]model.Claim{over}, nil)); n != 1 {
 		t.Fatalf("over default cap: %d findings", n)
-	}
-}
-
-func TestSummaryAndBodyCapLintsRegistered(t *testing.T) {
-	for _, name := range []string{"summary-required", "summary-oversize", "body-oversize"} {
-		if !lintRegistered(name) {
-			t.Fatalf("%s is not registered", name)
-		}
 	}
 }

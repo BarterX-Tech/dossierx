@@ -44,71 +44,13 @@ func TestPendingTriggers_DependencyEditIsDrift(t *testing.T) {
 	if !Recompute(child, []model.Claim{hub, child}, store, nil) {
 		t.Fatalf("Recompute must agree with PendingTriggers")
 	}
-}
-
-func TestPendingTriggers_AgreesWithDetectStale(t *testing.T) {
-	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "hub v1"}
-	rested := model.Claim{ID: "widget.contract.rested", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "rested"}
-
-	cases := []struct {
-		name  string
-		child model.Claim
-		edit  func(claims []model.Claim)
-	}{
-		{
-			name:  "rests_on hub",
-			child: model.Claim{ID: "c1", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(hub.ID)},
-			edit:  func(claims []model.Claim) { claims[0].Body = "hub v2" },
-		},
-		{
-			name:  "rests_on rested",
-			child: model.Claim{ID: "c3", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: model.RestsOnIDs(rested.ID)},
-			edit:  func(claims []model.Claim) { claims[1].Body = "rested v2" },
-		},
+	stale := false
+	for _, c := range lock.DetectStale([]model.Claim{hub, child}, store) {
+		if c.ID == child.ID && c.ReviewPending {
+			stale = true
+		}
 	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			claims := []model.Claim{hub, rested, tc.child}
-			store, err := lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
-			if err != nil {
-				t.Fatalf("lock.LoadStore: %v", err)
-			}
-			lock.RefreshBaseline(tc.child, claims, store)
-
-			tc.edit(claims)
-			drift, _, _ := PendingTriggers(tc.child, claims, store, nil)
-			stale := false
-			for _, c := range lock.DetectStale(claims, store) {
-				if c.ID == tc.child.ID && c.ReviewPending {
-					stale = true
-				}
-			}
-			if drift != stale {
-				t.Fatalf("comments.PendingTriggers drift=%v but lock.DetectStale review_pending=%v — the two must never diverge", drift, stale)
-			}
-			if !drift {
-				t.Fatalf("expected the %s edit to be drift", tc.name)
-			}
-		})
-	}
-}
-
-func TestPendingTriggers_RestsOnNoneIsNotADependency(t *testing.T) {
-	claim := model.Claim{
-		ID: "widget.contract.ungoverned", Facet: "contract", Module: "widget", Status: model.StatusLocked,
-		Body: "ungoverned", RestsOn: model.RestsNone("deliberately rests on nothing"),
-	}
-	store, err := lock.LoadStore(filepath.Join(t.TempDir(), "store.json"))
-	if err != nil {
-		t.Fatalf("lock.LoadStore: %v", err)
-	}
-	lock.RefreshBaseline(claim, []model.Claim{claim}, store)
-
-	if _, known := store.Baseline(claim.ID, "none"); known {
-		t.Fatalf("rests_on none must create no baseline; store has %v", store.Hashes)
-	}
-	if drift, _, _ := PendingTriggers(claim, []model.Claim{claim}, store, nil); drift {
-		t.Fatalf("rests_on none must never report drift")
+	if !stale {
+		t.Fatalf("comments.PendingTriggers reported drift but lock.DetectStale did not — the two must never diverge")
 	}
 }

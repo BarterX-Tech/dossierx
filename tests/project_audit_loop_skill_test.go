@@ -50,8 +50,8 @@ func TestProjectAuditLoopSkillCanBeCopiedAlone(t *testing.T) {
 }
 
 func TestProjectLearningSkillsCanBeCopiedAlone(t *testing.T) {
-	for _, name := range []string{"learning-to-skill", "skill-gap-review"} {
-		t.Run(name, func(t *testing.T) { checkSkillCanBeCopiedAlone(t, name, name == "learning-to-skill") })
+	for _, name := range []string{"learning-to-skill", "skill-gap-review", "test-audit"} {
+		t.Run(name, func(t *testing.T) { checkSkillCanBeCopiedAlone(t, name, name != "skill-gap-review") })
 	}
 }
 

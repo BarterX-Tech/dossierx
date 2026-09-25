@@ -88,7 +88,7 @@ func TestACommentOpLeavesAPreLedgerProjectAbleToCross(t *testing.T) {
 	// It still holds the pre-ledger locked claim, so the crossing refuses until
 	// that claim is unlocked — which is the refusal, not the outage: the store is
 	// untouched and every step of the recovery is still available.
-	if err := lock.CrossPreLedger(store, claims, 0); !errors.Is(err, lock.ErrPreLedgerUnadopted) {
+	if err := lock.CrossPreLedger(store, claims); !errors.Is(err, lock.ErrPreLedgerUnadopted) {
 		t.Fatalf("expected the pre-ledger refusal after a comment op, got %v", err)
 	}
 	// Emptied of what predates the ledger, it crosses — and the crossing creates
@@ -96,7 +96,7 @@ func TestACommentOpLeavesAPreLedgerProjectAbleToCross(t *testing.T) {
 	for i := range claims {
 		claims[i].Status = model.StatusDraft
 	}
-	if err := lock.CrossPreLedger(store, claims, 0); err != nil {
+	if err := lock.CrossPreLedger(store, claims); err != nil {
 		t.Fatalf("the crossing must still work after a comment op: %v", err)
 	}
 	digests, err := digest.LoadStore(digestPath)

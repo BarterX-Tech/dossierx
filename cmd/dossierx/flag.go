@@ -1,7 +1,7 @@
 // flag.go implements "dossierx claim flag <id> --claim-says --now-does --reason":
 // the agent-initiated trigger for internal/reaudit's second proposal
 // source (see internal/reaudit/flagstore.go's doc comment). Split out of
-// main.go for the same file-size reason build_order.go and implink.go are
+// main.go for the same file-size reason claim_link.go and track.go are
 // their own files — the construction pattern (newXCmd() *cobra.Command,
 // added to newRootCmd()'s AddCommand list) is identical to every other
 // command in this package.

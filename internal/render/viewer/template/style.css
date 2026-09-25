@@ -5252,14 +5252,11 @@ body.shell-body {
 /* R11.3: the freed width goes to the evidence, not the prose — the page
    grows to 1140px (docs/design/tokens.md §Open decisions: board 11 states
    this for both the desktop card column and its 1140px-wide header, and
-   .claim-body's own 760px cap, L3's, is untouched either way). Scoped
-   exactly like the Build-order reclaim immediately below (same
-   `screen and (min-width: 1181px)` floor, same reasoning: outrank the
-   tablet/phone .content-area rules only where the rail being reclaimed
-   actually exists, and stay off the print cascade, whose own
-   `.content-area { padding: 0 }` already reclaims everything). It composes
-   with that rule rather than fighting it: both set the SAME 42px right
-   padding, so viewing Build order while focused does not double-reclaim. */
+   .claim-body's own 760px cap, L3's, is untouched either way). Scoped to
+   `screen and (min-width: 1181px)`: outrank the tablet/phone .content-area
+   rules only where the right rail being reclaimed actually exists, and stay
+   off the print cascade, whose own `.content-area { padding: 0 }` already
+   reclaims everything. */
 @media screen and (min-width: 1181px) {
   html[data-focus="on"] .content-area {
     /* The 1140px belongs to the CARD, not to this wrapper. Paper 13J-0 keeps
@@ -5594,15 +5591,6 @@ body.shell-body {
   transition: padding 180ms ease-out;
 }
 
-/* The Build order tab reclaims the 282px right rail .content-area reserves
-   for the facet TOC, which renderToc hides on this tab, so the widest
-   diagram on the page is not laid out beside a blank gutter. Scoped to
-   screen because at (0,3,1) an unscoped version would beat the print
-   block's `.content-area { padding: 0 }` (0,1,0) on paper — the first rule
-   to break the invariant the print header states — and to the same
-   min-width as the TOC-collapsed rule above because the same specificity
-   equally outranks the tablet and phone .content-area rules, where the rail
-   it reclaims does not exist. */
 .system-record-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -5816,14 +5804,11 @@ body.shell-body {
 /* R11.3: the freed width goes to the evidence, not the prose — the page
    grows to 1140px (docs/design/tokens.md §Open decisions: board 11 states
    this for both the desktop card column and its 1140px-wide header, and
-   .claim-body's own 760px cap, L3's, is untouched either way). Scoped
-   exactly like the Build-order reclaim immediately below (same
-   `screen and (min-width: 1181px)` floor, same reasoning: outrank the
-   tablet/phone .content-area rules only where the rail being reclaimed
-   actually exists, and stay off the print cascade, whose own
-   `.content-area { padding: 0 }` already reclaims everything). It composes
-   with that rule rather than fighting it: both set the SAME 42px right
-   padding, so viewing Build order while focused does not double-reclaim. */
+   .claim-body's own 760px cap, L3's, is untouched either way). Scoped to
+   `screen and (min-width: 1181px)`: outrank the tablet/phone .content-area
+   rules only where the right rail being reclaimed actually exists, and stay
+   off the print cascade, whose own `.content-area { padding: 0 }` already
+   reclaims everything. */
 @media screen and (min-width: 1181px) {
   html[data-focus="on"] .content-area {
     /* The 1140px belongs to the CARD, not to this wrapper. Paper 13J-0 keeps
@@ -6108,15 +6093,6 @@ body.shell-body {
   transition: padding 180ms ease-out;
 }
 
-/* The Build order tab reclaims the 282px right rail .content-area reserves
-   for the facet TOC, which renderToc hides on this tab, so the widest
-   diagram on the page is not laid out beside a blank gutter. Scoped to
-   screen because at (0,3,1) an unscoped version would beat the print
-   block's `.content-area { padding: 0 }` (0,1,0) on paper — the first rule
-   to break the invariant the print header states — and to the same
-   min-width as the TOC-collapsed rule above because the same specificity
-   equally outranks the tablet and phone .content-area rules, where the rail
-   it reclaims does not exist. */
 .system-record-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

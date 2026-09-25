@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 )
 
 func writeProjectConfigFile(t *testing.T, cfgPath, body string) {
@@ -16,7 +16,7 @@ func writeProjectConfigFile(t *testing.T, cfgPath, body string) {
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
-	if err := manifest.SeedMinimalFromConfigYAML(filepath.Dir(cfgPath), []byte(body)); err != nil {
+	if err := manifesttest.SeedMinimalFromConfigYAML(filepath.Dir(cfgPath), []byte(body)); err != nil {
 		t.Fatalf("seed module manifests: %v", err)
 	}
 }

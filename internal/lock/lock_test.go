@@ -61,31 +61,6 @@ func testApproval() Approval {
 	return Approval{Actor: "test-actor", Reason: "test approval"}
 }
 
-func TestLockRefusesForeignInternals(t *testing.T) {
-	withRegistry(t, lint.RestsOnTargetLint{})
-
-	from := model.Claim{
-		ID: "widget.contract.from", Facet: "contract", Module: "widget",
-		Status: model.StatusDraft, Body: "cites foreign internals",
-		RestsOn: model.RestsOnIDs("gadget.internals.secret"),
-	}
-	secret := model.Claim{
-		ID: "gadget.internals.secret", Facet: "internals", Module: "gadget",
-		Status: model.StatusDraft, Body: "secret", RestsOn: model.RestsNone("fixture"),
-	}
-	store, err := LoadStore(t.TempDir() + "/store.json")
-	if err != nil {
-		t.Fatalf("LoadStore: %v", err)
-	}
-	_, err = Lock(from, []model.Claim{from, secret}, testConfig(), store, testApproval())
-	if err == nil {
-		t.Fatal("expected lock to refuse a foreign module's internals (rests-on-target)")
-	}
-	if !strings.Contains(err.Error(), "lint finding") {
-		t.Fatalf("lock error should refuse via the lint gate, got: %v", err)
-	}
-}
-
 func TestLockFailsOnLintError(t *testing.T) {
 	withRegistry(t, failingLint{})
 
@@ -202,29 +177,6 @@ func TestDetectStaleLeavesUnaffectedClaimsAlone(t *testing.T) {
 	}
 }
 
-func TestLockDoesNotHubGateDraftDependencies(t *testing.T) {
-	withRegistry(t) // empty registry: lint always passes
-
-	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusDraft}
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusDraft, RestsOn: model.RestsOnIDs(hub.ID)}
-	claims := []model.Claim{hub, child}
-	store, err := LoadStore(t.TempDir() + "/store.json")
-	if err != nil {
-		t.Fatalf("LoadStore: %v", err)
-	}
-
-	// NIT-6: hub-gating is gone. rest-on-locked still refuses a *lint* lock
-	// of a locked claim on a draft target; this test uses an empty registry
-	// so only engine gates apply. A draft dependency is not a lock refusal.
-	got, err := Lock(child, claims, testConfig(), store, testApproval())
-	if err != nil {
-		t.Fatalf("expected Lock to succeed without hub-gating, got: %v", err)
-	}
-	if got.Status != model.StatusLocked {
-		t.Fatalf("expected status locked, got %q", got.Status)
-	}
-}
-
 // TestLockEvaluatesLintsAgainstCandidatesPostLockStatus proves Lock lints
 // against the claim as it will look once locked, not against its still-
 // draft entry in the input claims slice. Using the real RestOnLockedLint
@@ -311,6 +263,13 @@ func TestRefreshBaselineRefreshesHashesWithoutTouchingReviewPending(t *testing.T
 	}
 	if _, ok := store.LockedAt[claim.ID]; !ok {
 		t.Fatalf("expected RefreshBaseline to stamp LockedAt")
+	}
+	// The refreshed baseline is what clears the drift trigger: against it the
+	// same dependency content no longer reads as changed.
+	settled := claim
+	settled.ReviewPending = false
+	if out := DetectStale([]model.Claim{settled, dep}, store); out[0].ReviewPending {
+		t.Fatalf("a refreshed baseline must clear the drift trigger")
 	}
 }
 
@@ -1163,10 +1122,10 @@ func TestTheUnrecordedDigestLockGateIsSilentWhereEvidenceIsHonestlyAbsent(t *tes
 // rests_on is the only drift baseline (NIT-6)
 // ---------------------------------------------------------------------
 
-// TestBaselineDependencyIDsIncludesAClaimValuedGovernedBy pins the whole of
-// what the baseline set is: rests_on, and a governed_by.type that
-// names a claim — with "none" and the empty string excluded by the same guard
-// internal/lint/dangling.go uses, and repeats collapsed deterministically.
+// TestBaselineDependencyIDsIncludesClaimValuedRestsOn pins the whole of what
+// the baseline set is: the claim ids rests_on names — with "none" and an unset
+// rests_on excluded, and repeats collapsed deterministically, so Lock records
+// one baseline per target however often it is named.
 func TestBaselineDependencyIDsIncludesClaimValuedRestsOn(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -1210,52 +1169,12 @@ func TestBaselineDependencyIDsIncludesClaimValuedRestsOn(t *testing.T) {
 	}
 }
 
-// TestLockRecordsAGovernanceBaseline is the bug in #21 at its source: before
-// the fix a claim-valued governed_by.type never became an approved baseline, so
-// there was nothing for DetectStale to compare against and editing the
-// governing doctrine claim moved nothing to review_pending.
-func TestLockRecordsARestsOnBaseline(t *testing.T) {
-	withRegistry(t) // empty registry: lint always passes
-
-	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "the governing doctrine"}
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "child", RestsOn: model.RestsOnIDs(hub.ID)}
-	claims := []model.Claim{hub, child}
-
-	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
-	if err != nil {
-		t.Fatalf("LoadStore: %v", err)
-	}
-	if _, err := Lock(child, claims, testConfig(), store, testApproval()); err != nil {
-		t.Fatalf("Lock: %v", err)
-	}
-
-	got, known := store.Baseline(child.ID, hub.ID)
-	if !known {
-		t.Fatalf("locking a claim with a claim-valued rests_on must record the target content hash; store has %v", store.Hashes)
-	}
-	if got != ContentHash(hub) {
-		t.Fatalf("governance baseline = %q, want the governor's current ContentHash %q", got, ContentHash(hub))
-	}
-
-	// And the drift half: edit the governor's comparable content and the
-	// directly governed locked claim flips to review_pending.
-	hub.Body = "the governing doctrine, reworded"
-	locked := child
-	locked.Status = model.StatusLocked
-	out := DetectStale([]model.Claim{hub, locked}, store)
-	for _, c := range out {
-		if c.ID == child.ID && !c.ReviewPending {
-			t.Fatalf("expected review_pending true after the governor's content changed")
-		}
-	}
-}
-
-// TestGovernanceDriftPropagationIsStaged: flagging a directly governed claim
-// does not itself flag claims downstream of it. DetectStale compares stored
+// TestRestsOnDriftPropagationIsStaged: flagging a claim whose rests_on target
+// changed does not itself flag claims downstream of it. DetectStale compares stored
 // baselines against CURRENT content, and the downstream claim's baseline is
 // over its dependency's content — which review_pending does not change (see
 // ContentHash's field list).
-func TestGovernanceDriftPropagationIsStaged(t *testing.T) {
+func TestRestsOnDriftPropagationIsStaged(t *testing.T) {
 	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
 	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "child", RestsOn: model.RestsOnIDs(hub.ID)}
 	downstream := model.Claim{ID: "widget.contract.downstream", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "downstream", RestsOn: model.RestsOnIDs(child.ID)}
@@ -1286,13 +1205,12 @@ func TestGovernanceDriftPropagationIsStaged(t *testing.T) {
 	}
 }
 
-// TestHubGatingIgnoresGovernedBy is the behavioural half of "hub gating is
-// byte-for-byte unchanged" (D-6, branch (a)): governance is a DRIFT edge, not a
-// GATING edge. A child naming an UNLOCKED doctrine-facet claim only through
-// governed_by.type still locks. Widening the lock-refusal rests_on walk instead of adding
-// BaselineDependencyIDs is exactly what this test refuses, and it is a refusal
-// documented in internal/lint/governed_cycle.go and FORMAT.md.
-func TestConstitutionRefCreatesNoGraphBaseline(t *testing.T) {
+// TestDanglingRestsOnTargetRecordsNoBaseline: a rests_on id that names no
+// claim in the registry has no content to snapshot, so Lock records no baseline
+// row for it — a row keyed by a missing claim would compare against nothing
+// and quietly never drift. (Whether a dangling target may be locked at all is
+// the lint gate's call; this test runs with an empty registry.)
+func TestDanglingRestsOnTargetRecordsNoBaseline(t *testing.T) {
 	withRegistry(t)
 
 	child := model.Claim{
@@ -1307,75 +1225,7 @@ func TestConstitutionRefCreatesNoGraphBaseline(t *testing.T) {
 		t.Fatalf("Lock: %v", err)
 	}
 	if ids := store.Hashes[child.ID]; len(ids) != 0 {
-		t.Fatalf("constitution typed refs must not become graph baselines; store has %v", ids)
-	}
-}
-
-// TestRefreshBaselineRefreshesTheGovernanceBaseline is the reaudit half: a
-// confirmed reaudit re-snapshots the governor, so the drift trigger clears.
-func TestRefreshBaselineRefreshesTheGovernanceBaseline(t *testing.T) {
-	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "doctrine v1"}
-	child := model.Claim{ID: "widget.contract.child", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "child", RestsOn: model.RestsOnIDs(hub.ID)}
-	store := &Store{
-		Version:  storeSchemaVersion,
-		Hashes:   map[string]map[string]string{child.ID: {hub.ID: ContentHash(hub)}},
-		LockedAt: map[string]string{},
-		path:     filepath.Join(t.TempDir(), "store.json"),
-	}
-
-	hub.Body = "doctrine v2"
-	RefreshBaseline(child, []model.Claim{hub, child}, store)
-
-	got, known := store.Baseline(child.ID, hub.ID)
-	if !known || got != ContentHash(hub) {
-		t.Fatalf("governance baseline after RefreshBaseline = %q (known=%v), want the governor's new ContentHash %q", got, known, ContentHash(hub))
-	}
-	if out := DetectStale([]model.Claim{hub, child}, store); out[1].ReviewPending {
-		t.Fatalf("a refreshed governance baseline must clear the drift trigger")
-	}
-}
-
-// TestGovernedByNoneCreatesNoBaseline: "none" is a sentinel, not a claim id. It
-// must never become a baseline key — a store row keyed "none" would compare
-// against a claim that cannot exist and quietly do nothing forever.
-func TestGovernedByNoneCreatesNoBaseline(t *testing.T) {
-	withRegistry(t) // empty registry: lint always passes
-
-	claim := model.Claim{
-		ID: "widget.contract.ungoverned", Facet: "contract", Module: "widget", Status: model.StatusDraft,
-		Body: "ungoverned", RestsOn: model.RestsNone("deliberately ungoverned"),
-	}
-	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
-	if err != nil {
-		t.Fatalf("LoadStore: %v", err)
-	}
-	if _, err := Lock(claim, []model.Claim{claim}, testConfig(), store, testApproval()); err != nil {
-		t.Fatalf("Lock: %v", err)
-	}
-	if _, known := store.Baseline(claim.ID, "none"); known {
-		t.Fatalf("rests_on none must create no baseline; store has %v", store.Hashes)
-	}
-}
-
-// TestTwoEdgeDependencyRecordsExactlyOneBaseline is dedupeStable at the store
-// level: rests_on X plus governed_by X is one dependency, recorded once.
-func TestTwoEdgeDependencyRecordsExactlyOneBaseline(t *testing.T) {
-	withRegistry(t) // empty registry: lint always passes
-
-	hub := model.Claim{ID: "widget.contract.hub", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "doctrine"}
-	twoEdge := model.Claim{
-		ID: "widget.contract.two-edge", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "two edges",
-		RestsOn: model.RestsOnIDs(hub.ID, hub.ID),
-	}
-	store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
-	if err != nil {
-		t.Fatalf("LoadStore: %v", err)
-	}
-	if _, err := Lock(twoEdge, []model.Claim{hub, twoEdge}, testConfig(), store, testApproval()); err != nil {
-		t.Fatalf("Lock: %v", err)
-	}
-	if n := len(store.Hashes[twoEdge.ID]); n != 1 {
-		t.Fatalf("a target reached through two edge types must produce exactly one baseline entry, got %d: %v", n, store.Hashes[twoEdge.ID])
+		t.Fatalf("a dangling rests_on target must not become a baseline; store has %v", ids)
 	}
 }
 

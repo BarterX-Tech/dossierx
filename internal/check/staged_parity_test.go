@@ -355,10 +355,10 @@ func TestStaged_ClaimsGenuinelyOutsideTheRepositoryAreRefusedWhereValidateAccept
 
 // The escape hatch still exists, and this is the whole of what is left of it on
 // this path: a claims_dir outside the work tree in a project that has NOTHING
-// for the ledger gate to judge — no lock ledger, no comment digest store, no
-// build-order artifact. There genuinely is no index content to judge, --validate
-// says nothing either, and refusing here would break `check --staged` in CI for
-// a checkout whose claims legitimately live somewhere else.
+// for the ledger gate to judge — no lock ledger and no comment digest store.
+// There genuinely is no index content to judge, --validate says nothing
+// either, and refusing here would break `check --staged` in CI for a checkout
+// whose claims legitimately live somewhere else.
 func TestStaged_OutOfWorkTreeClaimsDirWithNoLedgerIsStillTheEscapeHatch(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo")

@@ -59,14 +59,14 @@ func TestApprovedContentReportsALegacyRecordAsUnretained(t *testing.T) {
 	}
 }
 
-// A build-order record is not a claim approval, and its key space is separate.
+// A leftover v0.7.20 "build-order" row is not a claim approval.
 // ApprovedContent filters on Subject rather than on the key's shape.
 func TestApprovedContentIgnoresNonClaimSubjects(t *testing.T) {
 	store := &Store{Ledger: map[string]LedgerRecord{
-		"build-order:fixture": {Subject: SubjectBuildOrder, Hash: "abc"},
+		"build-order:fixture": {Subject: "build-order", Hash: "abc", Content: &model.Claim{ID: "build-order:fixture"}},
 	}}
 	if _, ok := store.ApprovedContent("build-order:fixture"); ok {
-		t.Fatal("a build-order record must never answer as claim content")
+		t.Fatal("a non-claim record must never answer as claim content")
 	}
 }
 

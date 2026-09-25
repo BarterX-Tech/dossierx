@@ -635,7 +635,7 @@ constitution show / absent file
                   lock:{hash:string,locked_at:string,near_cap:bool,over_cap:bool,path:string,reason:string,state:string,stored_hash:string,word_cap:number,words:number}
                   path:string
                   present:bool
-                  sections:[{entries:[{Body:string,Slug:string,Title:string}],name:string}|{entries:null,name:string}]
+                  sections:[{entries:[{body:string,slug:string,title:string}],name:string}|{entries:null,name:string}]
                   status:string
                   text:string
 

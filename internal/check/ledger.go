@@ -58,7 +58,7 @@ const RuleLedgerUnreadable = "lock-ledger-unreadable"
 // RuleStoreGitignored is the project-scoped finding for an engine-written path
 // under the build directory that .gitignore matches and the index does not
 // hold: the lock ledger, the comment digest, the flag store, the build
-// directory's own .gitignore, or a module's build-order or code-links artifact.
+// directory's own .gitignore, or a module's code-links artifact.
 // A collaborator or CI cloning the project would have no approval record to
 // compare against, so `check` reports it as an error-severity finding and the
 // approval-recording verbs refuse with error.code store_gitignored. Its
@@ -382,11 +382,10 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
-	// Build-order artifacts and SubjectBuildOrder ledger rows are leftover
-	// from the removed product. They are not client obligations: do not
-	// refuse check for stale, drifted, missing, orphan, abandoned, or
-	// unreadable sequences, and do not treat a locked leftover order as
-	// the pre-ledger "still holds locked artifacts" half.
+	// Leftover build-order artifacts and "build-order" ledger rows from before
+	// v0.7.21 are never read: lock.Audit filters on SubjectClaim, and nothing
+	// here opens build/build-order/. TestLeftoverBuildOrderArtifactsAreIgnored
+	// pins that.
 	return findings
 }
 

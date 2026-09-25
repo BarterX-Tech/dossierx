@@ -93,7 +93,7 @@ func blRecoveryLines(msg string) []string {
 }
 
 // TestLegacyLayoutRefusesEveryVerbWithGitMvLines: a legacy root layout
-// refuses check, check --validate, claim list and build-order status alike
+// refuses check, check --validate and claim list alike
 // with layout_legacy, the exact lines from (d), and under --format json one
 // details.moves entry per printed move line in the same order — and then
 // EXECUTES the printed block in a committed copy and requires exit 0.
@@ -208,7 +208,7 @@ func TestLegacyLayoutRefusesEveryVerbWithGitMvLines(t *testing.T) {
 		if err != nil {
 			t.Fatalf("re-encode data: %v", err)
 		}
-		for _, prefix := range []string{"lock-ledger-", "comment-digest-", "build-order-"} {
+		for _, prefix := range []string{"lock-ledger-", "comment-digest-"} {
 			if strings.Contains(string(data), `"rule":"`+prefix) {
 				t.Fatalf("no ledger finding may follow a pure move (signatures hash bytes, not paths): %s", data)
 			}
@@ -591,102 +591,5 @@ func TestCheckOnAFreshProjectWritesOnlyUnderBuild(t *testing.T) {
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("files outside claims/ after check:\n got %q\nwant %q", got, want)
-	}
-}
-
-// TestCheckWarnsWhenAStyleOverrideIsInForceBesideALockedOrder pins the one
-// render-side warning check carries: the Build order tab's diagram colours,
-// its overflow rules and its sticky module strip live in the engine's
-// style.css (the .bo-* rules), and a project that overrides style.css and
-// locks an order would otherwise get mermaid's base-theme lavender nodes and
-// a page that scrolls sideways with nothing said. Present on check with the
-// override and a locked order; absent once the artifact is gone or the file
-// removed. Render has no warnings channel, which is why it is check's line.
-func TestCheckWarnsWhenAStyleOverrideIsInForceBesideALockedOrder(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _, _ := restsOnPairProject(t, root)
-	cfgRaw, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	if err := os.WriteFile(cfgPath, append(cfgRaw, []byte("viewer:\n  template_overrides: tmpl\n")...), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	tmplDir := filepath.Join(root, "tmpl")
-	if err := os.MkdirAll(tmplDir, 0o755); err != nil {
-		t.Fatalf("mkdir tmpl: %v", err)
-	}
-	stylePath := filepath.Join(tmplDir, "style.css")
-	if err := os.WriteFile(stylePath, []byte("body { color: black; }\n"), 0o644); err != nil {
-		t.Fatalf("write style.css: %v", err)
-	}
-	const want = "viewer.template_overrides/style.css is in force: the Build order tab's diagram colours and overflow rules come from the engine's style.css and are not supplied by the override; copy the .bo-* rules into it"
-	hasWarning := func(env cliout.Envelope) bool {
-		for _, w := range env.Warnings {
-			if w == want {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Override in force, no locked order: no warning.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check before any lock: %v", err)
-	}
-	if hasWarning(env) {
-		t.Fatalf("the warning must not fire with no locked order; got %v", env.Warnings)
-	}
-
-	for _, id := range []string{"widget.contract.alpha", "widget.contract.beta"} {
-		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
-			t.Fatalf("claim lock %s: %v", id, err)
-		}
-	}
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check after locking claims: %v", err)
-	}
-	if hasWarning(env) {
-		t.Fatalf("the Build order tab is gone, so a style override must not warn about it; got %v", env.Warnings)
-	}
-}
-
-// TestCheckWarnsAndStillRendersWhenALockedOrderCannotBeDrawn pins the
-// per-module half of the Build order tab's load-error policy at the CLI: a
-// locked artifact whose stored phase name the engine does not know (a
-// hand-edit; the ledger's content-drift finding fails the run for it) costs
-// that module its tab entry and ONE warnings[] line naming the module and
-// the reason — the viewer is still written, with the module's ordinary
-// claims in it. Before this, the same edit failed Render and no viewer was
-// written for any module.
-func TestCheckWarnsAndStillRendersWhenALockedOrderCannotBeDrawn(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _, _ := restsOnPairProject(t, root)
-	for _, id := range []string{"widget.contract.alpha", "widget.contract.beta"} {
-		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
-			t.Fatalf("claim lock %s: %v", id, err)
-		}
-	}
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
-	if err != nil {
-		t.Fatalf("check with locked claims and no build order: %v", err)
-	}
-	for _, w := range env.Warnings {
-		if strings.Contains(w, "Build order tab") || strings.Contains(w, "build-order") {
-			t.Fatalf("retired build-order must not warn; got %q", w)
-		}
-	}
-	viewer := filepath.Join(root, "build", "viewer", "index.html")
-	after, err := os.ReadFile(viewer)
-	if err != nil {
-		t.Fatalf("read viewer: %v", err)
-	}
-	if strings.Contains(string(after), `id="dossierx-build-order-widget"`) {
-		t.Error("the Build order tab must stay absent")
-	}
-	if !strings.Contains(string(after), "widget.contract.alpha") {
-		t.Error("widget's ordinary claims must still render")
 	}
 }

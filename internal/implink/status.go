@@ -1,9 +1,9 @@
 // status.go implements the read-only reporting half of this package's
 // contract: Status recomputes drift for every linked file against its
 // stored baseline hash and separately counts a module's locked,
-// code-producing-phase claims that have no linked file at all — mirroring
-// internal/buildorder's Status (a read-only recompute-on-load over an
-// artifact only ever written elsewhere, by Lock there and by Set here).
+// code-producing-phase claims that have no linked file at all. It is a
+// read-only recompute-on-load over an artifact only ever written elsewhere,
+// by Set.
 package implink
 
 import (
@@ -250,9 +250,7 @@ type ViewFile struct {
 // with current drift status. It returns an error wrapping ErrNoArtifact
 // when module has no artifact at all (never called Set) — callers (namely
 // internal/render's attach step) are expected to treat that as "render
-// nothing extra for this module", the same graceful-degradation contract
-// internal/render's Build order tab follows for a module whose build-order
-// artifact does not load.
+// nothing extra for this module" (graceful degradation, not an error).
 func ViewsByClaim(cfg *config.Config, module string) (map[string][]ViewFile, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("implink: cfg must not be nil")

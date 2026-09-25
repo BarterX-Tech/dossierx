@@ -530,7 +530,7 @@ func (b *renderByteBudget) consume(n int) error {
 }
 
 // budgetBuffer checks the shared budget before bytes.Buffer grows. Template
-// execution can therefore never allocate a claim or build-order fragment past
+// execution can therefore never allocate a claim fragment past
 // the remaining honest viewer-output budget.
 type budgetBuffer struct {
 	bytes.Buffer

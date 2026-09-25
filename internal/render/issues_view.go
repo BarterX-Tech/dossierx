@@ -23,10 +23,7 @@ import "github.com/BarterX-Tech/dossierx/internal/readiness"
 // claims carry at least one dependency condition or review cause — 04 §2's
 // per-module "weight" a group sorts by, and §6's numerator in
 // "blocks <N> of <M> claims here". A claim id readiness has no entry for is
-// simply not blocked and does not count. This mirrors, claim by claim, the
-// same four-field check buildShellStaticData already runs project-wide for
-// HasReadinessMaps (render.go) — this is the per-facet, per-claim form of
-// that same test.
+// simply not blocked and does not count.
 func IssuesModuleWeight(assessments map[string]readiness.Assessment, claimIDs map[string]bool) int {
 	n := 0
 	for id, in := range claimIDs {

@@ -63,8 +63,7 @@
 # precisely what a checkout is — and runs every rule that survives: the whole
 # lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
 # -orphan / -abandoned / -absent / -pre-ledger / -downgraded,
-# comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
-# the build-order rules.
+# comment-ledger-drift, comment-digest-unrecorded and comment-digest-absent.
 #
 # WHAT THAT COSTS, stated as the principle rather than as a count. Earlier
 # revisions of this comment put a number on it — one, then two, then three —
@@ -72,9 +71,9 @@
 # count is gone and the reason is here instead:
 #
 #   AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE
-#   IT. The claim files, the lock store, the digest store and the build-order
-#   artifacts are the whole evidence base, and every one of them is a tracked
-#   file in the tree the committer is editing.
+#   IT. The claim files, the lock store and the digest store are the whole
+#   evidence base, and every one of them is a tracked file in the tree the
+#   committer is editing.
 #
 # So the line falls between UNCOORDINATED and COORDINATED change, not between
 # clumsy and clever. One file edited, one record removed, one status flipped,
@@ -117,13 +116,6 @@
 # Do not add them to .gitignore. Without the ledger in the repository, CI has
 # nothing to compare the claims against and this workflow is theatre.
 #
-# One generated file joins them the moment you approve it: a LOCKED
-# build/build-order/<module>.json. While it is locked:false it is ordinary output that
-# `build-order propose` rewrites in full, but a locked one is the sequence a
-# human approved and the artifact an implementing agent builds from, so this
-# workflow compares it against its record (build-order-content-drift,
-# build-order-ledger-missing) — and can only do that if it was committed.
-#
 # WHAT THE ABSENT-LEDGER ERROR DOES AND DOES NOT COVER
 #
 # dossierx says so out loud when the ledger FILE is missing: locked claims with
@@ -133,7 +125,7 @@
 # lock-ledger-pre-ledger. Nothing is grandfathered on the quiet.
 #
 # That finding is CONDITIONAL as of v0.4.0: it is emitted only when the project
-# actually holds a locked claim or a locked build order. A pre-ledger project
+# actually holds a locked claim. A pre-ledger project
 # that holds nothing locked is not a finding, because its next lock crosses the
 # store onto the ledger schema by itself — and records a real approval doing it.
 #

@@ -154,7 +154,10 @@ func TestManifestShowIsolationModuleBudget(t *testing.T) {
 		t.Fatalf("details: %+v", env.Error.Details)
 	}
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "manifest", "show", "widget", "--isolation", "--bodies"); err == nil {
-		t.Fatal("--bodies is gone; the flag must be rejected")
+	// --bodies is gone. The refusal must be the flag parser's, not the budget's:
+	// this module is over budget, so view_too_large would also be an error.
+	env, _, err = execCLIJSON(t, "--config", cfgPath, "manifest", "show", "widget", "--isolation", "--bodies")
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeUsage || !strings.Contains(env.Error.Message, "unknown flag") {
+		t.Fatalf("--bodies must be rejected as an unknown flag: err=%v env=%+v", err, env.Error)
 	}
 }

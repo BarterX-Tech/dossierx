@@ -7,14 +7,13 @@ import (
 
 // The build directory is the ONE place the engine writes at runtime, and this
 // file is the ONE place a generated path is spelled. Every kind the engine
-// produces — the per-module build-order and code-links artifacts, the three
+// produces — the per-module code-links artifact, the three
 // ledger stores, the catalog, the viewer, the claim-file write sentinel and the
 // build directory's own .gitignore — resolves through one method below, so a
 // command, the check pipeline and serve cannot disagree about where a file is.
 //
 // The layout under BuildDirPath():
 //
-//	build-order/<module>.json     the build-order artifact, per module
 //	code-links/<module>.json      the implementation-link artifact, per module
 //	ledger/lock-store.json        the lock ledger
 //	ledger/comment-digest.json    the comment digest store
@@ -55,10 +54,9 @@ const (
 	// DefaultProjectClaimsDir is the store for scope: project claims.
 	DefaultProjectClaimsDir = "project-claims"
 
-	// BuildOrderDirName and CodeLinksDirName are the per-module artifact
-	// subdirectories; CatalogDirName, ConformanceDirName and ViewerDirName
-	// hold regenerated outputs.
-	BuildOrderDirName  = "build-order"
+	// CodeLinksDirName is the per-module artifact subdirectory;
+	// CatalogDirName, ConformanceDirName and ViewerDirName hold regenerated
+	// outputs.
 	CodeLinksDirName   = "code-links"
 	CatalogDirName     = "catalog"
 	ConformanceDirName = "conformance"
@@ -109,11 +107,6 @@ var TrackedStoreFileNames = []string{LockStoreFileName, CommentDigestFileName, F
 // config, resolved against the config file's own directory exactly as
 // claims_dir is (never against the process cwd), defaulting to "build".
 func (c *Config) BuildDirPath() string { return c.BuildDir }
-
-// BuildOrderPath is module's build-order artifact: <build>/build-order/<module>.json.
-func (c *Config) BuildOrderPath(module string) string {
-	return filepath.Join(c.BuildDir, BuildOrderDirName, module+".json")
-}
 
 // CodeLinksPath is module's implementation-link artifact: <build>/code-links/<module>.json.
 func (c *Config) CodeLinksPath(module string) string {

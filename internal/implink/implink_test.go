@@ -15,8 +15,7 @@ import (
 // dir and loads it via config.LoadConfig — the only way to get a
 // *config.Config whose unexported dir field (and therefore Dir(), which
 // ArtifactPath/Set/Status all resolve paths against) actually points
-// somewhere real, mirroring internal/render's own buildOrderTestConfig
-// helper for the exact same reason.
+// somewhere real.
 func testConfig(t *testing.T, modules ...string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()

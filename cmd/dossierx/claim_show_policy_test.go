@@ -12,7 +12,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -275,7 +275,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 	// manifest.yaml has no lockable claims, and this test measures the graph,
 	// not the harness file.
 	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}, MaxClaimsPerModule: &scaleCap,
-		ManifestTree: map[string][]byte{"shape/manifest.yaml": manifest.MinimalYAML("shape")}}
+		ManifestTree: map[string][]byte{"shape/manifest.yaml": manifesttest.MinimalYAML("shape")}}
 	store := &lock.Store{PolicyVersion: lock.PolicyLocalApprovalV1}
 	type shape struct {
 		name           string
@@ -310,11 +310,13 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 		claim("shape.contract.leaf"),
 	}
 	wide := []model.Claim{claim("shape.contract.wideroot")}
+	var wideIDs []string
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("shape.contract.wide%03d", i)
-		wide[0].RestsOn.AppendIDs(id)
+		wideIDs = append(wideIDs, id)
 		wide = append(wide, claim(id))
 	}
+	wide[0].RestsOn = model.RestsOnIDs(wideIDs...)
 	makeDense := func(layers, width int) shape {
 		claims := []model.Claim{}
 		for layer := 0; layer < layers; layer++ {

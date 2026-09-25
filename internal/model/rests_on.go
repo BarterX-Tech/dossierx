@@ -54,19 +54,6 @@ func RestsNone(reason string) RestsOn {
 	return RestsOn{None: true, Reason: reason}
 }
 
-// AppendIDs adds targets. A stated NONE is cleared: a claim that now rests
-// on something no longer rests on nothing, and its reason goes with it.
-func (r *RestsOn) AppendIDs(ids ...string) {
-	if r == nil {
-		return
-	}
-	if r.None {
-		r.None = false
-		r.Reason = ""
-	}
-	r.IDs = append(r.IDs, ids...)
-}
-
 // Empty reports an undeclared rests_on: neither NONE nor any target. It is
 // the rests-on-required lint's question, and it is deliberately not IsZero —
 // a `none: true` with a blank reason is not empty, it is malformed, and the

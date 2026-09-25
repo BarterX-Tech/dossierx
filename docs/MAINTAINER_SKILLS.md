@@ -90,6 +90,11 @@ and implementation before applying it. When evidence or product decisions
 invalidate a rule, mark the lesson superseded, link its replacement, and update
 all affected routing. Do not keep obsolete rules active as accumulating memory.
 
+The [test-audit](../.agents/skills/test-audit/SKILL.md) skill is vendored from
+OpenClaw under the MIT License. Its `NOTICE.md` records the upstream revision and
+license; this copy is canonical for DossierX, and upstream changes are reviewed
+before they are pulled in.
+
 ## What validation establishes
 
 Repository tests check file reachability, relocatable adapters, valid skill

@@ -27,10 +27,9 @@ import (
 // A module with no implementation-link artifact at all — the overwhelming
 // common case for any project that hasn't adopted this feature — is
 // skipped silently: implink.ViewsByClaim's ErrNoArtifact (and, defensively,
-// any other error) is treated identically, the same "never fail Render
-// over a missing or malformed optional side file" reasoning
-// buildOrderTabData applies to a module whose build-order artifact does not
-// load. Returns nil (not an empty, non-nil map) when no module has
+// any other error) is treated identically: never fail Render over a
+// missing or malformed optional side file. Returns nil (not an empty,
+// non-nil map) when no module has
 // ever linked anything, so attachImplinkOverride's len(lookup) == 0 check
 // can tell "nothing to do at all" apart from "checked every module, all
 // empty" without caring about the distinction itself.

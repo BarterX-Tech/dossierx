@@ -140,7 +140,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 
 func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 	root := t.TempDir()
-	llWriteConfig(t, root, []string{"contract", "internals"}, []string{"flagmod"})
+	llWriteConfig(t, root, []string{"flagmod"})
 	claimPath := llWriteClaim(t, root, llClaimSpec{
 		id: "flagmod.contract.a", facet: "contract", module: "flagmod", status: "draft",
 		body: "the claim's original, soon-to-be-flagged assertion.",

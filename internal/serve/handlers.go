@@ -816,16 +816,8 @@ type statusDTO struct {
 	// next_steps: the client ranges over it without a null test.
 	LedgerFindings []lock.Finding `json:"ledger_findings"`
 
-	// BuildOrders is every module's build-order state with staleness recomputed
-	// live, beside the ledger findings and for the same reason: a locked build
-	// order is the second class of locked artifact in a project, and a human
-	// reading the viewer had no way to see that the approved implementation
-	// sequence had gone stale under the claims they were reading. It is an array,
-	// never null.
-	BuildOrders []check.BuildOrderReport `json:"build_orders"`
-
 	// Readiness is a claim-id keyed live assessment. It deliberately sits beside
-	// lock counts rather than being derived from them: a locked/build-order
+	// lock counts rather than being derived from them: a locked
 	// count cannot imply that required dependencies are approved and clear.
 	Readiness map[string]readiness.Assessment `json:"readiness"`
 
@@ -882,10 +874,6 @@ func statusToDTO(res check.Result) statusDTO {
 	if ledger == nil {
 		ledger = []lock.Finding{}
 	}
-	orders := res.BuildOrders
-	if orders == nil {
-		orders = []check.BuildOrderReport{}
-	}
 	var conformanceCode cliout.Code
 	var errorCode cliout.Code
 	conformanceBlocked := res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0
@@ -934,7 +922,6 @@ func statusToDTO(res check.Result) statusDTO {
 		OpenComments:               open,
 		NextSteps:                  next,
 		LedgerFindings:             ledger,
-		BuildOrders:                orders,
 		Readiness:                  assessment,
 		Conformance:                res.Conformance,
 		ConformanceBlockingEnabled: res.ConformanceBlockingEnabled,

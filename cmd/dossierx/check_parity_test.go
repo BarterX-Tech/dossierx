@@ -22,15 +22,13 @@
 // the impl-links scan summary and per-module status line, "check: OK", the
 // open-comments per-module summaries, and each next-steps
 // hint (draft, open-comment-thread, drift/flag reaudit including the
-// triggerless drift-then-revert catch-all, and the fully-locked build-order
-// prompt).
+// triggerless drift-then-revert catch-all), and the fully-locked run that
+// prints none.
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -154,8 +152,8 @@ func TestCheckParity_LintErrorFailsFast(t *testing.T) {
 	}
 }
 
-// D: a single fully-locked claim, no comments — exercises the "fully locked
-// with no build order yet -> build-order propose" next step.
+// D: a single fully-locked claim, no comments — a fully-locked module prints
+// no next step at all.
 func TestCheckParity_FullyLocked(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
@@ -359,13 +357,10 @@ func TestCheckParity_MalformedClaimLoadErrorPrefix(t *testing.T) {
 
 // K: a project that USES PROJECT CLAIMS — a locked project claim, a locked
 // module claim resting on it, and a locked project claim resting on that
-// module *.contract.* claim — through the plain `check` reporter, and then
-// the parity that matters for the pre-commit hook: `check --validate` and
-// `check --staged` must report the same lint and ledger findings on the same
-// index. --staged used to enumerate claims_dir alone, so this exact project
-// came out `dangling` plus `lock-ledger-abandoned` from the hook while plain
-// check said OK.
-func TestCheckParity_ProjectClaimsStagedAndValidateAgree(t *testing.T) {
+// module *.contract.* claim — through the plain `check` reporter. The
+// --staged/--validate parity on this same tree is owned by
+// internal/check/staged_project_claims_test.go.
+func TestCheckParity_ProjectClaims(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/overview.yaml": "id: widget.contract.overview\nsummary: A locked module claim resting on a project claim.\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
@@ -385,49 +380,4 @@ func TestCheckParity_ProjectClaimsStagedAndValidateAgree(t *testing.T) {
 		"render: wrote " + viewer + "\n" +
 		"check: OK\n"
 	assertCheckParity(t, cfgPath, want, "", false)
-
-	// The same project, staged. Both stores, the roof, the ledger and the
-	// generated build artifacts go into the index together, so the index and
-	// the working tree hold identical bytes and the two modes are being asked
-	// exactly the same question.
-	stagedGit(t, root, "init", "-q", "-b", "main")
-	stagedGit(t, root, "config", "user.email", "fixture@example.invalid")
-	stagedGit(t, root, "config", "user.name", "fixture")
-	stagedGit(t, root, "add", "-A")
-
-	type verdict struct {
-		OK             bool            `json:"ok"`
-		LintFindings   json.RawMessage `json:"lint_findings"`
-		LedgerFindings json.RawMessage `json:"ledger_findings"`
-		Skipped        bool            `json:"skipped"`
-	}
-	read := func(mode string) verdict {
-		t.Helper()
-		env, stderr, err := execCLIJSON(t, "--config", cfgPath, "check", mode)
-		if err != nil {
-			t.Fatalf("check %s: %v (stderr=%s)", mode, err, stderr)
-		}
-		raw, marshalErr := json.Marshal(env.Data)
-		if marshalErr != nil {
-			t.Fatalf("check %s: re-encode data: %v", mode, marshalErr)
-		}
-		var v verdict
-		if err := json.Unmarshal(raw, &v); err != nil {
-			t.Fatalf("check %s: decode data: %v\n%s", mode, err, raw)
-		}
-		v.OK = env.OK
-		return v
-	}
-	validate := read("--validate")
-	staged := read("--staged")
-	if !validate.OK {
-		t.Fatalf("control precondition: check --validate must accept the project-claims fixture, got lint %s ledger %s", validate.LintFindings, validate.LedgerFindings)
-	}
-	if staged.Skipped {
-		t.Fatalf("check --staged skipped the project-claims fixture instead of judging it")
-	}
-	if !staged.OK || !reflect.DeepEqual(validate.LintFindings, staged.LintFindings) || !reflect.DeepEqual(validate.LedgerFindings, staged.LedgerFindings) {
-		t.Fatalf("check --staged and check --validate disagree on one tree that uses project claims:\n--staged:   ok=%v lint=%s ledger=%s\n--validate: ok=%v lint=%s ledger=%s",
-			staged.OK, staged.LintFindings, staged.LedgerFindings, validate.OK, validate.LintFindings, validate.LedgerFindings)
-	}
 }

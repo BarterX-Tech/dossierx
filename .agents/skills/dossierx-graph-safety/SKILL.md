@@ -1,6 +1,6 @@
 ---
 name: dossierx-graph-safety
-description: Audit and harden changes to DossierX graph behavior against semantic degradation and combinatorial blowups. Use for dependency readiness, claim locking, review propagation, build-order graphs, catalog or viewer graph projections, and traversal behavior; documentation-only typo or formatting edits do not require runtime graph proofs.
+description: Audit and harden changes to DossierX graph behavior against semantic degradation and combinatorial blowups. Use for dependency readiness, claim locking, review propagation, catalog or viewer graph projections, and traversal behavior; documentation-only typo or formatting edits do not require runtime graph proofs.
 ---
 
 # DossierX Graph Safety
@@ -33,8 +33,8 @@ baseline from a historical faulty implementation used for a regression test.
 
 Read the current contract, implementation, and tests from the exact candidate.
 Start with `docs/approval-policy.md`, `internal/readiness/`, `internal/lock/`, and
-the affected caller paths; include `internal/buildorder/`, catalog, render, and
-serve code when relevant. Inspect other traversal contracts when those change.
+the affected caller paths; include catalog, render, and serve code when
+relevant. Inspect other traversal contracts when those change.
 Do not infer safety from an older checkout, generated artifact, or prior green
 run. Identify the tree actually tested, including any uncommitted patch; a result
 for that tree is not a result for the named commit alone.

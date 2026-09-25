@@ -3,8 +3,9 @@
 Use the smallest graph that isolates each property, then vary graph size and
 shape to test growth. Apply approval rows when approval/readiness is affected;
 for other traversals add their own ordering, membership, edge, and diagnostic
-invariants. For example, build order must preserve phase ordering and explicit
-exclusions; an approval boolean alone cannot test it. Record applicability and
+invariants. For example, the viewer's graph payload must preserve node
+membership and every edge, and count the edges it drops; an approval boolean
+alone cannot test it. Record applicability and
 justify exclusions using the call graph before running proofs.
 
 ## Required graph shapes

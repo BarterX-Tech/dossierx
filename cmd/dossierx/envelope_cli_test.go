@@ -421,21 +421,6 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 	}
 }
 
-func TestEnvelope_BuildOrderStatusIsRetired(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
 func TestEnvelope_SkillsExport(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "skills")
 	env, _, err := execReviewedCLIJSON(t, "skills", "export", target)
@@ -521,12 +506,6 @@ func TestErrorCodes(t *testing.T) {
 			name:     "comment with a nonsense actor",
 			args:     []string{"--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "robot", "--body", "hi"},
 			wantCode: cliout.CodeInvalidActor,
-			wantExit: 1,
-		},
-		{
-			name:     "retired build-order",
-			args:     []string{"--config", cfgPath, "build-order", "status", "--module", "nope"},
-			wantCode: cliout.CodeUsage,
 			wantExit: 1,
 		},
 		{
@@ -772,34 +751,6 @@ func TestDryRun_CommentAddWarnsThatItFlipsALockedClaim(t *testing.T) {
 	joined := strings.Join(dr.SideEffects, "\n")
 	if !strings.Contains(joined, "review_pending") {
 		t.Fatalf("opening a thread on a LOCKED claim flips it to review_pending; the preview must say so: %v", dr.SideEffects)
-	}
-}
-
-// buildOrderFixture writes a project whose single claim is locked, the shape
-// the retired build-order surface is exercised against.
-func buildOrderFixture(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a locked claim with a build role.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	return cfgPath
-}
-
-func TestEnvelope_BuildOrderVerbsAreRetired(t *testing.T) {
-	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
-		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  leftover.\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n",
-	})
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.OK {
-		t.Fatal("build-order is retired and must fail")
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
 	}
 }
 

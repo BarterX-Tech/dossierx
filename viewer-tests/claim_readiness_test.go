@@ -460,14 +460,9 @@ func TestReadinessTreatsFlagDetailsAsText(t *testing.T) {
 	}
 }
 
-// TestLiveReadinessRefreshesAfterAnUpstreamApproval re-pins the same test's
-// original Mermaid-error assertion away: R09.9 removed the inline trace, so
-// there is no `window.__boErrors` global for a project with no locked Build
-// order (build-order-ui.js is no longer injected at all — see render.go's
-// HasReadinessMaps field comment). The live-refresh guarantee itself is
-// unchanged: an upstream approval must drop the resolved fact from the
-// COMPLETE list on the next poll, not just from whichever page happened to
-// be open.
+// TestLiveReadinessRefreshesAfterAnUpstreamApproval: an upstream approval
+// must drop the resolved fact from the COMPLETE list on the next poll, not
+// just from whichever page happened to be open.
 func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 	p := newReadinessProject(t)
 	ctx := browserContext(t)

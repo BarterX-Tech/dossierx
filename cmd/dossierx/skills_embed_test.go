@@ -821,27 +821,12 @@ func TestCLI_SkillsExportCheck_WithoutALockEveryDifferenceIsUnverified(t *testin
 	}
 }
 
-// NIT-12: no skill may teach a whole-corpus read. The bundle this binary
-// ships says neither word, and --check refuses an exported tree that does,
-// naming the file, the line and the phrase.
+// NIT-12: no skill may teach a whole-corpus read. --check refuses an exported
+// tree that does, naming the file, the line and the phrase. --check scans every
+// shipped file, so the fresh export that must pass it in
+// TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing is the proof
+// that the bundle this binary ships says neither word.
 func TestSkills_NeverTeachAWholeCorpusRead(t *testing.T) {
-	err := fs.WalkDir(dxskills.FS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		raw, readErr := fs.ReadFile(dxskills.FS, path)
-		if readErr != nil {
-			return readErr
-		}
-		for _, f := range scanForbiddenSkillWording(path, raw) {
-			t.Errorf("%s:%d says %q; teach manifest show, one module at a time", f.File, f.Line, f.Wording)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	for _, line := range []string{"Load the context pack first.", "Read the full corpus.", "a full-corpus audit", "PACKS of claims"} {
 		if len(scanForbiddenSkillWording("x", []byte(line))) != 1 {
 			t.Errorf("%q must be forbidden", line)

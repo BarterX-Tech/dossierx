@@ -112,8 +112,7 @@ type ScanReport struct {
 }
 
 // Summary renders a one-line, human-readable overview of a scan run,
-// matching the terse style of StatusReport.Summary and buildorder's own
-// CLI-facing summary lines.
+// matching the terse style of StatusReport.Summary.
 func (r *ScanReport) Summary() string {
 	return fmt.Sprintf(
 		"impl-links: scanned %d file(s), found %d tag(s), reconciled %d link(s) (%d error(s))",
