@@ -207,7 +207,7 @@ var retiredFields = map[string]map[string]string{
 	"model.Claim": {
 		"build_role":  "`build_role` is a retired claim field; " + upgradingSkillStep + "\"build_role is gone\" fold",
 		"governed_by": "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
-		"mirrors":     "`mirrors` is a retired claim field; " + upgradingSkillStep + "fold for it",
+		"mirrors":     "`mirrors` is a retired claim field; " + upgradingSkillStep + "\"mirrors is gone\" fold",
 	},
 	"config.Config": {
 		"doctrine_facet": "`doctrine_facet` is a retired config field (the doctrine hub is gone); " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
