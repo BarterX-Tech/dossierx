@@ -538,7 +538,7 @@
     "internal/lock": "sha256:4e5b29685a1cc1371a31fd3e6c6bd43a0d81e14a2ae24ad83655496667841883",
     "internal/manifest": "sha256:b38a67f193608f0f3e16da7f5270da47640870f25f0b30d098aee89d12b4cd25",
     "internal/manifest/manifesttest": "sha256:9923dd2e327d0d8238fe3ec4b2de74e8ae0fd7a1d7efc8eb6cc638a19f990f94",
-    "internal/model": "sha256:2c20336b12e32534b57702f836378a46cf2a00220895de240a97712c4e79e8ee",
+    "internal/model": "sha256:4f24ac12463b19af4476079f69da2e589bbad2cef776a88155d3d8530da4fe9a",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
