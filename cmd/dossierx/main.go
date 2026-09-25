@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2126,6 +2127,14 @@ func newLockCmd() *cobra.Command {
 			conflicts, err := parseSemanticConflicts(semanticConflict)
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest, "lock: %w", err)
+			}
+			// A conflict on a claim this call does not lock would refuse
+			// nothing, and the lock it was meant to stop would go ahead.
+			for _, c := range conflicts {
+				if !slices.Contains(args, c.ClaimID) {
+					return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
+						"lock: --semantic-conflict names %q, which is not among the claims being locked; it would refuse nothing", c.ClaimID)
+				}
 			}
 			// --dry-run answers a question; it never writes and never takes a
 			// sentinel. One claim and a group take the same route: the set
