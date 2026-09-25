@@ -824,12 +824,6 @@ func ContentHash(c model.Claim) string {
 	for _, s := range c.Steps {
 		fmt.Fprintf(legacy, "step=%s\n", s)
 	}
-	for _, m := range c.Mirrors {
-		fmt.Fprintf(legacy, "mirrors=%s\n", m)
-	}
-	if c.RestsOn.None {
-		fmt.Fprintf(legacy, "rests_on=none/%s\n", c.RestsOn.Reason)
-	}
 	// RESTS ON NONE (NIT-24) writes one line of its own; a target list writes
 	// the per-id lines it always did, so no existing baseline moves.
 	if c.RestsOn.None {
@@ -838,8 +832,9 @@ func ContentHash(c model.Claim) string {
 	for _, r := range c.RestsOn.IDs {
 		fmt.Fprintf(legacy, "rests_on=%s\n", r)
 	}
-	// The retired governed_by edge used to write a "governed=" line here.
-	// It is gone without a placeholder (NIT-29), so every ContentHash — and
+	// The retired governed_by edge used to write a "governed=" line here,
+	// and the retired mirrors key a "mirrors=" line before rests_on. Both
+	// are gone without a placeholder (NIT-29), so every ContentHash — and
 	// with it every recorded dependency baseline — moved on that release.
 	// That is the "no migration tooling" decision: a corpus that carries
 	// baselines from before it re-locks by hand.
