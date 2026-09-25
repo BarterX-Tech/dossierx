@@ -374,7 +374,7 @@ func TestRun_ImplinkScanAndStatus(t *testing.T) {
 	if len(res.ScanErrors) != 0 {
 		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
 	}
-	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases" {
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims" {
 		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
 	}
 }
@@ -401,7 +401,7 @@ func TestRun_StepTagScanAndStatus(t *testing.T) {
 	if len(res.ScanErrors) != 0 {
 		t.Fatalf("expected no scan errors, got %#v", res.ScanErrors)
 	}
-	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked-in-schema/behavior/api/verification-phases" {
+	if len(res.ImplinkStatusStdout) != 1 || res.ImplinkStatusStdout[0] != "impl-links: 1 linked, 0 drifted, 0 partial, 0 unlinked locked claims" {
 		t.Fatalf("unexpected impl-link status stdout: %#v", res.ImplinkStatusStdout)
 	}
 }

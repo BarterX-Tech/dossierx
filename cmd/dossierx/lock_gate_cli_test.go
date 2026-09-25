@@ -304,3 +304,58 @@ func TestLockSucceedsAtConfiguredModuleCap(t *testing.T) {
 		t.Fatalf("locking a claim under the configured module cap must succeed: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------
+// --semantic-conflict
+// ---------------------------------------------------------------------
+
+// TestLockSemanticConflictRefusesForHumanReview pins what the flag does: it
+// refuses the named claim for human review with review_pending, and — because
+// the contradiction is recorded nowhere and claim show cannot name it — the
+// hint says so instead of leaving the router's generic "claim show names the
+// trigger" recovery to send the agent looking for a trigger that is not there.
+// A conflict on a claim the call does not lock is refused, since it would
+// otherwise refuse nothing and the lock would go ahead.
+func TestLockSemanticConflictRefusesForHumanReview(t *testing.T) {
+	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	card := func(slug string) string {
+		return "id: widget.contract." + slug + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"summary: Fixture card for the semantic conflict.\n" +
+			"body: |\n  the widget answers within 200ms.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n"
+	}
+	cfgPath := writeCheckFixture(t, t.TempDir(), cfg, map[string]string{
+		"claims/a.yaml": card("a"),
+		"claims/b.yaml": card("b"),
+	})
+	conflict := "widget.contract.a=widget.contract.b=a says 200ms, b says 500ms"
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "go", "--semantic-conflict", conflict)
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeReviewPending {
+		t.Fatalf("expected %q, got err=%v env=%+v", cliout.CodeReviewPending, err, env.Error)
+	}
+	if !strings.Contains(env.Error.Hint, "recorded nowhere") || !strings.Contains(env.Error.Hint, "dossierx claim lock widget.contract.a --dry-run") {
+		t.Fatalf("the hint must say the conflict is not recorded and name the re-preview, got %q", env.Error.Hint)
+	}
+	details, ok := env.Error.Details.(map[string]any)
+	if !ok {
+		t.Fatalf("error.details must be an object, got %#v", env.Error.Details)
+	}
+	got, err := json.Marshal(details["semantic_conflicts"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "widget.contract.b:a says 200ms, b says 500ms") {
+		t.Fatalf("error.details.semantic_conflicts must carry the dependency and the reason, got %s", got)
+	}
+	var data lockRefusedData
+	envData(t, env, &data)
+	if data.Gate != string(cliout.CodeReviewPending) {
+		t.Fatalf("data.gate must agree with error.code, got %q", data.Gate)
+	}
+
+	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--dry-run", "--semantic-conflict", conflict)
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeBadRequest {
+		t.Fatalf("a conflict on a claim not being locked must be refused, got err=%v env=%+v", err, env.Error)
+	}
+}

@@ -98,6 +98,56 @@ func TestClaimNewStubFailsCheckUntilDrafted(t *testing.T) {
 	}
 }
 
+// TestClaimNewStubIsPreviewedAndNeverHalfWritten: the manifest stub is a
+// second file claim new writes, so --dry-run must name it, and a failure to
+// write it must leave no claim on disk behind a write_failed.
+func TestClaimNewStubIsPreviewedAndNeverHalfWritten(t *testing.T) {
+	root := t.TempDir()
+	cfgPath := filepath.Join(root, "project.config.yaml")
+	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lockFixtureConstitution(t, cfgPath)
+	newArgs := []string{"--config", cfgPath, "claim", "new", "widget.contract.bound",
+		"--body", "the widget answers within 200ms.", "--summary", "Widget answers within 200ms.", "--rests-on-none-reason", "fixture"}
+	stubPath := filepath.Join(root, "claims", "widget", "manifest.yaml")
+	claimPath := filepath.Join(root, "claims", "widget.contract.bound.yaml")
+
+	env, _, err := execCLIJSON(t, append(newArgs, "--dry-run")...)
+	if err != nil || !env.OK {
+		t.Fatalf("claim new --dry-run: %+v (err=%v)", env, err)
+	}
+	var dr cliout.DryRun
+	envData(t, env, &dr)
+	named := false
+	for _, effect := range dr.SideEffects {
+		if strings.Contains(effect, "creates "+stubPath) {
+			named = true
+		}
+	}
+	if !named {
+		t.Fatalf("the dry-run plan must name the manifest stub %s, got %v", stubPath, dr.SideEffects)
+	}
+	if fileExists(stubPath) || fileExists(claimPath) {
+		t.Fatalf("--dry-run must write nothing")
+	}
+
+	// claims/widget is a FILE, so the stub's directory cannot be created.
+	if err := os.WriteFile(filepath.Join(root, "claims", "widget"), []byte("not a dir"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err = execCLIJSON(t, newArgs...)
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeWriteFailed {
+		t.Fatalf("a failed stub write must refuse with write_failed: err=%v env=%+v", err, env.Error)
+	}
+	if fileExists(claimPath) {
+		t.Fatalf("a failed stub write must leave no claim behind at %s", claimPath)
+	}
+}
+
 func TestModuleManifestFindingBlocksOnlyItsOwnModulesLocks(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, twoModuleConfig, map[string]string{

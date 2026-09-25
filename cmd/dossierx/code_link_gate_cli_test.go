@@ -1,6 +1,6 @@
 // code_link_gate_cli_test.go pins the code-link gate at the CLI surface
-// (issue #78): with source_dirs set, a plain `dossierx check` on a locked,
-// code-producing claim nobody tagged exits 1 with error.code unlinked_claims
+// (issue #78): with source_dirs set, a plain `dossierx check` on a locked
+// module claim nobody tagged exits 1 with error.code unlinked_claims
 // and stopped_at links, names the claim in data.code_links AND on the
 // terminal, and still writes the viewer; `check --validate` on the same
 // project stays green but says scanned:false, gated:false with the same

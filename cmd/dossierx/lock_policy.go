@@ -302,11 +302,13 @@ func policyRefusalData(evaluation lock.SetEvaluation) lockRefusedData {
 			data.LintFindings = append(data.LintFindings, lintFindingData{Lint: finding.LintName, ClaimID: finding.ClaimID, Severity: string(finding.Severity), Message: finding.Message})
 		}
 		data.LintErrors = len(data.LintFindings)
-		switch verdict.Refusals[0] {
-		case "unresolved_comments":
+		switch first := verdict.Refusals[0]; {
+		case first == "unresolved_comments":
 			data.Gate = string(cliout.CodeUnresolvedComments)
-		case "claim_not_found":
+		case first == "claim_not_found":
 			data.Gate = string(cliout.CodeClaimNotFound)
+		case strings.HasPrefix(first, "semantic_contradiction_requires_human_review"):
+			data.Gate = string(cliout.CodeReviewPending)
 		default:
 			data.Gate = string(cliout.CodeLintFailed)
 		}
@@ -346,7 +348,20 @@ func policyRefusalError(evaluation lock.SetEvaluation) error {
 			case refusal == "already_locked":
 				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID).WithDetails(details)
 			case strings.HasPrefix(refusal, "semantic_contradiction_requires_human_review"):
-				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details)
+				// The contradiction exists only in this invocation's
+				// --semantic-conflict: it is recorded nowhere, the claim is not
+				// review_pending on disk, and claim show will not name it. The
+				// hint says so, because the router's generic review_pending
+				// recovery ("claim show names the trigger") is wrong here.
+				conflicts := []string{}
+				for _, r := range verdict.Refusals {
+					if strings.HasPrefix(r, "semantic_contradiction_requires_human_review") {
+						conflicts = append(conflicts, r)
+					}
+				}
+				details["semantic_conflicts"] = conflicts
+				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details).
+					WithHint("the contradiction comes from this call's --semantic-conflict and is recorded nowhere (claim show will not name it): put error.details.semantic_conflicts to the human, and only once they have resolved it run: dossierx claim lock " + verdict.ClaimID + " --dry-run (without --semantic-conflict)")
 			case strings.HasPrefix(refusal, "retired_dependency:"), strings.HasPrefix(refusal, "unreadable_dependency:"):
 				parts := strings.SplitN(refusal, ":", 2)
 				if len(parts) == 2 {

@@ -148,7 +148,7 @@ func TestStatus_UnlinkedCounting_DraftClaimsNeverCount(t *testing.T) {
 
 func TestStatus_Summary_Format(t *testing.T) {
 	r := &StatusReport{LinkedClaims: 2, Drifted: []DriftEntry{{}}, PartialCount: 1, UnlinkedCount: 3}
-	want := "impl-links: 2 linked, 1 drifted, 1 partial, 3 unlinked-in-schema/behavior/api/verification-phases"
+	want := "impl-links: 2 linked, 1 drifted, 1 partial, 3 unlinked locked claims"
 	if got := r.Summary(); got != want {
 		t.Fatalf("Summary() = %q, want %q", got, want)
 	}

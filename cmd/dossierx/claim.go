@@ -320,8 +320,16 @@ type claimLedgerView struct {
 // release is built around starts with an agent orienting itself on one card
 // and it should not cost four round trips.
 type claimShowData struct {
-	ClaimID      string `json:"claim_id"`
-	Title        string `json:"title"`
+	ClaimID string `json:"claim_id"`
+	Title   string `json:"title"`
+	// Summary and Body are the claim's own words, exactly as authored (Body is
+	// not re-wrapped or trimmed). They are here because "claim show <id>" is
+	// the verb the isolation view and the skills send an agent to when it has
+	// to read a neighbor's contract; a show without the text sent the agent to
+	// the YAML file instead. Both keys are always present: a structured layout
+	// (table, steps) may carry an empty body.
+	Summary      string `json:"summary"`
+	Body         string `json:"body"`
 	Facet        string `json:"facet"`
 	Module       string `json:"module"`
 	Status       string `json:"status"`
@@ -605,6 +613,8 @@ func newClaimShowCmd() *cobra.Command {
 			data := claimShowData{
 				ClaimID:       claim.ID,
 				Title:         claimTitle(claim.ID),
+				Summary:       claim.Summary,
+				Body:          claim.Body,
 				Facet:         claim.Facet,
 				Module:        claim.Module,
 				Status:        string(claim.Status),
@@ -742,6 +752,16 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 		fmt.Fprintln(out, "  next actions:")
 		for _, a := range d.NextActions {
 			fmt.Fprintf(out, "    %s\n", a)
+		}
+	}
+	// The claim's own words close the block, after the state an agent acts
+	// on, so a long body never pushes the next actions off the screen. The
+	// body prints one indented line per authored line.
+	fmt.Fprintf(out, "  summary:            %s\n", d.Summary)
+	if d.Body != "" {
+		fmt.Fprintln(out, "  body:")
+		for _, line := range strings.Split(strings.TrimRight(d.Body, "\n"), "\n") {
+			fmt.Fprintf(out, "    %s\n", line)
 		}
 	}
 }
@@ -1316,8 +1336,11 @@ func newClaimNewCmd() *cobra.Command {
 				dr.Require("file_is_unused", !fileExists(path), boolDetail(fileExists(path),
 					path+" already exists",
 					path+" does not exist yet"))
-				dr.Effect("creates " + path).
-					Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
+				dr.Effect("creates " + path)
+				if stub := missingModuleManifest(cfg, module); stub != "" {
+					dr.Effect("creates " + stub + " (a module manifest STUB with an empty summary: check and claim lock refuse until it is drafted from dossierx manifest show " + module + " --isolation)")
+				}
+				dr.Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
 				dr.Propose("path", path).
 					Propose("facet", facet).
 					Propose("module", module).
@@ -1388,11 +1411,21 @@ func newClaimNewCmd() *cobra.Command {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: create claim dir: %w", err)
 			}
-			if err := loader.SaveClaim(claim); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: %w", err)
+			// The manifest stub is written BEFORE the claim, and removed again
+			// if the claim cannot be saved, so a failure on either write leaves
+			// the project as it was: never a claim on disk under a write_failed
+			// that says nothing was created, never an orphan stub.
+			stub := missingModuleManifest(cfg, module)
+			if stub != "" {
+				if err := manifest.WriteStub(cfg.ClaimsDir, module); err != nil {
+					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: write module manifest: %w", err)
+				}
 			}
-			if err := ensureModuleManifest(cfg, module); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: write module manifest: %w", err)
+			if err := loader.SaveClaim(claim); err != nil {
+				if stub != "" {
+					_ = os.Remove(stub)
+				}
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: %w", err)
 			}
 
 			// Lint the project WITH the new claim in it and report the verdict.
@@ -1462,13 +1495,16 @@ func normalizeClaimBody(body string) string {
 	return b
 }
 
-func ensureModuleManifest(cfg *config.Config, module string) error {
+// missingModuleManifest returns the path of module's manifest.yaml when
+// "claim new" would have to write a stub there, or "" when the manifest exists
+// or the claim has no module (a project claim).
+func missingModuleManifest(cfg *config.Config, module string) string {
 	if cfg == nil || module == "" {
-		return nil
+		return ""
 	}
 	dest := filepath.Join(cfg.ClaimsDir, filepath.FromSlash(manifest.RequiredRelPath(module)))
 	if fileExists(dest) {
-		return nil
+		return ""
 	}
-	return manifest.WriteStub(cfg.ClaimsDir, module)
+	return dest
 }
