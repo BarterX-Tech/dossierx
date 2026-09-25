@@ -482,11 +482,6 @@ func refuseLegacyLayout(cfg *config.Config) error {
 	return layout.RefuseMoves(cfg, moves, buildDirIgnored)
 }
 
-// loadClaims loads every claim under cfg's claims_dir. The "load claims:"
-// prefix is load-bearing and pinned (check_parity_test.go asserts a claims-load
-// failure is reported unprefixed by "check:", since it precedes the pipeline);
-// cliout.Errorf reproduces fmt.Errorf's string exactly, so attaching the code
-// changes no byte of the message.
 // lintErrorCode is the code a lint stop reports. The roof's two findings
 // (internal/check.ConstitutionFindings) get their own codes so an agent
 // branches on the constitution rather than on "fix the claims": over-cap
@@ -531,6 +526,11 @@ func lintStopError(res check.Result) error {
 	return cliout.Errorf(lintErrorCode(res.ClaimLintErrors()), "check: lint: %d error-level finding(s)", len(res.LintErrors))
 }
 
+// loadClaims loads every claim under cfg's claims_dir. The "load claims:"
+// prefix is load-bearing and pinned (check_parity_test.go asserts a claims-load
+// failure is reported unprefixed by "check:", since it precedes the pipeline);
+// cliout.Errorf reproduces fmt.Errorf's string exactly, so attaching the code
+// changes no byte of the message. A retired claim field gets the upgrade hint.
 func loadClaims(cfg *config.Config) ([]model.Claim, error) {
 	claims, err := loader.LoadAll(cfg)
 	if err != nil {
