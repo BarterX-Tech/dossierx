@@ -26,21 +26,25 @@
 // below runs on a temp copy, because those commands mutate claim files and
 // the ledger, which must never happen against a checked-in testdata directory.
 //
-// WHAT IS DELIBERATELY NOT COVERED HERE, AND WHY. `check --staged` — the
-// pre-commit hook's entry point — is not run on this fixture. On the branch
-// this file lands on, --staged enumerates claims from claims_dir's pathspec
-// only and never reads project-claims/ out of the index, so a module claim
-// resting on project.<slug> reports `dangling` and every locked project claim
-// reports `lock-ledger-abandoned` from the hook, on a tree that plain check
-// and check --validate accept. That is an engine gap on the staged path, not
-// a fixture defect; it is recorded on NIT-6 rather than hidden behind a
-// narrower assertion here, and this comment is the place a reader finds the
-// omission.
+// `check --staged` — the pre-commit hook's entry point — IS covered here too,
+// by TestLifecycle_ProjectClaimsFixturePassesTheStagedGate: the fixture is
+// copied into a disposable git repository (never the checked-in testdata
+// directory), staged, and the gate must be as clean as plain check is, both
+// as committed and once every claim is locked through the real approval
+// path; a hand-edited locked project claim must then be refused. This used
+// to be an exemption: --staged enumerated claims from claims_dir's pathspec
+// only and never read project-claims/ out of the index, so a module claim
+// resting on project.<slug> reported `dangling` and every locked project
+// claim `lock-ledger-abandoned` from the hook, on a tree plain check
+// accepted. The staged path now reads the project-claims store from the
+// index exactly as it reads claims_dir (internal/check/staged.go,
+// stagedProjectClaims), and the test below is what keeps it that way.
 package tests
 
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -334,5 +338,135 @@ func TestLifecycle_ProjectClaimsThroughThePipeline(t *testing.T) {
 	rt = byID[retention]
 	if rt.Status != "locked" || !rt.Readiness.ReviewPending || rt.Readiness.Ready || !hasRecord(rt.Readiness.ReviewCauses, "upstream_dependency_review", retention, overview, scope) {
 		t.Fatalf("%s must inherit the review through the unchanged intermediate, witness [%s %s %s]: %+v", retention, retention, overview, scope, rt)
+	}
+}
+
+// stagedGitInFixture runs one git command in the disposable fixture copy with
+// an isolated configuration, fatally: git here is scaffolding for the gate
+// under test, never the thing under test. A machine without git fails rather
+// than skips — the staged gate is the subject of this test, and a skip would
+// be indistinguishable from a pass.
+func stagedGitInFixture(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Fatalf("git is required to exercise check --staged and was not found on PATH: %v", err)
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s in the fixture copy: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// stagedEnvelope is the subset of the `check --staged` envelope this test
+// reads: the verdict, the two flags that say the index was judged rather
+// than skipped, and every finding either enforcing caller branches on.
+type stagedEnvelope struct {
+	OK   bool `json:"ok"`
+	Data struct {
+		ReadOnly       bool          `json:"read_only"`
+		Staged         bool          `json:"staged"`
+		Skipped        bool          `json:"skipped"`
+		LintFindings   []lintFinding `json:"lint_findings"`
+		LedgerFindings []struct {
+			Rule    string `json:"rule"`
+			ClaimID string `json:"claim_id"`
+		} `json:"ledger_findings"`
+	} `json:"data"`
+	Error *struct {
+		Code string `json:"code"`
+	} `json:"error"`
+}
+
+// runStaged runs "dossierx check --staged --format json" in root against
+// cfgPath and decodes the envelope. A skipped run is fatal on the spot: the
+// fixture copy is a git repository with the project staged, so "nothing to
+// evaluate" would mean the gate looked at the wrong thing.
+func runStaged(t *testing.T, root, cfgPath, step string) (stagedEnvelope, int) {
+	t.Helper()
+	stdout, stderr, code := run(t, root, "--config", cfgPath, "--format", "json", "check", "--staged")
+	var env stagedEnvelope
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("%s: check --staged output is not a single envelope: %v\nstdout: %s\nstderr: %s", step, err, stdout, stderr)
+	}
+	if !env.Data.ReadOnly || !env.Data.Staged {
+		t.Fatalf("%s: check --staged must mark its payload read_only and staged; got: %s", step, stdout)
+	}
+	if env.Data.Skipped {
+		t.Fatalf("%s: check --staged skipped the fixture copy instead of judging its index: %s", step, stdout)
+	}
+	return env, code
+}
+
+// The staged gate on the project-claims fixture, in a disposable git
+// repository: clean where plain check is clean, both as committed (all
+// drafts under a locked roof) and once every claim — the two project claims
+// included — is locked through the real approval path; and armed, so a
+// hand-edited locked project claim in the index is refused.
+func TestLifecycle_ProjectClaimsFixturePassesTheStagedGate(t *testing.T) {
+	root, cfgPath := projectClaimsFixture(t)
+	const (
+		scope     = "project.scope"
+		retention = "project.retention"
+		overview  = "widget.contract.overview"
+	)
+	stagedGitInFixture(t, root, "init", "-q")
+	stagedGitInFixture(t, root, "add", "-A")
+
+	// 1. As committed: plain check is clean, and so is the index.
+	if findings, code := runValidateFindings(t, root, cfgPath); code != 0 || len(findings) != 0 {
+		t.Fatalf("control precondition: check --validate on the fixture copy: exit %d, findings %+v", code, findings)
+	}
+	env, code := runStaged(t, root, cfgPath, "as committed")
+	if code != 0 || !env.OK || len(env.Data.LintFindings) != 0 || len(env.Data.LedgerFindings) != 0 {
+		t.Fatalf("check --staged must be as clean as check --validate on the fixture as committed: exit %d, %+v", code, env)
+	}
+
+	// 2. Every claim locked, the approvals staged with them: still clean.
+	// The module claim locks first, against a draft project claim (locally
+	// admissible under policy v1); then both project claims.
+	for _, id := range []string{overview, scope, retention} {
+		mustLock(t, root, cfgPath, id)
+	}
+	stagedGitInFixture(t, root, "add", "-A")
+	if findings, code := runValidateFindings(t, root, cfgPath); code != 0 || len(findings) != 0 {
+		t.Fatalf("control precondition: check --validate with every claim locked: exit %d, findings %+v", code, findings)
+	}
+	env, code = runStaged(t, root, cfgPath, "with every claim locked")
+	if code != 0 || !env.OK || len(env.Data.LintFindings) != 0 || len(env.Data.LedgerFindings) != 0 {
+		t.Fatalf("check --staged must accept the locked project claims and the module claim resting on one: exit %d, %+v", code, env)
+	}
+
+	// 3. And the second store is judged: a locked project claim rewritten in
+	// the file and staged — no unlock, no new record — is refused by name.
+	scopePath := filepath.Join(root, "project-claims", "scope.yaml")
+	raw, err := os.ReadFile(scopePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := strings.Replace(string(raw), "under one roof", "under one shared roof", 1)
+	if tampered == string(raw) {
+		t.Fatalf("the fixture body no longer carries the phrase this test rewrites:\n%s", raw)
+	}
+	if err := os.WriteFile(scopePath, []byte(tampered), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stagedGitInFixture(t, root, "add", "-A")
+	env, code = runStaged(t, root, cfgPath, "with a hand-edited locked project claim staged")
+	if code == 0 || env.OK || env.Error == nil || env.Error.Code != "integrity_failed" {
+		t.Fatalf("a hand-edited locked project claim in the index must be refused as integrity_failed: exit %d, %+v", code, env)
+	}
+	refused := false
+	for _, f := range env.Data.LedgerFindings {
+		if f.Rule == "lock-content-drift" && f.ClaimID == scope {
+			refused = true
+		}
+	}
+	if !refused {
+		t.Fatalf("the refusal must carry lock-content-drift on %s, got %+v", scope, env.Data.LedgerFindings)
 	}
 }
