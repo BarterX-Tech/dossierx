@@ -361,8 +361,11 @@
   "skills": [
     "dossierx",
     "dossierx-claims",
+    "dossierx-modules",
+    "dossierx-constitution",
     "dossierx-comments",
-    "dossierx-code-links"
+    "dossierx-code-links",
+    "dossierx-upgrading"
   ],
   "http_routes": [
     "DELETE /api/claims/{id}/comments/{tid}",
@@ -515,7 +518,7 @@
   ],
   "render_fingerprint": "sha256:eed03ce91eb09de1f3a37676cf8590af32d4f4488d90c1c57a4faa4a023048a6",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:60720d3fdc085ba00ebc8345708e426ad693d29e3e6f7e09f102700ef8cf413b",
+    "cmd/dossierx": "sha256:d586e03f59291f69ae144e70ba1e1498c0a52e7baf47ad032a6bc5cff605bd4b",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -548,7 +551,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
-    "skills": "sha256:6fa7d482f3934a2f5494cd5ca90b6dbb7330906efb81a3246f9181f16dfd2fb8"
+    "skills": "sha256:4003630d0d7739a691478b355b30fad2ebfec883da8300a29f851f5d03785cd8"
   },
   "envelope": {
     "keys": [
@@ -875,6 +878,7 @@
         "hand_edited",
         "missing",
         "no_lock",
+        "retired",
         "stale",
         "trees",
         "unverified"

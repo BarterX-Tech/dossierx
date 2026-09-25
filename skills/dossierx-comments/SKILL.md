@@ -38,7 +38,7 @@ so a claim you unlocked at step 4 waits in draft, its approval released, until s
 after their Resolve and carrying their words, is the `lock` half of unlock → fix → lock.
 
 Step 5 is theirs and only theirs. There is no CLI verb for it — `comment resolve`, `reopen`,
-`edit` and `delete` are viewer-only in v0.3.0. If your plan contains "then I resolve the thread",
+`edit` and `delete` are viewer-only. If your plan contains "then I resolve the thread",
 the plan is wrong.
 
 ## The verbs

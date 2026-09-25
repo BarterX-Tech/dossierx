@@ -18,6 +18,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -30,14 +31,17 @@ import (
 	dxskills "github.com/BarterX-Tech/dossierx/skills"
 )
 
-// The five bundles and the order the router presents them in. Spelled out
+// The seven bundles and the order the router presents them in. Spelled out
 // rather than derived so that adding or removing a skill is a deliberate edit
 // to a test, the same way cmd/dossierx/main_test.go pins the leaf surface.
 var wantSkillNames = []string{
 	"dossierx",
 	"dossierx-claims",
+	"dossierx-modules",
+	"dossierx-constitution",
 	"dossierx-comments",
 	"dossierx-code-links",
+	"dossierx-upgrading",
 }
 
 // ---------------------------------------------------------------------
@@ -63,10 +67,10 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		}
 	}
 
-	// Five bundles, their lock file, plus the generic guide, which is always
+	// Every bundle, their lock file, plus the generic guide, which is always
 	// written — with no project root to put it in, it lands beside the bundles.
-	if !strings.Contains(stdout, "wrote 6 file(s)") {
-		t.Fatalf("expected stdout to report 6 file(s) written, got:\n%s", stdout)
+	if want := fmt.Sprintf("wrote %d file(s)", len(wantSkillNames)+2); !strings.Contains(stdout, want) {
+		t.Fatalf("expected stdout to report %q, got:\n%s", want, stdout)
 	}
 	if _, statErr := os.Stat(filepath.Join(targetDir, skillsLockFile)); statErr != nil {
 		t.Fatalf("the lock file must be written beside the bundles: %v", statErr)
@@ -567,6 +571,16 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // THE #82 NEVER-BEND FIX does not raise the budget. Router rule 2 is five lines
 // so it can name `claim flag` and keep the reaudit no-change stub. CENSUS:
 // router 295 of 296, claims 261 of 296. The router is one line from its ceiling.
+//
+// THE NIT-34 SPLIT LOWERED NOTHING AND RAISED NOTHING. Instead of a raise, the
+// content two guides carried for other jobs moved into three bundles of their
+// own: the module harness and every cap (dossierx-modules), the roof and project
+// claims (dossierx-constitution), and the upgrade folds (dossierx-upgrading). The
+// router and claims each keep a pointer. Claims then spent part of what it freed
+// on a claim-writing guide, and code-links gained "implement, then tag".
+// CENSUS: router 255 of 296, claims 260, comments 211, code-links 182, modules
+// 108, constitution 104, upgrading 110. The ceiling stays a MAXIMUM per file,
+// not a total: seven short bundles an agent loads one at a time are the point.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 296
 
@@ -772,7 +786,7 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if checkErr == nil {
 		t.Fatalf("text-mode --check must also refuse")
 	}
-	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 4 file(s) differ"} {
+	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 7 file(s) differ"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in text output, got:\n%s", want, out)
 		}
@@ -860,5 +874,123 @@ func TestSkills_NeverTeachAWholeCorpusRead(t *testing.T) {
 	wantLine := strings.Count(string(original), "\n") + 1
 	if len(data.Forbidden) != 1 || data.Forbidden[0].File != routerPath || data.Forbidden[0].Line != wantLine || data.Forbidden[0].Wording != "pack" {
 		t.Fatalf("forbidden = %+v, want pack at %s:%d", data.Forbidden, routerPath, wantLine)
+	}
+}
+
+// NIT-33: a bundle an older release exported and this one no longer ships
+// (dossierx-build-order after v0.7.21) must not outlive the upgrade. --check
+// reports every such DossierX-named directory as retired and refuses; export
+// removes the ones the tree's previous lock proves it wrote, and never touches
+// a directory that is not a DossierX bundle name, whatever the lock says.
+func TestCLI_SkillsExport_PrunesRetiredBundlesAndCheckReportsThem(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "skills")
+	if _, _, err := execCLI(t, "skills", "export", targetDir); err != nil {
+		t.Fatalf("skills export: %v", err)
+	}
+	writeSkill := func(name string) {
+		t.Helper()
+		dir := filepath.Join(targetDir, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+name+"\n---\nold\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An older export's bundle, listed in the lock as that export wrote it.
+	writeSkill("dossierx-build-order")
+	// A project's own skill, also (wrongly) listed in the lock: never ours to remove.
+	writeSkill("house-rules")
+	// A DossierX-looking directory the lock never listed: reported, not removed.
+	writeSkill("dossierx-handmade")
+
+	lockPath := filepath.Join(targetDir, skillsLockFile)
+	rawLock, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lock skillsLock
+	if err := json.Unmarshal(rawLock, &lock); err != nil {
+		t.Fatal(err)
+	}
+	lock.Files["dossierx-build-order/SKILL.md"] = sha256Hex([]byte("old"))
+	lock.Files["house-rules/SKILL.md"] = sha256Hex([]byte("old"))
+	encoded, err := json.Marshal(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockPath, encoded, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	checkRetired := func() skillsCheckData {
+		t.Helper()
+		env, _, checkErr := execCLIJSON(t, "skills", "export", targetDir, "--check")
+		var data skillsCheckData
+		envData(t, env, &data)
+		if len(data.Retired) == 0 {
+			if checkErr != nil || !env.OK {
+				t.Fatalf("no retired bundle, expected a clean check, got err=%v env=%+v", checkErr, env)
+			}
+			return data
+		}
+		if checkErr == nil || env.Error == nil || env.Error.Code != cliout.CodeSkillsDrift {
+			t.Fatalf("a retired bundle must refuse skills_drift, got err=%v env=%+v", checkErr, env)
+		}
+		return data
+	}
+	retiredNames := func(paths []string) []string {
+		out := make([]string, 0, len(paths))
+		for _, p := range paths {
+			out = append(out, filepath.Base(p))
+		}
+		return out
+	}
+
+	data := checkRetired()
+	if got := strings.Join(retiredNames(data.Retired), ","); got != "dossierx-build-order,dossierx-handmade" {
+		t.Fatalf("retired = %v, want dossierx-build-order and dossierx-handmade only (house-rules is not a DossierX bundle)", data.Retired)
+	}
+	out, _, textErr := execCLI(t, "skills", "export", targetDir, "--check")
+	if textErr == nil || !strings.Contains(out, "retired") || !strings.Contains(out, "dossierx-build-order") {
+		t.Fatalf("text-mode --check must refuse and name the retired bundle, got err=%v:\n%s", textErr, out)
+	}
+
+	env, _, err := execCLIJSON(t, "skills", "export", targetDir)
+	if err != nil || !env.OK {
+		t.Fatalf("skills export: err=%v env=%+v", err, env)
+	}
+	var exported skillsExportData
+	envData(t, env, &exported)
+	if len(exported.Forms) == 0 || strings.Join(retiredNames(exported.Forms[0].Pruned), ",") != "dossierx-build-order" {
+		t.Fatalf("export must report exactly dossierx-build-order as pruned, got forms=%+v", exported.Forms)
+	}
+	if _, statErr := os.Stat(filepath.Join(targetDir, "dossierx-build-order")); !os.IsNotExist(statErr) {
+		t.Fatalf("dossierx-build-order must be removed, stat err=%v", statErr)
+	}
+	for _, kept := range []string{"house-rules", "dossierx-handmade"} {
+		if _, statErr := os.Stat(filepath.Join(targetDir, kept, "SKILL.md")); statErr != nil {
+			t.Fatalf("%s must be left alone: %v", kept, statErr)
+		}
+	}
+	// The new lock lists only what this binary ships.
+	rawLock, err = os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(rawLock), "dossierx-build-order") || strings.Contains(string(rawLock), "house-rules") {
+		t.Fatalf("the rewritten lock must list only shipped bundles:\n%s", rawLock)
+	}
+
+	// The unlisted DossierX-named directory still refuses until a human removes it.
+	data = checkRetired()
+	if got := strings.Join(retiredNames(data.Retired), ","); got != "dossierx-handmade" {
+		t.Fatalf("after export, retired = %v, want dossierx-handmade only", data.Retired)
+	}
+	if err := os.RemoveAll(filepath.Join(targetDir, "dossierx-handmade")); err != nil {
+		t.Fatal(err)
+	}
+	if data = checkRetired(); len(data.Retired) != 0 {
+		t.Fatalf("retired = %v, want none", data.Retired)
 	}
 }
