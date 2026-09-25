@@ -44,8 +44,8 @@ linters-settings:
 
       # internal/lint must never import internal/lock: the correct edge
       # runs the other way (lock imports lint, gating a lock operation on a
-      # clean lint run). It also must not import render, reaudit, or
-      # buildorder, none of which lint has any business depending on.
+      # clean lint run). It also must not import render or reaudit, neither
+      # of which lint has any business depending on.
       #
       # ONE FILE IS EXEMPTED BY NAME, and by name is the whole point: a pattern
       # like "!**_test.go" would exempt every test in the package, and a real

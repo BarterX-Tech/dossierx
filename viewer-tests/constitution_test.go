@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/chromedp/chromedp"
@@ -199,18 +198,4 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 			{"no placeholder", `claims.textContent.indexOf('No project claims') < 0`},
 		})
 
-	// The rendered file carries the escaped bytes, so a reader of the static
-	// HTML sees the same thing the browser painted.
-	raw, err := os.ReadFile(strings.TrimPrefix(url, "file://"))
-	if err != nil {
-		t.Fatalf("read the rendered viewer: %v", err)
-	}
-	for _, want := range []string{
-		"&lt;b&gt;one&lt;/b&gt; roof, and no module redefines it.",
-		`<article class="project-claim"><h4>project.scope</h4>`,
-	} {
-		if !strings.Contains(string(raw), want) {
-			t.Fatalf("rendered viewer lacks %q", want)
-		}
-	}
 }

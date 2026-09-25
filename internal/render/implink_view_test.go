@@ -1,7 +1,6 @@
 // implink_view_test.go covers the optional implementation-link viewer
-// extension's graceful-degradation contract, mirroring
-// build_order_render_test.go's approach for the sibling Build Order tab:
-// present (an extra "implemented in" edges-footer line) only when a module
+// extension's graceful-degradation contract: present (an extra
+// "implemented in" edges-footer line) only when a module
 // has an implementation-link artifact covering the rendered claim,
 // entirely absent (byte-for-byte unchanged output) when it does not.
 package render
@@ -21,8 +20,7 @@ import (
 // implinkTestConfig writes a minimal, valid project.config.yaml under a
 // fresh temp dir and loads it via config.LoadConfig — the only way to get a
 // *config.Config whose unexported dir field (and therefore Dir(), which
-// implink.ArtifactPath/Set resolve against) points somewhere real, mirroring
-// build_order_render_test.go's buildOrderTestConfig.
+// implink.ArtifactPath/Set resolve against) points somewhere real.
 func implinkTestConfig(t *testing.T, module string) *config.Config {
 	t.Helper()
 	dir := t.TempDir()

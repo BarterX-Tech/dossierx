@@ -580,17 +580,6 @@ func scanForNetworkRefs(label, content string) []string {
 	return offenders
 }
 
-const retiredMermaidPath = "internal/render/viewer/template/vendor/mermaid.min.js"
-
-// TestMermaidBundleIsGone pins the NIT-15 delete: the viewer no longer
-// ships a Mermaid runtime.
-func TestMermaidBundleIsGone(t *testing.T) {
-	root := moduleRoot(t)
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(retiredMermaidPath))); err == nil {
-		t.Fatalf("%s must not ship after build-order was deleted", retiredMermaidPath)
-	}
-}
-
 func TestNoNetworkReferencesAnywhereInEngine(t *testing.T) {
 	root := moduleRoot(t)
 

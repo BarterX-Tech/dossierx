@@ -2,8 +2,8 @@
 // FORMAT.md:
 //
 //	draft -> locked            via Lock (human-initiated; refused on any
-//	                           error-severity lint finding, on hub gating, OR
-//	                           on an unresolved comment thread)
+//	                           error-severity lint finding OR on an unresolved
+//	                           comment thread)
 //	locked -> locked+pending   on ANY of three independent triggers — a
 //	                           dependency's content hash drifts (DetectStale),
 //	                           a "dossierx claim flag" records a spec mismatch, or a
@@ -156,8 +156,7 @@ type Store struct {
 	LockedAt map[string]string `json:"locked_at"`
 
 	// Ledger is the lock ledger (schema version 2 and later): one
-	// LedgerRecord per locked artifact, keyed by claim id — or by
-	// BuildOrderLedgerKey(module) for a locked build order. See ledger.go's
+	// LedgerRecord per locked claim, keyed by claim id. See ledger.go's
 	// file doc for what it is for, and audit.go for the rules read off it.
 	// It is `omitempty` so a project with nothing locked keeps a store file
 	// shaped exactly as the pre-ledger one.
@@ -1012,11 +1011,9 @@ var ErrCommentDigestUnrecorded = errors.New("lock: this claim's comment threads 
 // hash as the new baseline for every claim it depends on, and returns the
 // updated claim (Status=locked, ReviewPending=false).
 //
-// Beyond the lint gate, Lock has two further, candidate-scoped refusal paths:
-// hub gating (checkHubGating — a dependency in the doctrine facet must itself
-// be locked first) and the comment gate (a claim carrying an unresolved
-// comment thread cannot lock; the refusal names the open thread ids). The
-// comment gate is the real enforcement — the comments-unresolved lint is only
+// Beyond the lint gate, Lock has one further, candidate-scoped refusal path:
+// the comment gate (a claim carrying an unresolved comment thread cannot lock;
+// the refusal names the open thread ids). The comment gate is the real enforcement — the comments-unresolved lint is only
 // a non-blocking warning — and it reads only THIS claim's own threads, so an
 // unrelated claim's open thread never blocks locking a thread-free one.
 //
@@ -1037,7 +1034,7 @@ var ErrCommentDigestUnrecorded = errors.New("lock: this claim's comment threads 
 // a hand-flipped status, and the gate would refuse the honest lock. Putting it
 // in the signature makes forgetting it a compile error.
 func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *Store, ap Approval) (model.Claim, error) {
-	// FIRST gate, ahead of lint, hub gating and the comment gate: Lock is the
+	// FIRST gate, ahead of lint and the comment gate: Lock is the
 	// draft -> locked transition, and it is not a re-signing tool.
 	//
 	// Without this the ledger has a laundering path made of one ordinary
@@ -1145,7 +1142,7 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	// paragraphs above for why a first record in a pre-ledger store is not a
 	// tidiness question.
 	if store.preLedgerUnadoptedOnDisk() {
-		return claim, preLedgerRefusal(countLocked(claims), 0)
+		return claim, preLedgerRefusal(countLocked(claims))
 	}
 
 	// THE DELETED RECORD. The two gates above refuse a claim whose record

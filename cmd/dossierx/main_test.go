@@ -322,18 +322,9 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // twenty-four leaves — build-order's own noun and leaves came and went in
 // between (NIT-15).
 //
-// THE FIFTH MOVE IS "build-order show", and it is a LEAF rather than a noun:
-// twenty-four-under-nine became twenty-five-under-nine, with the noun count
-// unchanged. The argument for it is that the build-order noun could compute an
-// order, report whether one exists, and approve one — and had no way to HAND
-// ONE OVER. `propose` prints the sequence it just wrote and never again;
-// `status` answers proposed/locked/stale and carries no claims at all; the
-// order itself was readable only by opening build/build-order/<m>.json and
-// re-deriving the phase levels by hand, which is the derivation this engine
-// exists to own. `show` is read-only in the strongest sense the noun has: it
-// takes no --reason, writes no file, takes no sentinel and touches neither the
-// artifact nor the ledger. Same argument as track and theme: a way to look, and
-// no new way to change what the project treats as approved.
+// THE FIFTH MOVE WAS a `build-order show` leaf. v0.7.21 killed the whole
+// build-order noun with no retired stub, so `build-order` is now an unknown
+// command like any other.
 //
 // THE SIXTH MOVE WAS a lock-policy adoption leaf. Agents treated it as an
 // everyday recovery, so it was deleted. Existing stores stay on their

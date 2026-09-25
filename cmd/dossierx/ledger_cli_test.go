@@ -217,28 +217,6 @@ func TestCLI_ReauditReSignsTheClaim(t *testing.T) {
 	}
 }
 
-// TestCLI_BuildOrderLockIsOnTheRecord: a locked build order is the second class
-// of locked artifact in this engine, and leaving it outside the ledger would
-// make "nothing already locked changes without your approval on the record" an
-// overclaim about half the locked things in a project.
-func TestCLI_BuildOrderLockIsOnTheRecord(t *testing.T) {
-	cfgPath, _, storeFile := ledgerProject(t)
-	const id = "widget.contract.main"
-
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
-		t.Fatalf("claim lock: %v", err)
-	}
-	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err == nil {
-		t.Fatal("retired build-order propose must fail")
-	}
-	if _, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]; ok {
-		t.Fatalf("retired build-order must not write a ledger record")
-	}
-	if findings := auditProject(t, cfgPath); len(findings) != 0 {
-		t.Fatalf("a leftover-free lock must leave the gate clean, got %+v", findings)
-	}
-}
-
 // TestCLI_DeletingTheLedgerIsNotSilentAdoption is the bypass the grandfathering
 // trigger is designed against. If an absent ledger meant "adopt everything",
 // the attack on this whole feature would be one `rm`.

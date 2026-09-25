@@ -831,7 +831,7 @@ func testIndependentCycleOracle(t *testing.T, lifecycle bool) {
 			claims[i] = lockedClaim(fmt.Sprintf("n%d", i))
 			for j := 0; j < n; j++ {
 				if rng.Intn(4) == 0 {
-					claims[i].RestsOn.AppendIDs(fmt.Sprintf("n%d", j))
+					claims[i].RestsOn.IDs = append(claims[i].RestsOn.IDs, fmt.Sprintf("n%d", j))
 					reach[i][j] = true
 				}
 			}

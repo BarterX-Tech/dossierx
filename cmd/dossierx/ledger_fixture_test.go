@@ -6,8 +6,8 @@
 // that way because reaching the state through the CLI would have turned each of
 // them into a lifecycle test. The gate now — correctly, and this is the point of
 // the release — reads a locked claim with no approval record as tampering: a
-// status flipped by hand walks straight past the lint gate, hub gating and the
-// unresolved-comment gate as though all three had passed.
+// status flipped by hand walks straight past the lint gate and the
+// unresolved-comment gate as though both had passed.
 //
 // armLedgerFixture says out loud what those fixtures always meant: these claims
 // are legitimately locked. It is deliberately explicit at each call site rather

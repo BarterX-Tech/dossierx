@@ -11,11 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/constitution/constitutiontest"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -59,41 +58,8 @@ func armLedger(t *testing.T, cfg *config.Config, claims []model.Claim) {
 // armLedger gives hand-written "status: locked" claims.
 func armConstitution(t *testing.T, cfg *config.Config) {
 	t.Helper()
-	path := cfg.ConstitutionPath()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.WriteFile(path, []byte("status: locked\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture has one lockable constitution above every module.\n"), 0o644); err != nil {
-			t.Fatalf("arm constitution: write: %v", err)
-		}
-	}
-	f, err := constitution.Load(path)
-	if err != nil {
-		t.Fatalf("arm constitution: load: %v", err)
-	}
-	if f.Status != model.StatusLocked {
-		f.Status = model.StatusLocked
-		raw, err := constitution.Marshal(f)
-		if err != nil {
-			t.Fatalf("arm constitution: marshal: %v", err)
-		}
-		if err := os.WriteFile(path, raw, 0o644); err != nil {
-			t.Fatalf("arm constitution: rewrite: %v", err)
-		}
-	}
-	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json"))
-	if err != nil {
-		t.Fatalf("arm constitution: load store: %v", err)
-	}
-	lock.LockConstitution(store, f, "fixture roof", time.Now())
-	// The crossing the real command performs on a fresh project: the comment
-	// threads already on disk are taken into digest coverage now, silently,
-	// so a fixture that hand-writes a thread before arming is not "unrecorded".
-	if !store.LedgerCovered() && !store.PreLedger() {
-		if claims, loadErr := loader.LoadAll(cfg); loadErr == nil {
-			lock.SweepCommentDigests(store, claims, false)
-		}
-	}
-	if err := store.Save(); err != nil {
-		t.Fatalf("arm constitution: save store: %v", err)
+	if err := constitutiontest.Arm(cfg); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -585,9 +551,8 @@ func downgradeLockStore(t *testing.T, cfg *config.Config, keepDigestStore bool) 
 // load-bearing as the finding assertion.
 func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
+		"claims/a.yaml": lockedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
 	downgradeLockStore(t, cfg, false)
 
 	res := check.Status(claims, cfg)
@@ -610,51 +575,6 @@ func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing
 	}
 }
 
-// THE STATE THE CLAIMS-ONLY EMITTER CANNOT SEE: a pre-ledger project holding a
-// LOCKED BUILD ORDER and ZERO locked claims.
-//
-// It is reachable, and it was silent. `claim unlock` never touches the
-// build-order artifact and internal/buildorder never clears Locked on unlock, so
-// lock a module, lock its order, then unlock every claim. In that state
-// lock.Audit's claims-only term is zero and buildOrderGate suppresses
-// build-order-ledger-missing under the pre-ledger exemption — while BOTH write
-// paths refuse with pre_ledger_unadopted. A refusal with no finding naming it,
-// and no recovery text reachable from `check`, is exactly what the project-scoped
-// rule exists to prevent.
-//
-// So: exactly ONE lock-ledger-pre-ledger (not one per module, and not two from
-// the two emitters), and still zero build-order-ledger-missing.
-func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
-	})
-	lockBuildOrder(t, cfg, claims, "widget")
-	downgradeLockStore(t, cfg, false)
-
-	// Unlock every claim, leaving the LOCKED artifact in place — the reachable
-	// state described above.
-	for i := range claims {
-		claims[i].Status = model.StatusDraft
-	}
-
-	got := rulesOf(check.Status(claims, cfg).LedgerFindings)
-	preLedger, missing := 0, 0
-	for _, r := range got {
-		switch r {
-		case lock.RuleLockLedgerPreLedger:
-			preLedger++
-		case "build-order-ledger-missing":
-			missing++
-		}
-	}
-	if preLedger != 0 {
-		t.Fatalf("a leftover locked build order is not a pre-ledger obligation, got %d in %v", preLedger, got)
-	}
-	if missing != 0 {
-		t.Fatalf("the pre-ledger exemption still covers the leftover artifact itself; got %d %s in %v", missing, "build-order-ledger-missing", got)
-	}
-}
-
 // The same bytes, with the sibling file that proves this project has already
 // been through a ledger-aware build, are a downgrade — and the read-only path
 // must not extend the pre-ledger exemption to them. Otherwise the fix for the
@@ -662,9 +582,8 @@ func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *test
 // edit one number, and check --staged reports nothing at all.
 func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/a.yaml": orderedClaim("widget.contract.a"),
+		"claims/a.yaml": lockedClaim("widget.contract.a"),
 	})
-	lockBuildOrder(t, cfg, claims, "widget")
 	downgradeLockStore(t, cfg, true)
 
 	res := check.Status(claims, cfg)

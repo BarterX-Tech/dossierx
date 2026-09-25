@@ -4,14 +4,11 @@
 // commented recovery. Both documents license the same branch at the re-lock
 // step: "re-lock only what you still stand behind".
 //
-// Build-order is gone (NIT-15). A leftover artifact is not part of the
-// crossing and does not keep the pre-ledger finding alive.
-//
-// TWO SCENARIOS, ON PURPOSE. The partial-re-lock scenario enacts the licensed
-// branch to its documented end state — gate-green with the module partially
-// locked. The all-re-lock sibling asserts the same fence GREEN end to end, so
-// the cheapest "fix" — deleting the fence, or deleting the license to re-lock
-// partially — cannot turn this file green.
+// ONE SCENARIO, BOTH END STATES. The crossing unlocks both claims, re-locks
+// one and runs the gate: the licensed partial re-lock must already be
+// gate-green. It then re-locks the other and runs the gate again, so the full
+// re-lock is green too. The cheapest "fix" — deleting the fence, or deleting
+// the license to re-lock partially — cannot turn this file green.
 package procedures
 
 import "testing"
@@ -48,65 +45,38 @@ func crossingAnchors(t *testing.T) {
 	requireDocAnchor(t, "scripts/ci/dossierx-check.yml", "the first lock in a project")
 }
 
-func TestPreLedgerCrossing_PartialRelock(t *testing.T) {
+func TestPreLedgerCrossing(t *testing.T) {
 	f := newFixture(t)
 	crossingAnchors(t)
 	buildPreLedgerProject(f, t)
 
-	f.Plan("pre-ledger crossing, partial re-lock (README fence + CI template recipe)",
+	f.Plan("pre-ledger crossing, partial then full re-lock (README fence + CI template recipe)",
 		"dossierx claim unlock <idA> --reason <words>",
 		"dossierx claim unlock <idB> --reason <words>",
 		"dossierx claim lock <idA> --reason <words>",
 		"dossierx check",
-	)
-
-	for _, bind := range []map[string]string{
-		{"idA": defaultClaimID, "words": "crossing: releasing the pre-ledger approval"},
-		{"idB": "widget.contract.alpha", "words": "crossing: releasing the pre-ledger approval"},
-	} {
-		key := "idA"
-		if _, ok := bind["idB"]; ok {
-			key = "idB"
-		}
-		step2 := f.Run("dossierx claim unlock <"+key+"> --reason <words>", bind)
-		f.DocumentedSuccess(step2, "crossing: unlock is documented gateless")
-	}
-
-	step3 := f.RunReviewedLock("dossierx claim lock <idA> --reason <words>",
-		map[string]string{"idA": defaultClaimID, "words": "still standing behind this one"})
-	f.DocumentedSuccess(step3, "crossing: the first re-lock, which stamps the store onto the ledger")
-
-	check := f.Run("dossierx check", nil)
-	f.DocumentedSuccess(check, "the fence: a partially re-locked module finishes the crossing gate-green")
-}
-
-func TestPreLedgerCrossing_FullRelockStaysGreen(t *testing.T) {
-	f := newFixture(t)
-	crossingAnchors(t)
-	buildPreLedgerProject(f, t)
-
-	f.Plan("pre-ledger crossing, full re-lock (README fence + CI template recipe)",
-		"dossierx claim unlock <idA> --reason <words>",
-		"dossierx claim unlock <idB> --reason <words>",
-		"dossierx claim lock <idA> --reason <words>",
 		"dossierx claim lock <idB> --reason <words>",
 		"dossierx check",
 	)
 
 	u1 := f.Run("dossierx claim unlock <idA> --reason <words>",
 		map[string]string{"idA": defaultClaimID, "words": "crossing: releasing the pre-ledger approval"})
-	f.DocumentedSuccess(u1, "crossing unlock")
+	f.DocumentedSuccess(u1, "crossing: unlock is documented gateless")
 	u2 := f.Run("dossierx claim unlock <idB> --reason <words>",
 		map[string]string{"idB": "widget.contract.alpha", "words": "crossing: releasing the pre-ledger approval"})
-	f.DocumentedSuccess(u2, "crossing unlock")
+	f.DocumentedSuccess(u2, "crossing: unlock is documented gateless")
 
 	l1 := f.RunReviewedLock("dossierx claim lock <idA> --reason <words>",
 		map[string]string{"idA": defaultClaimID, "words": "still standing behind this one"})
-	f.DocumentedSuccess(l1, "crossing: the first re-lock crosses the store")
+	f.DocumentedSuccess(l1, "crossing: the first re-lock, which stamps the store onto the ledger")
+
+	partial := f.Run("dossierx check", nil)
+	f.DocumentedSuccess(partial, "the fence: a partially re-locked module finishes the crossing gate-green")
+
 	l2 := f.RunReviewedLock("dossierx claim lock <idB> --reason <words>",
 		map[string]string{"idB": "widget.contract.alpha", "words": "still standing behind this one too"})
 	f.DocumentedSuccess(l2, "crossing: the second re-lock")
 
-	check := f.Run("dossierx check", nil)
-	f.DocumentedSuccess(check, "a completed crossing leaves a tree the gate accepts")
+	full := f.Run("dossierx check", nil)
+	f.DocumentedSuccess(full, "a completed crossing leaves a tree the gate accepts")
 }

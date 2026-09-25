@@ -210,14 +210,6 @@ func entryForIntegration(c model.Claim, internals map[string]bool) Entry {
 	return e
 }
 
-// IsolationClaims is this catalog's isolation surface for module.
-func (cat *Catalog) IsolationClaims(module string) []model.Claim {
-	if cat == nil {
-		return nil
-	}
-	return visibility.IsolationClaims(cat.Claims, module)
-}
-
 // entryFor projects one claim into its Entry form.
 func entryFor(c model.Claim) Entry {
 	e := Entry{

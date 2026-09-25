@@ -39,7 +39,7 @@ func projectClaim(i int, summary string) model.Claim {
 func TestShowIsolationEmitsAuthoredSummariesVerbatim(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{Modules: []string{"widget"}, ClaimsDir: dir}
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	// Past the old 80-rune clip, and a body whose first line says something
@@ -70,7 +70,7 @@ func TestShowIsolationCarriesConstitutionAndProjectIndex(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "claims")
 	cfg := &config.Config{Modules: []string{"widget"}, ClaimsDir: dir, Constitution: filepath.Join(root, "constitution.yaml")}
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(cfg.Constitution, []byte("status: draft\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: Every module reads this sentence.\n"), 0o644); err != nil {
@@ -109,7 +109,7 @@ func TestShowIsolationCarriesConstitutionAndProjectIndex(t *testing.T) {
 func TestIsolationBudgetMeasuresTheEmittedView(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{Modules: []string{"widget"}, ClaimsDir: dir}
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	var claims []model.Claim
@@ -139,7 +139,7 @@ func TestIsolationBudgetMeasuresTheEmittedView(t *testing.T) {
 func TestShowIsolationRefusesModuleOverflowNamingTheModule(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{Modules: []string{"widget"}, ClaimsDir: dir}
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	var claims []model.Claim
@@ -168,7 +168,7 @@ func TestShowIsolationRefusesModuleOverflowNamingTheModule(t *testing.T) {
 func TestShowIsolationNeverRefusesForSharedText(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{Modules: []string{"widget"}, ClaimsDir: dir}
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	claims := []model.Claim{moduleClaim("widget", 1, "Widget summary.")}
@@ -219,10 +219,10 @@ func TestCheckSharedBudgetBlamesTheCrossingClaim(t *testing.T) {
 func TestListAndIntegration(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.Config{Modules: []string{"widget", "lock"}, ClaimsDir: dir}
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteMinimal(dir, "lock"); err != nil {
+	if err := writeMinimal(dir, "lock"); err != nil {
 		t.Fatal(err)
 	}
 	write(t, dir, "widget/manifest.yaml", "summary: widget boundary.\nprovides:\n  - widget.contract.bound\ndepends_on:\n  - lock.contract.store\n")

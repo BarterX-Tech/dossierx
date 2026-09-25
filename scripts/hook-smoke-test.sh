@@ -148,8 +148,6 @@ build/*
 !build/.gitignore
 !build/ledger
 !build/ledger/*
-!build/build-order
-!build/build-order/*
 !build/code-links
 !build/code-links/*
 EOF
@@ -829,7 +827,7 @@ grep -q 'project.config.yaml' "$TMP/untracked-commit2.out" ||
 #
 # The reachable shape is claims_dir resolving OUTSIDE the repository altogether
 # AND the index holding nothing else the ledger gate could judge — no lock
-# ledger, no comment digest store, no build-order artifact. Then no commit could
+# ledger, no comment digest store. Then no commit could
 # carry the claims and the engine genuinely has nothing to look at. Silence is
 # the wrong answer there too: the hook is installed to guard these claims, and
 # "I could not look at them" is a refusal, not an approval.
@@ -914,7 +912,7 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 # hook and CI actually run was the permissive one.
 #
 # That mode disagreement is closed: the skip is now reached only when the index
-# holds no lock ledger, no comment digest store and no build-order artifact —
+# holds no lock ledger and no comment digest store —
 # i.e. only when there is genuinely nothing to judge, which is case 19 above.
 # With a ledger present the tree is judged over an empty registry, because no
 # commit can carry those claims, and the ledger's standing records are reported

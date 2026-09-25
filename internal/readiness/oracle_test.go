@@ -150,7 +150,7 @@ func oraclelocalSummary(c model.Claim, claims []model.Claim, store *lock.Store, 
 	for _, depID := range lock.BaselineDependencyIDs(c) {
 		dep, exists := byID[depID]
 		if !exists {
-			// A missing governed_by input is still reported by the
+			// A missing baseline input outside rests_on is reported by the
 			// relevant integrity/lint gate; it is deliberately not turned into
 			// an approval prerequisite here. rests_on is the required chain.
 			if contains(c.RestsOn.IDs, depID) {
@@ -162,8 +162,8 @@ func oraclelocalSummary(c model.Claim, claims []model.Claim, store *lock.Store, 
 			continue
 		}
 		if !contains(c.RestsOn.IDs, depID) {
-			// governed_by is a comparable drift input, but that
-			// edge creates an approval prerequisite.
+			// A baseline input outside rests_on is a comparable drift
+			// input, never an approval prerequisite.
 			if stored, known := oraclebaseline(store, c.ID, depID); known && stored != lock.ContentHash(dep) {
 				out.causes = append(out.causes, Cause{
 					Kind: CauseDirectDependencyChange, SourceKind: CauseDirectDependencyChange,

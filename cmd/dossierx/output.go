@@ -92,7 +92,7 @@ func markTextOnly(cmd *cobra.Command) *cobra.Command {
 }
 
 // commandPath is the envelope's "command" field: the command path with the
-// binary name stripped, e.g. "build-order lock". A skill correlates a response
+// binary name stripped, e.g. "claim lock". A skill correlates a response
 // with the call it made by this string, so it must name the SUBcommand, not the
 // binary every response would share.
 func commandPath(cmd *cobra.Command) string {
@@ -189,8 +189,8 @@ func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error
 }
 
 // requireSubcommand is the RunE every NOUN carries — the command groups (claim,
-// comment, build-order, track, skills) that exist only to hold leaves and do no work of
-// their own.
+// comment, constitution, manifest, track, skills) that exist only to hold leaves and do
+// no work of their own.
 //
 // Without it, cobra's default for a parent with no Run/RunE is to print its help
 // text and return nil. That breaks the machine contract in both halves at once:
@@ -497,16 +497,15 @@ func exitStatusFor(err error) int {
 	return 1
 }
 
-// requireReason enforces --reason on the four verbs that change what the
-// project treats as approved: claim lock, claim unlock, claim reaudit
-// --confirm, and build-order lock.
+// requireReason enforces --reason on the verbs that change what the project
+// treats as approved: claim lock, claim unlock, claim reaudit --confirm, claim
+// recover-approved-content and constitution lock.
 //
 // verb is the full command path, and it names the failure. The HINT is looked up
 // in reasonInvocations rather than composed from verb, because composing it was
-// wrong for all four callers: this used to print `run: dossierx <verb> --reason
-// "…"`, and `claim lock`, `claim unlock` and `claim reaudit` are each declared
-// cobra.ExactArgs(1) while `build-order lock` refuses without --module, so every
-// one of those four lines named an invocation that exits non-zero before it could
+// wrong: this used to print `run: dossierx <verb> --reason "…"`, and `claim
+// lock`, `claim unlock` and `claim reaudit` are each declared cobra.ExactArgs(1),
+// so each of those lines named an invocation that exits non-zero before it could
 // reach the missing --reason. internal/cliout's WithHint doc says a hint is "a
 // literal next command to run"; a shape the reader has to repair first is not one.
 //
@@ -525,11 +524,11 @@ func exitStatusFor(err error) int {
 // `dossierx claim lock --reason "…"` exits 1 on the missing positional id long
 // before --reason is looked at.
 //
-// The four keys are the four call sites, and there are no others:
-// cmd/dossierx/main.go's claim lock, claim unlock and claim reaudit, and
-// cmd/dossierx/build_order.go's build-order lock. Adding a fifth caller without
-// adding its entry here is handled below rather than left to print the old wrong
-// shape.
+// The keys are cmd/dossierx/main.go's claim lock, claim unlock and claim
+// reaudit, and cmd/dossierx/claim_recover.go's claim recover-approved-content.
+// constitution.go's constitution lock is the fifth caller and has no entry, so
+// it gets no hint; a caller without an entry is handled below rather than left
+// to print the old wrong shape.
 var reasonInvocations = map[string]string{
 	"claim lock":                     "dossierx claim lock <id>",
 	"claim recover-approved-content": "dossierx claim recover-approved-content",

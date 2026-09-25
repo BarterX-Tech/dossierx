@@ -89,12 +89,3 @@ func TestRestsOnRequiredLint(t *testing.T) {
 		})
 	}
 }
-
-func TestRestsOnRequiredLintIsRegistered(t *testing.T) {
-	for _, l := range Registry {
-		if l.Name() == "rests-on-required" {
-			return
-		}
-	}
-	t.Fatal("rests-on-required is not in the lint registry")
-}

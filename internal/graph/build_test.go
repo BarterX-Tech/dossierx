@@ -360,7 +360,7 @@ func TestBuildDeterministic(t *testing.T) {
 			claims[i].RestsOn = model.RestsOnIDs(claims[i-1].ID, claims[i-3].ID)
 		}
 		if i%5 == 0 && i+1 < len(claims) {
-			claims[i].RestsOn.AppendIDs(claims[i+1].ID)
+			claims[i].RestsOn.IDs = append(claims[i].RestsOn.IDs, claims[i+1].ID)
 		}
 		byID[claims[i].ID] = claims[i]
 	}

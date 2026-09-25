@@ -13,8 +13,8 @@
 //     through the unchanged intermediate;
 //   - the written catalog carries the project claim as an entry with no
 //     module and no facet, its rests_on edges intact, absent from by_module
-//     and by_facet, and the viewer lists it under the constitution's
-//     "Project claims" tab;
+//     and by_facet (the viewer's "Project claims" tab is owned by
+//     internal/render and viewer-tests);
 //   - locking the project claim clears the obstacle for every dependent;
 //   - unlocking, rewriting and re-locking the project claim flips review on
 //     its direct dependent (direct_dependency_change) and, through that
@@ -31,7 +31,9 @@
 // copied into a disposable git repository (never the checked-in testdata
 // directory), staged, and the gate must be as clean as plain check is, both
 // as committed and once every claim is locked through the real approval
-// path; a hand-edited locked project claim must then be refused. This used
+// path. A hand-edited locked project claim in the index is refused by
+// internal/check's TestStaged_TamperedLockedProjectClaimInTheIndexIsRefused,
+// which owns that contract. This used
 // to be an exemption: --staged enumerated claims from claims_dir's pathspec
 // only and never read project-claims/ out of the index, so a module claim
 // resting on project.<slug> reported `dangling` and every locked project
@@ -215,7 +217,7 @@ func TestLifecycle_ProjectClaimsThroughThePipeline(t *testing.T) {
 	}
 	mustLock(t, root, cfgPath, overview)
 
-	// 3. The written catalog and viewer. The project claim is an entry with
+	// 3. The written catalog. The project claim is an entry with
 	// no module and no facet, its edges intact, in no module or facet bucket;
 	// the module claim is locally approved but not ready; the draft project
 	// claim resting on it sees the same obstacle through the unchanged
@@ -276,19 +278,6 @@ func TestLifecycle_ProjectClaimsThroughThePipeline(t *testing.T) {
 	}
 	if sc := byID[scope]; sc.Readiness == nil || sc.Readiness.LocalApproved || !sc.Readiness.DependencyReady || sc.Readiness.Ready {
 		t.Fatalf("a draft project claim resting on nothing is dependency-ready and not locally approved: %+v", sc)
-	}
-	viewer, err := os.ReadFile(filepath.Join(root, "build", "viewer", "index.html"))
-	if err != nil {
-		t.Fatalf("read the written viewer: %v", err)
-	}
-	for _, want := range []string{
-		`<article class="project-claim"><h4>` + scope + `</h4>`,
-		`<article class="project-claim"><h4>` + retention + `</h4>`,
-		`<p class="constitution-meter">11 of 800 words · locked</p>`,
-	} {
-		if !strings.Contains(string(viewer), want) {
-			t.Fatalf("the viewer must list the project claims under the constitution; missing %q", want)
-		}
 	}
 
 	// 4. Locking the project claim clears the obstacle for both dependents,
@@ -409,8 +398,7 @@ func runStaged(t *testing.T, root, cfgPath, step string) (env stagedEnvelope, co
 // The staged gate on the project-claims fixture, in a disposable git
 // repository: clean where plain check is clean, both as committed (all
 // drafts under a locked roof) and once every claim — the two project claims
-// included — is locked through the real approval path; and armed, so a
-// hand-edited locked project claim in the index is refused.
+// included — is locked through the real approval path.
 func TestLifecycle_ProjectClaimsFixturePassesTheStagedGate(t *testing.T) {
 	root, cfgPath := projectClaimsFixture(t)
 	const (
@@ -443,34 +431,5 @@ func TestLifecycle_ProjectClaimsFixturePassesTheStagedGate(t *testing.T) {
 	env, code = runStaged(t, root, cfgPath, "with every claim locked")
 	if code != 0 || !env.OK || len(env.Data.LintFindings) != 0 || len(env.Data.LedgerFindings) != 0 {
 		t.Fatalf("check --staged must accept the locked project claims and the module claim resting on one: exit %d, %+v", code, env)
-	}
-
-	// 3. And the second store is judged: a locked project claim rewritten in
-	// the file and staged — no unlock, no new record — is refused by name.
-	scopePath := filepath.Join(root, "project-claims", "scope.yaml")
-	raw, err := os.ReadFile(scopePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tampered := strings.Replace(string(raw), "under one roof", "under one shared roof", 1)
-	if tampered == string(raw) {
-		t.Fatalf("the fixture body no longer carries the phrase this test rewrites:\n%s", raw)
-	}
-	if err := os.WriteFile(scopePath, []byte(tampered), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	stagedGitInFixture(t, root, "add", "-A")
-	env, code = runStaged(t, root, cfgPath, "with a hand-edited locked project claim staged")
-	if code == 0 || env.OK || env.Error == nil || env.Error.Code != "integrity_failed" {
-		t.Fatalf("a hand-edited locked project claim in the index must be refused as integrity_failed: exit %d, %+v", code, env)
-	}
-	refused := false
-	for _, f := range env.Data.LedgerFindings {
-		if f.Rule == "lock-content-drift" && f.ClaimID == scope {
-			refused = true
-		}
-	}
-	if !refused {
-		t.Fatalf("the refusal must carry lock-content-drift on %s, got %+v", scope, env.Data.LedgerFindings)
 	}
 }

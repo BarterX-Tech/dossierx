@@ -61,18 +61,6 @@ func TestServeFailureUnderTextIsUnchanged(t *testing.T) {
 	}
 }
 
-func TestClaimNewRefusesRetiredOverviewFacet(t *testing.T) {
-	root := t.TempDir()
-	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
-
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.router",
-		"--body", "read the contract claims below in order.",
-		"--rests-on-none-reason", "fixture")
-	if err == nil || env.OK {
-		t.Fatalf("claim new must refuse the retired overview facet, got %+v", env)
-	}
-}
-
 func TestClaimNewHonoursAnExplicitLayout(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")

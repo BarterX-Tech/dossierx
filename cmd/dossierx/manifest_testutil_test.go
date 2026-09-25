@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 )
 
 func seedManifestsFromConfigBody(t *testing.T, root, cfgBody string) {
 	t.Helper()
-	if err := manifest.SeedMinimalFromConfigYAML(root, []byte(cfgBody)); err != nil {
+	if err := manifesttest.SeedMinimalFromConfigYAML(root, []byte(cfgBody)); err != nil {
 		t.Fatalf("seed module manifests: %v", err)
 	}
 }

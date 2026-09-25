@@ -16,10 +16,8 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/constitution"
-	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/constitution/constitutiontest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 
@@ -136,7 +134,7 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 	if filepath.Base(path) == "project.config.yaml" {
-		if err := manifest.SeedMinimalFromConfigYAML(filepath.Dir(path), []byte(content)); err != nil {
+		if err := manifesttest.SeedMinimalFromConfigYAML(filepath.Dir(path), []byte(content)); err != nil {
 			t.Fatalf("seed module manifests: %v", err)
 		}
 	}
@@ -901,35 +899,7 @@ func countComments(t *testing.T, data []byte) int {
 // wrote its own) and the lock-store record `constitution lock` would leave.
 func armConstitution(t *testing.T, cfg *config.Config) {
 	t.Helper()
-	if cfg == nil {
-		// A fixture whose config is refused on purpose has no roof to lock.
-		return
-	}
-	path := cfg.ConstitutionPath()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		roof := "status: locked\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture has one lockable constitution above every module.\n"
-		if err := os.WriteFile(path, []byte(roof), 0o644); err != nil {
-			t.Fatalf("arm constitution: write: %v", err)
-		}
-	}
-	f, err := constitution.Load(path)
-	if err != nil {
-		t.Fatalf("arm constitution: load: %v", err)
-	}
-	store, err := lock.LoadStore(cfg.LockStorePath())
-	if err != nil {
-		t.Fatalf("arm constitution: load store: %v", err)
-	}
-	lock.LockConstitution(store, f, "fixture roof", time.Now())
-	// The crossing the real command performs on a fresh project: the comment
-	// threads already on disk are taken into digest coverage now, silently,
-	// so a fixture that hand-writes a thread before arming is not "unrecorded".
-	if !store.LedgerCovered() && !store.PreLedger() {
-		if claims, loadErr := loader.LoadAll(cfg); loadErr == nil {
-			lock.SweepCommentDigests(store, claims, false)
-		}
-	}
-	if err := store.Save(); err != nil {
-		t.Fatalf("arm constitution: save store: %v", err)
+	if err := constitutiontest.Arm(cfg); err != nil {
+		t.Fatal(err)
 	}
 }

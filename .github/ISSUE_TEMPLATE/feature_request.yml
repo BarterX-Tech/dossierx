@@ -47,7 +47,6 @@ body:
         - Viewer / render output
         - Config (project.config.yaml)
         - Lock / reaudit lifecycle
-        - Build order
         - Code links (implink)
         - Claude Code skills (skills/)
         - Other / not sure

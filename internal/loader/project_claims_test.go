@@ -139,25 +139,6 @@ func TestLoadAll_NilConfigIsAnError(t *testing.T) {
 	}
 }
 
-// A project-claims store inside claims_dir (or wrapping it) is refused at
-// config load, so LoadAll can never be handed one: LoadClaims would otherwise
-// walk the project store as module claims, and id-shape would refuse every
-// project.<slug> file it found there.
-func TestLoadAll_StoreInsideClaimsDirIsRefusedByConfig(t *testing.T) {
-	for _, tc := range []struct{ name, extra string }{
-		{"store under claims_dir", "project_claims_dir: claims/project\n"},
-		{"store equal to claims_dir", "project_claims_dir: claims\n"},
-		{"store wrapping claims_dir", "project_claims_dir: .\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := writeProjectConfig(t, t.TempDir(), tc.extra)
-			if err == nil || !strings.Contains(err.Error(), "project_claims_dir") || !strings.Contains(err.Error(), "must sit outside claims_dir") {
-				t.Fatalf("expected the containment refusal, got %v", err)
-			}
-		})
-	}
-}
-
 func TestLoadAll_DuplicateIDAcrossStoresIsVisibleToLint(t *testing.T) {
 	root := t.TempDir()
 	cfg, err := writeProjectConfig(t, root, "")

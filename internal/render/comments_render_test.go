@@ -28,11 +28,16 @@ func openComment(id, body string) model.Comment {
 	return model.Comment{ID: id, Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-24T10:00:00Z", Body: body}
 }
 
-func TestRender_CommentedClaimChipDoesNotFanOutAcrossFacets(t *testing.T) {
+// TestRender_CommentedClaimRendersOnceAcrossFacetTabs: a module's facets are
+// peer tabs, and a claim belongs to exactly one of them. Its body, its
+// canonical id, its comment chip, its baked thread and its panel each appear
+// once in the finished document, never injected into a sibling facet's tab.
+func TestRender_CommentedClaimRendersOnceAcrossFacetTabs(t *testing.T) {
 	note := commentedClaim(
 		"widget.contract.router", "widget", "contract", model.LayoutCard,
 		[]model.Comment{openComment("c-aaaaaa", "THREAD-BODY")},
 	)
+	note.Body = "CONTRACT-BODY"
 	claims := []model.Claim{
 		note,
 		commentedClaim("widget.internals.b", "widget", "internals", model.LayoutCard, nil),
@@ -61,6 +66,9 @@ func TestRender_CommentedClaimChipDoesNotFanOutAcrossFacets(t *testing.T) {
 	}
 	if got := strings.Count(out, ` id="widget.contract.router"`); got != 1 {
 		t.Fatalf("canonical id appears %d times, want 1:\n%s", got, out)
+	}
+	if got := strings.Count(out, "CONTRACT-BODY"); got != 1 {
+		t.Fatalf("claim body appears %d times, want 1 (no facet-tab injection):\n%s", got, out)
 	}
 }
 

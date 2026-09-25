@@ -71,8 +71,7 @@
         for (var mi = 0; mi < moduleSections.length; mi++) {
           var candidate = moduleSections[mi];
           if (candidate.classList.contains('constitution-section') ||
-              candidate.classList.contains('track-section') ||
-              candidate.classList.contains('build-order-section')) {
+              candidate.classList.contains('track-section')) {
             continue;
           }
           firstModuleID = candidate.id;
@@ -145,12 +144,10 @@
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
       // triple. Checked in order: a claim id -> its own card's facet + module; a
       // source row's anchor id -> the same, but scrolled to the row rather than
-      // to the card; a facet id -> its own module + itself (a Build order
-      // module's "#dossierx-build-order-<module>" group is a facet of the #dossierx-build-order
-      // section here, nothing special); a bare module id (which a TRACK section
-      // and the Build order section also are — see track_view.go) -> that
-      // module + its default facet; anything else -> the first module + its
-      // default facet.
+      // to the card; a facet id -> its own module + itself; a bare module id
+      // (which a TRACK section also is — see track_view.go) -> that module +
+      // its default facet; anything else -> the first module + its default
+      // facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -284,8 +281,7 @@
 
         // Materialize the active surface BEFORE status-strip filtering and
         // before resolving a deep-linked claim id: getElementById / query
-        // cannot see cards that still live only in a <template>. Build-order
-        // sections have no surface template and no-op.
+        // cannot see cards that still live only in a <template>.
         mountSurface(facetID);
 
         if (lastStatusData) {
@@ -1385,9 +1381,7 @@
 
       function activeFacetClaimIDs() {
         var ids = Object.create(null);
-        // The Build order section holds diagrams, not claim cards: with it
-        // active the id set is empty and only project-wide findings render.
-        var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var section = document.querySelector('.module-section:not([hidden])');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
         if (!group) { return ids; }
         var collect = function (root) {
@@ -1698,9 +1692,7 @@
 // interval before system-record.js has enhanced a fresh SSE fragment.
       function positionStatusStrip() {
         if (!stripEl) { return; }
-        // Never the Build order section: it falls through to the .content-area
-        // branch rather than taking the strip as the diagrams' first child.
-        var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var section = document.querySelector('.module-section:not([hidden])');
         if (!section) {
           var content = document.querySelector('.content-area');
           if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
@@ -3109,7 +3101,7 @@
           return all;
         }
         if (scope === 'module') {
-          var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+          var section = document.querySelector('.module-section:not([hidden])');
           var moduleID = section ? section.id : '';
           var ids = Object.create(null);
           Object.keys(claimToFacet).forEach(function (id) {
@@ -3295,7 +3287,7 @@
       // reading view already maintains — read-only, no new state.
       function issuesSyncHeader() {
         var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
-        var activeSection = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
+        var activeSection = document.querySelector('.module-section:not([hidden])');
         var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
         if (issuesBreadcrumbFacetEl) {
           issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';

@@ -33,9 +33,9 @@ func TestAuditIsSilentOnAnHonestProject(t *testing.T) {
 }
 
 // TestAuditCatchesAHandFlippedStatus is the first row of the audit's table:
-// editing "status: draft" to "status: locked" walked past the lint gate, hub
-// gating and the unresolved-comment gate as though all three had passed, and
-// nothing in the engine noticed.
+// editing "status: draft" to "status: locked" walked past the lint gate and the
+// unresolved-comment gate as though both had passed, and nothing in the engine
+// noticed.
 func TestAuditCatchesAHandFlippedStatus(t *testing.T) {
 	store := newStore(t)
 	handFlipped := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
@@ -304,19 +304,22 @@ func TestThePreLedgerSuppressionDoesNotSilenceTheOtherRules(t *testing.T) {
 	}
 }
 
-// TestAuditDoesNotReadABuildOrderRecordAsAClaim: the ledger holds two subject
-// kinds in one map. If the claim rules matched on the key alone, a build-order
-// record would have to be parsed out by shape — and a subject added later would
-// silently start being audited as a claim.
-func TestAuditDoesNotReadABuildOrderRecordAsAClaim(t *testing.T) {
+// TestAuditDoesNotReadANonClaimRecordAsAClaim: an old store may still hold the
+// "build-order" rows releases up to v0.7.20 wrote, in the same map as the claim
+// records. If the claim rules matched on the key alone, such a row would have
+// to be parsed out by shape — and any other subject would silently start being
+// audited as a claim.
+func TestAuditDoesNotReadANonClaimRecordAsAClaim(t *testing.T) {
 	store := newStore(t)
-	RecordBuildOrderApproval(store, "widget", "artifact-signature", Approval{Actor: "alice", Reason: "order approved"})
+	store.Ledger = map[string]LedgerRecord{
+		"build-order:widget": {Subject: "build-order", Hash: "artifact-signature", Actor: "alice", Reason: "order approved"},
+	}
 
-	// A claim whose id collides with the build-order key would still be
-	// reported: the record it finds is not a claim record.
-	collide := model.Claim{ID: BuildOrderLedgerKey("widget"), Facet: "contract", Module: "widget", Status: model.StatusLocked}
+	// A claim whose id collides with the leftover key is still reported: the
+	// record it finds is not a claim record.
+	collide := model.Claim{ID: "build-order:widget", Facet: "contract", Module: "widget", Status: model.StatusLocked}
 	if !hasRule(Audit([]model.Claim{collide}, store, nil), RuleLockLedgerMissing) {
-		t.Fatalf("a build-order record must never satisfy a claim's approval requirement")
+		t.Fatalf("a non-claim record must never satisfy a claim's approval requirement")
 	}
 }
 

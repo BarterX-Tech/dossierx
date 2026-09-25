@@ -197,7 +197,8 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 // one that has to be broad:
 //   - inserting "See [[dossierx-claimz]]" (a typo) into a bundle's SKILL.md;
 //   - inserting "See [[claims-router]]" (a plausible but nonexistent name);
-//   - renaming the loaded name "dossierx-build-order" to
+//   - renaming the loaded name "dossierx-build-order" (a bundle since
+//     retired) to
 //     "build-order-skill" everywhere EXCEPT inside an existing
 //     "[[dossierx-build-order]]" reference, simulating a rename regression
 //     that leaves one cross-reference stale.

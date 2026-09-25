@@ -20,7 +20,7 @@ func TestCheck_MissingAndValid(t *testing.T) {
 		t.Fatalf("missing: %+v", got)
 	}
 
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	if got := Check(claims, cfg); len(got) != 0 {
@@ -81,7 +81,7 @@ func TestCheck_StagedTreeNotWorktree(t *testing.T) {
 		Modules:   []string{"widget"},
 		ClaimsDir: dir,
 		ManifestTree: map[string][]byte{
-			"widget/manifest.yaml": MinimalYAML("widget"),
+			"widget/manifest.yaml": minimalYAML("widget"),
 		},
 	}
 	// Worktree has no file; overlay must be enough.
@@ -208,7 +208,7 @@ func TestStubIsRefusedUntilDrafted(t *testing.T) {
 		t.Fatalf("missing must name the drafting command: %+v", got)
 	}
 	// The test seed stays valid: fixtures are not stubs.
-	if err := WriteMinimal(dir, "widget"); err != nil {
+	if err := writeMinimal(dir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	if got := Check(nil, cfg); len(got) != 0 {

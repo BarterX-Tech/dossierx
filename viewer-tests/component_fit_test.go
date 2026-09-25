@@ -282,7 +282,6 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		{"the utilities row exists", `utilities`},
 		{"the utilities row has one action", `utilities.children.length === 1`},
 		{"the first action is #dxgOpen", `utilities.children[0].id === 'dxgOpen'`},
-		{"no build-order utility remains", `!document.querySelector('[data-target="#dossierx-build-order"]')`},
 		{"the first action is 40px tall", `getComputedStyle(utilities.children[0]).height === '40px'`},
 		{"a Tracks group exists", `tracks`},
 		{"the Tracks group is collapsed", `!tracks.open`},
@@ -399,10 +398,9 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 		var groups = scroll && scroll.querySelectorAll('.system-nav-group');
 		return scroll && footer && getComputedStyle(footer).flexShrink === '0' &&
 		  utilities && utilities.children.length === 1 && utilities.children[0].id === 'dxgOpen' &&
-		  !document.querySelector('[data-target="#dossierx-build-order"]') &&
 		  getComputedStyle(utilities.children[0]).height === '30px' &&
 		  groups && groups.length === 2 && groups[0].open && !groups[1].open &&
-		  !scroll.querySelector('[data-dxg-open]') && !scroll.querySelector('[data-target="#dossierx-build-order"]') &&
+		  !scroll.querySelector('[data-dxg-open]') &&
 		  choices && choices.length === 2 && choices[0].dataset.themeChoice === 'light' && choices[1].dataset.themeChoice === 'dark' &&
 		  !footer.querySelector('[data-theme-choice="system"]');
 	})()`) {

@@ -27,9 +27,8 @@ package viewertests
 // viewer-tests/testdata/three-facets rendered fresh by the engine under test,
 // at 1280px, in light and dark, in the two selection states (the default facet
 // selected, and a different facet selected after a real click). It does not
-// cover the mobile form of the strip (02 § 5), the sidebar module row that
-// shares .sec-tab__count, or the build-order strip (.bo-modules), which is a
-// different component that reuses the .subtab class.
+// cover the mobile form of the strip (02 § 5) or the sidebar module row that
+// shares .sec-tab__count.
 
 import (
 	"fmt"

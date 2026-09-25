@@ -108,19 +108,6 @@ func WriteStub(claimsDir, module string) error {
 	return writeFile(claimsDir, module, StubYAML(module))
 }
 
-// MinimalYAML returns a valid empty-surface manifest. It exists for fixtures
-// and tests that need a module to pass module-manifest without authoring
-// one; the CLI never writes it (see StubYAML).
-func MinimalYAML(module string) []byte {
-	return []byte("summary: module " + module + " — fixture module context.\nprovides: []\ndepends_on: []\n")
-}
-
-// WriteMinimal writes MinimalYAML at RequiredRelPath under claimsDir.
-// Test seeding only.
-func WriteMinimal(claimsDir, module string) error {
-	return writeFile(claimsDir, module, MinimalYAML(module))
-}
-
 func writeFile(claimsDir, module string, body []byte) error {
 	rel := RequiredRelPath(module)
 	dest := filepath.Join(claimsDir, filepath.FromSlash(rel))
@@ -128,42 +115,6 @@ func writeFile(claimsDir, module string, body []byte) error {
 		return err
 	}
 	return os.WriteFile(dest, body, 0o644)
-}
-
-// seedConfig is the subset of project.config.yaml SeedMinimalFromConfigYAML
-// needs. Tests use this after writing a config so check/lock see a valid
-// per-module manifest without every fixture listing one by hand.
-type seedConfig struct {
-	ClaimsDir string   `yaml:"claims_dir"`
-	Modules   []string `yaml:"modules"`
-}
-
-// SeedMinimalFromConfigYAML writes a valid empty-surface manifest.yaml for
-// every module listed in cfgYAML. projectRoot is the directory that contains
-// project.config.yaml (claims_dir is resolved against it). Existing files
-// are overwritten with the same stub; missing modules are a no-op.
-// Test seeding only.
-func SeedMinimalFromConfigYAML(projectRoot string, cfgYAML []byte) error {
-	var c seedConfig
-	if err := yaml.Unmarshal(cfgYAML, &c); err != nil {
-		return err
-	}
-	claimsDir := c.ClaimsDir
-	if claimsDir == "" {
-		claimsDir = "claims"
-	}
-	if !filepath.IsAbs(claimsDir) {
-		claimsDir = filepath.Join(projectRoot, claimsDir)
-	}
-	for _, module := range c.Modules {
-		if module == "" {
-			continue
-		}
-		if err := WriteMinimal(claimsDir, module); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Check validates one required manifest per cfg.Modules, then the

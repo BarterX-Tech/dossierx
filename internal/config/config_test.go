@@ -316,42 +316,32 @@ claims_dir: claims
 	}
 }
 
+// TestLoadConfig_UnknownField: the strict decode refuses any field the schema
+// does not declare, naming the field and the file — including doctrine_facet,
+// the retired setting an upgraded project may still carry.
 func TestLoadConfig_UnknownField(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
+	for _, field := range []string{"totally_unknown_field: true", "doctrine_facet: doctrine"} {
+		name := strings.SplitN(field, ":", 2)[0]
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := writeConfig(t, dir, "project.config.yaml", `
 schema_version: 1
 facets: [contract, internals]
 modules: [ledger]
 claims_dir: claims
-totally_unknown_field: true
+`+field+`
 `)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected strict-decode error for unknown field, got nil")
-	}
-	if !strings.Contains(err.Error(), "totally_unknown_field") {
-		t.Errorf("expected error to name the unknown field totally_unknown_field, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), p) {
-		t.Errorf("expected error to name the config file path %q, got: %v", p, err)
-	}
-}
-
-func TestLoadConfig_UnknownDoctrineFacetFieldRefused(t *testing.T) {
-	dir := t.TempDir()
-	p := writeConfig(t, dir, "project.config.yaml", `
-schema_version: 1
-facets: [contract, internals]
-modules: [ledger]
-claims_dir: claims
-doctrine_facet: doctrine
-`)
-	_, err := LoadConfig(p)
-	if err == nil {
-		t.Fatal("expected error for retired doctrine_facet field, got nil")
-	}
-	if !strings.Contains(err.Error(), "doctrine_facet") {
-		t.Errorf("expected error to name doctrine_facet, got: %v", err)
+			_, err := LoadConfig(p)
+			if err == nil {
+				t.Fatalf("expected strict-decode error for unknown field %s, got nil", name)
+			}
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("expected error to name the unknown field %s, got: %v", name, err)
+			}
+			if !strings.Contains(err.Error(), p) {
+				t.Errorf("expected error to name the config file path %q, got: %v", p, err)
+			}
+		})
 	}
 }
 
@@ -747,6 +737,32 @@ func TestLoadConfig_BuildDirInsideClaimsDirIsRefused(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "build_dir") {
 				t.Fatalf("the refusal must name build_dir, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestLoadConfig_ProjectClaimsDirInsideClaimsDirIsRefused: a project-claims
+// store inside claims_dir (or wrapping it) is refused at config load, so the
+// loader can never be handed one — LoadClaims would otherwise walk the project
+// store as module claims, and id-shape would refuse every project.<slug> file
+// it found there.
+func TestLoadConfig_ProjectClaimsDirInsideClaimsDirIsRefused(t *testing.T) {
+	for _, tc := range []struct{ name, projectClaimsDir string }{
+		{"store under claims_dir", "claims/project"},
+		{"store equal to claims_dir", "claims"},
+		{"store wrapping claims_dir", "."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			p := writeConfig(t, dir, "project.config.yaml",
+				"schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nproject_claims_dir: "+tc.projectClaimsDir+"\n")
+			_, err := LoadConfig(p)
+			if err == nil || !strings.Contains(err.Error(), "project_claims_dir") || !strings.Contains(err.Error(), "must sit outside claims_dir") {
+				t.Fatalf("expected the containment refusal, got %v", err)
 			}
 		})
 	}

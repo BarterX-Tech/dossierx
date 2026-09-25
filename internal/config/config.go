@@ -204,7 +204,7 @@ type Config struct {
 	Conformance  Conformance       `yaml:"conformance,omitempty"`
 
 	// BuildDir is the directory every runtime-generated file lives under —
-	// the build-order and code-links artifacts, the three ledger stores, the
+	// the code-links artifacts, the three ledger stores, the
 	// catalog and the viewer — one subdirectory per kind (see paths.go for the
 	// layout). Optional; it defaults to "build" and, like ClaimsDir, is
 	// resolved against the config file's own directory, never the process

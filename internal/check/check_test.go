@@ -3,7 +3,6 @@ package check_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
@@ -11,7 +10,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -65,7 +64,7 @@ func projectWithRoof(t *testing.T, cfgBody string, files map[string]string, roof
 		t.Fatalf("load config: %v", err)
 	}
 	for _, module := range cfg.Modules {
-		if err := manifest.WriteMinimal(cfg.ClaimsDir, module); err != nil {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, module); err != nil {
 			t.Fatalf("write module manifest %s: %v", module, err)
 		}
 	}
@@ -351,27 +350,6 @@ func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("triggerless review_pending claim dropped from next-steps; expected %q, got %#v", want, res.NextSteps)
-	}
-}
-
-// A fully-locked module with no build-order artifact yet drives the
-// build-order propose next step and leaves OpenComments empty.
-func TestRun_FullyLockedBuildOrderHint(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
-		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
-	})
-
-	res, err := check.Run(claims, cfg)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(res.OpenComments) != 0 {
-		t.Fatalf("expected no open comments, got %#v", res.OpenComments)
-	}
-	for _, h := range res.NextSteps {
-		if strings.Contains(h, "build-order") {
-			t.Fatalf("fully locked modules must not require a build order, got %#v", res.NextSteps)
-		}
 	}
 }
 

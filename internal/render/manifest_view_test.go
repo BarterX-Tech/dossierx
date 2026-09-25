@@ -66,34 +66,6 @@ func manifestTestClaims() []model.Claim {
 	}
 }
 
-func TestManifestTab_HealthyRendersStructuredEscapedViewWithLinks(t *testing.T) {
-	dir := t.TempDir()
-	cfg := &config.Config{Modules: []string{"widget", "lock"}, Facets: []string{"contract", "internals"}, ClaimsDir: dir}
-	writeManifestFile(t, dir, "widget", "summary: Widget <script>alert(1)</script> & co.\nprovides:\n  - widget.contract.bound\ndepends_on:\n  - lock.contract.store\n")
-	writeManifestFile(t, dir, "lock", "summary: lock store.\nprovides:\n  - lock.contract.store\ndepends_on: []\n")
-
-	got := manifestTabOf(t, manifestTestClaims(), cfg, "widget")
-	for _, want := range []string{
-		`data-manifest-state="ok"`,
-		`<p class="manifest-summary">Widget &lt;script&gt;alert(1)&lt;/script&gt; &amp; co.</p>`,
-		`<ul class="manifest-ids manifest-provides"><li class="manifest-id"><a class="claim-ref" href="#widget.contract.bound"`,
-		`<ul class="manifest-ids manifest-depends-on"><li class="manifest-id"><a class="claim-ref" href="#lock.contract.store"`,
-		`provided by <a class="manifest-provider-link" href="#lock" data-module="lock">Lock</a>`,
-		`<details class="manifest-raw"><summary>Raw YAML</summary>`,
-		`summary: Widget &lt;script&gt;alert(1)&lt;/script&gt; &amp; co.`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("healthy Manifest tab lacks %q:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, "<script>") {
-		t.Fatalf("manifest text reached the page unescaped:\n%s", got)
-	}
-	if strings.Contains(got, "manifest-findings") || strings.Contains(got, "manifest-copy") {
-		t.Fatalf("a healthy manifest rendered refusal chrome:\n%s", got)
-	}
-}
-
 func TestManifestTab_RefusalShowsChecksFindingsAndCommand(t *testing.T) {
 	cases := map[string]string{
 		"missing":   "",

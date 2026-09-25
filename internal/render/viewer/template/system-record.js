@@ -426,11 +426,11 @@
     });
   }
 
-  // activeFacet returns null while the Build order tab is active (it is not a
-  // module section: no header, TOC, status strip or claim controls are built
-  // over the diagrams), so renderToc hides the TOC there.
+  // activeFacet returns null while no plain module section is visible (a
+  // track or the constitution section is active), so renderToc hides the TOC
+  // there.
   function activeFacet() {
-    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section):not(.constitution-section)'));
+    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.track-section):not(.constitution-section)'));
     var module = modules.find(function (section) { return !section.hidden; });
     if (!module) { return null; }
     var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
@@ -743,7 +743,7 @@
     // directly (see bindFocusControl above).
     var focusState = isFocusOn() ? 'on' : 'off';
     var moduleSections = Array.prototype.slice.call(
-      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section):not(.constitution-section)')
+      document.querySelectorAll('.module-section:not(.track-section):not(.constitution-section)')
     );
     var moduleCount = moduleSections.length;
     moduleSections.forEach(function (section, moduleIndex) {

@@ -7,9 +7,8 @@
 //   - DX-AUD-20: lock/unlock/flag on a nonexistent claim exit 2 (the
 //     documented "not found / not in the right state" family), matching
 //     deps/reaudit; flag on a not-locked claim exits 2 too.
-//   - DX-AUD-21: build-order/implink status on an unknown --module exit
-//     non-zero instead of silently succeeding; a known-but-unused module
-//     still succeeds.
+//   - DX-AUD-21: claim list on an unknown --module exits non-zero instead
+//     of silently succeeding; a known-but-unused module still succeeds.
 //   - DX-AUD-19: `version` and `--version` work with no project config and
 //     print the binary's version.
 package tests

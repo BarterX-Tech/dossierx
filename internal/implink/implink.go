@@ -40,23 +40,21 @@ import (
 
 // nowFunc is this package's clock, overridable in tests so LinkedAt can be
 // asserted deterministically instead of racing real time — the same
-// pattern internal/lock.nowFunc and internal/buildorder.nowFunc use.
+// pattern internal/lock.nowFunc uses.
 var nowFunc = time.Now
 
 // ErrNoArtifact is returned (wrapped) by LoadArtifact, and therefore by
 // Status, whenever no implementation-link artifact exists yet at the given
 // path — the common case for any module that has never called Set. Callers
 // use errors.Is(err, ErrNoArtifact) to distinguish "nothing linked yet"
-// from a genuine read/parse failure, the same way buildorder.ErrNotProposed
-// lets callers special-case "no build-order artifact" instead of reporting
-// a generic file error.
+// from a genuine read/parse failure instead of reporting a generic file
+// error.
 var ErrNoArtifact = errors.New("implink: no implementation-link artifact for this module yet")
 
 // FileLink is one linked file entry: the project-relative path (never
 // absolute — Set rejects an absolute path outright rather than silently
-// rewriting it, unlike buildorder.go's displayPath, which converts an
-// already-absolute internal path; here the path is agent-supplied input,
-// so the contract is enforced at the door instead), an optional symbol
+// rewriting it: the path is agent-supplied input, so the contract is
+// enforced at the door), an optional symbol
 // name (e.g. a function or type Set was told this file's linked code lives
 // in), and FileHash — a whole-file content hash snapshot taken at Set time,
 // the drift baseline Status re-checks against.
@@ -122,8 +120,7 @@ func ArtifactPath(cfg *config.Config, module string) string {
 // LoadArtifact reads and decodes the implementation-link artifact at path.
 // A missing file returns an error wrapping ErrNoArtifact rather than a bare
 // os.IsNotExist-shaped error, so callers can use errors.Is(err,
-// ErrNoArtifact) the same way they use errors.Is(err,
-// buildorder.ErrNotProposed).
+// ErrNoArtifact).
 func LoadArtifact(path string) (*Artifact, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -343,9 +340,8 @@ func hashFile(path string) (string, error) {
 }
 
 // findByID is a small local claim lookup, duplicated here rather than
-// imported from internal/loader, mirroring internal/buildorder's own
-// precedent of keeping each generated-artifact package's dependency
-// footprint limited to exactly what it needs.
+// imported from internal/loader, keeping this generated-artifact package's
+// dependency footprint limited to exactly what it needs.
 func findByID(claims []model.Claim, id string) (model.Claim, bool) {
 	for _, c := range claims {
 		if c.ID == id {
@@ -359,9 +355,9 @@ func findByID(claims []model.Claim, id string) (model.Claim, bool) {
 // observe a partially-written file: it writes to a temp file created in
 // path's own directory (so the later rename stays on one filesystem, which
 // is what makes it atomic) and then renames it over path. Duplicated here
-// rather than exported from internal/lock/internal/buildorder/internal/loader
-// (which each already have their own copy), matching buildorder/store.go's
-// own reasoning for why it duplicates rather than imports this same helper.
+// rather than exported from internal/lock or internal/loader (which each
+// already have their own copy), to keep this package's dependency footprint
+// limited.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")

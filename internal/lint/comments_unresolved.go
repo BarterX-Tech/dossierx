@@ -7,8 +7,7 @@
 // while a thread is open) and the claim's review_pending trigger.
 //
 // This lint never FAILS "dossierx lint"/"dossierx check" — the hard refusal
-// lives in internal/lock.Lock, and the buildorder completeness gate refuses a
-// module with an open thread; this rule is only the visible, non-blocking
+// lives in internal/lock.Lock; this rule is only the visible, non-blocking
 // surfacing of the same fact, exactly like the orphan warning.
 //
 // Banner-layout claims are skipped: a banner is a decorative divider that

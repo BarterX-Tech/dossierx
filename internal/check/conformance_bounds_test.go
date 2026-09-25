@@ -9,14 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"time"
-
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
-	"github.com/BarterX-Tech/dossierx/internal/constitution"
-	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
-	"github.com/BarterX-Tech/dossierx/internal/manifest"
+	"github.com/BarterX-Tech/dossierx/internal/constitution/constitutiontest"
+	"github.com/BarterX-Tech/dossierx/internal/manifest/manifesttest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -25,32 +21,8 @@ import (
 // so the roof gate (NIT-26) lets these projections run.
 func armConstitution(t *testing.T, cfg *config.Config) {
 	t.Helper()
-	path := cfg.ConstitutionPath()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		roof := "status: locked\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture has one lockable constitution above every module.\n"
-		if err := os.WriteFile(path, []byte(roof), 0o644); err != nil {
-			t.Fatalf("arm constitution: write: %v", err)
-		}
-	}
-	f, err := constitution.Load(path)
-	if err != nil {
-		t.Fatalf("arm constitution: load: %v", err)
-	}
-	store, err := lock.LoadStore(cfg.LockStorePath())
-	if err != nil {
-		t.Fatalf("arm constitution: load store: %v", err)
-	}
-	lock.LockConstitution(store, f, "fixture roof", time.Now())
-	// The crossing the real command performs on a fresh project: the comment
-	// threads already on disk are taken into digest coverage now, silently,
-	// so a fixture that hand-writes a thread before arming is not "unrecorded".
-	if !store.LedgerCovered() && !store.PreLedger() {
-		if claims, loadErr := loader.LoadAll(cfg); loadErr == nil {
-			lock.SweepCommentDigests(store, claims, false)
-		}
-	}
-	if err := store.Save(); err != nil {
-		t.Fatalf("arm constitution: save store: %v", err)
+	if err := constitutiontest.Arm(cfg); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -88,7 +60,7 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 	}
 	armConstitution(t, cfg)
 	for _, mod := range modules {
-		if err := manifest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -138,7 +110,7 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 	}
 	armConstitution(t, cfg)
 	for _, mod := range modules {
-		if err := manifest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
+		if err := manifesttest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -188,7 +160,7 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
-	if err := manifest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
+	if err := manifesttest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	claims := make([]model.Claim, 96)
@@ -235,7 +207,7 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
-	if err := manifest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
+	if err := manifesttest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	shared := strings.Repeat("x", 20<<20)
@@ -285,7 +257,7 @@ func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
-	if err := manifest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
+	if err := manifesttest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
 		t.Fatal(err)
 	}
 	shared := strings.Repeat("x", 20<<20)

@@ -75,9 +75,8 @@ func walkJSONKeys(v any, path string, visit func(path, key string)) {
 // see the leak at all.
 func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 	root := t.TempDir()
-	cfgPath, claimPath := icWriteFixtureProject(t, root, "widget")
+	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	icWriteRoledClaim(t, claimPath, "widget")
 	icMustRun(t, cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
 
 	// A thread with a reply, so comment list's whole tree — thread fields AND
@@ -130,19 +129,6 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 				}
 			})
 		})
-	}
-}
-
-// icWriteRoledClaim rewrites the shared fixture claim into the plain locked-
-// claim shape the retired build-order surface is exercised against.
-func icWriteRoledClaim(t *testing.T, claimPath, module string) {
-	t.Helper()
-	claim := "id: " + module + ".contract.overview\n" +
-		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-		"body: |\n  fixture claim for in-process CLI tests.\n" +
-		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
-	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
-		t.Fatalf("rewrite claim: %v", err)
 	}
 }
 
@@ -202,35 +188,14 @@ var jsonTagName = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*$`)
 // the first time an agent reads the output and finds nothing under the key the
 // contract promised.
 func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
-	payloads := []any{
-		versionData{},
-		checkData{},
-		claimShowData{},
-		claimListData{},
-		claimNewData{},
-		claimLinkData{},
-		lockData{},
-		lockRefusedData{},
-		unlockData{},
-		reauditData{},
-		flagData{},
-		commentWriteData{},
-		commentListData{},
-		commentInboxData{},
-		trackListData{},
-		trackShowData{},
-		trackStatusData{},
-		manifestShowData{},
-		manifestListData{},
-		manifestFindingData{},
-
-		skillsExportData{},
-		cliout.DryRun{},
-		cliout.Envelope{},
-	}
-	for _, p := range payloads {
+	// surfacePayloadTypes is the one inventory of every payload this package
+	// publishes (TestSurfacePayloadTableCoversEveryDataType keeps it complete);
+	// the envelope itself is the one type outside it.
+	payloads := surfacePayloadTypes()
+	payloads["cliout.Envelope"] = cliout.Envelope{}
+	for name, p := range payloads {
 		rt := reflect.TypeOf(p)
-		t.Run(rt.Name(), func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			requireJSONTags(t, rt, rt.Name(), map[reflect.Type]bool{})
 		})
 	}
@@ -447,91 +412,6 @@ func TestCommentWriteDryRunAgreesWithTheWritePath(t *testing.T) {
 			args := append([]string{"--config", cfgPath, "comment", "add", "widget.contract.overview"}, tc.args...)
 			assertDryRunAgrees(t, tc.wantBlocked, args...)
 		})
-	}
-}
-
-// buildorder.Lock refuses a STALE order before it looks at anything else — a
-// bare relock would freeze an order whose claims have moved — and the preview
-// not only failed to check it, its "not_already_current" gate actively PASSED a
-// stale order (it reads !locked || stale). So the one artifact state that always
-// refuses previewed as go-ahead.
-func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
-	root := t.TempDir()
-	claimsDir := filepath.Join(root, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims: %v", err)
-	}
-	cfgPath := filepath.Join(root, "project.config.yaml")
-	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
-	lockFixtureConstitution(t, cfgPath)
-	claimPath := filepath.Join(claimsDir, "a.yaml")
-	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-		"body: |\n  claim a.\n" +
-		"rests_on:\n  none: true\n  reason: fixture\n"
-	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
-		t.Fatalf("write claim: %v", err)
-	}
-
-	mustSucceed := func(args ...string) {
-		t.Helper()
-		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
-			t.Fatalf("%v: %v", args, err)
-		}
-	}
-	mustSucceed("claim", "lock", "widget.contract.a", "--reason", "fixture")
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock it")
-	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-}
-
-// The hand-edit gate (buildorder.ErrHandEdited) is the LAST refusal Lock makes
-// and it was the only one the preview could not see. It is also the one the
-// preview most needed: an artifact whose phase blocks were reversed by hand
-// between propose and lock is UNLOCKED, so it is never stale (staleness is a
-// locked-artifact concept and recomputeStale early-returns on an unlocked one)
-// and it is not already current — meaning every precondition the preview did
-// evaluate passed. The run previewed blocked:false and then exited 1.
-//
-// Reversing the phase blocks is the specific edit chosen here because it is the
-// one that survives a per-claim comparison: a claim's signature is
-// phase/position-within-phase/File, so moving whole blocks leaves every
-// signature byte-identical. Only the explicit phase-sequence comparison catches
-// it, which is exactly the check that lived behind an unexported function.
-func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
-	root := t.TempDir()
-	claimsDir := filepath.Join(root, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims: %v", err)
-	}
-	cfgPath := filepath.Join(root, "project.config.yaml")
-	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
-	lockFixtureConstitution(t, cfgPath)
-	// Two claims in DIFFERENT phases, so the artifact has two phase blocks to
-	// reverse. One claim could not express this edit at all.
-	for _, c := range []struct{ name, id string }{
-		{"a", "widget.contract.a"},
-		{"b", "widget.contract.b"},
-	} {
-		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  claim " + c.name + ".\n" +
-			"rests_on:\n  none: true\n  reason: fixture\n"
-		if err := os.WriteFile(filepath.Join(claimsDir, c.name+".yaml"), []byte(claim), 0o644); err != nil {
-			t.Fatalf("write claim %s: %v", c.id, err)
-		}
-	}
-
-	mustSucceed := func(args ...string) {
-		t.Helper()
-		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
-			t.Fatalf("%v: %v", args, err)
-		}
-	}
-	mustSucceed("claim", "lock", "widget.contract.a", "--reason", "fixture")
-	mustSucceed("claim", "lock", "widget.contract.b", "--reason", "fixture")
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
 	}
 }
 

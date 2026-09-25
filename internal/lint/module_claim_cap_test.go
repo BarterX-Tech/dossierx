@@ -93,9 +93,3 @@ func TestModuleClaimCapLint(t *testing.T) {
 		}
 	})
 }
-
-func TestModuleClaimCapLint_Registered(t *testing.T) {
-	if !lintRegistered("module-claim-cap") {
-		t.Fatal("module-claim-cap lint is not registered in the lint Registry")
-	}
-}

@@ -13,10 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
-	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -262,35 +259,6 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	}
 }
 
-// TestBuildOrderSignatureMatchesTheGate is the parity pin between the two sides
-// of the build-order ledger record: cmd/dossierx WRITES the signature and
-// internal/check's gate RE-COMPUTES it to compare. They are separate functions
-// (sharing one would mean cmd/ and check/ importing each other), so nothing but
-// this test stops them drifting — and a one-byte disagreement would report
-// build-order-content-drift on every honestly locked build order in every
-// project, which is a gate firing on correct state.
-func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
-	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
-	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order must be usage, got %+v", env.Error)
-	}
-
-	cfg, err := config.LoadConfig(cfgPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	claims, err := loader.LoadClaims(cfg.ClaimsDir)
-	if err != nil {
-		t.Fatalf("load claims: %v", err)
-	}
-	for _, f := range check.Status(claims, cfg).LedgerFindings {
-		if strings.HasPrefix(f.Rule, "build-order-") {
-			t.Fatalf("leftover build-order artifacts must not refuse: %s: %s", f.Rule, f.Message)
-		}
-	}
-}
-
 // TestAPreLedgerProjectCrossesByEmptyingItself is v0.4.0's whole answer to
 // "how does a project that predates the lock ledger ever get onto it", end to
 // end, through the CLI.
@@ -302,9 +270,8 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 // the record it writes evidence of anything.
 //
 // What replaces it costs more and claims less. The project is emptied of
-// everything that predates the ledger, in the order the refusal gives (propose
-// FIRST — propose requires the module still fully locked, so unlocking a claim
-// first would leave the order stuck), and the first re-lock crosses the store.
+// everything that predates the ledger, in the order the refusal gives, and the
+// first re-lock crosses the store.
 // Nothing is grandfathered, because by then there is nothing to grandfather.
 //
 // The last two assertions are the ones that catch a crossing point that stamps
@@ -312,8 +279,12 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 // act, and the finding set is asserted EMPTY rather than merely free of two
 // named rules.
 func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
-	cfgPath := buildOrderFixture(t) // one claim, status: locked, module widget
-	root := filepath.Dir(cfgPath)
+	root := t.TempDir()
+	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
+			"body: |\n  a locked claim.\n" +
+			"rests_on:\n  none: true\n  reason: fixture\n",
+	})
 	const id = "widget.contract.a"
 
 	// Rewind to what a pre-ledger build would have left behind: an existing
@@ -324,15 +295,10 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	storeFile := filepath.Join(root, "build", "ledger", "lock-store.json")
 	rewindStoreToPreLedger(t, storeFile)
 
-	// 1. The refusal, and that it IS the refusal. Retired build-order is usage,
-	// not a second pre-ledger emitter.
+	// 1. The refusal, and that it IS the refusal.
 	lockEnv, _, lockErr := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
 	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
 		t.Fatalf("claim lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
-	}
-	boEnv, _, boErr := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
-	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodeUsage {
-		t.Fatalf("retired build-order lock must be usage, got %+v", boEnv.Error)
 	}
 
 	// 2. The recovery, in the order the refusal text gives.

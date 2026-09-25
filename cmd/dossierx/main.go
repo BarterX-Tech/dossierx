@@ -197,9 +197,10 @@ func newRootCmd() *cobra.Command {
 	// why a track must never gate a lock — so the noun adds a way to look at
 	// the corpus and no new way to change it.
 	//
-	// "build-order" was a noun through v0.7.20 and is a hidden retired stub
-	// as of this release. A locked implementation sequence is not a product
-	// once module depends_on exists; leftover artifacts are ignored.
+	// "build-order" was a noun through v0.7.20 and was removed in v0.7.21,
+	// with no retired stub: `dossierx build-order` is an unknown command. A
+	// locked implementation sequence is not a product once module depends_on
+	// exists; leftover build-order artifacts and ledger rows are ignored.
 	//
 	// The migration verb was the twentieth leaf, added by v0.3.0 and REMOVED by
 	// v0.4.0. It was the one door into ledger adoption, and v0.4.0 removes
@@ -346,9 +347,9 @@ func newVersionCmd() *cobra.Command {
 }
 
 // requireKnownModule validates a --module against the modules this project
-// actually declares (cfg.Modules). Every build-order/implink subcommand
-// takes a --module, and an unknown or typo'd one would otherwise silently
-// report an empty "not proposed yet"/"nothing linked yet" state and exit 0 —
+// actually declares (cfg.Modules). claim list and claim link take a
+// --module, and an unknown or typo'd one would otherwise silently report an
+// empty "nothing listed"/"nothing linked yet" state and exit 0 —
 // a success-looking result for a module that does not exist. A valid but
 // unused module passes this check and still reaches its normal report.
 func requireKnownModule(cfg *config.Config, module string) error {
@@ -666,9 +667,9 @@ func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, ad
 // as-found, which is the same "an adoption a command performs on its own is an
 // adoption an attacker can perform on their own" that took the claim half out.
 // It went behind the explicit adoption command, and then out of the build
-// entirely when v0.4.0 removed that command: nothing grandfathers a build order
-// now, and a pre-ledger project's locked orders are covered by the same
-// project-scoped exemption its locked claims are until it crosses.
+// entirely when v0.4.0 removed that command; v0.7.21 removed build orders
+// themselves, and a leftover build-order artifact or ledger row plays no part
+// in the pre-ledger crossing.
 //
 // It returns the adopted ids alongside changed, because the COMMENT-DIGEST
 // sweep still adopts and its ids still have to reach an envelope. Discarding them
@@ -727,8 +728,8 @@ func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (
 const preLedgerCrossingHint = `unlock every locked claim (dossierx claim unlock <id> --reason "..."), then lock only what you still stand behind — the first lock in a project with nothing locked crosses the store onto the ledger`
 
 // crossPreLedger is the write-path half of the pre-ledger gate, shared by the
-// three commands that record an approval: claim lock, claim reaudit --confirm,
-// and build-order lock.
+// commands that record an approval: claim lock (its single, batch and policy
+// paths) and claim reaudit --confirm.
 //
 // It replaces the refusal helper the removed migration command carried. The
 // difference is that this one is not only a refusal: on a project that holds
@@ -738,15 +739,14 @@ const preLedgerCrossingHint = `unlock every locked claim (dossierx claim unlock 
 //
 // THE CALLER MUST ALREADY HOLD THE LOCK-STORE SENTINEL AND MUST NOT ACQUIRE
 // ANYTHING ELSE FOR THIS. lock.CrossPreLedger takes the comment digest store's
-// own sentinel as a leaf and needs no claims sentinel; requiring one here would
-// invert the project-wide claims -> lock-store order against `build-order lock`,
-// which holds only the lock-store sentinel by design. See lock.CrossPreLedger's
+// own sentinel as a leaf and needs no claims sentinel; the lock-store sentinel
+// the caller already holds is the only one it needs. See lock.CrossPreLedger's
 // LOCKING paragraph.
 //
 // verb is the command path, so the message reads as that command's own refusal
 // rather than as a stray internal error.
 func crossPreLedger(cfg *config.Config, store *lock.Store, claims []model.Claim, verb string) error {
-	err := lock.CrossPreLedger(store, claims, 0)
+	err := lock.CrossPreLedger(store, claims)
 	switch {
 	case err == nil:
 		return nil
@@ -853,8 +853,8 @@ func adoptionWarnings(a adoptions) []string {
 // currently vouches for it?
 //
 // "Standing" means an approval that is in force right now — a record that
-// exists, describes a CLAIM (not a build order), and has not been released by an
-// unlock. A released record describes a claim that is allowed to be draft and
+// exists, describes a CLAIM (not a leftover build-order row), and has not
+// been released by an unlock. A released record describes a claim that is allowed to be draft and
 // allowed to change; comparing content against it would refuse the ordinary
 // draft edit the release exists to keep free. No record at all is not a match
 // failure either: that is lock-ledger-missing, a finding the gate already owns,
@@ -1544,7 +1544,6 @@ func newCheckCmd() *cobra.Command {
 			data.CommentDigestsAdopted = adopted.CommentDigests
 			warnings := append(adoptionWarnings(adopted), lintWarningLines(res.LintWarnings)...)
 			warnings = append(warnings, res.GitignoreWarnings...)
-			warnings = append(warnings, res.ViewerWarnings...)
 			out := cmdResult{
 				Data:      data,
 				Warnings:  warnings,
@@ -1604,8 +1603,9 @@ func newCheckCmd() *cobra.Command {
 // tell whether a store is ignored, this read-only mode reports
 // data.gitignore_check and exits 0 rather than refusing — only the
 // approval-recording verbs (claim lock, claim flag, claim reaudit --confirm,
-// build-order lock) refuse with store_gitignored, because they are about to
-// write something the repository is the only carrier for.
+// claim recover-approved-content, constitution lock) refuse with
+// store_gitignored, because they are about to write something the repository
+// is the only carrier for.
 func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -1652,7 +1652,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	data.StagedFiles = sp.FromIndex
 	out := cmdResult{
 		Data:     data,
-		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), res.ViewerWarnings...),
+		Warnings: append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...),
 		Text:     func() { formatCheckStagedResult(cmd, sp, res) },
 	}
 
@@ -1705,7 +1705,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 // exiting 0. That advisory is gone with the parent comparison that produced it,
 // and the printing stays anyway, on its own merits: --staged is the entry point
 // a human meets from a hook, mid-commit, and the ordinary next steps (a claim
-// ready to lock, a build order gone stale) are exactly as worth saying there as
+// ready to lock, a claim awaiting review) are exactly as worth saying there as
 // they are from plain `check`. The two formats agreeing about what a run said is
 // a property worth keeping for its own sake, not a fix that outlived its bug.
 //
@@ -1775,7 +1775,7 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 	data.ReadOnly = true
 	out := cmdResult{
 		Data:     data,
-		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), res.ViewerWarnings...),
+		Warnings: append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...),
 		Text:     func() { formatCheckValidateResult(cmd, res) },
 	}
 	if len(res.ClaimLintErrors()) > 0 {
@@ -1825,9 +1825,6 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 func reportGitignoreCheck(cmd *cobra.Command, res check.Result) {
 	out := cmd.OutOrStdout()
 	for _, w := range res.GitignoreWarnings {
-		fmt.Fprintf(out, "  warning: %s\n", w)
-	}
-	for _, w := range res.ViewerWarnings {
 		fmt.Fprintf(out, "  warning: %s\n", w)
 	}
 	if res.GitignoreCheck != "" && res.GitignoreCheck != check.GitignoreNotAWorkTree {
@@ -2387,7 +2384,7 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 	// all is not blocked either — both of which mirror the real run exactly.
 	//
 	// The store is read WITHOUT the sentinel, as every read-only path in this
-	// binary reads it (see buildOrderApprovalStands): a dry run answers a
+	// binary reads it: a dry run answers a
 	// question and must not take a lock. A store that cannot be read yields no
 	// standing record and no block — the preview must not manufacture a refusal
 	// out of evidence it could not load, and the real run fails that case
@@ -2602,7 +2599,7 @@ func newLockCmd() *cobra.Command {
 				}
 			}
 
-			// THE PRE-LEDGER CROSSING, the first of the three write paths that
+			// THE PRE-LEDGER CROSSING, on the first of the write paths that
 			// record an approval. It refuses while anything locked still predates
 			// the ledger, and otherwise stamps this project onto the ledger schema
 			// (creating the comment digest store in the same act) so the approval
@@ -3334,10 +3331,9 @@ func newReauditCmd() *cobra.Command {
 					WithHint(fmt.Sprintf("run: dossierx check --validate (it names the finding), then either restore %s from git or dossierx claim unlock %s --reason \"...\"", claim.SourcePath, id))
 			}
 
-			// THE PRE-LEDGER CROSSING. RecordApproval below is the second of the
-			// three paths in this binary that write an approval record, and — like
-			// "build-order lock" and unlike "claim lock" — it does not go through
-			// lock.Lock, so it does not inherit that function's refusal. Writing
+			// THE PRE-LEDGER CROSSING. RecordApproval below writes an approval
+			// record and — unlike the single "claim lock" path — it does not go
+			// through lock.Lock, so it does not inherit that function's refusal. Writing
 			// here would put the first record into a store that says it has no
 			// ledger, which lock.Store.LedgerDowngraded reads — correctly, by its
 			// own rules — as tampering from then on. A reaudit always has at least

@@ -10,7 +10,7 @@ package cliout
 // condition, so a skill that learned "rights_denied means the human owns that
 // thread" from the viewer's API already knows what the terminal is telling it.
 // The CLI-only half names conditions the HTTP API structurally cannot reach
-// (there is no locking, linting, or build-order endpoint).
+// (there is no locking or linting endpoint).
 //
 // Adding a code is cheap and safe. Repurposing or deleting one is a breaking
 // change to every skill in the field, so don't.
@@ -161,13 +161,12 @@ const (
 	//     accepts the edit that caused it, then unlock, edit and lock again.
 	//
 	// Do not reuse this code for a third state without checking that sense (1)
-	// is not what a reader will apply. internal/buildorder's unbacked-flag case
-	// deliberately did not reuse it for exactly that reason.
+	// is not what a reader will apply.
 	CodeAlreadyLocked Code = "already_locked"
-	// CodePreLedgerUnadopted is an approval-recording command — claim lock, claim
-	// reaudit --confirm, build-order lock — refused because this project's lock
-	// store predates the lock ledger and the project still holds locked artifacts
-	// that predate it. It is the write-path twin of the gate's
+	// CodePreLedgerUnadopted is an approval-recording command — claim lock or
+	// claim reaudit --confirm — refused because this project's lock store
+	// predates the lock ledger and the project still holds locked claims that
+	// predate it. It is the write-path twin of the gate's
 	// lock-ledger-pre-ledger finding.
 	//
 	// It is its own code for CodeUntrackedConfig's reason: a deterministic
@@ -176,8 +175,8 @@ const (
 	// loops forever. It is also the one integrity-family condition an agent can
 	// clear by itself once the human has said yes, which is precisely what a code
 	// is for: the skills' recovery table can carry "pre_ledger_unadopted -> show
-	// the human the ordered crossing (re-propose locked build orders, unlock
-	// every locked claim, then re-lock only what they still stand behind)".
+	// the human the ordered crossing (unlock every locked claim, then re-lock
+	// only what they still stand behind)".
 	//
 	// Nothing is grandfathered on the way through. The first lock in a project
 	// holding nothing locked is what stamps the store onto the ledger schema, and
@@ -273,10 +272,8 @@ const (
 	// which mean "supplied, but not a legal value".
 	CodeMissingFlag Code = "missing_flag"
 	// CodeUnsupportedFormat is a --format value the command cannot render. The
-	// root's persistent --format accepts json and text; one leaf,
-	// "build-order show", registers a local --format that also accepts mermaid,
-	// because a diagram is a rendering of that one payload and nothing else on
-	// the surface has anything to draw.
+	// root's persistent --format accepts json and text, and no leaf registers a
+	// --format of its own.
 	CodeUnsupportedFormat Code = "unsupported_format"
 	// CodeUsage is an invocation cobra itself rejected: an unknown command, an
 	// unknown flag, the wrong number of positional arguments.
@@ -288,8 +285,9 @@ const (
 	// exact block of moves to run; error.details.moves[] carries the same
 	// list as {from, to, tracked}. See internal/layout.
 	CodeLayoutLegacy Code = "layout_legacy"
-	// CodeStoreGitignored is an approval-recording verb (claim lock, claim
-	// flag, claim reaudit --confirm, build-order lock, batch claim lock)
+	// CodeStoreGitignored is an approval-recording verb (claim lock, batch
+	// claim lock, claim flag, claim reaudit --confirm, claim
+	// recover-approved-content, constitution lock)
 	// refusing because a store it is about to write under build/ is matched
 	// by .gitignore and not in the index — the approval would never reach a
 	// collaborator — or because the project is inside a git work tree and git
