@@ -50,6 +50,7 @@ testdata/fixture-basic/build/catalog/catalog.json  (+3 -61)
     inputs changed  testdata/fixture-basic/build/ledger/lock-store.json
                     testdata/fixture-basic/claims/widget-fields.yaml
                     testdata/fixture-basic/claims/widget-overview.yaml
+                    testdata/fixture-basic/claims/widget/manifest.yaml
                     testdata/fixture-basic/constitution.yaml
     size            97 lines / 2597 bytes -> 39 lines / 929 bytes
 @@ -8,10 +8,8 @@
@@ -144,6 +145,7 @@ testdata/fixture-basic/build/viewer/index.html  (+644 -656)
     inputs changed  testdata/fixture-basic/build/ledger/lock-store.json
                     testdata/fixture-basic/claims/widget-fields.yaml
                     testdata/fixture-basic/claims/widget-overview.yaml
+                    testdata/fixture-basic/claims/widget/manifest.yaml
                     testdata/fixture-basic/constitution.yaml
     size            23276 lines / 1234179 bytes -> 23264 lines / 1229408 bytes
 @@ -124,36 +124,11 @@
@@ -2126,6 +2128,7 @@ testdata/fixture-conformance-v1/build/catalog/catalog.json  (+10 -20)
                     testdata/fixture-conformance-v1/claims/mismatch.yaml
                     testdata/fixture-conformance-v1/claims/owed.yaml
                     testdata/fixture-conformance-v1/claims/uncheckable.yaml
+                    testdata/fixture-conformance-v1/claims/widget/manifest.yaml
                     testdata/fixture-conformance-v1/constitution.yaml
                     testdata/fixture-conformance-v1/project.config.yaml
     size            275 lines / 7660 bytes -> 265 lines / 7545 bytes
@@ -2202,6 +2205,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+658 -659)
                     testdata/fixture-conformance-v1/claims/mismatch.yaml
                     testdata/fixture-conformance-v1/claims/owed.yaml
                     testdata/fixture-conformance-v1/claims/uncheckable.yaml
+                    testdata/fixture-conformance-v1/claims/widget/manifest.yaml
                     testdata/fixture-conformance-v1/constitution.yaml
                     testdata/fixture-conformance-v1/project.config.yaml
     size            23601 lines / 1288309 bytes -> 23600 lines / 1284728 bytes
@@ -4223,6 +4227,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
                     testdata/fixture-graph-demo/claims/cli-noun-list-is-fixed.yaml
                     testdata/fixture-graph-demo/claims/cli-serve-noun.yaml
                     testdata/fixture-graph-demo/claims/cli-six-nouns.yaml
+                    testdata/fixture-graph-demo/claims/cli/manifest.yaml
                     testdata/fixture-graph-demo/claims/engine-build-is-pure.yaml
                     testdata/fixture-graph-demo/claims/engine-catalog-groups-by-facet.yaml
                     testdata/fixture-graph-demo/claims/engine-catalog-shape.yaml
@@ -4238,6 +4243,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
                     testdata/fixture-graph-demo/claims/engine-no-code-nodes.yaml
                     testdata/fixture-graph-demo/claims/engine-single-source-of-truth.yaml
                     testdata/fixture-graph-demo/claims/engine-start-here.yaml
+                    testdata/fixture-graph-demo/claims/engine/manifest.yaml
                     testdata/fixture-graph-demo/claims/lock-comment-digest.yaml
                     testdata/fixture-graph-demo/claims/lock-ledger-audit-suite.yaml
                     testdata/fixture-graph-demo/claims/lock-ledger-first.yaml
@@ -4248,6 +4254,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
                     testdata/fixture-graph-demo/claims/lock-no-migration-command.yaml
                     testdata/fixture-graph-demo/claims/lock-review-pending-is-engine-managed.yaml
                     testdata/fixture-graph-demo/claims/lock-unlock-keeps-the-record.yaml
+                    testdata/fixture-graph-demo/claims/lock/manifest.yaml
                     testdata/fixture-graph-demo/claims/telemetry-counter-increment.yaml
                     testdata/fixture-graph-demo/claims/telemetry-counter-shape.yaml
                     testdata/fixture-graph-demo/claims/telemetry-counters-are-local.yaml
@@ -4257,6 +4264,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
                     testdata/fixture-graph-demo/claims/telemetry-no-egress.yaml
                     testdata/fixture-graph-demo/claims/telemetry-offline-suite.yaml
                     testdata/fixture-graph-demo/claims/telemetry-what-this-module-is.yaml
+                    testdata/fixture-graph-demo/claims/telemetry/manifest.yaml
                     testdata/fixture-graph-demo/claims/viewer-browser-suite.yaml
                     testdata/fixture-graph-demo/claims/viewer-canvas-not-svg.yaml
                     testdata/fixture-graph-demo/claims/viewer-colour-is-not-the-only-channel.yaml
@@ -4270,6 +4278,7 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+508 -1560)
                     testdata/fixture-graph-demo/claims/viewer-render-is-pure.yaml
                     testdata/fixture-graph-demo/claims/viewer-representative-node-rule.yaml
                     testdata/fixture-graph-demo/claims/viewer-scope-filter.yaml
+                    testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
     size            2182 lines / 65184 bytes -> 1130 lines / 36870 bytes
@@ -6890,6 +6899,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
                     testdata/fixture-graph-demo/claims/cli-noun-list-is-fixed.yaml
                     testdata/fixture-graph-demo/claims/cli-serve-noun.yaml
                     testdata/fixture-graph-demo/claims/cli-six-nouns.yaml
+                    testdata/fixture-graph-demo/claims/cli/manifest.yaml
                     testdata/fixture-graph-demo/claims/engine-build-is-pure.yaml
                     testdata/fixture-graph-demo/claims/engine-catalog-groups-by-facet.yaml
                     testdata/fixture-graph-demo/claims/engine-catalog-shape.yaml
@@ -6905,6 +6915,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
                     testdata/fixture-graph-demo/claims/engine-no-code-nodes.yaml
                     testdata/fixture-graph-demo/claims/engine-single-source-of-truth.yaml
                     testdata/fixture-graph-demo/claims/engine-start-here.yaml
+                    testdata/fixture-graph-demo/claims/engine/manifest.yaml
                     testdata/fixture-graph-demo/claims/lock-comment-digest.yaml
                     testdata/fixture-graph-demo/claims/lock-ledger-audit-suite.yaml
                     testdata/fixture-graph-demo/claims/lock-ledger-first.yaml
@@ -6915,6 +6926,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
                     testdata/fixture-graph-demo/claims/lock-no-migration-command.yaml
                     testdata/fixture-graph-demo/claims/lock-review-pending-is-engine-managed.yaml
                     testdata/fixture-graph-demo/claims/lock-unlock-keeps-the-record.yaml
+                    testdata/fixture-graph-demo/claims/lock/manifest.yaml
                     testdata/fixture-graph-demo/claims/telemetry-counter-increment.yaml
                     testdata/fixture-graph-demo/claims/telemetry-counter-shape.yaml
                     testdata/fixture-graph-demo/claims/telemetry-counters-are-local.yaml
@@ -6924,6 +6936,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
                     testdata/fixture-graph-demo/claims/telemetry-no-egress.yaml
                     testdata/fixture-graph-demo/claims/telemetry-offline-suite.yaml
                     testdata/fixture-graph-demo/claims/telemetry-what-this-module-is.yaml
+                    testdata/fixture-graph-demo/claims/telemetry/manifest.yaml
                     testdata/fixture-graph-demo/claims/viewer-browser-suite.yaml
                     testdata/fixture-graph-demo/claims/viewer-canvas-not-svg.yaml
                     testdata/fixture-graph-demo/claims/viewer-colour-is-not-the-only-channel.yaml
@@ -6937,6 +6950,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+872 -1063)
                     testdata/fixture-graph-demo/claims/viewer-render-is-pure.yaml
                     testdata/fixture-graph-demo/claims/viewer-representative-node-rule.yaml
                     testdata/fixture-graph-demo/claims/viewer-scope-filter.yaml
+                    testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
     size            23990 lines / 1496790 bytes -> 23799 lines / 1487671 bytes
@@ -9874,6 +9888,7 @@ testdata/fixture-portability/build/catalog/catalog.json  (+3 -147)
                     testdata/fixture-portability/claims/beacon-overview.yaml
                     testdata/fixture-portability/claims/beacon-signals.yaml
                     testdata/fixture-portability/claims/beacon-why.yaml
+                    testdata/fixture-portability/claims/beacon/manifest.yaml
                     testdata/fixture-portability/constitution.yaml
                     testdata/fixture-portability/project.config.yaml
     size            151 lines / 4182 bytes -> 7 lines / 76 bytes
@@ -10039,6 +10054,7 @@ testdata/fixture-portability/build/viewer/index.html  (+658 -670)
                     testdata/fixture-portability/claims/beacon-overview.yaml
                     testdata/fixture-portability/claims/beacon-signals.yaml
                     testdata/fixture-portability/claims/beacon-why.yaml
+                    testdata/fixture-portability/claims/beacon/manifest.yaml
                     testdata/fixture-portability/constitution.yaml
                     testdata/fixture-portability/project.config.yaml
     size            23267 lines / 1238682 bytes -> 23255 lines / 1233663 bytes
@@ -12055,11 +12071,13 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+36 -231)
                     testdata/fixture-theme-flat/claims/panel-mockup.yaml
                     testdata/fixture-theme-flat/claims/panel-state.yaml
                     testdata/fixture-theme-flat/claims/panel-verify.yaml
+                    testdata/fixture-theme-flat/claims/panel/manifest.yaml
                     testdata/fixture-theme-flat/claims/widget-boundary.yaml
                     testdata/fixture-theme-flat/claims/widget-fields.yaml
                     testdata/fixture-theme-flat/claims/widget-overview.yaml
                     testdata/fixture-theme-flat/claims/widget-reviewed.yaml
                     testdata/fixture-theme-flat/claims/widget-walkthrough.yaml
+                    testdata/fixture-theme-flat/claims/widget/manifest.yaml
                     testdata/fixture-theme-flat/constitution.yaml
                     testdata/fixture-theme-flat/project.config.yaml
     size            436 lines / 11807 bytes -> 241 lines / 6630 bytes
@@ -12431,11 +12449,13 @@ testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
                     testdata/fixture-theme-flat/claims/panel-mockup.yaml
                     testdata/fixture-theme-flat/claims/panel-state.yaml
                     testdata/fixture-theme-flat/claims/panel-verify.yaml
+                    testdata/fixture-theme-flat/claims/panel/manifest.yaml
                     testdata/fixture-theme-flat/claims/widget-boundary.yaml
                     testdata/fixture-theme-flat/claims/widget-fields.yaml
                     testdata/fixture-theme-flat/claims/widget-overview.yaml
                     testdata/fixture-theme-flat/claims/widget-reviewed.yaml
                     testdata/fixture-theme-flat/claims/widget-walkthrough.yaml
+                    testdata/fixture-theme-flat/claims/widget/manifest.yaml
                     testdata/fixture-theme-flat/constitution.yaml
                     testdata/fixture-theme-flat/project.config.yaml
     size            27403 lines / 4877586 bytes -> 23405 lines / 1273590 bytes

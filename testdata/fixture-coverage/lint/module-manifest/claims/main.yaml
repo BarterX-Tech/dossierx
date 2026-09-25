@@ -1,0 +1,11 @@
+id: missmod.contract.main
+facet: contract
+module: missmod
+status: draft
+layout: card
+summary: Fixture claim used by the engine test corpus.
+body: |
+  A claim in a module that has no claims_dir/<module>/manifest.yaml, so
+  module-manifest fires at error severity.
+rests_on:
+  - missmod.contract.peer

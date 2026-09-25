@@ -24,9 +24,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - emptyrowsmod\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	// rows: [] on disk decodes to a non-nil, zero-length slice — distinct
@@ -151,9 +149,7 @@ func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed
 	if allowlisted {
 		cfg += "mockup_modules:\n  - widget\n"
 	}
-	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, root)
 
 	status := "draft"

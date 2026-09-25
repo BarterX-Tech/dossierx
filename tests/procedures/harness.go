@@ -80,6 +80,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 )
 
 // ---------------------------------------------------------------------------
@@ -447,6 +449,9 @@ func (f *fixture) WriteProjectConfig() {
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
 	if err := os.WriteFile(filepath.Join(f.root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
 		f.t.Fatalf("write project.config.yaml: %v", err)
+	}
+	if err := manifest.SeedMinimalFromConfigYAML(f.root, []byte(cfg)); err != nil {
+		f.t.Fatalf("seed module manifests: %v", err)
 	}
 	f.LockConstitution()
 }

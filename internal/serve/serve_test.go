@@ -19,6 +19,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 
@@ -133,6 +134,11 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+	if filepath.Base(path) == "project.config.yaml" {
+		if err := manifest.SeedMinimalFromConfigYAML(filepath.Dir(path), []byte(content)); err != nil {
+			t.Fatalf("seed module manifests: %v", err)
+		}
 	}
 }
 

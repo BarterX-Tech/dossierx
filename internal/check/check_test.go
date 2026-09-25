@@ -11,6 +11,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -62,6 +63,11 @@ func projectWithRoof(t *testing.T, cfgBody string, files map[string]string, roof
 	cfg, err := config.LoadConfig(filepath.Join(root, "project.config.yaml"))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
+	}
+	for _, module := range cfg.Modules {
+		if err := manifest.WriteMinimal(cfg.ClaimsDir, module); err != nil {
+			t.Fatalf("write module manifest %s: %v", module, err)
+		}
 	}
 	claims, err := loader.LoadClaims(cfg.ClaimsDir)
 	if err != nil {

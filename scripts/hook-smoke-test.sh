@@ -200,6 +200,22 @@ YAML
 		fail "constitution lock failed in $dir; no fixture claim can lock without the roof"
 }
 
+# arm_manifest <claims-dir> <module> — the module-manifest harness (NIT-7):
+# every configured module needs exactly one claims_dir/<module>/manifest.yaml
+# before "check" or "claim lock" passes. "claim new" itself only writes an
+# empty-summary STUB (deliberately unfrictioned drafting, refused until an
+# agent fills it in), so every fixture below drafts one here, the same way an
+# agent would from "dossierx manifest show <module> --isolation".
+arm_manifest() {
+	local claims_dir="$1" module="$2"
+	mkdir -p "$claims_dir/$module"
+	cat >"$claims_dir/$module/manifest.yaml" <<YAML
+summary: module $module — the smoke test's fixture module.
+provides: []
+depends_on: []
+YAML
+}
+
 CLAIM_ID="widget.contract.overview"
 
 # new_project <dir> — a git repository containing a one-claim dossierx project
@@ -224,6 +240,7 @@ YAML
 		git config user.name "hook smoke test"
 		git config commit.gpgsign false
 		arm_roof "$dir"
+		arm_manifest "$dir/claims" widget
 		"$BIN" claim new "$CLAIM_ID" \
 			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
@@ -253,6 +270,7 @@ YAML
 	(
 		cd "$repo/$sub"
 		arm_roof "$repo/$sub"
+		arm_manifest "$repo/$sub/claims" widget
 		"$BIN" claim new "$CLAIM_ID" \
 			--summary "The widget answers within 200ms." \
 			--body "the widget answers within 200ms." \
@@ -713,6 +731,7 @@ YAML
 (
 	cd "$SPLIT/docs"
 	arm_roof "$SPLIT/docs"
+	arm_manifest "$SPLIT/claims" widget
 	"$BIN" claim new "$CLAIM_ID" \
 		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
@@ -844,6 +863,7 @@ YAML
 	git config user.name "hook smoke test"
 	git config commit.gpgsign false
 	arm_roof "$SKIPPED/repo"
+	arm_manifest "$SKIPPED/outside-claims" widget
 	"$BIN" claim new "$CLAIM_ID" \
 		--summary "The widget answers within 200ms." \
 		--body "the widget answers within 200ms." \
@@ -1100,6 +1120,7 @@ YAML
 	git config user.name "hook smoke test"
 	git config commit.gpgsign false
 	arm_roof "$PROJCLAIMS"
+	arm_manifest "$PROJCLAIMS/claims" widget
 	"$BIN" claim new "$PROJECT_CLAIM_ID" \
 		--summary "Every widget this project documents is kept under one roof." \
 		--body "every widget this project documents is kept under one roof." \

@@ -155,7 +155,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 			if store != nil && store.LocalApprovalEnabled() && finding.LintName == "rest-on-locked" {
 				continue
 			}
-			if findingAffects(finding, id) {
+			if findingAffects(finding, id, claim.Module) {
 				verdict.LocalAdmissible = false
 				verdict.Refusals = append(verdict.Refusals, "lint:"+finding.LintName)
 				verdict.LintFindings = append(verdict.LintFindings, finding)
@@ -216,7 +216,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 		}
 		related := false
 		for _, id := range ids {
-			if findingAffects(finding, id) {
+			if findingAffects(finding, id, byID[id].Module) {
 				related = true
 				break
 			}
@@ -228,7 +228,16 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 	return result
 }
 
-func findingAffects(f lint.Finding, id string) bool {
+// findingAffects is the scoping rule: a finding blocks a candidate when it
+// names the candidate, or — for the module-manifest rule, whose ClaimID is
+// the MODULE ("" = project-wide) and never a claim — when it is about the
+// candidate's own module. A module with no valid manifest.yaml has no
+// lockable claims (NIT-22); a defect in another module's file is not this
+// candidate's to fix and does not hold it hostage.
+func findingAffects(f lint.Finding, id, module string) bool {
+	if f.LintName == lint.ModuleManifestLintName {
+		return f.ClaimID == "" || f.ClaimID == module
+	}
 	return f.ClaimID == id || strings.Contains(f.Message, id)
 }
 

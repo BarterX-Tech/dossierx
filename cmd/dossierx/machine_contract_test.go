@@ -222,6 +222,9 @@ func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
 		trackListData{},
 		trackShowData{},
 		trackStatusData{},
+		manifestShowData{},
+		manifestListData{},
+		manifestFindingData{},
 
 		skillsExportData{},
 		cliout.DryRun{},
@@ -381,9 +384,7 @@ func TestClaimLinkDryRunAgreesWithTheWritePath(t *testing.T) {
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	// Two modules, so "the claim is in a different module" is expressible.
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gadget\nclaims_dir: claims\n"
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("rewrite config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
 	lockFixtureConstitution(t, cfgPath)
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture"); err != nil {
 		t.Fatalf("lock the claim so it is linkable: %v", err)
@@ -463,9 +464,7 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	claimPath := filepath.Join(claimsDir, "a.yaml")
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
@@ -508,9 +507,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	// Two claims in DIFFERENT phases, so the artifact has two phase blocks to
 	// reverse. One claim could not express this edit at all.

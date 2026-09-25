@@ -23,9 +23,7 @@ func ledgerProject(t *testing.T) (cfgPath, claimPath, storeFile string) {
 		t.Fatalf("mkdir claims: %v", err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "main.yaml")
 	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +

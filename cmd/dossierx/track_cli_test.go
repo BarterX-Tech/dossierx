@@ -54,9 +54,7 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
 		"  - id: refunds\n    title: Refunds\n"
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, cfg)
 	lockFixtureConstitution(t, cfgPath)
 
 	claims := map[string]string{

@@ -114,7 +114,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the eight nouns the way the noun
+	// The message is inlined instead, naming the nine nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -127,11 +127,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <check, claim, comment, serve, skills, track, version>")
+				WithHint("run one of: dossierx <check, claim, comment, manifest, serve, skills, track, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <check, claim, comment, serve, skills, track, version>")
+			WithHint("run one of: dossierx <check, claim, comment, manifest, serve, skills, track, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -169,13 +169,14 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: eight nouns, twenty-two leaves, and not one more.
+	// The whole surface: nine nouns, twenty-four leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link recover-approved-content 9
 	//	comment inbox list add reply                                      4
 	//	constitution show lock                                            2
 	//	track   list show status                                          3
+	//	manifest show list                                                2
 	//	serve · skills export · version                                   3
 	//
 	// The count is a design constraint, not a coincidence. Every verb here is
@@ -211,6 +212,7 @@ func newRootCmd() *cobra.Command {
 		newCommentCmd(),
 		newConstitutionCmd(),
 		newTrackCmd(),
+		newManifestCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
 

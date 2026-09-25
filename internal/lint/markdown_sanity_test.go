@@ -317,12 +317,12 @@ func equalStrings(a, b []string) bool {
 // first stray backtick in any draft in a project freezes every lock in it —
 // including the locks the author needs in order to go fix it.
 func TestMarkdownSanity_CraftFindingsDoNotBlockALock(t *testing.T) {
-	cfg := &config.Config{
+	cfg := withManifests(&config.Config{
 		SchemaVersion: 1,
 		Facets:        []string{"contract"},
 		Modules:       []string{"widget"},
 		ClaimsDir:     "claims",
-	}
+	})
 	claims := []model.Claim{
 		{
 			ID:      "widget.contract.anchor",

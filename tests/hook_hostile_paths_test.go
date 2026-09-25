@@ -297,9 +297,7 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 		t.Fatalf("could not create the hostile fixture directories under %s: %v (if the OS refuses this name the case belongs in the table's exclusions, declared, not discovered here)", parent, err)
 	}
 	cfg := "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
-	if err := os.WriteFile(filepath.Join(project, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write project.config.yaml: %v", err)
-	}
+	writeProjectConfigFile(t, filepath.Join(project, "project.config.yaml"), cfg)
 	lockFixtureConstitution(t, project)
 
 	mustRun := func(dir, what string, name string, args ...string) {

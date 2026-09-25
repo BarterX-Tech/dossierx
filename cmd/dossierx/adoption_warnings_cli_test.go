@@ -163,9 +163,7 @@ func TestFirstCheckOfANewProjectDoesNotWarnAboutAdoption(t *testing.T) {
 	// Deliberately NOT writeCheckFixture: no locked claim, so nothing arms the
 	// ledger or the digest store before the roof lock below creates them.
 	cfgPath := filepath.Join(root, "project.config.yaml")
-	if err := os.WriteFile(cfgPath, []byte(parityConfig), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	writeProjectConfigFile(t, cfgPath, parityConfig)
 	if err := os.MkdirAll(filepath.Join(root, "claims"), 0o755); err != nil {
 		t.Fatalf("mkdir claims: %v", err)
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -86,6 +87,11 @@ func TestViewerMultiplicityOverflowPreservesAllPreviousArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
+	for _, mod := range modules {
+		if err := manifest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
 	heavy := strings.Repeat("x", 1<<20)
 	var claims []model.Claim
 	for _, mod := range modules {
@@ -131,6 +137,11 @@ func TestPlainViewerCapacityOverflowPreservesPreviousCatalogAndViewer(t *testing
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
+	for _, mod := range modules {
+		if err := manifest.WriteMinimal(cfg.ClaimsDir, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
 	heavy := strings.Repeat("x", 1<<20)
 	var claims []model.Claim
 	for _, mod := range modules {
@@ -177,6 +188,9 @@ func TestSharedTargetProjectionOverflowPreservesAllPreviousArtifacts(t *testing.
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
+	if err := manifest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
+		t.Fatal(err)
+	}
 	claims := make([]model.Claim, 96)
 	for i := range claims {
 		claims[i] = model.Claim{
@@ -221,6 +235,9 @@ func TestPlainCatalogCapacityUsesCatalogDomainBeforeWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
+	if err := manifest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
+		t.Fatal(err)
+	}
 	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {
@@ -268,6 +285,9 @@ func TestReadOnlyOptOutDoesNotBuildOrBoundCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	armConstitution(t, cfg)
+	if err := manifest.WriteMinimal(cfg.ClaimsDir, "widget"); err != nil {
+		t.Fatal(err)
+	}
 	shared := strings.Repeat("x", 20<<20)
 	claims := make([]model.Claim, 4)
 	for i := range claims {

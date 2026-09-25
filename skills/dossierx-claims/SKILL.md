@@ -68,10 +68,10 @@ it out.
   constitution — it is not a target, not a node, not a ref grammar (see **Project claims and the
   constitution** below). Targets are **drift** edges (a target's content changing under a locked
   claim flags `review_pending`). `governed_by` is gone as of v0.7.21 — a claim file that still
-  carries it fails to load; the router's "governed_by is gone" section says what to do.
+  carries it fails to load; the router's "governed_by is gone" section says what to do. **A `rests_on` loop is refused** at ERROR (`cycle`).
 - **Facets are hard law:** exactly `contract` and `internals`. Another module may cite only `contract`;
   foreign `internals` is refused (`rests-on-target`) and never exported (catalog, integration).
-- **A `rests_on` loop is refused** at ERROR (`cycle`).
+- **Module context is `claims/<module>/manifest.yaml`**, not `build_role: orientation` — required YAML, not a claim: `summary` (why / start here + neighbor/product use, ≤280 characters), `provides` (this module's `contract`-facet ids — its export list) and `depends_on` (other modules' contract ids, each listed in that provider's `provides`; never your own ids, never `project.*` or constitution refs), file ≤4096 bytes. **You draft it**, from `dossierx manifest show <module> --isolation` (claim summaries + `draft_hints.suggested_provides` + constitution digest seam) plus a short usage note; do not paste claim bodies. `claim new` leaves an empty-summary stub that fails until you do. Missing, stub or invalid fails `check`, `claim lock` (every claim of that module) and `manifest show` (`module-manifest` / `lint_failed`). Neighbors: `manifest show --integration`. Catalog blurbs: `manifest list`. The lists are not `rests_on` edges; cycles are legal. Draft or refresh it when a module is new or a neighbor needs a contract id you have not exported yet.
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
   **Citing your evidence** below.
