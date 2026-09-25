@@ -1336,8 +1336,11 @@ func newClaimNewCmd() *cobra.Command {
 				dr.Require("file_is_unused", !fileExists(path), boolDetail(fileExists(path),
 					path+" already exists",
 					path+" does not exist yet"))
-				dr.Effect("creates " + path).
-					Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
+				dr.Effect("creates " + path)
+				if stub := missingModuleManifest(cfg, module); stub != "" {
+					dr.Effect("creates " + stub + " (a module manifest STUB with an empty summary: check and claim lock refuse until it is drafted from dossierx manifest show " + module + " --isolation)")
+				}
+				dr.Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
 				dr.Propose("path", path).
 					Propose("facet", facet).
 					Propose("module", module).
@@ -1408,11 +1411,21 @@ func newClaimNewCmd() *cobra.Command {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: create claim dir: %w", err)
 			}
-			if err := loader.SaveClaim(claim); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: %w", err)
+			// The manifest stub is written BEFORE the claim, and removed again
+			// if the claim cannot be saved, so a failure on either write leaves
+			// the project as it was: never a claim on disk under a write_failed
+			// that says nothing was created, never an orphan stub.
+			stub := missingModuleManifest(cfg, module)
+			if stub != "" {
+				if err := manifest.WriteStub(cfg.ClaimsDir, module); err != nil {
+					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: write module manifest: %w", err)
+				}
 			}
-			if err := ensureModuleManifest(cfg, module); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: write module manifest: %w", err)
+			if err := loader.SaveClaim(claim); err != nil {
+				if stub != "" {
+					_ = os.Remove(stub)
+				}
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "claim new: %w", err)
 			}
 
 			// Lint the project WITH the new claim in it and report the verdict.
@@ -1482,13 +1495,16 @@ func normalizeClaimBody(body string) string {
 	return b
 }
 
-func ensureModuleManifest(cfg *config.Config, module string) error {
+// missingModuleManifest returns the path of module's manifest.yaml when
+// "claim new" would have to write a stub there, or "" when the manifest exists
+// or the claim has no module (a project claim).
+func missingModuleManifest(cfg *config.Config, module string) string {
 	if cfg == nil || module == "" {
-		return nil
+		return ""
 	}
 	dest := filepath.Join(cfg.ClaimsDir, filepath.FromSlash(manifest.RequiredRelPath(module)))
 	if fileExists(dest) {
-		return nil
+		return ""
 	}
-	return manifest.WriteStub(cfg.ClaimsDir, module)
+	return dest
 }
