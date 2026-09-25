@@ -1,0 +1,10 @@
+id: caps.contract.long-summary
+summary: SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS
+facet: contract
+module: caps
+status: draft
+layout: card
+body: |
+  A claim whose summary is one character over the default cap.
+rests_on:
+  - caps.contract.control

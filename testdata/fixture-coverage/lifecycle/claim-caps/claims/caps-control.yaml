@@ -1,0 +1,11 @@
+id: caps.contract.control
+summary: Control claim inside every cap; it must lock.
+facet: contract
+module: caps
+status: draft
+layout: card
+body: |
+  A short, well-formed claim that locks.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

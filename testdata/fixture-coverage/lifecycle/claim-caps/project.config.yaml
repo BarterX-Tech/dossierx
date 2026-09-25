@@ -1,0 +1,12 @@
+# NIT-11: one project that trips every claim cap at once, on the defaults.
+# No max_claim_body_chars, max_claim_summary_chars or max_claims_per_module
+# override: the caps under test are 2,000 / 200 / 10.
+schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - caps
+  - other
+  - crowded
+claims_dir: claims
