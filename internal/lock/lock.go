@@ -45,6 +45,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
@@ -786,26 +787,16 @@ func createCommentDigestStore(lockStorePath string) error {
 // observe a partially-written file: it writes to a temp file created in
 // path's own directory (so the later rename stays on one filesystem, which
 // is what makes it atomic) and then renames it over path.
+//
+// The rename is delegated to atomicfile.Write so Windows gets the same
+// bounded retry as loader.SaveClaim. A concurrent reader (dry-run / another
+// lock process loading the store) can hold lock-store.json open; Windows then
+// refuses MoveFileEx with a sharing violation. A single os.Rename turned that
+// into "store write failed and recovery incomplete" on windows-latest Go
+// stable in TestConcurrentClaimWritersNeverCorruptClaimFiles (CI run
+// 36166155789). POSIX rename stays one-shot.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) // no-op once the rename below succeeds
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.Write(path, data, perm)
 }
 
 // ContentHash returns a deterministic hash of the parts of a claim that
