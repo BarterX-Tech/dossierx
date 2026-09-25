@@ -9,13 +9,10 @@ are never readable or citable from outside the owning module.
 ## Lock policy v1
 
 The lock store has a separate `policy_version` from its JSON `version`. v1 is
-the only policy. The legacy policy 0 (every `rests_on` target must already be
-locked) was retired in v0.7.21: a store that records `policy_version: 0`, or
-predates the field, loads as v1, and its next write stamps `policy_version: 1`
-with `policy_migrated_at` and `policy_migration_reason`. Every approval such a
-store holds was granted under the stricter legacy rule, so the carry-over
-reinterprets none of them; it does not refresh baselines or clear review
-causes.
+the only policy. A store that records an older `policy_version`, or none, loads
+as v1, and its next write stamps `policy_version: 1` with `policy_migrated_at`
+and `policy_migration_reason`. The carry-over reinterprets no approval,
+refreshes no baseline and clears no review cause.
 
 Policy v1 evaluates a requested claim set as one final candidate state. A set
 of one uses the same evaluator as a group. `claim lock ... --dry-run` returns
@@ -24,8 +21,8 @@ the matching snapshot as mandatory `--proposal` on the write refuses if its requ
 content changed in between. A readable draft dependency can leave a claim
 locally approved with a visible `dependency_unapproved` condition. That claim
 is not dependency-ready. Missing, retired, unreadable, or cyclic required
-dependencies, open review threads, lint/integrity gates and unresolved doctrine
-gating still refuse approval.
+dependencies, open review threads, an unlocked constitution, and lint or
+integrity gates still refuse approval.
 
 Each policy-v1 approval stores a receipt per reviewed dependency: its id,
 comparable content hash and decoded claim content. The receipt makes the
@@ -727,8 +724,8 @@ joins no cycle walk.
 | `track-unowned` | WARNING | a track with citations but no owner. The assembled document renders as references with no statement of what the feature *is* — incomplete, not false. |
 
 **Track membership never gates `dossierx claim lock`, and this is a non-goal
-rather than an omission.** A claim locks on its own merits — lint clean, doctrine
-dependencies locked, no unresolved comment thread — and adding a second axis must
+rather than an omission.** A claim locks on its own merits — lint clean, the
+constitution locked, no unresolved comment thread — and adding a second axis must
 not add a second way to be refused. `dossierx track status <id>` **reports**:
 a track is COMPLETE when every claim it owns and every claim it cites is locked,
 and an incomplete track is a fact about the feature, not a verdict on any claim
@@ -798,14 +795,14 @@ decoding never rejects it.
 `agent`), not an identity — the same axis as the CLI's `--as` flag. A banner
 (`layout: banner`) claim is decorative and cannot carry comment threads.
 
-### `build_role` (removed)
+### Retired fields
 
-`build_role` is gone as of v0.7.21 (NIT-32), with no alias. A claim file
-that still carries it fails strict decode at `load`. Delete the key from
-every claim; a locked claim that carried it moves its lock hash, so it goes
-through `unlock` → `lock` once, like every locked claim in this release.
-What to implement next is locked claims, module `depends_on`, and claim
-`rests_on`; viewer reading order is `order` / `section`.
+A claim file carrying a key the schema does not have fails strict decode at
+`load` (`invalid_claim`). That includes the retired `build_role`,
+`governed_by` and `mirrors`; the `dossierx-upgrading` skill folds a corpus
+that still carries them. What to implement next is locked claims, module
+`depends_on`, and claim `rests_on`; viewer reading order is `order` /
+`section`.
 
 ### `section` and in-content headings
 
@@ -864,21 +861,6 @@ A claim may reference other claims by `id` via one directed edge kind:
   `review_pending`). Its reach is the lock gate (`CONSTITUTION_NOT_LOCKED`),
   the viewer's Constitution pin, and the digest and text `manifest show` will
   carry. See "The constitution" below.
-- **`governed_by`** — **gone as of v0.7.21** (NIT-29). It named a doctrine
-  claim as the authority behind a claim, or `type: none` with a reason. The
-  field, its `governed-cycle` / `governed-required` / `mixed-cycle` /
-  `validated-on-missing` lints, its graph edge and its drift baseline are all
-  removed, with no alias and no migrate command: a claim file that still
-  carries a `governed_by:` block **fails to load**. Where the old
-  `governed_by.type` named a claim the dependent genuinely relies on, name it
-  under `rests_on` instead — that is the only edge the engine walks, gates
-  and baselines. Where it was `type: none`, `rests_on: {none: true, reason}`
-  is the replacement. See the CHANGELOG entry for the client-project
-  migration.
-- **The doctrine hub is gone too** (NIT-23): there is no `doctrine_facet`
-  config key and no hub-gating. Critical former doctrine bodies become
-  constitution entries; the rest become project claims under
-  `project-claims/`.
 
 ### Graph invariants
 
@@ -1140,7 +1122,7 @@ certified exactly the edit that most needed a signature; it is built on
 | `lock-ledger-absent` | Locked claims exist, so the ledger file must exist. Deleting it is not a way to re-bless a project; it is a project-scoped refusal you fix by restoring the file from version control. |
 | `lock-ledger-downgraded` | The lock store says it predates the ledger while the project around it proves otherwise — its `version` set back from `2` to `1` and the `ledger` key deleted, one hand edit to the audited file. **Read this as tamper evidence, not as a grandfathering guard.** It was written as the latter: adoption used to key on the store's own `version`, so this edit re-ran adoption and recorded whatever the claims said at that moment as approved, and the rule's job was to catch that with evidence the store does not own (a sibling `build/ledger/comment-digest.json`, or ledger records still sitting in a store claiming to predate records). There is no adoption path at all any more — see *Crossing onto the ledger* below — so the edit buys nothing and this rule is no longer load-bearing for that. It still fires, because a store lying about its own schema version is still a store somebody edited by hand, and the per-claim findings under it still stand. Restore the store from version control. Do **not** re-lock. A downgraded store is deliberately not offered the crossing either: `PreLedgerUnadopted` is `PreLedger && !LedgerDowngraded`, so this store gets *this* finding rather than `lock-ledger-pre-ledger`, and `CrossPreLedger` returns without stamping it. |
 | `lock-ledger-pre-ledger` | This project's lock store predates the lock ledger **and** the project still holds a locked claim, so nothing locked here has an approval record and nothing can attest to content no ledger ever recorded. This is **not** tampering and there is nothing wrong with the claims: the ledger simply does not exist yet. There is no adoption path and no migration command any more — a project crosses by emptying itself of everything that predates the ledger, and the next `claim lock` stamps the store while recording a real approval. One project-scoped finding, deliberately in place of one `lock-ledger-missing` per claim — repeating "locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is destructive advice at a project that has done nothing wrong. **It is CONDITIONAL:** a pre-ledger project holding nothing locked is silent, because such a project crosses correctly on its next lock and a finding there would be a finding on correct state. It is emitted exactly once per project from the locked-claims term (`lock.Audit`). Its write-path twin is the `pre_ledger_unadopted` refusal from `claim lock` and `claim reaudit --confirm`. See *Crossing onto the ledger* below. Tell it apart from `lock-ledger-absent`, which means the project **had** a ledger and no longer does — and from `lock-ledger-downgraded`, a store that only *claims* to predate the ledger: that rule owns that diagnosis, and such a store is never offered the crossing. |
-| `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate, hub-gating and the unresolved-comment gate as though all three had passed. |
+| `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate and the unresolved-comment gate as though both had passed. |
 | `lock-ledger-deleted` | A claim **this engine locked** still has its record. `lock-ledger-missing`'s sharper twin, and it exists because every other rule keyed on a record *existing*, so deleting one removed the claim from the switch entirely: drop its entry from the `ledger` map, flip `status: locked` to `draft`, and it is an ordinary draft — freely editable, and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. The evidence the deletion does not reach is one key away in the same file: `locked_at`, stamped by every lock and confirmed reaudit and removed by nothing in this build, plus the claim's dependency baselines under `hashes`. The only path that legitimately ends an approval is `unlock`, which **keeps** the record and stamps `ReleasedAt` — so a record that is absent rather than released was deleted by hand. Stated plainly: deleting `locked_at` and the baselines in the same edit leaves nothing to notice, which is three keys in a tracked file instead of one, in a diff whose purpose is to be read. |
 | `lock-ledger-released` | A `locked` claim's record is a *standing* approval. Unlocking marks the record released rather than deleting it, so flipping `status:` back to `locked` by hand leaves a released record in place — which satisfies "a record exists" while recording the opposite of an approval, and passes the hash check because the hash deliberately excludes `status`. |
 | `lock-content-drift` | A locked claim's content still hashes to what was approved. Covers every field above, including the ones `ContentHash` cannot see. |

@@ -16,8 +16,8 @@ content change in a dependency
 creates review on the direct consumer and an inherited review cause on every
 downstream consumer, with the full path shown on that consumer.
 
-`rests_on` is the only drift input since the `governed_by` edge retired
-(NIT-29); the baseline set and the required chain are the same set. Hashes
+`rests_on` is the only drift input; the baseline set and the required chain
+are the same set. Hashes
 detect comparable content changes; they do not decide semantic compatibility. Existing lint,
 integrity, comment, and human-review gates still apply.
 
@@ -144,12 +144,10 @@ does not guarantee linear work, memory, or serialized output.
 
 ## Existing projects
 
-Local-approval policy v1 is the only policy. The legacy policy 0 ("every
-`rests_on` target must already be locked") was retired in v0.7.21. A store
-that records policy 0, or predates the field, loads as v1 and its next write
-records the carry-over (`policy_version: 1`, `policy_migrated_at`,
-`policy_migration_reason`). Every approval such a store holds was granted
-under the stricter legacy rule, so none of them is reinterpreted.
+Local-approval policy v1 is the only policy. A store that records an older
+policy, or predates the field, loads as v1 and its next write records the
+carry-over (`policy_version: 1`, `policy_migrated_at`,
+`policy_migration_reason`). No approval it holds is reinterpreted.
 
 Existing approvals, dependency baselines, receipts and review causes stay as
 recorded. Loading a newer binary does not lock or unlock claims, refresh a
@@ -222,7 +220,7 @@ claim nothing reported.
 
 ## What readiness does not prove
 
-The number of locked claims, a complete build order, passing fixture tests, or
+The number of locked claims, a complete track, passing fixture tests, or
 a green local approval count is not an integrated-readiness certificate. The
 relevant dependency chain must be approved, current, and clear of active
 review, and the project still needs the implementation and independent
