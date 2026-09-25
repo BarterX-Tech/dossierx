@@ -248,10 +248,29 @@ migration tooling.
 `check --staged` reads the index copy of each manifest, not the worktree.
 
 `dossierx manifest show <module>` prints the file and always includes a
-`constitution_digest` object (NIT-6 fills the roof text; this release emits
-`status: pending_nit6`). `--isolation` adds claim summaries and draft hints;
-`--bodies` is opt-in and refuses `view_too_large` over the 16384-byte isolation
-cap. `--integration` adds neighbor blurbs and `depends_on` membership edges —
+`constitution_digest` object (path, word count, hash and the constitution gate's
+`state`). `--isolation` adds the bounded context an agent works a module from:
+
+- `shared.constitution_text`: the whole constitution as text;
+- `shared.project_claims`: the project claims index, one line per
+  `project.<slug>` (id, authored `summary`, status);
+- `manifest`: this module's file;
+- `claims`: each of this module's claims as id, title, facet, status and its
+  authored `summary`, exactly as written. No bodies; read one with
+  `dossierx claim show <id>`;
+- `draft_hints`: suggested `provides` (the module's contract ids).
+
+The view is at most 16384 bytes of compact JSON, split into two budgets that
+`isolation_budget` reports beside it. The **shared** budget (10240 bytes) is
+`shared` itself. Every module carries the same text, so it is never a reason to
+refuse one module's view: `check` enforces it with `shared-context-budget`
+(error), raised on the project claim whose index line pushes the shared context
+over, in id order (project-wide when the constitution text alone is over).
+The **module** budget (6144 bytes) is everything else in the view. Over it,
+`manifest show --isolation` refuses with `view_too_large`, naming the module,
+its bytes and claim count. Ten claims with 200-character summaries fit; a
+`max_claims_per_module` override well above 10, or a manifest near its
+4096-byte file cap, can outgrow it. ``--integration` adds neighbor blurbs and `depends_on` membership edges —
 not catalog graph walks. `dossierx manifest list` is the summaries-only module
 catalog. The retired `deps` and `catalog` nouns stay retired. No lock exists for
 the manifest itself in this release: the human reviews it in the viewer's

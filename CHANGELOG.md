@@ -93,11 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   until an agent drafts it from `dossierx manifest show <module> --isolation`
   (exit 1 with `draft_hints` while the file is missing). Do not paste claim
   bodies. `provides`/`depends_on` are not graph edges and cycles are legal.
-  `dossierx manifest show` prints one file (and always a `constitution_digest`
-  seam for NIT-6). `--isolation` adds claim summaries and draft hints;
+  `dossierx manifest show` prints one file and always a `constitution_digest`.
+  `--isolation` adds the constitution text, the project claims index, this
+  module's manifest, each claim's authored `summary` exactly as written (no
+  bodies; there is no `--bodies`) and draft hints;
   `--integration` adds neighbor blurbs and `depends_on` membership edges.
-  `manifest list` is the summaries-only module catalog. Isolation over the
-  16384-byte view cap refuses with `view_too_large`. The retired `deps` /
+  `manifest list` is the summaries-only module catalog. The 16384-byte
+  isolation view is split: 10240 bytes shared (constitution text plus project
+  claims index), enforced by the new `shared-context-budget` check on the
+  project claim that crosses it, and 6144 bytes owned by the module, whose
+  overflow refuses with `view_too_large` naming the module. The retired `deps` /
   `catalog` nouns stay retired. Decisions recorded on Linear NIT-7 (2026-09-24).
 
 ### Changed

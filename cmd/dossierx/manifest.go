@@ -32,6 +32,7 @@ type manifestShowData struct {
 	Findings           []manifestFindingData       `json:"findings"`
 	ConstitutionDigest manifest.ConstitutionDigest `json:"constitution_digest"`
 	Isolation          *manifest.IsolationView     `json:"isolation,omitempty"`
+	IsolationBudget    *manifest.IsolationBudget   `json:"isolation_budget,omitempty"`
 	Integration        *manifest.IntegrationView   `json:"integration,omitempty"`
 }
 
@@ -47,10 +48,10 @@ type manifestListData struct {
 }
 
 func newManifestShowCmd() *cobra.Command {
-	var isolation, integration, bodies bool
+	var isolation, integration bool
 	cmd := &cobra.Command{
 		Use:   "show <module>",
-		Short: "Print one module's manifest.yaml; --isolation adds constitution digest + claim summaries, --integration adds neighbor blurbs",
+		Short: "Print one module's manifest.yaml; --isolation adds the constitution, project claims index and claim summaries, --integration adds neighbors",
 		Args:  cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			module := args[0]
@@ -61,11 +62,17 @@ func newManifestShowCmd() *cobra.Command {
 			if err := requireDeclaredModule(cfg, module, "manifest show"); err != nil {
 				return cmdResult{}, err
 			}
-			view, err := manifest.Show(claims, cfg, module, isolation, integration, bodies)
+			view, err := manifest.Show(claims, cfg, module, manifest.ShowOptions{
+				Isolation:         isolation,
+				Integration:       integration,
+				ConstitutionState: string(constitutionVerdict(cfg).State),
+			})
 			if err != nil {
 				if manifest.IsIsolationOversize(err) {
 					return cmdResult{}, cliout.Errorf(cliout.CodeViewTooLarge, "manifest show: %s", err.Error()).
-						WithHint("omit --bodies or shorten claim text; isolation is summaries by default")
+						WithDetails(manifest.IsolationOversizeDetails(err)).
+						WithHint("shorten this module's claim summaries or manifest, or split the module; " +
+							"a max_claims_per_module override above 10 or a manifest near its 4096-byte cap can outgrow the module budget")
 				}
 				return cmdResult{}, err
 			}
@@ -78,6 +85,7 @@ func newManifestShowCmd() *cobra.Command {
 				Findings:           projectManifestFindings(view.Findings),
 				ConstitutionDigest: view.ConstitutionDigest,
 				Isolation:          view.Isolation,
+				IsolationBudget:    view.IsolationBudget,
 				Integration:        view.Integration,
 			}
 			res := cmdResult{
@@ -92,9 +100,8 @@ func newManifestShowCmd() *cobra.Command {
 			return res, nil
 		}),
 	}
-	cmd.Flags().BoolVar(&isolation, "isolation", false, "emit constitution digest + this manifest + claim summaries (bodies opt-in via --bodies)")
+	cmd.Flags().BoolVar(&isolation, "isolation", false, "emit constitution text + project claims index + this manifest + claim summaries (no bodies; read one with claim show <id>)")
 	cmd.Flags().BoolVar(&integration, "integration", false, "add neighbor module catalog rows and depends_on membership edges")
-	cmd.Flags().BoolVar(&bodies, "bodies", false, "include claim bodies in --isolation (refused if the view exceeds the isolation cap)")
 	return cmd
 }
 
@@ -143,7 +150,7 @@ func projectManifestFindings(in []manifest.Finding) []manifestFindingData {
 func writeManifestShowText(cmd *cobra.Command, d manifestShowData, isolation, integration bool) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "manifest show: %s (%s)\n", d.Module, d.Path)
-	fmt.Fprintf(out, "  constitution:      %s\n", d.ConstitutionDigest.Status)
+	fmt.Fprintf(out, "  constitution:      %s\n", constitutionLine(d.ConstitutionDigest))
 	if d.Summary != "" {
 		fmt.Fprintf(out, "  summary:           %s\n", d.Summary)
 	}
@@ -156,10 +163,21 @@ func writeManifestShowText(cmd *cobra.Command, d manifestShowData, isolation, in
 		}
 	}
 	if isolation && d.Isolation != nil {
+		fmt.Fprintf(out, "  project claims:    %d\n", len(d.Isolation.Shared.ProjectClaims))
+		for _, e := range d.Isolation.Shared.ProjectClaims {
+			fmt.Fprintf(out, "    %s — %s\n", e.ID, e.Summary)
+		}
 		fmt.Fprintf(out, "  isolation claims:  %d (draft from summaries; do not paste bodies)\n", len(d.Isolation.Claims))
+		for _, c := range d.Isolation.Claims {
+			fmt.Fprintf(out, "    %s — %s\n", c.ID, c.Summary)
+		}
 		if len(d.Isolation.DraftHints.SuggestedProvides) > 0 {
 			fmt.Fprintf(out, "  suggested provides: %s\n", strings.Join(d.Isolation.DraftHints.SuggestedProvides, ", "))
 		}
+	}
+	if isolation && d.IsolationBudget != nil {
+		b := d.IsolationBudget
+		fmt.Fprintf(out, "  isolation bytes:   shared %d/%d, module %d/%d\n", b.SharedBytes, b.SharedBudget, b.ModuleBytes, b.ModuleBudget)
 	}
 	if integration && d.Integration != nil {
 		fmt.Fprintf(out, "  neighbors:         %d\n", len(d.Integration.Neighbors))
@@ -167,6 +185,18 @@ func writeManifestShowText(cmd *cobra.Command, d manifestShowData, isolation, in
 			fmt.Fprintf(out, "    %s via %s — %s\n", n.Module, n.Via, n.Summary)
 		}
 	}
+}
+
+// constitutionLine is the text report's one-word-plus-size roof line.
+func constitutionLine(d manifest.ConstitutionDigest) string {
+	if !d.Present {
+		return "missing (" + d.Path + ")"
+	}
+	state := d.State
+	if state == "" {
+		state = d.Status
+	}
+	return fmt.Sprintf("%s, %d of %d words", state, d.Words, d.WordCap)
 }
 
 func writeManifestListText(cmd *cobra.Command, d manifestListData) {

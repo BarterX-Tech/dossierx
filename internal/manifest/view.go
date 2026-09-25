@@ -6,44 +6,77 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/projectclaims"
 )
 
-// MaxIsolationBytes is the hard cap on the isolation view JSON. NIT-10
-// refuses an oversize emitted view rather than truncating it.
-const MaxIsolationBytes = 16384
+// The --isolation view is capped at MaxIsolationBytes of compact JSON, split
+// in two budgets (NIT-7 Q2, decided 2026-09-25):
+//
+//   - SharedBudgetBytes covers the text every module reads the same way: the
+//     constitution text plus the project claims index. check enforces it
+//     project-wide (the shared-context-budget lint) on the project claim that
+//     pushes the index over, so a module view is never refused for text the
+//     module does not own.
+//   - ModuleBudgetBytes covers everything else in the view: this module's
+//     manifest, its claim summaries, the draft hints and the JSON framing.
+//     Show refuses an overflow with errIsolationOversize, naming the module.
+//
+// The two add up to MaxIsolationBytes, so a view inside both budgets is
+// inside the whole cap.
+const (
+	MaxIsolationBytes = 16384
+	SharedBudgetBytes = 10240
+	ModuleBudgetBytes = MaxIsolationBytes - SharedBudgetBytes
+)
 
-// MaxClaimSummaryRunes is the isolation claim-summary cap. Full bodies
-// are opt-in and still count against MaxIsolationBytes.
-const MaxClaimSummaryRunes = 80
-
-// ConstitutionDigestStatusPending is the NIT-6 seam. This package never
-// reads constitution.yaml or project-claims; NIT-6 fills Text.
-const ConstitutionDigestStatusPending = "pending_nit6"
-
-// ConstitutionDigest is always present on manifest show. NIT-6 owns the
-// roof text; this PR only reserves the field.
+// ConstitutionDigest is always present on manifest show: constitution.Digest
+// (which constitution the view was built against and how full it is) plus
+// the lock gate's state. It is the digest, not the text; --isolation carries
+// the text.
 type ConstitutionDigest struct {
-	Status string `json:"status"`
-	Text   string `json:"text,omitempty"`
+	Path       string `json:"path"`
+	Present    bool   `json:"present"`
+	Status     string `json:"status,omitempty"`
+	State      string `json:"state,omitempty"`
+	Words      int    `json:"words"`
+	WordCap    int    `json:"word_cap"`
+	OverCap    bool   `json:"over_cap"`
+	NearCap    bool   `json:"near_cap"`
+	Hash       string `json:"hash,omitempty"`
+	Invariants int    `json:"invariants"`
+	Glossary   int    `json:"glossary"`
+	Decisions  int    `json:"decisions"`
 }
 
-// PendingConstitutionDigest is the reserved empty roof.
-func PendingConstitutionDigest() ConstitutionDigest {
-	return ConstitutionDigest{Status: ConstitutionDigestStatusPending}
+func newConstitutionDigest(d constitution.Digest, state string) ConstitutionDigest {
+	return ConstitutionDigest{
+		Path: d.Path, Present: d.Present, Status: d.Status, State: state,
+		Words: d.Words, WordCap: d.WordCap, OverCap: d.OverCap, NearCap: d.NearCap,
+		Hash: d.Hash, Invariants: d.Invariants, Glossary: d.Glossary, Decisions: d.Decisions,
+	}
 }
 
-// ClaimSummary is one claim card without a body dump.
+// SharedContext is the part of the isolation view every module shares, and
+// the exact bytes SharedBudgetBytes measures. The lint and the view build it
+// with the same function, so check and manifest show cannot disagree on its
+// size.
+type SharedContext struct {
+	ConstitutionText string                `json:"constitution_text"`
+	ProjectClaims    []projectclaims.Entry `json:"project_claims"`
+}
+
+// ClaimSummary is one claim card: the claim's authored summary, never its
+// body (bodies are read with claim show <id>).
 type ClaimSummary struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Facet   string `json:"facet"`
 	Status  string `json:"status"`
 	Summary string `json:"summary"`
-	Body    string `json:"body,omitempty"`
 }
 
 // DraftHints is the NIT-7 authoring path: draft the stub from these
@@ -53,12 +86,24 @@ type DraftHints struct {
 	Note              string   `json:"note"`
 }
 
-// IsolationView is constitution digest + this manifest + claim summaries.
+// IsolationView is the bounded context an agent works a module from: the
+// shared context, this manifest, this module's claim summaries and the
+// draft hints.
 type IsolationView struct {
-	ConstitutionDigest ConstitutionDigest `json:"constitution_digest"`
-	Manifest           Manifest           `json:"manifest"`
-	Claims             []ClaimSummary     `json:"claims"`
-	DraftHints         DraftHints         `json:"draft_hints"`
+	Shared     SharedContext  `json:"shared"`
+	Manifest   Manifest       `json:"manifest"`
+	Claims     []ClaimSummary `json:"claims"`
+	DraftHints DraftHints     `json:"draft_hints"`
+}
+
+// IsolationBudget reports how the isolation view spends its two budgets. It
+// sits beside the view, not inside it, so reporting the size never changes
+// the size.
+type IsolationBudget struct {
+	SharedBytes  int `json:"shared_bytes"`
+	SharedBudget int `json:"shared_budget"`
+	ModuleBytes  int `json:"module_bytes"`
+	ModuleBudget int `json:"module_budget"`
 }
 
 // Neighbor is a summaries-only catalog row for a module this one depends on.
@@ -103,7 +148,17 @@ type ShowResult struct {
 	Findings           []Finding          `json:"findings"`
 	ConstitutionDigest ConstitutionDigest `json:"constitution_digest"`
 	Isolation          *IsolationView     `json:"isolation,omitempty"`
+	IsolationBudget    *IsolationBudget   `json:"isolation_budget,omitempty"`
 	Integration        *IntegrationView   `json:"integration,omitempty"`
+}
+
+// ShowOptions selects manifest show's opt-in views. ConstitutionState is the
+// constitution lock gate's state, which needs the lock store this package
+// never reads; the caller passes it through.
+type ShowOptions struct {
+	Isolation         bool
+	Integration       bool
+	ConstitutionState string
 }
 
 // LoadModule returns the required path's bytes if present.
@@ -126,15 +181,83 @@ func LoadModule(cfg *config.Config, module string) (raw []byte, ok bool, extras 
 	return raw, ok, extras
 }
 
-// Show assembles manifest show. isolation/integration are opt-in.
-// bodies is isolation-only. An isolation view over MaxIsolationBytes
-// returns errIsolationOversize.
-func Show(claims []model.Claim, cfg *config.Config, module string, isolation, integration, bodies bool) (ShowResult, error) {
+// loadConstitution reads the configured constitution.yaml, or nil when it is
+// absent or unreadable (the constitution gate reports those; the views just
+// carry no text).
+func loadConstitution(cfg *config.Config) (string, *constitution.File) {
+	if cfg == nil {
+		return "", nil
+	}
+	path := cfg.ConstitutionPath()
+	f, err := constitution.LoadOptional(path)
+	if err != nil {
+		return path, nil
+	}
+	return path, f
+}
+
+// BuildSharedContext is the shared half of every isolation view: the
+// constitution text and the project claims index.
+func BuildSharedContext(claims []model.Claim, cfg *config.Config) SharedContext {
+	_, f := loadConstitution(cfg)
+	idx := projectclaims.Index(claims)
+	if idx == nil {
+		idx = []projectclaims.Entry{}
+	}
+	return SharedContext{ConstitutionText: constitution.Text(f), ProjectClaims: idx}
+}
+
+// SharedOverflow is where the shared context first crosses SharedBudgetBytes.
+type SharedOverflow struct {
+	// ClaimID is the project claim whose index line pushes the shared
+	// context over the budget, in index (id) order. It is "" when the
+	// constitution text alone is over.
+	ClaimID string
+	// Bytes is the whole shared context's size.
+	Bytes int
+}
+
+// CheckSharedBudget measures sc the way the isolation view serializes it and
+// reports the first index line that crosses SharedBudgetBytes, or nil when
+// the shared context fits. It marshals each entry once: linear in the index.
+func CheckSharedBudget(sc SharedContext) (*SharedOverflow, error) {
+	base, err := json.Marshal(SharedContext{ConstitutionText: sc.ConstitutionText, ProjectClaims: []projectclaims.Entry{}})
+	if err != nil {
+		return nil, err
+	}
+	// "[]" becomes "[e1,e2,...]": each entry adds its own bytes, and every
+	// entry after the first adds a comma.
+	size := len(base)
+	var over *SharedOverflow
+	if size > SharedBudgetBytes {
+		over = &SharedOverflow{}
+	}
+	for i, e := range sc.ProjectClaims {
+		line, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+		size += len(line)
+		if i > 0 {
+			size++
+		}
+		if over == nil && size > SharedBudgetBytes {
+			over = &SharedOverflow{ClaimID: e.ID}
+		}
+	}
+	if over != nil {
+		over.Bytes = size
+	}
+	return over, nil
+}
+
+// Show assembles manifest show. The isolation and integration views are
+// opt-in. An isolation view whose module-owned part is over
+// ModuleBudgetBytes returns errIsolationOversize.
+func Show(claims []model.Claim, cfg *config.Config, module string, opts ShowOptions) (ShowResult, error) {
 	rel := RequiredRelPath(module)
-	byID := map[string]model.Claim{}
 	var moduleClaims []model.Claim
 	for _, c := range claims {
-		byID[c.ID] = c
 		if c.Module == module {
 			moduleClaims = append(moduleClaims, c)
 		}
@@ -156,6 +279,7 @@ func Show(claims []model.Claim, cfg *config.Config, module string, isolation, in
 		m, _ = decodeManifest(module, rel, raw)
 	}
 
+	path, f := loadConstitution(cfg)
 	out := ShowResult{
 		Module:             module,
 		Path:               rel,
@@ -163,7 +287,7 @@ func Show(claims []model.Claim, cfg *config.Config, module string, isolation, in
 		Provides:           m.Provides,
 		DependsOn:          m.DependsOn,
 		Findings:           findings,
-		ConstitutionDigest: PendingConstitutionDigest(),
+		ConstitutionDigest: newConstitutionDigest(constitution.NewDigest(path, f), opts.ConstitutionState),
 	}
 	if out.Provides == nil {
 		out.Provides = []string{}
@@ -172,11 +296,11 @@ func Show(claims []model.Claim, cfg *config.Config, module string, isolation, in
 		out.DependsOn = []string{}
 	}
 
-	if isolation {
+	if opts.Isolation {
 		iso := IsolationView{
-			ConstitutionDigest: PendingConstitutionDigest(),
-			Manifest:           m,
-			Claims:             claimSummaries(moduleClaims, bodies),
+			Shared:   BuildSharedContext(claims, cfg),
+			Manifest: m,
+			Claims:   claimSummaries(moduleClaims),
 			DraftHints: DraftHints{
 				SuggestedProvides: suggestedProvides(moduleClaims, module),
 				Note:              "Draft summary/provides/depends_on from these claim summaries plus short neighbor/product use. Do not paste claim bodies into the manifest.",
@@ -188,31 +312,90 @@ func Show(claims []model.Claim, cfg *config.Config, module string, isolation, in
 		if iso.Manifest.DependsOn == nil {
 			iso.Manifest.DependsOn = []string{}
 		}
-		blob, err := json.Marshal(iso)
+		budget, err := measureIsolation(iso)
 		if err != nil {
 			return out, err
 		}
-		if len(blob) > MaxIsolationBytes {
-			return out, errIsolationOversize{n: len(blob)}
+		out.IsolationBudget = &budget
+		if budget.ModuleBytes > ModuleBudgetBytes {
+			return out, errIsolationOversize{
+				module:        module,
+				budget:        budget,
+				manifestBytes: jsonLen(iso.Manifest),
+				claims:        len(iso.Claims),
+			}
 		}
 		out.Isolation = &iso
 	}
-	if integration {
+	if opts.Integration {
 		out.Integration = integrationView(claims, cfg, module, m)
 	}
 	return out, nil
 }
 
-type errIsolationOversize struct{ n int }
-
-func (e errIsolationOversize) Error() string {
-	return fmt.Sprintf("isolation view is %d bytes; must be at most %d (drop --bodies or shorten claim text)", e.n, MaxIsolationBytes)
+// measureIsolation splits the view's compact JSON into the shared context and
+// everything else. Everything else is the module's: its manifest, claim
+// summaries, hints, and the framing keys.
+func measureIsolation(iso IsolationView) (IsolationBudget, error) {
+	whole, err := json.Marshal(iso)
+	if err != nil {
+		return IsolationBudget{}, err
+	}
+	shared, err := json.Marshal(iso.Shared)
+	if err != nil {
+		return IsolationBudget{}, err
+	}
+	return IsolationBudget{
+		SharedBytes:  len(shared),
+		SharedBudget: SharedBudgetBytes,
+		ModuleBytes:  len(whole) - len(shared),
+		ModuleBudget: ModuleBudgetBytes,
+	}, nil
 }
 
-// IsIsolationOversize reports a NIT-10 view-size refuse.
+func jsonLen(v any) int {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return 0
+	}
+	return len(b)
+}
+
+type errIsolationOversize struct {
+	module        string
+	budget        IsolationBudget
+	manifestBytes int
+	claims        int
+}
+
+func (e errIsolationOversize) Error() string {
+	return fmt.Sprintf("module %q isolation context is %d bytes, over its %d-byte module budget "+
+		"(%d claim summaries; the manifest itself is %d bytes)",
+		e.module, e.budget.ModuleBytes, e.budget.ModuleBudget, e.claims, e.manifestBytes)
+}
+
+// IsIsolationOversize reports a module-budget refuse from Show.
 func IsIsolationOversize(err error) bool {
 	var e errIsolationOversize
 	return errors.As(err, &e)
+}
+
+// IsolationOversizeDetails is the refusal's machine-readable half, for the
+// CLI envelope's error.details.
+func IsolationOversizeDetails(err error) map[string]any {
+	var e errIsolationOversize
+	if !errors.As(err, &e) {
+		return nil
+	}
+	return map[string]any{
+		"module":         e.module,
+		"module_bytes":   e.budget.ModuleBytes,
+		"module_budget":  e.budget.ModuleBudget,
+		"shared_bytes":   e.budget.SharedBytes,
+		"shared_budget":  e.budget.SharedBudget,
+		"claims":         e.claims,
+		"manifest_bytes": e.manifestBytes,
+	}
 }
 
 // List is the locked-module catalog from manifest.yaml blurbs.
@@ -266,24 +449,19 @@ func suggestedProvides(claims []model.Claim, module string) []string {
 	return ids
 }
 
-// claimSummaries is the summaries-only card list. Until NIT-8 lands its
-// required claim `summary` field, the summary is the body's first line
-// clipped to MaxClaimSummaryRunes; once that field exists it replaces this
-// derivation verbatim (one definition of "summary", not two).
-func claimSummaries(claims []model.Claim, bodies bool) []ClaimSummary {
+// claimSummaries is the card list: each claim's authored summary exactly as
+// written, the same field the project claims index reads. One definition of
+// "summary", never a derivation from the body.
+func claimSummaries(claims []model.Claim) []ClaimSummary {
 	out := make([]ClaimSummary, 0, len(claims))
 	for _, c := range claims {
-		s := ClaimSummary{
+		out = append(out, ClaimSummary{
 			ID:      c.ID,
 			Title:   claimTitle(c.ID),
 			Facet:   c.Facet,
 			Status:  string(c.Status),
-			Summary: clipRunes(firstLine(c.Body), MaxClaimSummaryRunes),
-		}
-		if bodies {
-			s.Body = c.Body
-		}
-		out = append(out, s)
+			Summary: projectclaims.Summary(c),
+		})
 	}
 	return out
 }
@@ -327,22 +505,6 @@ func integrationView(claims []model.Claim, cfg *config.Config, module string, m 
 		edges = []ModuleEdge{}
 	}
 	return &IntegrationView{Neighbors: neighbors, Edges: edges}
-}
-
-func firstLine(body string) string {
-	body = strings.TrimSpace(body)
-	if i := strings.IndexByte(body, '\n'); i >= 0 {
-		return strings.TrimSpace(body[:i])
-	}
-	return body
-}
-
-func clipRunes(s string, limit int) string {
-	if utf8.RuneCountInString(s) <= limit {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:limit])
 }
 
 func claimTitle(id string) string {

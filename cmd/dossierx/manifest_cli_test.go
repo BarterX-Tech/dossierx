@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,8 +62,10 @@ func TestManifestShowIsolationAndList(t *testing.T) {
 		ConstitutionDigest manifest.ConstitutionDigest `json:"constitution_digest"`
 	}
 	envData(t, env, &data)
-	if data.ConstitutionDigest.Status != manifest.ConstitutionDigestStatusPending {
-		t.Fatalf("constitution digest seam = %+v", data.ConstitutionDigest)
+	// No constitution.yaml in this project: the digest says so, and the
+	// gate's state is carried through rather than left as a seam.
+	if data.ConstitutionDigest.Present || data.ConstitutionDigest.State != "missing" || data.ConstitutionDigest.WordCap != 800 {
+		t.Fatalf("constitution digest = %+v", data.ConstitutionDigest)
 	}
 
 	iso, _, err := execCLIJSON(t, "--config", cfgPath, "manifest", "show", "widget", "--isolation", "--integration")
@@ -111,5 +114,47 @@ func TestManifestShowRefusesMissing(t *testing.T) {
 	}
 	if !strings.Contains(env.Error.Message, "module-manifest") {
 		t.Fatalf("message: %s", env.Error.Message)
+	}
+}
+
+// A module over its isolation budget is refused with view_too_large, and
+// the refusal names the module and carries the byte accounting. There is no
+// --bodies flag to reach for.
+func TestManifestShowIsolationModuleBudget(t *testing.T) {
+	root := t.TempDir()
+	claimsDir := filepath.Join(root, "claims")
+	if err := os.MkdirAll(filepath.Join(claimsDir, "widget"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeProjectConfigFile(t, filepath.Join(root, "project.config.yaml"),
+		"schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\nmax_claims_per_module: 30\n")
+	if err := os.WriteFile(filepath.Join(claimsDir, "widget", "manifest.yaml"), []byte(
+		"summary: widget is the public boundary other modules call.\nprovides: []\ndepends_on: []\n",
+	), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	summary := strings.Repeat("s", 199) + "."
+	for i := 0; i < 25; i++ {
+		body := fmt.Sprintf("id: widget.contract.rule-%02d\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n"+
+			"summary: %s\nbody: |\n  rule.\nrests_on:\n  none: true\n  reason: fixture\n", i, summary)
+		if err := os.WriteFile(filepath.Join(claimsDir, fmt.Sprintf("r%02d.yaml", i)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfgPath := filepath.Join(root, "project.config.yaml")
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "manifest", "show", "widget", "--isolation")
+	if err == nil || env.Error == nil || env.Error.Code != cliout.CodeViewTooLarge {
+		t.Fatalf("want view_too_large: err=%v env=%+v", err, env.Error)
+	}
+	if !strings.Contains(env.Error.Message, `module "widget"`) || !strings.Contains(env.Error.Message, "25 claim summaries") {
+		t.Fatalf("refusal must name the module and its claim count: %s", env.Error.Message)
+	}
+	details, ok := env.Error.Details.(map[string]any)
+	if !ok || details["module"] != "widget" || details["module_budget"] != float64(manifest.ModuleBudgetBytes) {
+		t.Fatalf("details: %+v", env.Error.Details)
+	}
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "manifest", "show", "widget", "--isolation", "--bodies"); err == nil {
+		t.Fatal("--bodies is gone; the flag must be rejected")
 	}
 }
