@@ -26,7 +26,7 @@ func ledgerProject(t *testing.T) (cfgPath, claimPath, storeFile string) {
 	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 	claimPath = filepath.Join(claimsDir, "main.yaml")
-	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +
+	claim := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the approved body.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
@@ -102,7 +102,7 @@ func TestCLI_LockUnlockRelockKeepsTheLedgerHonest(t *testing.T) {
 	}
 
 	// Edit while draft — entirely allowed — then re-lock: a NEW approval.
-	edited := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\nbuild_role: schema\n" +
+	edited := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: draft\n" +
 		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  the corrected body.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
@@ -137,7 +137,7 @@ func TestCLI_HandEditingALockedClaimIsCaught(t *testing.T) {
 		t.Fatalf("claim lock: %v", err)
 	}
 
-	tampered := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nbuild_role: schema\n" +
+	tampered := "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\n" +
 		"summary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a body nobody approved.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"

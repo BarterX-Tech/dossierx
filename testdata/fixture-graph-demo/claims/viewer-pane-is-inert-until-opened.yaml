@@ -4,7 +4,6 @@ facet: internals
 module: viewer
 status: locked
 layout: card
-build_role: behavior
 body: |
   Until a reader opens it, the pane registers one listener and does nothing else. It builds no elements, parses no payload and starts no simulation.
 rests_on:

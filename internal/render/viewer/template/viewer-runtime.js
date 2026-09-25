@@ -2380,7 +2380,7 @@
       // Two states look like an edit and have nothing to put behind a
       // "Changes" tab. A record written before the approved wording was kept
       // proves the text moved and does not carry what it moved from. A claim
-      // whose hash moved because its rests_on or build_role moved has an
+      // whose hash moved because its rests_on or section moved has an
       // approved wording identical to its current one. In both, the panel has
       // one sentence to say and no second version of the claim — so there is
       // no switch, and the claim's own body stays on screen.

@@ -4,7 +4,6 @@ facet: internals
 module: lock
 status: draft
 layout: card
-build_role: behavior
 body: |
   Review discussion is hashed into a sibling store, so a thread edited away in a file is reported rather than forgotten.
 rests_on:

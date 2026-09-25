@@ -90,7 +90,7 @@ func TestCLI_Check_UnlinkedClaim_RefusesAfterWritingTheViewer(t *testing.T) {
 	if cliout.ExitCode(env.Error.Code) != 1 {
 		t.Fatalf("unlinked_claims must exit 1 (the check-failure family), got %d", cliout.ExitCode(env.Error.Code))
 	}
-	if !strings.Contains(env.Error.Hint, "data.code_links") || !strings.Contains(env.Error.Hint, "dossierx-step:") || !strings.Contains(env.Error.Hint, "build_role") {
+	if !strings.Contains(env.Error.Hint, "data.code_links") || !strings.Contains(env.Error.Hint, "dossierx-step:") || !strings.Contains(env.Error.Hint, "embodiment") {
 		t.Fatalf("the hint must point at data.code_links and name both recoveries (tag, or re-role), got %q", env.Error.Hint)
 	}
 	data := decodeCodeLinksData(t, env)

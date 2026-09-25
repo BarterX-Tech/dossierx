@@ -4,7 +4,6 @@ facet: contract
 module: viewer
 status: locked
 layout: card
-build_role: api
 body: |
   Rendering is a function of the catalog and the configuration. The same inputs produce the same document, apart from the one stamped generation time.
 rests_on:

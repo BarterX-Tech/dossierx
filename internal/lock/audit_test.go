@@ -48,14 +48,13 @@ func TestAuditCatchesAHandFlippedStatus(t *testing.T) {
 
 // TestAuditCatchesEditedLockedContent covers the audit's second, third and
 // fourth rows at once — an edited body, a swapped raw_html payload, and a
-// flipped build_role/section/order/emphasis. ContentHash sees none of these
+// flipped section/order/emphasis. ContentHash sees none of these
 // unless a dependent happens to exist; LockedClaimHash sees all of them.
 func TestAuditCatchesEditedLockedContent(t *testing.T) {
 	tamper := map[string]func(*model.Claim){
 		"body edited":       func(c *model.Claim) { c.Body = "quietly rewritten" },
 		"raw_html swapped":  func(c *model.Claim) { c.RawHTML = `<img src=x onerror=alert(1)>` },
 		"raw_html reviewed": func(c *model.Claim) { c.RawHTMLReviewed = false },
-		"build_role":        func(c *model.Claim) { c.BuildRole = model.BuildRoleOutOfScope },
 		"section":           func(c *model.Claim) { c.Section = "moved elsewhere" },
 		"order":             func(c *model.Claim) { c.Order = 42 },
 		"emphasis":          func(c *model.Claim) { c.Emphasis = true },
@@ -66,8 +65,7 @@ func TestAuditCatchesEditedLockedContent(t *testing.T) {
 			approved := model.Claim{
 				ID: "widget.contract.mockup", Facet: "contract", Module: "widget",
 				Layout: model.LayoutMockup, Body: "approved body",
-				RawHTML: `<div>approved markup</div>`, RawHTMLReviewed: true,
-				BuildRole: model.BuildRoleSchema, Section: "1 - orientation", Order: 1,
+				RawHTML: `<div>approved markup</div>`, RawHTMLReviewed: true, Section: "1 - orientation", Order: 1,
 			}
 			locked, store := lockedWithRecord(t, approved)
 

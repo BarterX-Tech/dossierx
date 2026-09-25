@@ -4,7 +4,6 @@ facet: contract
 module: cli
 status: draft
 layout: banner
-build_role: orientation
 body: |
   The command surface is deliberately small and is not going to grow to accommodate a rendering feature.
 rests_on:

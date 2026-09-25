@@ -4,7 +4,6 @@ facet: internals
 module: engine
 status: draft
 layout: card
-build_role: verification
 body: |
   Every entry point is exercised with absent inputs and with empty identifiers, and must return a valid result rather than panic.
 rests_on:

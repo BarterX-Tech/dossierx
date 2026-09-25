@@ -133,18 +133,16 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 	}
 }
 
-// icWriteRoledClaim rewrites the shared fixture claim with a build_role, which
-// is what buildorder.Propose needs and what icWriteFixtureProject deliberately
-// does not carry (its subject is the claim lifecycle, not the build order).
+// icWriteRoledClaim rewrites the shared fixture claim into the plain locked-
+// claim shape the retired build-order surface is exercised against.
 func icWriteRoledClaim(t *testing.T, claimPath, module string) {
 	t.Helper()
 	claim := "id: " + module + ".contract.overview\n" +
 		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-		"build_role: schema\n" +
 		"body: |\n  fixture claim for in-process CLI tests.\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim, not backed by any real doctrine\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
-		t.Fatalf("rewrite claim with a build_role: %v", err)
+		t.Fatalf("rewrite claim: %v", err)
 	}
 }
 
@@ -468,7 +466,7 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 	lockFixtureConstitution(t, cfgPath)
 	claimPath := filepath.Join(claimsDir, "a.yaml")
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-		"build_role: schema\nbody: |\n  claim a.\n" +
+		"body: |\n  claim a.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
@@ -511,12 +509,12 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 	lockFixtureConstitution(t, cfgPath)
 	// Two claims in DIFFERENT phases, so the artifact has two phase blocks to
 	// reverse. One claim could not express this edit at all.
-	for _, c := range []struct{ name, id, role string }{
-		{"a", "widget.contract.a", "schema"},
-		{"b", "widget.contract.b", "behavior"},
+	for _, c := range []struct{ name, id string }{
+		{"a", "widget.contract.a"},
+		{"b", "widget.contract.b"},
 	} {
 		claim := "id: " + c.id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: " + c.role + "\nbody: |\n  claim " + c.name + ".\n" +
+			"body: |\n  claim " + c.name + ".\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n"
 		if err := os.WriteFile(filepath.Join(claimsDir, c.name+".yaml"), []byte(claim), 0o644); err != nil {
 			t.Fatalf("write claim %s: %v", c.id, err)

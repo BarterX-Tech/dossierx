@@ -72,7 +72,10 @@ import (
 // against schema 1 would still parse this payload, but it would offer a
 // governed_by toggle, a governance overlay and a GOVERNED BY block that can
 // never light, so the bump is deliberate.
-const SchemaVersion = 2
+//
+// 3 (NIT-32): build_role is gone from every node, and with it the
+// missing_build_phase hint that was its only reader.
+const SchemaVersion = 3
 
 // Edge type values. These are the wire strings, matching the claim
 // edge kinds model.Claim declares (RestsOn). They are
@@ -87,15 +90,13 @@ const (
 //
 // Every SCALAR field is emitted unconditionally. The client reads a fixed
 // shape, and an absent key and a zero value are different things to it:
-// "build_role": "" is the fact the missing_build_phase rule keys off, and a
-// node object that simply lacked the key would make that rule silently unable
-// to fire.
+// "review_pending": false is a fact a client rule reads, and a node object
+// that simply lacked the key would make that rule silently unable to fire.
 //
 // Tracks is the one exception, and it is one for a reason that does not
 // weaken the rule above. It is a LIST, and an absent list and an empty list
 // mean the identical thing here — "this claim joins no track" — so no client
-// rule can key off the difference the way missing_build_phase keys off the
-// empty string. What the difference DOES decide is whether a project that
+// rule can key off the difference the way a scalar's zero value is keyed off. What the difference DOES decide is whether a project that
 // never opted into tracks pays for them: with the key always present, every
 // node in every track-less corpus grows a "tracks":null, and the three
 // tracked fixture viewers this repository commits would all move. Tracks are
@@ -122,10 +123,6 @@ type Node struct {
 
 	// Kind is model.Claim.EffectiveKind(), never the raw Kind field.
 	Kind string `json:"kind"`
-
-	// BuildRole is model.Claim.BuildRole. Empty is meaningful, not
-	// missing: it is what the client's missing_build_phase hint counts.
-	BuildRole string `json:"build_role"`
 
 	// Emphasis is model.Claim.Emphasis.
 	Emphasis bool `json:"emphasis"`

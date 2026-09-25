@@ -24,8 +24,7 @@ import "testing"
 // lock-ledger-pre-ledger finding.
 func buildPreLedgerProject(f *fixture, t *testing.T) {
 	t.Helper()
-	f.SetBuildRoleByHand(defaultClaimID, "schema")
-	f.NewClaim("widget.contract.alpha", "alpha behavior.", "behavior")
+	f.NewClaim("widget.contract.alpha", "alpha behavior.")
 	f.LockClaim(defaultClaimID, "approved before the ledger era")
 	f.LockClaim("widget.contract.alpha", "approved before the ledger era")
 

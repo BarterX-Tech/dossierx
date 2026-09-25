@@ -4,7 +4,6 @@ facet: contract
 module: cli
 status: draft
 layout: card
-build_role: api
 body: |
   Serving binds the loopback interface only and never lints, so a live session can carry shapes a reviewed corpus cannot.
 rests_on:

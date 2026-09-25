@@ -4,7 +4,6 @@ facet: contract
 module: viewer
 status: locked
 layout: card
-build_role: api
 body: |
   The rendered document makes no outbound request of any kind. It opens from a local file and works with the network removed.
 rests_on:

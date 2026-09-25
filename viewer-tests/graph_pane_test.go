@@ -181,7 +181,7 @@ func injectedCyclePayload(t *testing.T) string {
 	node := func(id string) map[string]any {
 		return map[string]any{
 			"id": id, "title": id, "module": "core", "facet": "contract",
-			"status": "draft", "kind": "fact", "build_role": "", "emphasis": false,
+			"status": "draft", "kind": "fact", "emphasis": false,
 			"review_pending": false, "open_comments": 0, "in_degree": 1, "out_degree": 1,
 		}
 	}
@@ -373,8 +373,8 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 	if n := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).nodes.length`); n != 3 {
 		t.Fatalf("payload nodes = %d, want 3 (one per claim file)", n)
 	}
-	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 2 {
-		t.Fatalf("payload schema = %d, want 2", v)
+	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 3 {
+		t.Fatalf("payload schema = %d, want 3", v)
 	}
 
 	openGraphPane(t, ctx)
@@ -611,8 +611,8 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// The gaps rail keeps facts and heuristics in separate blocks, and the
 	// heuristics are labelled as guesses. False positives among them are
 	// guaranteed rather than merely possible.
-	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="hint"]').length`); n != 2 {
-		t.Fatalf("hint blocks inside the hints section = %d, want 2", n)
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="hint"]').length`); n != 1 {
+		t.Fatalf("hint blocks inside the hints section = %d, want 1", n)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="fact"]').length`); n != 0 {
 		t.Fatalf("fact blocks inside the hints section = %d, want 0 — facts and guesses never mix", n)

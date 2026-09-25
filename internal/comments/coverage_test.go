@@ -221,7 +221,6 @@ const preLedgerLockedBYAML = `id: widget.contract.b
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim b
 rests_on:
   none: true

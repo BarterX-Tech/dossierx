@@ -42,7 +42,6 @@ const lockedAYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim a
 rests_on:
   none: true
@@ -53,7 +52,6 @@ const lockedARestsOnBYAML = `id: widget.contract.a
 facet: contract
 module: widget
 status: locked
-build_role: schema
 body: claim a
 rests_on:
   - widget.contract.b

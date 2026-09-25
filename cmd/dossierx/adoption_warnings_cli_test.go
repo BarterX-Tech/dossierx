@@ -50,7 +50,6 @@ func adoptableCommentFixture(t *testing.T) string {
 	// create the digest store (it skips a project with no comments anywhere).
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/locked.yaml": "id: widget.contract.main\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  a locked claim, present so the project is ledger- and digest-covered.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n" +
 			"comments:\n" +

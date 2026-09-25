@@ -4,7 +4,6 @@ facet: internals
 module: telemetry
 status: draft
 layout: card
-build_role: verification
 body: |
   The suite runs with the network removed and asserts every command still completes.
 rests_on:

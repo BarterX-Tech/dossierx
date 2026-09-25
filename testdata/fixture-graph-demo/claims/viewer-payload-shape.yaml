@@ -4,7 +4,6 @@ facet: internals
 module: viewer
 status: locked
 layout: card
-build_role: schema
 body: |
   The graph payload carries nodes, edges, the two grouping axes and a count of what could not be represented.
 rests_on:

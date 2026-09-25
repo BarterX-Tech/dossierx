@@ -52,7 +52,7 @@ func TestSummaryRequiredLint(t *testing.T) {
 	t.Run("no exemption for mockup or orientation", func(t *testing.T) {
 		findings := summaryRequiredLint{}.Check([]model.Claim{
 			{ID: "w.contract.mock", Layout: model.LayoutMockup},
-			{ID: "w.doctrine.hub", Facet: "doctrine", BuildRole: model.BuildRoleOrientation},
+			{ID: "w.doctrine.hub", Facet: "doctrine"},
 		}, nil)
 		if len(findings) != 2 {
 			t.Fatalf("got %d findings, want 2", len(findings))

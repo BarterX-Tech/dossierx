@@ -4,7 +4,6 @@ facet: internals
 module: engine
 status: locked
 layout: card
-build_role: verification
 body: |
   Build the same corpus a hundred times from shuffled input and assert the encoded bytes are identical every time.
 rests_on:

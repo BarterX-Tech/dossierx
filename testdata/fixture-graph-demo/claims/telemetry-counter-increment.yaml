@@ -4,7 +4,6 @@ facet: internals
 module: telemetry
 status: draft
 layout: card
-build_role: behavior
 body: |
   Incrementing is lock-free and never allocates, so measuring a hot path does not change what it measures.
 rests_on:
