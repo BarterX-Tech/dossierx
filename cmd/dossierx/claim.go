@@ -327,7 +327,6 @@ type claimShowData struct {
 	Status       string `json:"status"`
 	Layout       string `json:"layout"`
 	Kind         string `json:"kind"`
-	BuildRole    string `json:"build_role,omitempty"`
 	Section      string `json:"section,omitempty"`
 	MigratedFrom string `json:"migrated_from,omitempty"`
 	SourcePath   string `json:"source_path"`
@@ -438,7 +437,7 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 		//
 		// This used to read "-> dossierx check --validate", and for the whole
 		// family of lints that decide a LOCK that was a dead end: rest-on-locked,
-		// roll-up and build-role-required-for-locked all key off a claim's own
+		// and roll-up both key off a claim's own
 		// status, so against the project as it stands — with this claim still
 		// draft — `check --validate` reports ok:true and zero findings. The
 		// agent was told a finding blocks the lock, sent to a command that
@@ -635,7 +634,6 @@ func newClaimShowCmd() *cobra.Command {
 				Status:        string(claim.Status),
 				Layout:        string(claim.Layout),
 				Kind:          string(claim.EffectiveKind()),
-				BuildRole:     string(claim.BuildRole),
 				Section:       claim.Section,
 				MigratedFrom:  claim.MigratedFrom,
 				SourcePath:    claim.SourcePath,
@@ -1283,7 +1281,7 @@ func claimNewPath(cfg *config.Config, id, override string) (string, error) {
 }
 
 func newClaimNewCmd() *cobra.Command {
-	var body, summary, layout, section, buildRole, restsOnNoneReason, file string
+	var body, summary, layout, section, restsOnNoneReason, file string
 	var restsOn []string
 	var dryRun bool
 
@@ -1399,7 +1397,6 @@ func newClaimNewCmd() *cobra.Command {
 				Summary:    strings.TrimSpace(summary),
 				Body:       normalizeClaimBody(body),
 				Section:    section,
-				BuildRole:  model.BuildRole(buildRole),
 				SourcePath: path,
 			}
 			if model.IsProjectClaimID(id) {
@@ -1453,7 +1450,6 @@ func newClaimNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&summary, "summary", "", "one-line plain-text description printed by claim list (required)")
 	cmd.Flags().StringVar(&layout, "layout", string(model.LayoutCard), "render layout: card, list, tree, banner (table/steps/mockup need rows/steps/raw_html, which this command does not author)")
 	cmd.Flags().StringVar(&section, "section", "", "optional in-content section heading this claim sits under")
-	cmd.Flags().StringVar(&buildRole, "build-role", "", "optional build phase: orientation, schema, behavior, api, verification, out-of-scope (required only once the claim locks)")
 	cmd.Flags().StringVar(&restsOnNoneReason, "rests-on-none-reason", "", "why this claim rests on nothing (required when --rests-on is empty)")
 	cmd.Flags().StringSliceVar(&restsOn, "rests-on", nil, "claim ids this claim rests on: project.<slug>, any module's *.contract.*, or this module's own *.internals.*")
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")

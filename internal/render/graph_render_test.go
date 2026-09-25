@@ -255,8 +255,8 @@ func TestGraphPayloadBlockParsesAsJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &payload); err != nil {
 		t.Fatalf("payload block does not parse as JSON: %v\n%.400s", err, text)
 	}
-	if payload.Schema != 2 {
-		t.Errorf("payload schema = %d, want 2", payload.Schema)
+	if payload.Schema != 3 {
+		t.Errorf("payload schema = %d, want 3", payload.Schema)
 	}
 	if payload.GeneratedAt == "" {
 		t.Errorf("payload generated_at is empty; the render path must stamp it (graph.Build deliberately does not)")

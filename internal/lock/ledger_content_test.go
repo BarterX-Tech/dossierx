@@ -71,7 +71,7 @@ func TestApprovedContentIgnoresNonClaimSubjects(t *testing.T) {
 }
 
 func TestSignedFieldsDifferingNamesOnlySignedFields(t *testing.T) {
-	a := model.Claim{ID: "fixture.contract.d", Status: model.StatusLocked, Body: "one", BuildRole: "rule"}
+	a := model.Claim{ID: "fixture.contract.d", Status: model.StatusLocked, Body: "one"}
 	b := a
 	b.Body = "two"
 	b.RestsOn = model.RestsOnIDs("fixture.contract.other")

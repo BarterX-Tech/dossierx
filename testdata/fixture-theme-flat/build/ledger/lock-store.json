@@ -123,7 +123,7 @@
           "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
           "Rows": null,
           "Section": "What the panel looks like",
-          "RawHTML": "\u003cdiv class=\"mockup-diagram\"\u003e\u003cdiv class=\"gcp-console\"\u003e\u003cdiv class=\"gcp-row\"\u003e\u003cspan class=\"mockup-badge\"\u003eDRAFT\u003c/span\u003e widget.contract.overview\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+          "RawHTML": "<div class=\"mockup-diagram\"><div class=\"gcp-console\"><div class=\"gcp-row\"><span class=\"mockup-badge\">DRAFT</span> widget.contract.overview</div></div></div>",
           "RawHTMLReviewed": true,
           "Steps": null,
           "Mirrors": null,
@@ -203,7 +203,7 @@
     },
     "panel.contract.api": {
       "subject": "claim",
-      "hash": "cc38c1207f303908c0df378ece29ed4731b82c99b8b541c48b68c3e90dab08ab",
+      "hash": "3e3bf13859619aad2c161b991777825532f3829d4bf8f2bbe4cb61c4984383d8",
       "at": "2026-09-24T15:43:17.811047Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -245,7 +245,7 @@
     },
     "panel.contract.behavior": {
       "subject": "claim",
-      "hash": "aa8e7ecef1e9fab58434cfe002e7805db1d7e7e68d272abe7fcbc969628198f1",
+      "hash": "754eaa6012f9b354337e1194be9b166cea14ed1070b70ed3f520cdb8144c7b81",
       "at": "2026-09-24T15:43:17.968345Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -287,7 +287,7 @@
     },
     "panel.internals.mockup": {
       "subject": "claim",
-      "hash": "83af35f707a51b29bc8dce18dd1f4545de7487bf5aceaf96c11cf284408e80f7",
+      "hash": "970795d5c9785aa4960e8d76c19f2fa9b2033b0db8506e70e55e1866fc345b1e",
       "at": "2026-09-24T15:43:18.126907Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -305,7 +305,7 @@
         "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
         "Rows": null,
         "Section": "What the panel looks like",
-        "RawHTML": "\u003cdiv class=\"mockup-diagram\"\u003e\u003cdiv class=\"gcp-console\"\u003e\u003cdiv class=\"gcp-row\"\u003e\u003cspan class=\"mockup-badge\"\u003eDRAFT\u003c/span\u003e widget.contract.overview\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+        "RawHTML": "<div class=\"mockup-diagram\"><div class=\"gcp-console\"><div class=\"gcp-row\"><span class=\"mockup-badge\">DRAFT</span> widget.contract.overview</div></div></div>",
         "RawHTMLReviewed": true,
         "Steps": null,
         "Mirrors": null,
@@ -327,7 +327,7 @@
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "fac3a5b463a230ca20cf9c27073d61a5ef907b15d9863c2ead320259f3a2b826",
+      "hash": "d9b8747e7ab8d624f135e590a7a83da2dcd0f7ca24ce060c3332dbfdd1264f11",
       "at": "2026-09-24T15:43:18.284312Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -371,7 +371,7 @@
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "1eb40e0eef92a533cd82db1730e69016d099ec650bbc3344c45fb0273cbf51c9",
+      "hash": "884003fb99236f79657a1c12fe2ebe0c023c979f9b0d0a6fe1e443876d571e18",
       "at": "2026-09-24T15:43:18.445753Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",

@@ -60,7 +60,6 @@ facet: contract
 module: widget
 status: draft
 summary: Fixture claim used by the viewer test suite.
-build_role: orientation
 tracks:
   - id: review
     role: owns
@@ -75,7 +74,6 @@ facet: internals
 module: widget
 status: draft
 summary: Fixture claim used by the viewer test suite.
-build_role: verification
 body: |
   the widget implementation detail.
 rests_on:

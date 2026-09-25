@@ -4,7 +4,6 @@ facet: internals
 module: viewer
 status: draft
 layout: card
-build_role: orientation
 body: |
   Roughly twelve is the practical ceiling on distinguishable categorical colour. Identity is therefore carried three ways: by colour, by a legend naming each category, and by a detail panel that names it in words.
 rests_on:

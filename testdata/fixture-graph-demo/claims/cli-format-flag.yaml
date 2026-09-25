@@ -4,7 +4,6 @@ facet: internals
 module: cli
 status: draft
 layout: card
-build_role: behavior
 body: |
   Machine output is the default and prose is opt-in, because the primary caller is an agent.
 rests_on:

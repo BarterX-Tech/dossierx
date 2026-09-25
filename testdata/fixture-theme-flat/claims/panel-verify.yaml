@@ -3,7 +3,6 @@ summary: Fixture claim used by the engine test corpus.
 facet: internals
 module: panel
 status: locked
-build_role: verification
 layout: card
 section: How the panel is proven
 body: |

@@ -4,7 +4,6 @@ facet: internals
 module: engine
 status: locked
 layout: card
-build_role: schema
 body: |
   There are three edge kinds and no more. One says a claim depends on another, one says two claims are content-identical, and one says which doctrine backs the claim's truth.
 rests_on:

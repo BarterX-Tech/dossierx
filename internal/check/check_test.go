@@ -113,11 +113,11 @@ func lockedClaim(id string) string {
 		"rests_on:\n  none: true\n  reason: fixture\n"
 }
 
-// lockedCodeClaim is lockedClaim in a code-producing build_role: the shape the
-// code-link gate holds to account. lockedClaim itself carries no build_role and
-// is therefore never expected to be linked.
+// lockedCodeClaim is a locked claim with code behind it: the shape the
+// code-link gate holds to account. Every locked module claim is, unless it
+// declares `embodiment: {mode: none}`.
 func lockedCodeClaim(id string) string {
-	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: behavior\n" +
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
 		"body: |\n  a locked claim with code behind it.\n" +
 		"rests_on:\n  none: true\n  reason: fixture\n"
 }
@@ -404,7 +404,7 @@ func TestRun_ImplinkScanAndStatus(t *testing.T) {
 func TestRun_StepTagScanAndStatus(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: behavior\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - do the thing\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
@@ -498,7 +498,7 @@ func TestRun_CodeLinkGate_RefusesUnlinkedClaim(t *testing.T) {
 func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 	hash := implink.StepContentHash("do the thing")
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
-		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\nbuild_role: behavior\n" +
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: steps\nsummary: Fixture claim used by the engine test corpus.\n" +
 			"steps:\n  - do the thing\n  - do the other thing\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-step: widget.contract.locked #1 " + hash + "\nfunc Foo() {}\n",
@@ -520,7 +520,7 @@ func TestRun_CodeLinkGate_RefusesPartialSteps(t *testing.T) {
 func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
 	cfg, claims := project(t, baseConfig+"source_dirs:\n  - src\n", map[string]string{
 		"claims/locked.yaml":  lockedCodeClaim("widget.contract.locked"),
-		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbuild_role: orientation\nbody: |\n  context, no code.\nrests_on:\n  none: true\n  reason: fixture\n",
+		"claims/context.yaml": "id: widget.contract.context\nfacet: contract\nmodule: widget\nstatus: locked\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nembodiment:\n  mode: none\n  reason: context only, no code\nbody: |\n  context, no code.\nrests_on:\n  none: true\n  reason: fixture\n",
 		"src/impl.go":         "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
 	})
 
@@ -532,7 +532,7 @@ func TestRun_CodeLinkGate_PassesWhenEveryClaimLinked(t *testing.T) {
 		t.Fatalf("expected OK, got %+v", res)
 	}
 	if res.CodeLinks == nil || !res.CodeLinks.Gated || res.CodeLinks.Incomplete() != 0 {
-		t.Fatalf("expected a gated, complete report; the orientation claim is not expected to link: %+v", res.CodeLinks)
+		t.Fatalf("expected a gated, complete report; the code-free claim is not expected to link: %+v", res.CodeLinks)
 	}
 }
 

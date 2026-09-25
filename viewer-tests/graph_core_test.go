@@ -121,10 +121,10 @@ func runCoreCases(t *testing.T, cases []coreCase) {
 // claim carrying open comments, and one claim (c.one) that no edge touches.
 func coreNodes() []any {
 	return []any{
-		map[string]any{"id": "a.one", "module": "a", "facet": "contract", "status": "locked", "build_role": "api", "review_pending": true, "open_comments": 0},
-		map[string]any{"id": "a.two", "module": "a", "facet": "contract", "status": "draft", "build_role": "", "review_pending": false, "open_comments": 2},
-		map[string]any{"id": "b.one", "module": "b", "facet": "contract", "status": "draft", "build_role": "", "review_pending": false, "open_comments": 0},
-		map[string]any{"id": "c.one", "module": "c", "facet": "schema", "status": "draft", "build_role": "", "review_pending": false, "open_comments": 0},
+		map[string]any{"id": "a.one", "module": "a", "facet": "contract", "status": "locked", "review_pending": true, "open_comments": 0},
+		map[string]any{"id": "a.two", "module": "a", "facet": "contract", "status": "draft", "review_pending": false, "open_comments": 2},
+		map[string]any{"id": "b.one", "module": "b", "facet": "contract", "status": "draft", "review_pending": false, "open_comments": 0},
+		map[string]any{"id": "c.one", "module": "c", "facet": "schema", "status": "draft", "review_pending": false, "open_comments": 0},
 	}
 }
 
@@ -228,11 +228,9 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "FACT_RULE_IDS", expr: "window.dossierxGraphCore.FACT_RULE_IDS",
 			want: []any{"cycle", "self_edge", "isolated", "weakly_linked", "review_pending", "open_threads", "sink_group", "orphan_group"}},
 		{name: "HINT_RULE_IDS", expr: "window.dossierxGraphCore.HINT_RULE_IDS",
-			want: []any{"missing_build_phase", "density_outlier"}},
+			want: []any{"density_outlier"}},
 		{name: "OVERLAYS", expr: "window.dossierxGraphCore.OVERLAYS",
 			want: []any{"none", "isolated", "cycles", "review", "comments", "status"}},
-		{name: "BUILD_PHASES", expr: "window.dossierxGraphCore.BUILD_PHASES",
-			want: []any{"orientation", "schema", "behavior", "api", "verification"}},
 
 		{name: "groupId", fn: "groupId", args: []any{"module", "a"}, want: "module:a"},
 		{name: "edgeKey", fn: "edgeKey", args: []any{edge("a", "b", "rests_on")}, want: "a|rests_on|b"},
@@ -563,10 +561,10 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			}},
 		{name: "hints are kept apart from facts", fn: "gapRules",
 			args: []any{coreNodes(), coreEdges(), map[string]any{}}, post: ".hints",
-			want: []any{hint("missing_build_phase", "module:a"), hint("density_outlier")}},
+			want: []any{hint("density_outlier")}},
 		{name: "the density heuristic fires on a thin facet", fn: "gapRules",
 			args: []any{densityNodes, []any{}, map[string]any{}}, post: ".hints",
-			want: []any{hint("missing_build_phase"), hint("density_outlier", "module:m3")}},
+			want: []any{hint("density_outlier", "module:m3")}},
 
 		{name: "encodeState of the default state", fn: "encodeState",
 			args: []any{nil}, want: "md=&fc=&gr=claims&ov=none&ty=r&lb=1&ex=&se="},

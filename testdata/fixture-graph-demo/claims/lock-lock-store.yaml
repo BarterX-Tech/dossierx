@@ -4,7 +4,6 @@ facet: internals
 module: lock
 status: locked
 layout: card
-build_role: schema
 body: |
   The store records, per approved claim, when it was approved and what the approved content hashed to.
 rests_on:

@@ -4,7 +4,6 @@ facet: contract
 module: lock
 status: draft
 layout: card
-build_role: api
 body: |
   The review flag is set by the engine when something underneath an approved claim changed, and is cleared only by a confirmed re-review.
 rests_on:

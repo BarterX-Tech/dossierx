@@ -4,7 +4,6 @@ facet: contract
 module: engine
 status: locked
 layout: card
-build_role: api
 body: |
   The check entry point stops at the first failing stage and names the stage it stopped at.
 rests_on:

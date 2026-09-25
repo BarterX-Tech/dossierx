@@ -4,7 +4,6 @@ facet: internals
 module: lock
 status: locked
 layout: card
-build_role: schema
 body: |
   A record carries the subject, the content hash, the moment, the actor and the human's stated reason.
 rests_on:

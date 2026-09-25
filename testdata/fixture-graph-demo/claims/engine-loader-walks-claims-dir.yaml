@@ -4,7 +4,6 @@ facet: internals
 module: engine
 status: locked
 layout: card
-build_role: behavior
 body: |
   The loader walks the configured claims directory and reads every file it finds. Directory layout carries no meaning: a claim's module and facet come from fields inside the claim.
 rests_on:

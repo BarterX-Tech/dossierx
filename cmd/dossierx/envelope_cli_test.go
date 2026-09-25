@@ -424,7 +424,6 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 func TestEnvelope_BuildOrderStatusIsRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -776,14 +775,13 @@ func TestDryRun_CommentAddWarnsThatItFlipsALockedClaim(t *testing.T) {
 	}
 }
 
-// buildOrderFixture writes a project whose single claim is locked and carries a
-// build_role, which is the minimum a build order can be proposed from.
+// buildOrderFixture writes a project whose single claim is locked, the shape
+// the retired build-order surface is exercised against.
 func buildOrderFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  a locked claim with a build role.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
@@ -793,7 +791,6 @@ func buildOrderFixture(t *testing.T) string {
 func TestEnvelope_BuildOrderVerbsAreRetired(t *testing.T) {
 	cfgPath := writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"build_role: schema\n" +
 			"body: |\n  leftover.\n" +
 			"rests_on:\n  none: true\n  reason: fixture\n",
 	})
