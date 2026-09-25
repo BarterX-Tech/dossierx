@@ -320,8 +320,16 @@ type claimLedgerView struct {
 // release is built around starts with an agent orienting itself on one card
 // and it should not cost four round trips.
 type claimShowData struct {
-	ClaimID      string `json:"claim_id"`
-	Title        string `json:"title"`
+	ClaimID string `json:"claim_id"`
+	Title   string `json:"title"`
+	// Summary and Body are the claim's own words, exactly as authored (Body is
+	// not re-wrapped or trimmed). They are here because "claim show <id>" is
+	// the verb the isolation view and the skills send an agent to when it has
+	// to read a neighbor's contract; a show without the text sent the agent to
+	// the YAML file instead. Both keys are always present: a structured layout
+	// (table, steps) may carry an empty body.
+	Summary      string `json:"summary"`
+	Body         string `json:"body"`
 	Facet        string `json:"facet"`
 	Module       string `json:"module"`
 	Status       string `json:"status"`
@@ -605,6 +613,8 @@ func newClaimShowCmd() *cobra.Command {
 			data := claimShowData{
 				ClaimID:       claim.ID,
 				Title:         claimTitle(claim.ID),
+				Summary:       claim.Summary,
+				Body:          claim.Body,
 				Facet:         claim.Facet,
 				Module:        claim.Module,
 				Status:        string(claim.Status),
@@ -742,6 +752,16 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 		fmt.Fprintln(out, "  next actions:")
 		for _, a := range d.NextActions {
 			fmt.Fprintf(out, "    %s\n", a)
+		}
+	}
+	// The claim's own words close the block, after the state an agent acts
+	// on, so a long body never pushes the next actions off the screen. The
+	// body prints one indented line per authored line.
+	fmt.Fprintf(out, "  summary:            %s\n", d.Summary)
+	if d.Body != "" {
+		fmt.Fprintln(out, "  body:")
+		for _, line := range strings.Split(strings.TrimRight(d.Body, "\n"), "\n") {
+			fmt.Fprintf(out, "    %s\n", line)
 		}
 	}
 }
