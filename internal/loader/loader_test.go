@@ -635,3 +635,24 @@ body: claim a
 		})
 	}
 }
+
+// TestLoadClaims_RestsOnNoneMappingIsStrict: the {none, reason} mapping is
+// decoded by RestsOn's own UnmarshalYAML, which the claim decoder's
+// KnownFields does not reach. A misspelled reason must fail the load rather
+// than decode to a blank one, and ids beside none: true must fail rather than
+// be silently dropped, leaving a claim that rests on nothing.
+func TestLoadClaims_RestsOnNoneMappingIsStrict(t *testing.T) {
+	for _, tc := range []struct{ name, restsOn, want string }{
+		{"misspelled reason", "  none: true\n  reson: fixture\n", "rests_on: field reson not found"},
+		{"none beside ids", "  none: true\n  reason: fixture\n  ids:\n    - widget.contract.b\n", "rests_on: none: true cannot also name targets"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\nrests_on:\n"+tc.restsOn)
+			_, err := LoadClaims(dir)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("load error = %v, want one containing %q", err, tc.want)
+			}
+		})
+	}
+}
