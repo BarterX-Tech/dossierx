@@ -10,7 +10,8 @@
       "edges": {
         "rests_on": [
           "engine.contract.check-is-fail-fast"
-        ]
+        ],
+        "rests_on_internals_omitted": 1
       },
       "readiness": {
         "claim_id": "cli.contract.check-noun",
@@ -27,8 +28,8 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.check-noun",
-              "cli.internals.exit-codes",
-              "cli.internals.json-envelope",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -42,8 +43,8 @@
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -56,9 +57,9 @@
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -70,8 +71,8 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.check-noun",
-              "cli.internals.exit-codes",
-              "cli.internals.json-envelope",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -85,8 +86,8 @@
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -99,9 +100,9 @@
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -115,7 +116,9 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "cli.contract.noun-list-is-fixed",
         "policy_version": 1,
@@ -131,7 +134,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.noun-list-is-fixed",
-              "cli.internals.json-envelope",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -146,7 +149,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.noun-list-is-fixed",
-              "cli.internals.json-envelope",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -163,7 +166,9 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "cli.contract.serve-noun",
         "policy_version": 1,
@@ -179,7 +184,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.serve-noun",
-              "cli.internals.json-envelope",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -194,7 +199,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.serve-noun",
-              "cli.internals.json-envelope",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -215,7 +220,9 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "cli.contract.six-nouns",
         "policy_version": 1,
@@ -231,7 +238,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.six-nouns",
-              "cli.internals.json-envelope",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -246,7 +253,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "cli.contract.six-nouns",
-              "cli.internals.json-envelope",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -369,7 +376,9 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "engine.contract.check-is-fail-fast",
         "policy_version": 1,
@@ -385,8 +394,8 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -398,9 +407,9 @@
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -412,8 +421,8 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -425,9 +434,9 @@
             "source_kind": "own_thread",
             "path": [
               "engine.contract.check-is-fail-fast",
-              "engine.internals.lint-runs-before-catalog"
+              "(internals)"
             ],
-            "detail": "c-2e8875",
+            "detail": "withheld: authored on an internals claim",
             "direct": false,
             "inherited": true
           }
@@ -534,7 +543,9 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "lock.contract.ledger-first",
         "policy_version": 1,
@@ -550,7 +561,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.ledger-first",
-              "lock.internals.lock-store",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -565,7 +576,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.ledger-first",
-              "lock.internals.lock-store",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -586,7 +597,9 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "lock.contract.lock-is-human-approved",
         "policy_version": 1,
@@ -602,9 +615,9 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.lock-is-human-approved",
-              "lock.internals.lock-gates",
-              "lock.internals.ledger-record",
-              "lock.internals.lock-store",
+              "(internals)",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -619,9 +632,9 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.lock-is-human-approved",
-              "lock.internals.lock-gates",
-              "lock.internals.ledger-record",
-              "lock.internals.lock-store",
+              "(internals)",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -638,7 +651,9 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "lock.contract.review-pending-is-engine-managed",
         "policy_version": 1,
@@ -654,9 +669,9 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.review-pending-is-engine-managed",
-              "lock.internals.lock-gates",
-              "lock.internals.ledger-record",
-              "lock.internals.lock-store",
+              "(internals)",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -671,9 +686,9 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "lock.contract.review-pending-is-engine-managed",
-              "lock.internals.lock-gates",
-              "lock.internals.ledger-record",
-              "lock.internals.lock-store",
+              "(internals)",
+              "(internals)",
+              "(internals)",
               "engine.contract.claim-shape"
             ],
             "detail": "dependency content differs from the reviewed baseline",
@@ -719,22 +734,22 @@
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit",
-              "telemetry.internals.counter-shape"
+              "(internals)",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.flush-on-exit",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -751,22 +766,22 @@
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit",
-              "telemetry.internals.counter-shape"
+              "(internals)",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.flush-on-exit",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.disabled-by-default",
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -784,7 +799,9 @@
       "status": "draft",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "telemetry.contract.no-egress",
         "policy_version": 1,
@@ -796,20 +813,20 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit",
-              "telemetry.internals.counter-shape"
+              "(internals)",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.flush-on-exit",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -817,20 +834,20 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit",
-              "telemetry.internals.counter-shape"
+              "(internals)",
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           },
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.flush-on-exit",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.no-egress",
-              "telemetry.internals.flush-on-exit"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -848,7 +865,9 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "telemetry.contract.what-this-module-is",
         "policy_version": 1,
@@ -860,10 +879,10 @@
         "dependency_conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.what-this-module-is",
-              "telemetry.internals.counter-shape"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -871,10 +890,10 @@
         "conditions": [
           {
             "kind": "dependency_unapproved",
-            "dependency_id": "telemetry.internals.counter-shape",
+            "dependency_id": "(internals)",
             "path": [
               "telemetry.contract.what-this-module-is",
-              "telemetry.internals.counter-shape"
+              "(internals)"
             ],
             "detail": "required dependency is not locally approved"
           }
@@ -917,7 +936,9 @@
       "status": "locked",
       "layout": "card",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "viewer.contract.no-network-at-runtime",
         "policy_version": 1,
@@ -933,7 +954,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.no-network-at-runtime",
-              "viewer.internals.payload-shape",
+              "(internals)",
               "engine.contract.catalog-shape",
               "engine.contract.claim-shape"
             ],
@@ -949,7 +970,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.no-network-at-runtime",
-              "viewer.internals.payload-shape",
+              "(internals)",
               "engine.contract.catalog-shape",
               "engine.contract.claim-shape"
             ],
@@ -967,7 +988,9 @@
       "status": "draft",
       "layout": "banner",
       "kind": "fact",
-      "edges": {},
+      "edges": {
+        "rests_on_internals_omitted": 1
+      },
       "readiness": {
         "claim_id": "viewer.contract.read-me-first",
         "policy_version": 1,
@@ -983,7 +1006,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.read-me-first",
-              "viewer.internals.payload-shape",
+              "(internals)",
               "engine.contract.catalog-shape",
               "engine.contract.claim-shape"
             ],
@@ -999,7 +1022,7 @@
             "dependency_id": "engine.contract.claim-shape",
             "path": [
               "viewer.contract.read-me-first",
-              "viewer.internals.payload-shape",
+              "(internals)",
               "engine.contract.catalog-shape",
               "engine.contract.claim-shape"
             ],

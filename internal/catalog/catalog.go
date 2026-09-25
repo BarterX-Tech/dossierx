@@ -145,7 +145,31 @@ type Edges struct {
 	RestsOn       []string `json:"rests_on,omitempty"`
 	RestsOnNone   bool     `json:"rests_on_none,omitempty"`
 	RestsOnReason string   `json:"rests_on_reason,omitempty"`
+
+	// RestsOnInternalsOmitted counts the rests_on targets the integration
+	// projection dropped because they name internals claims. The ids stay
+	// out of catalog.json, but the count does not: an entry whose only
+	// prerequisite is internals would otherwise read `edges: {}`, which a
+	// consumer cannot tell apart from a claim that rests on nothing. Like
+	// the graph payload's dropped counts, it says what was withheld rather
+	// than withholding it silently. omitempty keeps a project with no such
+	// edge byte-identical to before.
+	RestsOnInternalsOmitted int `json:"rests_on_internals_omitted,omitempty"`
 }
+
+// RedactedInternalsID is written in catalog.json readiness wherever the
+// assessment would otherwise name an internals claim: a path hop, or a
+// cause/condition dependency_id. It is not a valid claim id (ids are
+// module.facet.slug in kebab case), so a consumer can never mistake it for,
+// or resolve it to, a real claim. The record itself is kept — a contract
+// claim blocked by an internals prerequisite is still reported blocked, with
+// one record per independent fact — only the internals identity is withheld.
+const RedactedInternalsID = "(internals)"
+
+// WithheldInternalsDetail replaces a readiness detail that carries text
+// authored on an internals claim (a flag reason, open thread ids). Engine
+// details are fixed strings that name no claim and are kept as they are.
+const WithheldInternalsDetail = "withheld: authored on an internals claim"
 
 // Entry is the .catalog.json projection of a single claim: id/facet/module/
 // status/layout plus its outgoing edges. It deliberately omits body/rows/
@@ -206,8 +230,75 @@ type Document struct {
 // follow a cite into internals.
 func entryForIntegration(c model.Claim, internals map[string]bool) Entry {
 	e := entryFor(c)
-	e.Edges.RestsOn = visibility.DropInternalsTargets(e.Edges.RestsOn, internals)
+	kept := visibility.DropInternalsTargets(e.Edges.RestsOn, internals)
+	e.Edges.RestsOnInternalsOmitted = len(e.Edges.RestsOn) - len(kept)
+	e.Edges.RestsOn = kept
 	return e
+}
+
+// redactAssessment returns the integration projection of one exported
+// claim's readiness: every internals id in a path or dependency_id becomes
+// RedactedInternalsID, and author-supplied detail owned by an internals
+// claim becomes WithheldInternalsDetail. Booleans, record counts, kinds and
+// record order are unchanged, so a blocked claim stays visibly blocked and
+// each independent fact keeps its own record. The input is not mutated;
+// work and output are O(size of the assessment).
+func redactAssessment(a readiness.Assessment, internals map[string]bool) readiness.Assessment {
+	if len(internals) == 0 {
+		return a
+	}
+	redactID := func(id string) string {
+		if internals[id] {
+			return RedactedInternalsID
+		}
+		return id
+	}
+	redactPath := func(p readiness.Path) readiness.Path {
+		if p == nil {
+			return nil
+		}
+		out := make(readiness.Path, len(p))
+		for i, id := range p {
+			out[i] = redactID(id)
+		}
+		return out
+	}
+	conditions := func(in []readiness.DependencyCondition) []readiness.DependencyCondition {
+		if in == nil {
+			return nil
+		}
+		out := make([]readiness.DependencyCondition, len(in))
+		for i, c := range in {
+			c.DependencyID = redactID(c.DependencyID)
+			c.Path = redactPath(c.Path)
+			out[i] = c
+		}
+		return out
+	}
+	causes := func(in []readiness.Cause) []readiness.Cause {
+		if in == nil {
+			return nil
+		}
+		out := make([]readiness.Cause, len(in))
+		for i, c := range in {
+			// An own_thread / own_flag cause is owned by the claim at the end
+			// of its path; its detail is that claim's thread ids or flag
+			// reason, i.e. text authored on it.
+			if (c.SourceKind == readiness.CauseOwnThread || c.SourceKind == readiness.CauseOwnFlag) &&
+				len(c.Path) > 0 && internals[c.Path[len(c.Path)-1]] {
+				c.Detail = WithheldInternalsDetail
+			}
+			c.DependencyID = redactID(c.DependencyID)
+			c.Path = redactPath(c.Path)
+			out[i] = c
+		}
+		return out
+	}
+	a.DependencyConditions = conditions(a.DependencyConditions)
+	a.Conditions = conditions(a.Conditions)
+	a.ReviewCauses = causes(a.ReviewCauses)
+	a.Causes = causes(a.Causes)
+	return a
 }
 
 // entryFor projects one claim into its Entry form.
@@ -237,8 +328,10 @@ func entryFor(c model.Claim) Entry {
 }
 
 // Document builds the deterministic .catalog.json integration projection:
-// internals claims are omitted, internals-targeting edges are dropped, and
-// remaining entries are sorted by id.
+// internals claims are omitted, internals-targeting edges are dropped (and
+// counted in rests_on_internals_omitted), readiness names no internals id
+// (see redactAssessment), and remaining entries are sorted by id. No
+// internals claim id appears anywhere in the result.
 //
 // Document never panics on an empty catalog: an empty (or nil) Catalog
 // produces a Document with an empty (non-nil) Claims slice and empty
@@ -260,8 +353,8 @@ func (cat *Catalog) Document() *Document {
 	for _, c := range visibility.IntegrationClaims(cat.Claims) {
 		e := entryForIntegration(c, internals)
 		if assessment, ok := cat.Readiness[c.ID]; ok {
-			assessmentCopy := assessment
-			e.Readiness = &assessmentCopy
+			redacted := redactAssessment(assessment, internals)
+			e.Readiness = &redacted
 		}
 		if result, ok := cat.Conformance[c.ID]; ok {
 			resultCopy := result
@@ -369,19 +462,27 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 	if cat == nil {
 		return b
 	}
+	// Walk exactly what Document emits: internals claims, internals edge
+	// targets and internals ids in readiness never reach the file, so
+	// charging them would let an unemitted byte refuse valid output.
+	internals := visibility.InternalsIDs(cat.Claims)
 	for _, claim := range cat.Claims {
+		if !visibility.IntegrationIncludes(claim) {
+			continue
+		}
 		b.add(catalogEntryStructureBytes)
 		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind())} {
 			add(value)
 		}
 		add(claim.RestsOn.Reason)
-		addStrings(claim.RestsOn.IDs)
+		addStrings(visibility.DropInternalsTargets(claim.RestsOn.IDs, internals))
 		for _, track := range claim.Tracks {
 			b.add(trackStructureBytes)
 			add(track.ID)
 			add(string(track.EffectiveRole()))
 		}
 		if assessment, ok := cat.Readiness[claim.ID]; ok {
+			assessment = redactAssessment(assessment, internals)
 			b.add(readinessAssessmentStructureBytes)
 			add(assessment.ClaimID)
 			add(assessment.LocalApprovalIssue)
@@ -460,9 +561,12 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 		}
 	}
 	for key, ids := range cat.ByFacet {
+		if key == config.FacetInternals {
+			continue
+		}
 		b.add(mapArrayEntryStructureBytes)
 		add(key)
-		addStrings(ids)
+		addStrings(visibility.DropInternalsTargets(ids, internals))
 		if b.exceeded {
 			return b
 		}
@@ -470,7 +574,7 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 	for key, ids := range cat.ByModule {
 		b.add(mapArrayEntryStructureBytes)
 		add(key)
-		addStrings(ids)
+		addStrings(visibility.DropInternalsTargets(ids, internals))
 		if b.exceeded {
 			return b
 		}

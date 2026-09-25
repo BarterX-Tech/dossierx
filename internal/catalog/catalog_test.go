@@ -170,6 +170,29 @@ func TestEncodeJSONBoundedLargeSparseCatalogDoesNotFalseRefuse(t *testing.T) {
 	t.Logf("ambiguous catalog estimate measured exactly: claims=%d catalog_bytes=%d cap=%d", claimCount, len(got), conformance.MaxOutputBytes)
 }
 
+// The preflight is refusal authority, so it may charge only bytes Document
+// emits. An internals claim never reaches catalog.json; its bytes (here, a
+// rests_on reason alone larger than the cap) must not refuse a catalog whose
+// actual output is small.
+func TestEncodeJSONBoundedDoesNotChargeOmittedInternals(t *testing.T) {
+	huge := strings.Repeat("x", conformance.MaxOutputBytes+1)
+	claims := []model.Claim{
+		{ID: "widget.contract.api", Module: "widget", Facet: "contract", Status: model.StatusDraft, RestsOn: model.RestsOnIDs("widget.internals.queue")},
+		{ID: "widget.internals.queue", Module: "widget", Facet: "internals", Status: model.StatusDraft, RestsOn: model.RestsOn{None: true, Reason: huge}},
+	}
+	cat, err := Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	if err != nil {
+		t.Fatalf("bytes of an omitted internals claim refused the catalog: %v", err)
+	}
+	if strings.Contains(string(data), "widget.internals.queue") || len(data) > 4096 {
+		t.Fatalf("catalog = %d bytes, want the small contract-only projection:\n%.512s", len(data), data)
+	}
+}
+
 func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing.T) {
 	const claimCount = 420000
 	claims := make([]model.Claim, claimCount)
