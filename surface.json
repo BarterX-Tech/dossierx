@@ -185,9 +185,8 @@
     },
     {
       "path": "manifest show",
-      "short": "Print one module's manifest.yaml; --isolation adds constitution digest + claim summaries, --integration adds neighbor blurbs",
+      "short": "Print one module's manifest.yaml; --isolation adds the constitution, project claims index and claim summaries, --integration adds neighbors",
       "flags": [
-        "--bodies",
         "--config",
         "--format",
         "--integration",
@@ -291,6 +290,7 @@
     "roll-up",
     "rows-shape",
     "self-edge",
+    "shared-context-budget",
     "source-external-unanchored",
     "source-internal-drift",
     "source-ref-undefined",
@@ -515,7 +515,7 @@
   ],
   "render_fingerprint": "sha256:f557eac88402c773b567ceaf5620f51bd0e48e4337356b03cab01565a28b6a06",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:fc0b35f3c686de145e5a6e839c8dcc34d2381fbf0823f65d42d3549c5ab28ff6",
+    "cmd/dossierx": "sha256:edf9e5b217bc9914c941f89bbafebb61a4dae7c4ff2950ca25b7d319c3a39da9",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -531,10 +531,10 @@
     "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:085f1e32e92dd210f903a552b4645be76d29d9dad39df6f066644e51c528f465",
+    "internal/lint": "sha256:133bd97c345a179cc8d16c0d27c14956f652e47a12671055380ffb5e6e049624",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
     "internal/lock": "sha256:9c8cc7d212cde4a538fcaa17b44c1d1d99719fd7fa54b998dfbc0f5b5793d115",
-    "internal/manifest": "sha256:e0a77643ef233ce5e800428b2b2d74fbf43db2fca684d2c62ead9f31742db67b",
+    "internal/manifest": "sha256:59c1538f75ea4eaa8bad23910cf9f727944b00d7ccd76089bbc0b1e15abcc69d",
     "internal/model": "sha256:1b248b01289a60091b67cd5336761319981e6f681dabe2b959adb78a23277029",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:396747b3186b4f14d24462963edef3c40aa8aadf2ba3e8f97fbd27854aa9ed7c",
@@ -548,7 +548,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:e25a25dde22bd12e8af0bbee332476938ffd9414fc572845222861bbfaf438c1",
-    "skills": "sha256:e51378cbbff9ee716600258743d85d697061d02612b30489402009a75523d3ca"
+    "skills": "sha256:c5fd5ca5b94ccfc2d174f810e231a80ba8aedf7ede3d333d7111b291f12869f7"
   },
   "envelope": {
     "keys": [
@@ -803,6 +803,7 @@
         "findings",
         "integration",
         "isolation",
+        "isolation_budget",
         "module",
         "path",
         "provides",
@@ -949,7 +950,7 @@
     "commands": 24,
     "error_codes": 50,
     "http_routes": 14,
-    "lint_rules": 36,
+    "lint_rules": 37,
     "nouns": 9
   }
 }

@@ -535,7 +535,7 @@ manifest show / one module file
     ok            true
     envelope      command data ok
     command       manifest show
-    data          constitution_digest:{status:string}
+    data          constitution_digest:{decisions:number,glossary:number,hash:string,invariants:number,near_cap:bool,over_cap:bool,path:string,present:bool,state:string,status:string,word_cap:number,words:number}
                   depends_on:[]
                   findings:[]
                   module:string
@@ -549,10 +549,11 @@ manifest show / isolation
     ok            true
     envelope      command data ok
     command       manifest show
-    data          constitution_digest:{status:string}
+    data          constitution_digest:{decisions:number,glossary:number,hash:string,invariants:number,near_cap:bool,over_cap:bool,path:string,present:bool,state:string,status:string,word_cap:number,words:number}
                   depends_on:[]
                   findings:[]
-                  isolation:{claims:[{facet:string,id:string,status:string,summary:string,title:string}],constitution_digest:{status:string},draft_hints:{note:string,suggested_provides:[string]},manifest:{depends_on:[],provides:[],summary:string}}
+                  isolation:{claims:[{facet:string,id:string,status:string,summary:string,title:string}],draft_hints:{note:string,suggested_provides:[string]},manifest:{depends_on:[],provides:[],summary:string},shared:{constitution_text:string,project_claims:[]}}
+                  isolation_budget:{module_budget:number,module_bytes:number,shared_budget:number,shared_bytes:number}
                   module:string
                   path:string
                   provides:[]

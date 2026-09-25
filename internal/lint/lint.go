@@ -1,4 +1,4 @@
-// Package lint defines the Lint interface every one of the 36 lints
+// Package lint defines the Lint interface every one of the 37 lints
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, self-edge,
 // rests-on-required, rests-on-target,
 // rows-shape,
@@ -9,7 +9,7 @@
 // source-external-unanchored, source-internal-drift,
 // track-shape, track-unknown, track-multi-owner, track-empty,
 // track-unowned, summary-required, summary-oversize, body-oversize,
-// module-claim-cap, module-manifest) implements,
+// module-claim-cap, module-manifest, shared-context-budget) implements,
 // one per file
 // in this package. This file only defines the contract and the registry;
 // individual lint implementations are a later phase and Registry starts
