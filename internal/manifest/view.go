@@ -195,14 +195,25 @@ func LoadModule(cfg *config.Config, module string) (raw []byte, ok bool, extras 
 	return raw, ok, extras
 }
 
-// loadConstitution reads the configured constitution.yaml, or nil when it is
-// absent or unreadable (the constitution gate reports those; the views just
+// loadConstitution reads the configured constitution.yaml (the index copy
+// when cfg.ConstitutionIndex is set), or nil when it is absent or unreadable (the constitution gate reports those; the views just
 // carry no text).
 func loadConstitution(cfg *config.Config) (string, *constitution.File) {
 	if cfg == nil {
 		return "", nil
 	}
 	path := cfg.ConstitutionPath()
+	if idx := cfg.ConstitutionIndex; idx != nil {
+		// check --staged: the roof the commit carries, not the working tree.
+		if !idx.Tracked {
+			return path, nil
+		}
+		f, err := constitution.Parse(idx.Raw, path)
+		if err != nil {
+			return path, nil
+		}
+		return path, f
+	}
 	f, err := constitution.LoadOptional(path)
 	if err != nil {
 		return path, nil

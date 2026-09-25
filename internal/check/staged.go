@@ -951,6 +951,16 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	}
 	in.constitution = constitution.EvaluateAt(constitutionPath, constitutionRecord(in.store))
 	in.constitution.Path = cfg.ConstitutionPath()
+	// The lints that read the roof's text (shared-context-budget) must judge
+	// this same index copy, not the working tree the gate declined to read.
+	// Captured here, before the temp directory is removed.
+	indexed := &config.IndexedFile{}
+	if raw, readErr := os.ReadFile(constitutionPath); readErr == nil {
+		indexed = &config.IndexedFile{Tracked: true, Raw: raw}
+	} else if !os.IsNotExist(readErr) {
+		return ledgerInputs{}, fmt.Errorf("check --staged: read staged %s: %w", cfg.ConstitutionPath(), readErr)
+	}
+	cfg.ConstitutionIndex = indexed
 
 	return in, nil
 }
