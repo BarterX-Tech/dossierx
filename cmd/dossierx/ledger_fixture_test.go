@@ -28,7 +28,9 @@ import (
 )
 
 // armLedgerFixture records a lock-ledger approval for every locked claim in the
-// project at cfgPath, exactly as "dossierx claim lock" would have.
+// project at cfgPath — module claims under claims_dir AND project claims under
+// project_claims_dir, the set loader.LoadAll gives every command — exactly as
+// "dossierx claim lock" would have.
 //
 // It is also the right call after a fixture EDITS a locked claim in place to
 // simulate a change that real use makes through unlock -> edit -> lock: without
@@ -40,7 +42,7 @@ func armLedgerFixture(t *testing.T, cfgPath string) {
 	if err != nil {
 		t.Fatalf("arm ledger: load config %s: %v", cfgPath, err)
 	}
-	claims, err := loader.LoadClaims(cfg.ClaimsDir)
+	claims, err := loader.LoadAll(cfg)
 	if err != nil {
 		// A fixture whose claims do not parse is testing the LOAD failure
 		// itself; there is nothing to approve and nothing this helper can
