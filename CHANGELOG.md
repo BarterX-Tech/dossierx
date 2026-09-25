@@ -99,6 +99,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `manifest list` is the summaries-only module catalog. Isolation over the
   16384-byte view cap refuses with `view_too_large`. The retired `deps` /
   `catalog` nouns stay retired. Decisions recorded on Linear NIT-7 (2026-09-24).
+  The viewer's Manifest tab (NIT-19) now renders the module's `manifest.yaml`
+  read-only in both the static and the served viewer: the `summary`, each
+  `provides` id linked to its Contract claim, each `depends_on` id linked to
+  its claim and provider module, and a toggle showing the raw YAML. A
+  missing, oversize, malformed or invalid manifest shows the same
+  `module-manifest` message(s) `check` reports for that module and a copyable
+  `dossierx manifest show <module> --isolation`, never the broken file. Tabs
+  stay Manifest | Contract | Internals and a module still opens on Contract.
 
 ### Changed
 

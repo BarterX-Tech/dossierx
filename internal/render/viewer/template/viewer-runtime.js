@@ -212,7 +212,10 @@
         if (!host || !tmpl) {
           return;
         }
-        if (!host.querySelector('.claim')) {
+        // A Manifest tab holds no .claim card, only its .manifest-view, so
+        // both count as "already mounted"; otherwise every revisit would
+        // clone the manifest into the host again.
+        if (!host.querySelector('.claim, .manifest-view')) {
           host.appendChild(tmpl.content.cloneNode(true));
           if (typeof window.dossierxEnhanceSystemRecord === 'function') {
             window.dossierxEnhanceSystemRecord();
@@ -3942,6 +3945,28 @@
             closeCommentPanel();
           } else {
             openCommentPanel(chipClaim);
+          }
+          return;
+        }
+        // The Manifest tab's refusal command (NIT-19). The command text is
+        // selected first, so a file:// viewer without clipboard access still
+        // leaves it one keystroke from copied; the clipboard write is a bonus.
+        var copyBtn = e.target.closest('.manifest-copy');
+        if (copyBtn) {
+          e.preventDefault();
+          var copyText = copyBtn.getAttribute('data-copy-text') || '';
+          var codeEl = copyBtn.parentNode.querySelector('.manifest-command-text');
+          if (codeEl && window.getSelection) {
+            var range = document.createRange();
+            range.selectNodeContents(codeEl);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          if (window.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(copyText).then(function () {
+              copyBtn.textContent = 'Copied';
+            }).catch(function () {});
           }
           return;
         }
