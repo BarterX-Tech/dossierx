@@ -73,8 +73,8 @@ func TestRetiredFieldLoadRefusalNamesTheUpgradeFold(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(claimsDir, "retry.yaml"), []byte(claimYAML+"totally_unknown: 1\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		env, _, _ := execCLIJSON(t, "--config", cfgPath, "claim", "list")
-		if env.Error == nil || env.Error.Code != cliout.CodeInvalidClaim {
+		env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "list")
+		if err == nil || env.Error == nil || env.Error.Code != cliout.CodeInvalidClaim {
 			t.Fatalf("want invalid_claim, got %+v", env)
 		}
 		if strings.Contains(env.Error.Hint, "dossierx-upgrading") {

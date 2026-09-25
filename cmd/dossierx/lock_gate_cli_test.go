@@ -337,8 +337,14 @@ func TestLockSemanticConflictRefusesForHumanReview(t *testing.T) {
 	if !strings.Contains(env.Error.Hint, "recorded nowhere") || !strings.Contains(env.Error.Hint, "dossierx claim lock widget.contract.a --dry-run") {
 		t.Fatalf("the hint must say the conflict is not recorded and name the re-preview, got %q", env.Error.Hint)
 	}
-	details, _ := env.Error.Details.(map[string]any)
-	got, _ := json.Marshal(details["semantic_conflicts"])
+	details, ok := env.Error.Details.(map[string]any)
+	if !ok {
+		t.Fatalf("error.details must be an object, got %#v", env.Error.Details)
+	}
+	got, err := json.Marshal(details["semantic_conflicts"])
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(got), "widget.contract.b:a says 200ms, b says 500ms") {
 		t.Fatalf("error.details.semantic_conflicts must carry the dependency and the reason, got %s", got)
 	}
