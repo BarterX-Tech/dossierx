@@ -72,6 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and negatives are refused at config load. No migration tooling and no
   grandfathering.
 
+- **Max claims per module (NIT-14).** `max_claims_per_module` on `project.config.yaml` (omit → **10**). `dossierx
+  check` reports `module-claim-cap` when any module holds more claims than
+  that ceiling, and `claim lock` refuses every claim in an over-cap module.
+  Raise the project-level key to override; there is no per-module override.
+  Values below 1 are refused when the config loads. Project claims carry no
+  module and never count toward a module's cap.
+
 ### Changed
 
 - **Claim facets are engine-fixed (NIT-20).** `project.config.yaml` must list

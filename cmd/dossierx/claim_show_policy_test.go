@@ -269,7 +269,8 @@ func snapshotFiles(t *testing.T, root string) map[string]string {
 }
 
 func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
-	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}}
+	scaleCap := 10000
+	cfg := &config.Config{Facets: []string{"contract"}, Modules: []string{"shape"}, MaxClaimsPerModule: &scaleCap}
 	store := &lock.Store{PolicyVersion: lock.PolicyLocalApprovalV1}
 	type shape struct {
 		name           string

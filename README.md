@@ -370,6 +370,7 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | `mockup_modules` | []string | no | The allowlist of modules permitted to author `raw_html` (on any layout, including `layout: mockup`). Every entry must also appear in `modules`. Unset/empty means no module may. |
 | `max_claim_body_chars` | int | no | Project-wide ceiling on `body` + `steps` + `rows` cells, counted as Unicode code points. Omitted, the default is **2000**. `check` fails with `body-oversize` when a claim is over, and `claim lock` refuses. `raw_html` is exempt. Values below 1 are refused at config load. |
 | `max_claim_summary_chars` | int | no | Project-wide ceiling on `summary`, counted as Unicode code points. Omitted, the default is **200**. `check` fails with `summary-oversize` when over. Values below 1 are refused at config load. |
+| `max_claims_per_module` | int | no | Project-wide ceiling on how many claims one module may hold. Omitted, the default is **10**. `check` fails with `module-claim-cap` when a module is over, and `claim lock` refuses any claim in that module. Raise this number to override; there is no per-module override. Values below 1 are refused at config load. |
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
 ## The skills
 

@@ -20,7 +20,7 @@ func conformanceCLIProject(t *testing.T) (root, cfgPath string) {
 		t.Fatal(err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"
 	claim := "id: widget.contract.state\nfacet: contract\nmodule: widget\nstatus: draft\nsummary: Fixture claim used by the engine test corpus.\nlayout: card\nbody: state fixture\nrests_on:\n  none: true\n  reason: fixture\nembodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://state\n      expectation:\n        shape: set\n        value: [blocked, ready]\n"
 	observation := `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["ready","paused"]}]}`
 	for path, data := range map[string]string{cfgPath: cfg, filepath.Join(root, "claims", "state.yaml"): claim, filepath.Join(root, "observations.json"): observation} {
@@ -40,7 +40,7 @@ func conformanceCapacityCLIProject(t *testing.T) (root, cfgPath string) {
 		t.Fatal(err)
 	}
 	cfgPath = filepath.Join(root, "project.config.yaml")
-	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nconformance:\n  observations: observations.json\n"
+	cfg := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\nmax_claims_per_module: 10000\nconformance:\n  observations: observations.json\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -1477,6 +1477,12 @@ max_claim_body_chars: int        # optional; omit → 2000. Unicode code-point
 max_claim_summary_chars: int     # optional; omit → 200. Unicode code-point
                                   # ceiling on summary. check reports
                                   # summary-oversize (ERROR) when over.
+max_claims_per_module: int       # optional; omit → 10. Project-wide ceiling
+                                  # on claim files per module. check reports
+                                  # module-claim-cap (ERROR) when a module is
+                                  # over, and claim lock refuses every claim
+                                  # in that module. Raise this number to
+                                  # override; there is no per-module key.
                                   # Values below 1 are a config-load error.
 viewer:
   template_overrides: path        # optional override dir; resolved relative

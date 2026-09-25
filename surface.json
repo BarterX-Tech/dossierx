@@ -262,6 +262,7 @@
     "kind-shape",
     "layout-shape-mismatch",
     "markdown-sanity",
+    "module-claim-cap",
     "orphan",
     "raw-html-scope",
     "rest-on-locked",
@@ -501,7 +502,7 @@
     "internal/check": "sha256:a4ebfbed6312721aad86b1f192c19443a078b5fcff3d8f3ac55384a9800eebb0",
     "internal/cliout": "sha256:bbd11a5f3a2b24aee4d557280f470f971f2124402dbabb5d1a8cac678bce1bfe",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:89aefc6ca6dd23ca13da08e8fb8cde361932d605dfda181f51b992145f7f081a",
+    "internal/config": "sha256:dfc41cb97ca084a5b50beea099f679ca4585d426fb0c6353d12953c33f592870",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:d40d8ae4bb547e32a9c04fbae73cd887f290bab08e669f1355fbe196af8ccc31",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
@@ -509,7 +510,7 @@
     "internal/graph": "sha256:e6f2019b38549e0067f6dffa7141d21aa02c3aad295a4a70d3b69a6834148308",
     "internal/implink": "sha256:9d15d1e196aa1e9cf967b25685eae6503c716714090fdf1c88572f0038e50a64",
     "internal/layout": "sha256:9c97e06fcf41adf9688157f92427767576b8107584fa1ee6e9159b8720fc86c8",
-    "internal/lint": "sha256:b6761e9d73221e4f482b025569b35997919465db969d75592b400ca920be9b34",
+    "internal/lint": "sha256:c036c63fc52e053b0657ed649879f407b15ff7b0c65018fe8942a9ef421c1097",
     "internal/loader": "sha256:3f016bec4118c24d48427e7ed085288b5df5ae8f4040dafabcfda907becda39a",
     "internal/lock": "sha256:9ec21d80696bf11fe83e1559de80fded994e4237c32f8b23d434448642d147b9",
     "internal/model": "sha256:1b248b01289a60091b67cd5336761319981e6f681dabe2b959adb78a23277029",
@@ -905,7 +906,7 @@
     "commands": 22,
     "error_codes": 49,
     "http_routes": 14,
-    "lint_rules": 34,
+    "lint_rules": 35,
     "nouns": 8
   }
 }

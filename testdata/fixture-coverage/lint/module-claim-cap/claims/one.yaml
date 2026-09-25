@@ -1,0 +1,10 @@
+id: fatmod.contract.one
+facet: contract
+module: fatmod
+status: draft
+layout: card
+summary: Fixture card that counts toward the module cap.
+rests_on:
+  - fatmod.contract.two
+body: |
+  First card in a three-claim module whose project cap is two.

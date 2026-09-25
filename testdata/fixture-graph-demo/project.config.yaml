@@ -51,3 +51,6 @@ modules:
   - lock
   - telemetry
 claims_dir: claims
+# The graph pane needs a dense corpus, so modules here run past the default
+# cap of 10 claims (engine is the largest). Raised on purpose; see NIT-14.
+max_claims_per_module: 15
