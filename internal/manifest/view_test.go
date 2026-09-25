@@ -164,6 +164,45 @@ func TestShowIsolationRefusesModuleOverflowNamingTheModule(t *testing.T) {
 	}
 }
 
+// The module budget counts bytes and summary caps count characters. Ten
+// claims at the 200-character cap fit in ASCII, but in CJK (3 bytes a
+// character) the same ten overflow, and check must say so with the refusal
+// manifest show --isolation gives, rather than pass a module whose view
+// nobody can open.
+func TestCheckRefusesTheModuleOverflowShowRefuses(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{Modules: []string{"widget"}, ClaimsDir: dir}
+	if err := writeMinimal(dir, "widget"); err != nil {
+		t.Fatal(err)
+	}
+	withSummary := func(summary string) []model.Claim {
+		var claims []model.Claim
+		for i := 1; i <= 10; i++ {
+			claims = append(claims, moduleClaim("widget", i, summary))
+		}
+		return claims
+	}
+
+	if findings := Check(withSummary(summary200), cfg); len(findings) != 0 {
+		t.Fatalf("ten ASCII summaries at the cap fit the module budget: %+v", findings)
+	}
+
+	cjk := withSummary(strings.Repeat("界", 200))
+	_, showErr := Show(cjk, cfg, "widget", ShowOptions{Isolation: true})
+	if !IsIsolationOversize(showErr) {
+		t.Fatalf("fixture precondition: ten 200-character CJK summaries must overflow the module view, got %v", showErr)
+	}
+	findings := Check(cjk, cfg)
+	if len(findings) != 1 || findings[0].Module != "widget" || findings[0].Message != showErr.Error() {
+		t.Fatalf("check findings = %+v, want exactly show's refusal %q", findings, showErr)
+	}
+	for _, want := range []string{fmt.Sprint(IsolationOversizeDetails(showErr)["module_bytes"]), fmt.Sprint(ModuleBudgetBytes), "multibyte", "split the module"} {
+		if !strings.Contains(showErr.Error(), want) {
+			t.Fatalf("refusal %q does not say %q", showErr, want)
+		}
+	}
+}
+
 // Shared text never refuses a module's view: check owns that budget.
 func TestShowIsolationNeverRefusesForSharedText(t *testing.T) {
 	dir := t.TempDir()
