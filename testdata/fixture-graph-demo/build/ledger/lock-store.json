@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "policy_version": 1,
+  "policy_migrated_at": "2026-09-25T18:09:22Z",
+  "policy_migration_reason": "lock policy 0 retired in v0.7.21; this store now records local approval v1",
   "hashes": {
     "cli.contract.check-noun": {
       "cli.internals.exit-codes": "9963e969b9667ae62309a8a9dae7b74ddc3aaa685c91ab4b756fd07c7537e0f7",
@@ -37,7 +40,7 @@
       "engine.contract.build-is-pure": "9d807bce57bcbdffe047d4d641fe3f5dd996c2a7881c71021cfca71e02e17074"
     },
     "engine.internals.edge-kinds": {
-      "engine.contract.claim-shape": "a30c2b97d6d7cebbba0662c9c40a945a999760f97554a5fa05ce670bd9fd9fa9"
+      "engine.contract.claim-shape": "e3fadfa3cfef0e939291fa509504cf2aae4ac31f80c03239ba351013d94c7752"
     },
     "engine.internals.lint-runs-before-catalog": {
       "engine.internals.edge-kinds": "90b3707affe0eab22f9fca4d3d4082d469c3ba6d98b09af1794497d2978f0e08"
@@ -78,6 +81,45 @@
       "engine.contract.catalog-shape": "dfba9cfa1b678d916ae4b6ba0e4ed7b7106b5182cef4512bbc9297aa91562b0d"
     }
   },
+  "receipts": {
+    "engine.internals.edge-kinds": {
+      "engine.contract.claim-shape": {
+        "hash": "e3fadfa3cfef0e939291fa509504cf2aae4ac31f80c03239ba351013d94c7752",
+        "content": {
+          "ID": "engine.contract.claim-shape",
+          "Facet": "contract",
+          "Module": "engine",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "Mirrors": null,
+          "RestsOn": {
+            "None": true,
+            "Reason": "fixture claim; nothing to rest on",
+            "IDs": null
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/home/claude/dossierx/.claude/worktrees/agent-a713c4cb1a88a01f2/testdata/fixture-graph-demo/claims/engine-claim-shape.yaml"
+        }
+      }
+    }
+  },
   "locked_at": {
     "cli.contract.check-noun": "2026-08-05T15:19:19.043108Z",
     "cli.contract.noun-list-is-fixed": "2026-08-05T15:19:19.057264Z",
@@ -91,7 +133,7 @@
     "engine.contract.single-source-of-truth": "2026-09-24T15:48:39.475264Z",
     "engine.internals.catalog-groups-by-facet": "2026-08-05T15:19:19.084751Z",
     "engine.internals.determinism-suite": "2026-08-05T15:19:19.138847Z",
-    "engine.internals.edge-kinds": "2026-08-05T15:19:19.002938Z",
+    "engine.internals.edge-kinds": "2026-09-25T18:09:42.891172003Z",
     "engine.internals.lint-runs-before-catalog": "2026-08-05T15:19:19.01665Z",
     "engine.internals.loader-walks-claims-dir": "2026-08-05T15:19:19.099119Z",
     "lock.contract.lock-is-human-approved": "2026-08-05T15:19:19.206352Z",
@@ -176,7 +218,6 @@
         "Status": "locked",
         "Layout": "card",
         "Kind": "",
-        "BuildRole": "schema",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "A claim is one atomic statement carrying an identifier, a facet, a module, a lifecycle status and its outgoing edges.\n",
@@ -216,7 +257,6 @@
         "Status": "locked",
         "Layout": "card",
         "Kind": "",
-        "BuildRole": "orientation",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "Every fact in this project has exactly one home. A second place that states the same thing is a second place to keep correct, and the two will disagree.\n",
@@ -258,10 +298,44 @@
     },
     "engine.internals.edge-kinds": {
       "subject": "claim",
-      "hash": "135affcd6effc61355646d4cf8908cfc9e6d9387cb52722efc80152d8cc581fa",
-      "at": "2026-08-05T15:19:19.002949Z",
-      "actor": "dossierx-fixture",
-      "reason": "demo fixture: seeded as approved so the graph pane has locked nodes, a governed hub and a review-pending claim to draw"
+      "hash": "c51500f9a877e1eedf524637b108634587209d1d408330d3f0310f5d7693045a",
+      "at": "2026-09-25T18:09:42.891209247Z",
+      "actor": "unknown",
+      "reason": "release cleanup for v0.7.21: the body described the retired doctrine edge (governed_by); corrected to the one edge kind, rests_on",
+      "content": {
+        "ID": "engine.internals.edge-kinds",
+        "Facet": "internals",
+        "Module": "engine",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "There is one edge kind and no more: a claim rests on another. A claim that rests on nothing states that absence, with a reason, instead of leaving the edge out.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "Mirrors": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "engine.contract.claim-shape"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/home/claude/dossierx/.claude/worktrees/agent-a713c4cb1a88a01f2/testdata/fixture-graph-demo/claims/engine-edge-kinds.yaml"
+      }
     },
     "engine.internals.lint-runs-before-catalog": {
       "subject": "claim",

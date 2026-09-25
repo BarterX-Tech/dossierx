@@ -38,13 +38,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.contract.claim-shape",
+            "dependency_id": "engine.internals.edge-kinds",
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
               "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
-              "engine.contract.claim-shape"
+              "engine.internals.edge-kinds"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -81,13 +80,12 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.contract.claim-shape",
+            "dependency_id": "engine.internals.edge-kinds",
             "path": [
               "cli.contract.check-noun",
               "engine.contract.check-is-fail-fast",
               "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
-              "engine.contract.claim-shape"
+              "engine.internals.edge-kinds"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -382,12 +380,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.contract.claim-shape",
+            "dependency_id": "engine.internals.edge-kinds",
             "path": [
               "engine.contract.check-is-fail-fast",
               "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
-              "engine.contract.claim-shape"
+              "engine.internals.edge-kinds"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,
@@ -409,12 +406,11 @@
           {
             "kind": "upstream_dependency_review",
             "source_kind": "direct_dependency_change",
-            "dependency_id": "engine.contract.claim-shape",
+            "dependency_id": "engine.internals.edge-kinds",
             "path": [
               "engine.contract.check-is-fail-fast",
               "engine.internals.lint-runs-before-catalog",
-              "engine.internals.edge-kinds",
-              "engine.contract.claim-shape"
+              "engine.internals.edge-kinds"
             ],
             "detail": "dependency content differs from the reviewed baseline",
             "direct": false,

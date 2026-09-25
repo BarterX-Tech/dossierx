@@ -5,6 +5,6 @@ module: engine
 status: draft
 layout: card
 body: |
-  A node's project-wide degree counts all three edge kinds. It is a fact about the corpus; the reader's current scope produces a different, smaller number that is computed separately.
+  A node's project-wide degree counts every rests_on edge into and out of it. It is a fact about the corpus; the reader's current scope produces a different, smaller number that is computed separately.
 rests_on:
   - engine.internals.edge-kinds

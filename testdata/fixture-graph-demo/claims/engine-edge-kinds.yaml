@@ -5,7 +5,6 @@ module: engine
 status: locked
 layout: card
 body: |
-  There are three edge kinds and no more. One says a claim depends on another, one says two claims are content-identical, and one says which doctrine backs the claim's truth.
+  There is one edge kind and no more: a claim rests on another. A claim that rests on nothing states that absence, with a reason, instead of leaving the edge out.
 rests_on:
   - engine.contract.claim-shape
-review_pending: true

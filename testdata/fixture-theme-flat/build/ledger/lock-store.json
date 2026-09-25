@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "policy_version": 1,
+  "policy_migrated_at": "2026-09-25T18:09:47Z",
+  "policy_migration_reason": "lock policy 0 retired in v0.7.21; this store now records local approval v1",
   "hashes": {
     "panel.contract.api": {
       "panel.contract.behavior": "db7259ed5a63c2fcb49787d8b548e5f4a7823a9553ff1a2b008ef1c0ee4a1686"
@@ -35,7 +38,6 @@
           "Status": "locked",
           "Layout": "card",
           "Kind": "",
-          "BuildRole": "behavior",
           "Embodiment": null,
           "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "The panel opens on the claim named in the URL fragment and does nothing\nelse until a reader asks it to.\n",
@@ -75,7 +77,6 @@
           "Status": "locked",
           "Layout": "list",
           "Kind": "",
-          "BuildRole": "schema",
           "Embodiment": null,
           "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "- the claim currently open\n- the scroll position of the reading pane\n- nothing else\n",
@@ -117,13 +118,12 @@
           "Status": "locked",
           "Layout": "mockup",
           "Kind": "",
-          "BuildRole": "orientation",
           "Embodiment": null,
           "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
           "Rows": null,
           "Section": "What the panel looks like",
-          "RawHTML": "<div class=\"mockup-diagram\"><div class=\"gcp-console\"><div class=\"gcp-row\"><span class=\"mockup-badge\">DRAFT</span> widget.contract.overview</div></div></div>",
+          "RawHTML": "\u003cdiv class=\"mockup-diagram\"\u003e\u003cdiv class=\"gcp-console\"\u003e\u003cdiv class=\"gcp-row\"\u003e\u003cspan class=\"mockup-badge\"\u003eDRAFT\u003c/span\u003e widget.contract.overview\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
           "RawHTMLReviewed": true,
           "Steps": null,
           "Mirrors": null,
@@ -155,7 +155,6 @@
           "Status": "locked",
           "Layout": "card",
           "Kind": "",
-          "BuildRole": "api",
           "Embodiment": null,
           "Summary": "Fixture claim used by the engine test corpus.",
           "Body": "The panel exposes one call, `render()`, and nothing else. This claim is\nlocked so the corpus has a locked claim beside its drafts.\n",
@@ -180,7 +179,7 @@
           "ReviewPending": false,
           "AuditNotes": null,
           "Comments": null,
-          "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-api.yaml"
+          "SourcePath": "/home/claude/dossierx/.claude/worktrees/agent-a713c4cb1a88a01f2/testdata/fixture-theme-flat/claims/panel-api.yaml"
         }
       }
     }
@@ -190,7 +189,7 @@
     "panel.contract.behavior": "2026-09-24T15:43:17.968334Z",
     "panel.internals.mockup": "2026-09-24T15:43:18.126896Z",
     "panel.internals.state": "2026-09-24T15:43:18.284302Z",
-    "panel.internals.verification": "2026-09-24T15:43:18.445742Z",
+    "panel.internals.verification": "2026-09-25T18:09:58.552189125Z",
     "widget.contract.reviewed": "2026-09-02T10:22:20.174643Z"
   },
   "ledger": {
@@ -215,7 +214,6 @@
         "Status": "locked",
         "Layout": "card",
         "Kind": "",
-        "BuildRole": "api",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "The panel exposes one call, `render()`, and nothing else. This claim is\nlocked so the corpus has a locked claim beside its drafts.\n",
@@ -257,7 +255,6 @@
         "Status": "locked",
         "Layout": "card",
         "Kind": "",
-        "BuildRole": "behavior",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "The panel opens on the claim named in the URL fragment and does nothing\nelse until a reader asks it to.\n",
@@ -299,13 +296,12 @@
         "Status": "locked",
         "Layout": "mockup",
         "Kind": "",
-        "BuildRole": "orientation",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "The markup below is the project-authored diagram the `mockup-bg` token\npaints.\n",
         "Rows": null,
         "Section": "What the panel looks like",
-        "RawHTML": "<div class=\"mockup-diagram\"><div class=\"gcp-console\"><div class=\"gcp-row\"><span class=\"mockup-badge\">DRAFT</span> widget.contract.overview</div></div></div>",
+        "RawHTML": "\u003cdiv class=\"mockup-diagram\"\u003e\u003cdiv class=\"gcp-console\"\u003e\u003cdiv class=\"gcp-row\"\u003e\u003cspan class=\"mockup-badge\"\u003eDRAFT\u003c/span\u003e widget.contract.overview\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
         "RawHTMLReviewed": true,
         "Steps": null,
         "Mirrors": null,
@@ -339,7 +335,6 @@
         "Status": "locked",
         "Layout": "list",
         "Kind": "",
-        "BuildRole": "schema",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "- the claim currently open\n- the scroll position of the reading pane\n- nothing else\n",
@@ -371,10 +366,10 @@
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "884003fb99236f79657a1c12fe2ebe0c023c979f9b0d0a6fe1e443876d571e18",
-      "at": "2026-09-24T15:43:18.445753Z",
-      "actor": "nitinkhanna",
-      "reason": "fixture re-lock after the rests_on shape change",
+      "hash": "5e58c8eae794b4f6d102e25497e7144d2e52c697ad321fb8c6f66b559db4d769",
+      "at": "2026-09-25T18:09:58.552276642Z",
+      "actor": "unknown",
+      "reason": "release cleanup for v0.7.21: the body named the retired build_role and build-order artifact; that sentence is removed",
       "content": {
         "ID": "panel.internals.verification",
         "Facet": "internals",
@@ -383,10 +378,9 @@
         "Status": "locked",
         "Layout": "card",
         "Kind": "",
-        "BuildRole": "verification",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
-        "Body": "Every claim above is proven by the browser suite, not by reading the\nsource. This claim carries the verification build_role so the module's\nbuild-order artifact covers every phase.\n",
+        "Body": "Every claim above is proven by the browser suite, not by reading the\nsource.\n",
         "Rows": null,
         "Section": "How the panel is proven",
         "RawHTML": "",
@@ -408,7 +402,7 @@
         "ReviewPending": false,
         "AuditNotes": null,
         "Comments": null,
-        "SourcePath": "/Users/nitinkhanna/Desktop/dossierx/.claude/worktrees/nit-6-pr104/testdata/fixture-theme-flat/claims/panel-verify.yaml"
+        "SourcePath": "/home/claude/dossierx/.claude/worktrees/agent-a713c4cb1a88a01f2/testdata/fixture-theme-flat/claims/panel-verify.yaml"
       }
     },
     "widget.contract.reviewed": {
@@ -428,7 +422,6 @@
         "Status": "locked",
         "Layout": "card",
         "Kind": "",
-        "BuildRole": "",
         "Embodiment": null,
         "Summary": "Fixture claim used by the engine test corpus.",
         "Body": "This claim is locked and carries an open comment thread, which is what puts\nit in `review_pending` and renders the `.claim-review-pending` marker the\nparity probe reads.\n",
