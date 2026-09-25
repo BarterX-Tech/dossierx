@@ -284,6 +284,15 @@ catalog. The retired `deps` and `catalog` nouns stay retired. No lock exists for
 the manifest itself in this release: the human reviews it in the viewer's
 Manifest tab and approves the module through its claim locks.
 
+The Manifest tab (static and served viewer alike) is read-only. A healthy
+file shows its `summary`, each `provides` id linked to its Contract claim,
+each `depends_on` id linked to its claim and its provider module, and a
+toggle that reveals the raw YAML. A missing, oversize, malformed or invalid
+file shows only the `module-manifest` finding(s) `check` reports for that
+module, verbatim, and the copyable `dossierx manifest show <module>
+--isolation` command; none of the broken file is rendered. There is no
+editing in the viewer.
+
 `build_role: orientation` remains a claim field; it is not a substitute for the
 manifest.
 

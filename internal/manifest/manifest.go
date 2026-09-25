@@ -177,7 +177,13 @@ func Check(claims []model.Claim, cfg *config.Config) []Finding {
 	if walkErr != nil {
 		return []Finding{{Module: "", Message: walkErr.Error()}}
 	}
+	return checkTree(claims, cfg, tree, extras)
+}
 
+// checkTree is Check over an already-loaded manifest tree, so a caller that
+// also needs the bytes (Viewer) walks claims_dir once and still gets check's
+// exact findings.
+func checkTree(claims []model.Claim, cfg *config.Config, tree map[string][]byte, extras []string) []Finding {
 	byID := make(map[string]model.Claim, len(claims))
 	for _, c := range claims {
 		byID[c.ID] = c

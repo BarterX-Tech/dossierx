@@ -100,12 +100,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--integration` adds, for each module in `depends_on`, its manifest summary,
   its `provides` ids and each provided contract claim's summary (never
   internals or bodies), plus the `depends_on` membership edges and the project
-  claims index. It reads one hop and has no byte cap. `manifest list` is the summaries-only module catalog. The 16384-byte
-  isolation view is split: 10240 bytes shared (constitution text plus project
+  claims index. It reads one hop and has no byte cap. `manifest list` is the
+  summaries-only module catalog. The 16384-byte isolation view is split: 10240 bytes shared (constitution text plus project
   claims index), enforced by the new `shared-context-budget` check on the
   project claim that crosses it, and 6144 bytes owned by the module, whose
   overflow refuses with `view_too_large` naming the module. The retired `deps` /
   `catalog` nouns stay retired. Decisions recorded on Linear NIT-7 (2026-09-24).
+  The viewer's Manifest tab (NIT-19) now renders the module's `manifest.yaml`
+  read-only in both the static and the served viewer: the `summary`, each
+  `provides` id linked to its Contract claim, each `depends_on` id linked to
+  its claim and provider module, and a toggle showing the raw YAML. A
+  missing, oversize, malformed or invalid manifest shows the same
+  `module-manifest` message(s) `check` reports for that module and a copyable
+  `dossierx manifest show <module> --isolation`, never the broken file. Tabs
+  stay Manifest | Contract | Internals and a module still opens on Contract.
 - **Skills teach the manifest harness (NIT-12).** The router and the claims
   skill teach one module at a time: `manifest show <module> --isolation`
   (constitution, project claims index, manifest, claim summaries), then

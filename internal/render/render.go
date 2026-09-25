@@ -34,6 +34,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/manifest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 	"github.com/BarterX-Tech/dossierx/internal/visibility"
@@ -920,16 +921,33 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 		moduleSeen[c.Module] = true
 	}
 
+	// The Manifest tab's data (NIT-19): one small file per declared module,
+	// judged by the module-manifest lint's own rules. Computed once here, not
+	// per module, so claims_dir is walked once per render.
+	manifests := manifest.Viewer(cat.Claims, cfg)
+	var byID map[string]model.Claim
+	if len(manifests) > 0 {
+		byID = make(map[string]model.Claim, len(cat.Claims))
+		for _, c := range cat.Claims {
+			byID[c.ID] = c
+		}
+	}
+
 	var groups []Group
 	for _, m := range orderedNames(declaredModules, moduleSeen) {
-		// Every seen module gets the three peer tabs. Manifest is empty until
-		// NIT-7 fills it; do not inject retired overview notes onto any tab.
+		// Every seen module gets the three peer tabs. Manifest holds no
+		// claims: it renders the module's manifest.yaml (manifest_view.go);
+		// do not inject retired overview notes onto any tab.
 		for _, f := range declaredFacets {
-			var groupClaims []model.Claim
-			if f != visibility.ViewerTabManifest {
-				groupClaims = claimsByKey[groupKey{m, f}]
+			if f == visibility.ViewerTabManifest {
+				g := newGroup(m, f, nil, renderedByID)
+				if v, ok := manifests[m]; ok {
+					g.Claims = []template.HTML{manifestTabHTML(v, byID)}
+				}
+				groups = append(groups, g)
+				continue
 			}
-			groups = append(groups, newGroup(m, f, groupClaims, renderedByID))
+			groups = append(groups, newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID))
 		}
 	}
 
@@ -1091,6 +1109,8 @@ func orderClaims(claims []model.Claim) []model.Claim {
 func newGroup(module, facet string, claims []model.Claim, renderedByID map[string]template.HTML) Group {
 	claims = orderClaims(claims)
 	htmls := make([]template.HTML, 0, len(claims)+1)
+	// Fallback only: buildGroups replaces this with the module's manifest
+	// view whenever the config declares the module (manifest_view.go).
 	if facet == visibility.ViewerTabManifest && len(claims) == 0 {
 		htmls = append(htmls, template.HTML(`<p class="claims-empty">No module manifest yet.</p>`))
 	}
