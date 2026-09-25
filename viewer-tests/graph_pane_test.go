@@ -411,17 +411,19 @@ func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
 // call in this repository.
 const hostileFacet = `</script><img src=x>`
 
-// hostileConfig declares that facet. THIS CORPUS IS SERVED, NOT RENDERED
-// STATICALLY, and that is forced rather than chosen: the id-shape lint
-// requires a claim's id facet segment to equal its facet field and to be a
-// configured facet, at error severity, so `dossierx check` refuses to render
-// this corpus at all. `dossierx serve` never lints — it loads, builds,
-// renders — which is exactly the surface design section 2.6 names as
-// reachable: under serve no lint has run to constrain what an author wrote.
+// hostileConfig declares only the engine-fixed facets (NIT-20: config load
+// refuses any other list), so the breakout string reaches the payload
+// through the claim's own facet field instead. THIS CORPUS IS SERVED, NOT
+// RENDERED STATICALLY, and that is forced rather than chosen: the id-shape
+// lint requires a claim's facet to be an engine facet, at error severity, so
+// `dossierx check` refuses to render this corpus at all. `dossierx serve`
+// never lints — it loads, builds, renders — which is exactly the surface
+// design section 2.6 names as reachable: under serve no lint has run to
+// constrain what an author wrote.
 const hostileConfig = `schema_version: 1
 facets:
   - contract
-  - "</script><img src=x>"
+  - internals
 modules:
   - widget
 claims_dir: claims

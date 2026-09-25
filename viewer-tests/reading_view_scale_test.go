@@ -169,7 +169,11 @@ func TestReadingViewBrowserScaleBudgets(t *testing.T) {
 
 	runCDP(t, ctx, chromedp.Evaluate(`(function(){
 		var start = performance.now();
-		var tab = document.querySelector('.module-section:not([hidden]) .subtab:not(.on)');
+		// Switch to another facet that holds claims. With NIT-20's peer tabs
+		// the first inactive tab can be an empty Manifest.
+		var tab = Array.prototype.find.call(
+			document.querySelectorAll('.module-section:not([hidden]) .subtab:not(.on)'),
+			function (b) { var c = b.querySelector('.sec-tab__count'); return c && c.textContent.trim() !== '0'; });
 		if (tab) { tab.click(); }
 		return new Promise(function(resolve){
 			requestAnimationFrame(function(){
@@ -256,7 +260,7 @@ func TestReadingViewBrowserScaleBudgets(t *testing.T) {
 		t.Fatalf("JS heap %.0f bytes outside 0..%d budget", metrics.JSHeapBytes, readingScaleMaxJSHeapBytes)
 	}
 
-	deepID := "mod02.facet01.c03"
+	deepID := "mod02.internals.c03"
 	runCDP(t, ctx, chromedp.Navigate(url+"#"+deepID))
 	pollTrue(t, ctx, fmt.Sprintf(`!!document.getElementById(%q)`, deepID))
 	if !evalBool(t, ctx, fmt.Sprintf(`document.getElementById(%q).closest('[data-dossierx-surface-host]') !== null`, deepID)) {
