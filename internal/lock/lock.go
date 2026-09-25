@@ -462,7 +462,7 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 	s.PolicyMigrationReason = onDisk.PolicyMigrationReason
 	if s.PolicyVersion < PolicyLocalApprovalV1 {
 		s.PolicyVersion = PolicyLocalApprovalV1
-		s.PolicyMigratedAt = time.Now().UTC().Format(time.RFC3339)
+		s.PolicyMigratedAt = nowFunc().UTC().Format(time.RFC3339Nano)
 		s.PolicyMigrationReason = retiredPolicyMigrationReason
 	}
 
