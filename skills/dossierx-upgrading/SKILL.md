@@ -86,8 +86,9 @@ constitution is the roof and is never cited. **Fold by hand, one pass, in this o
    governor became a project claim, nothing where it became a constitution entry, `{none: true,
    reason: "…"}` otherwise. Every `<hub>.doctrine.<slug>` reference becomes `project.<slug>` or goes.
 4. `dossierx check --validate`; fix every `rests-on-required` / `rests-on-target` finding.
-5. Re-lock, per module and with the human: every locked claim that carried `governed_by` — before
-   v0.7.21 that was normally all of them — has a moved hash (`lock-content-drift` until it re-locks):
+5. Re-lock, per module and with the human. In v0.7.21 **every** locked claim's hash moves once —
+   `governed_by` and `build_role` both left the signed schema — so each reports
+   `lock-content-drift` until it re-locks:
    `claim unlock` → `claim lock --dry-run` → `claim lock --reason --proposal`.
 
 ## `build_role` is gone
@@ -98,13 +99,15 @@ through `manifest show`, its `depends_on`, and its claims' `rests_on`
 (**[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**).
 
 1. Delete the `build_role:` line from every claim file, draft and locked alike.
-2. `dossierx check --validate` — the corpus loads again. The locked claims you edited report
-   `lock-content-drift` until step 3: that is the fold in progress, not tampering.
-3. Each **locked** claim that carried it has a moved hash: `claim unlock` → `claim lock --dry-run` →
+2. `dossierx check --validate` — the corpus loads again. Every locked claim reports
+   `lock-content-drift` until step 3, whether or not it carried the key: the field left the signed
+   schema, so every hash moved. That is the fold in progress, not tampering.
+3. Re-lock each **locked** claim: `claim unlock` → `claim lock --dry-run` →
    `claim lock --reason "…" --proposal "<snapshot>"`, each re-lock approved by the human. Do this in
    the same pass as any `governed_by` fold, so each claim re-locks once.
 4. Plain `dossierx check`. With `source_dirs` set, the code-link gate now covers **every** locked
    module claim (project claims are exempt), including the ones that used to be `orientation` or
    `out-of-scope`, so expect `unlinked_claims` on some. Tag the real code that implements each one.
-   A locked claim that genuinely produces no code is a design question for the human — does it
-   belong as a claim, or as a project claim? — not a field to set and not a file to tag around.
+   A locked claim that genuinely has no code behind it is the human's call, not a file to tag
+   around: on their yes it declares `embodiment: {mode: none, reason: "…"}` — best folded into the
+   same re-lock as step 3 — or it becomes a project claim.

@@ -40,8 +40,9 @@ There is no sequencer: the order comes from the claims themselves.
    (`dossierx claim show <id>`) names what must already hold for it to be true: build or confirm
    those first. Read a body with `claim show` only when the summary is not enough.
 3. **Tag as you finish each claim** (Channel B below), then run plain `dossierx check`. When the
-   project sets `source_dirs`, every locked module claim must end up linked to real code; one that
-   genuinely produces no code is a design question for the human, not a file to tag around.
+   project sets `source_dirs`, every locked module claim must end up linked to real code. One that
+   genuinely has no code behind it is the human's call, not a file to tag around: on their yes it
+   declares `embodiment: {mode: none, reason: "…"}` through unlock → fix → lock.
 4. **When the code cannot honor a claim**, stop: that is a comment or a flag for the human (Channel
    A), never a quiet deviation and never a tag on code that does something else.
 
@@ -105,8 +106,8 @@ and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write 
 `build/code-links/<module>.json` — never hand-edit it.
 
 **Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
-refuses (`unlinked_claims`, `stopped_at: links`) when any locked module claim (project claims are
-exempt) has no linked file, or a claim with `steps:` is not tagged on every step — a
+refuses (`unlinked_claims`, `stopped_at: links`) when any locked module claim (project claims and
+claims declaring `embodiment: {mode: none}` are exempt) has no linked file, or a claim with `steps:` is not tagged on every step — a
 `dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
 The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
 claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the

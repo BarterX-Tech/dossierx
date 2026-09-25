@@ -80,8 +80,8 @@ your claims change what the module is for.
 ## Caps are loud, and raising one is the human's call
 
 Every cap refuses; none truncates. **When one fires, report the finding to the human in its own
-words and take the default recovery below.** Some lint messages end "or raise `max_…` in
-project.config.yaml": that option exists, and it is **the human's decision, never your default**. If
+words and take the default recovery below.** Three lint messages name a `max_…` value in
+project.config.yaml that can be raised: raising it is **the human's decision, never your default**. If
 you think a raise is right, ask, say what it costs (a bigger module no longer fits its 6144-byte
 isolation budget, and every reader pays for the extra context), and **wait for an explicit yes**.
 Never raise a value in the same change that hits the cap, and never pad, merge or cram to fit.
