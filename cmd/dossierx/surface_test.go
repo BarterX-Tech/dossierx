@@ -7,7 +7,7 @@
 // newRootCmd() in main.go and Go forbids importing package main, so the walk has
 // to happen inside this package. The other door — a hidden `dossierx __surface`
 // verb — is worse than inconvenient: it would itself be a twentieth leaf, and
-// TestSurfaceIsTwentyTwoLeavesUnderEightNouns excludes commands by the
+// TestSurfaceIsTwentyOneLeavesUnderEightNouns excludes commands by the
 // annotationRetired MARK and deliberately NOT by hidden-ness (see retired.go),
 // so the emitter would break the very count it exists to protect. A generator
 // test has neither problem, and it comes with the staleness check for free:
@@ -289,7 +289,7 @@ func buildSurfaceDoc(t *testing.T, root string) surfaceDoc {
 // ---------------------------------------------------------------------
 
 // surfaceCommandTree walks newRootCmd() the same way
-// TestSurfaceIsTwentyTwoLeavesUnderEightNouns does, and for the same reason: a
+// TestSurfaceIsTwentyOneLeavesUnderEightNouns does, and for the same reason: a
 // naive walk yields ~31 leaves against an enforced 19, because cobra's own
 // help/completion furniture and the twelve removal stubs are all in the tree.
 //

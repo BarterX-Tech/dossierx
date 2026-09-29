@@ -210,30 +210,6 @@
       ]
     },
     {
-      "path": "track list",
-      "short": "List every declared track with its claim counts and whether it is complete",
-      "flags": [
-        "--config",
-        "--format"
-      ]
-    },
-    {
-      "path": "track show",
-      "short": "Assemble one track's document: its owned claims in full, and the claims it cites with their owning module, facet, and lock state",
-      "flags": [
-        "--config",
-        "--format"
-      ]
-    },
-    {
-      "path": "track status",
-      "short": "Report whether a track is complete — every claim it owns and cites locked — and name every claim that is not",
-      "flags": [
-        "--config",
-        "--format"
-      ]
-    },
-    {
       "path": "version",
       "short": "Print the dossierx version, commit, and build date",
       "flags": [
@@ -295,12 +271,7 @@
     "source-shape",
     "status-shape",
     "summary-oversize",
-    "summary-required",
-    "track-empty",
-    "track-multi-owner",
-    "track-shape",
-    "track-unknown",
-    "track-unowned"
+    "summary-required"
   ],
   "error_codes": [
     "CONSTITUTION_NOT_LOCKED",
@@ -342,7 +313,6 @@
     "thread_open",
     "thread_resolved",
     "unknown_module",
-    "unknown_track",
     "unlinked_claims",
     "unresolved_comments",
     "unsafe_body",
@@ -512,44 +482,44 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:d8e0689c5e22c35d15063f23752d09d61950637c9e6633cc39dc5367231ddac2",
+  "render_fingerprint": "sha256:0671dfaa25d6e0cd6174c62907af3a4e69e6aeda97a854bd9a044e4b735c6406",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:b58f7e94f4ce8a7ef719f99559ea29e0a6bcf1b5f3d8b0dfa7b9ca846fe51642",
+    "cmd/dossierx": "sha256:0e62feed82f9bf995c4414f1e77c5aaf3b203e6909130db65d1df5d8802e12ff",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/catalog": "sha256:1567a5b113d3e896827c4d3223701a025be1e54893d62a680f3c856e1ca2ac75",
+    "internal/catalog": "sha256:5bc5134d2111471736bb91a16c1641a69d146e09f87070add6770fcc318a6d4b",
     "internal/check": "sha256:2375b93295cfcdf78510a031da12825df5d7b42d7636e537b7c70113d9969700",
-    "internal/cliout": "sha256:f4e017acd833a9d6440c5c96856185781731c3046ee2ef4e37714e3c5b16fff4",
+    "internal/cliout": "sha256:d83043338d2eab2311ddde462832a1276d41086da30aaef1db7b5204e9479217",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:796aa83831a8794042ae64ca63462f3f3b983de099b1b277ad5dc025542ebad8",
+    "internal/config": "sha256:0285a9a77c13a28854bce8f8a390c443a53c2d422bc2d3b57ec4632949811aa2",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:1b0cfa30ba70ba12a5f01d67018b7aa0e73b01fe773f596678b692b0a86eb1f6",
     "internal/constitution/constitutiontest": "sha256:c1b3b79e4b7e7626ec10f17bf9937df4485c2b3c1c2762e0bcca298fd319d294",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
-    "internal/graph": "sha256:7ac3b4676c2585147dfafabcbb2458a6ce4b8aa4178217c960d77610172a4ff8",
+    "internal/graph": "sha256:5b22947cce259599fbdf178bf1aece321788e9556b3f25051f464587865bb34f",
     "internal/implink": "sha256:eeed3cbd1ac99ec2844290f02554ba0599b7127fcf877be886b3231dbda83d65",
     "internal/layout": "sha256:6f2f699218c8402eccffef20eb46c7e30b08a39529381ff68bdc8b70e42ad07d",
-    "internal/lint": "sha256:5b0247af923d54540781ad7948a27256df0ce8a0a8e73c5c2b1a8690bf015b1e",
+    "internal/lint": "sha256:cbcffc134fb2f0929a8eba862defac2f7b1ca86bad52e70cca09991e769ae1c7",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
-    "internal/lock": "sha256:b0a96ae064af0904ae8dc1f83eee2579f9602d9af45e7d541384903713ad1106",
+    "internal/lock": "sha256:a1a879a280841911a5581e6350b27a1f39e88b62fc1511db3f60141c514c879b",
     "internal/manifest": "sha256:b38a67f193608f0f3e16da7f5270da47640870f25f0b30d098aee89d12b4cd25",
     "internal/manifest/manifesttest": "sha256:9923dd2e327d0d8238fe3ec4b2de74e8ae0fd7a1d7efc8eb6cc638a19f990f94",
-    "internal/model": "sha256:a1b9dac35f6eeb5d69159113b095339aeec97908a2c270d69b5ccfdb5d1c397f",
+    "internal/model": "sha256:732aacf4060444d91efcf4fdcfe0bb4fb81750f0b3e68304e5607df28d97ef8e",
     "internal/projectclaims": "sha256:d22bcab5cfb4e8918b55fc71caab4b74ebf88f6e390211cfacc540388d5c0a0b",
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:bf1bd9c8335856b9877065d178ed3b833afd384d7714c4f7aaded54920f3a44b",
-    "internal/render/components": "sha256:519624a9449599da1a02cd61dcc2a715cf41f6d773c41b7561a4d1be717f0a35",
+    "internal/render": "sha256:8f7eac13d6609f38078fd52cba9b9af624afc11f8b98d7cd0e26f2851d877d02",
+    "internal/render/components": "sha256:32e9f91788052670ec8c1a5f6fe7250e1d1ce1a7bd4f3dd12245a1b5f683f192",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:ceb4c156ec60d24ade931bb8efae5c87abd488cd1651c299ebb79929d15f32da",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:fb2819bd35872cbcb08d638353070527c2d8ad5a02ef2f5effe95756b5c8e375"
+    "skills": "sha256:de3d812d369b2b513c43d37339c9c65f1e0d5ba3b8d78895a02df2cb0fd0d091"
   },
   "envelope": {
     "keys": [
@@ -600,7 +570,6 @@
       "thread_open": 1,
       "thread_resolved": 1,
       "unknown_module": 1,
-      "unknown_track": 1,
       "unlinked_claims": 1,
       "unresolved_comments": 1,
       "unsafe_body": 1,
@@ -695,8 +664,7 @@
         "sources",
         "status",
         "summary",
-        "title",
-        "tracks"
+        "title"
       ],
       "cliout.DryRun": [
         "blocked",
@@ -876,29 +844,6 @@
         "line",
         "wording"
       ],
-      "trackListData": [
-        "count",
-        "tracks"
-      ],
-      "trackShowData": [
-        "cited_claims",
-        "complete",
-        "locked_claims",
-        "owned_claims",
-        "summary",
-        "title",
-        "total_claims",
-        "track_id"
-      ],
-      "trackStatusData": [
-        "blocking",
-        "cited",
-        "complete",
-        "owned",
-        "title",
-        "total_claims",
-        "track_id"
-      ],
       "unlockData": [
         "claim_id",
         "flag_cleared",
@@ -937,10 +882,10 @@
     }
   ],
   "counts": {
-    "commands": 24,
-    "error_codes": 50,
+    "commands": 21,
+    "error_codes": 49,
     "http_routes": 14,
-    "lint_rules": 35,
-    "nouns": 9
+    "lint_rules": 30,
+    "nouns": 8
   }
 }

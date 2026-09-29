@@ -208,19 +208,23 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsTwentyFourLeavesUnderEightNouns treats the leaf count.
+// TestSurfaceIsTwentyOneLeavesUnderEightNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":    9,
-		"commands": 24,
+		// 9 -> 8 and 24 -> 21 when tracks were retired and the track noun
+		// went with them (NIT-184).
+		"nouns":    8,
+		"commands": 21,
 		// 36 -> 37 with NIT-10's shared-context-budget (the shared half of
 		// the manifest show --isolation view). 37 -> 36 when lock policy 0
 		// was retired and rest-on-locked went with it. 36 -> 35 when
 		// migrated_from was retired and supersede went with it (NIT-191).
-		"lint_rules": 35,
+		// 35 -> 30 when tracks were retired with their five track-* lints
+		// (NIT-184).
+		"lint_rules": 30,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
 		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):
@@ -229,8 +233,9 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		// NIT-7's manifest harness together: the doctrine hub's
 		// `dependency_not_locked` is deleted (NIT-23) and `view_too_large`
 		// is added (`manifest show --isolation` over the 16384-byte view
-		// cap), landing at 50.
-		"error_codes": 50,
+		// cap), landing at 50. 50 -> 49 when tracks were retired and
+		// `unknown_track` went with them (NIT-184).
+		"error_codes": 49,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

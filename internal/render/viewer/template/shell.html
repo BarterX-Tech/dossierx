@@ -78,7 +78,7 @@
         <div class="sidebar-nav-scroll">
           <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg><input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules"></div>
 <!-- The Constitution pin (NIT-27): the project roof, above every module and
-             outside the module/track groups on purpose — it is not a module, so it
+             outside the module group on purpose — it is not a module, so it
              is not a group member, and .system-nav-group:first-child stays Modules. -->
           <div class="constitution-pin">
             <button class="sec-tab constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><span class="sec-tab__label">Constitution</span><span class="sec-tab__meta">PROJECT — NOT A MODULE</span></button>
@@ -91,28 +91,7 @@
                 <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
 {{- end}}
             </div>
-          </details>{{if .Tracks}}
-<!-- The Tracks group. It is guarded on .Tracks and the guard opens on
-             the same line as the module loop's closing action, with no newline
-             between them, so a project that declares no track emits not one
-             byte here — the zero-cost contract
-             tests/fixture_staleness_test.go holds this file to. Keep them on
-             one line: a newline before the guard is a newline in the output of
-             every project that has no tracks.
-             Tracks come AFTER every module because the module axis is the one
-             a reader navigates by default: a claim has exactly one module and
-             that is who guarantees it, while a track is the second, optional
-             view over the same claims. The buttons are ordinary .sec-tab
-             elements — a track section is a .module-section to all the
-             show/hide machinery below, deliberately (see track_view.go). -->
-          <details class="system-nav-group">
-            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
-            <div class="system-nav-group__body">
-{{- range .Tracks}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
-{{- end}}
-            </div>
-          </details>{{end}}
+          </details>
           </div>
         </div>
         <div class="sidebar-footer">
@@ -154,54 +133,13 @@
 {{end}}
 {{else}}
         <p class="claims-empty">No claims.</p>
-{{end}}{{if .Tracks}}
-<!-- Track sections, siblings of the module sections and switched by the
-           same machinery: each carries .module-section (what a sidebar tab
-           reveals) and holds exactly one .claim-group (what a deep link
-           resolves to), so every lookup map, hash rule and fragment-swap
-           re-init below picks them up by query with nothing new to maintain.
-           A track has no facets, hence no .sub-nav and exactly one group.
-           The claims a track OWNS render as whole cards; the ones it CITES
-           render as pointer rows inside .CitedHTML and never as bodies — a
-           second copy of a claim's prose is the drift this tool exists to
-           catch. The owned cards' element ids were stripped on the way in
-           (render.stripDuplicateClaimIDs): the id-bearing copy stays in the
-           claim's own module, because its module is still what guarantees it.
-           Guarded and hugged to the preceding action for the same reason the
-           sidebar group is — a project with no tracks must render byte for
-           byte as it did before this existed. -->
-{{range .Tracks}}
-        <section class="module-section track-section" id="{{.ID}}" hidden>
-          <header class="track-head">
-            <h2 class="track-title">{{.Title}}</h2>
-            <span class="pill {{.StateClass}}">{{.StateLabel}}</span>
-{{if .Summary}}<p class="track-summary">{{.Summary}}</p>{{end}}
-          </header>
-{{/* Tracks follow the same SoftMount gate as module facets. Soft-mounting
-     tracks while SoftMount is off leaves the frozen theme-parity baseline
-     with a live hidden <pre> (owned claim fenced block) that the current
-     render would keep inside a <template>, which makes the screenshot
-     fenced-box lists disagree. When SoftMount is on, deferring the track
-     copy until visit is still correct. An HTML comment here would leave a
-     spaces-only line after html/template strips it. */}}
-          <section class="claim-group" id="{{.ClaimsID}}" hidden{{if $.SoftMount}} data-dossierx-surface="{{.ClaimsID}}"{{end}}>
-{{if $.SoftMount}}            <div class="claim-group-host" data-dossierx-surface-host></div>
-            <template class="dossierx-surface-template">
-{{range .OwnedClaims}}{{.}}
-{{end}}
-            </template>
-{{else}}{{range .OwnedClaims}}{{.}}
-{{end}}{{end}}{{if .CitedHTML}}<h4 class="cited-claims-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
-{{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
-          </section>
-        </section>
-{{end}}{{end}}<!-- The Constitution section (NIT-27): The file | Project claims. It sits
-     LAST in the content area, after every module and track, so the first
+{{end}}<!-- The Constitution section (NIT-27): The file | Project claims. It sits
+     LAST in the content area, after every module, so the first
      .module-section — the default reading view, and what the measurement tests
      read — is always the first module. Its two canvases start hidden like every
-     facet canvas. The comment hugs the track guard's closing action on purpose:
-     html/template strips it but keeps a newline of its own, and the no-tracks
-     byte contract (track_view_test.go) counts those newlines. -->
+     facet canvas. The comment hugs the preceding action on purpose:
+     html/template strips it but keeps a newline of its own, and the committed
+     fixture viewers count those newlines. -->
         <section class="module-section constitution-section" id="constitution" hidden>
           <header class="constitution-head">
             <p class="constitution-kicker">PROJECT — NOT A MODULE</p>

@@ -107,7 +107,6 @@
             "IDs": null
           },
           "Sources": null,
-          "Tracks": null,
           "Order": 0,
           "Emphasis": false,
           "ReviewPending": false,
@@ -230,7 +229,6 @@
           "IDs": null
         },
         "Sources": null,
-        "Tracks": null,
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,
@@ -267,7 +265,6 @@
           "IDs": null
         },
         "Sources": null,
-        "Tracks": null,
         "Order": 0,
         "Emphasis": true,
         "ReviewPending": false,
@@ -320,7 +317,6 @@
           ]
         },
         "Sources": null,
-        "Tracks": null,
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,

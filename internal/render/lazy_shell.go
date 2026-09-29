@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"html/template"
 	"sync"
 
@@ -26,10 +25,6 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
-	data.Tracks, err = buildTrackSectionsWithBudget(in.cat, in.cfg, renderedByID, budget)
-	if err != nil {
-		return shellData{}, fmt.Errorf("render: track sections: %w", err)
-	}
 	return data, nil
 }
 
@@ -53,10 +48,6 @@ func (d *lazyShellData) ModuleGroups() ([]ModuleGroup, error) {
 	return d.projection.moduleGroups()
 }
 
-func (d *lazyShellData) Tracks() ([]TrackSection, error) {
-	return d.projection.trackSections()
-}
-
 func (d *lazyShellData) GraphPayload() (template.JS, error) {
 	return d.projection.graphPayloadJSON()
 }
@@ -73,10 +64,6 @@ type lazyShellProjection struct {
 	groupsOnce sync.Once
 	groups     []ModuleGroup
 	groupsErr  error
-
-	tracksOnce sync.Once
-	tracks     []TrackSection
-	tracksErr  error
 
 	graphOnce sync.Once
 	graph     template.JS
@@ -100,18 +87,6 @@ func (p *lazyShellProjection) moduleGroups() ([]ModuleGroup, error) {
 		p.groups = buildModuleGroups(buildGroups(p.in.cat, p.in.cfg, rendered))
 	})
 	return p.groups, p.groupsErr
-}
-
-func (p *lazyShellProjection) trackSections() ([]TrackSection, error) {
-	p.tracksOnce.Do(func() {
-		rendered, err := p.renderedClaims()
-		if err != nil {
-			p.tracksErr = err
-			return
-		}
-		p.tracks, p.tracksErr = buildTrackSectionsWithBudget(p.in.cat, p.in.cfg, rendered, p.budget)
-	})
-	return p.tracks, p.tracksErr
 }
 
 func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {

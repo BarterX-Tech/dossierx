@@ -295,8 +295,8 @@ when those bounds do not decide the result. Catalog likewise refuses only from
 provably mandatory encoded bytes and measures ambiguous output, so padding in
 an estimate cannot produce a false size claim. For the embedded viewer shell,
 whose projection contract is fixed, the bounded path shares one output-derived
-budget across claim fragments, the graph JSON, repeated track
-content, and the final shell writer. A project shell override receives those
+budget across claim fragments, the graph JSON, and the final shell
+writer. A project shell override receives those
 expensive fields lazily: an omitted field or an unexecuted template branch is
 not computed or charged as output. Its separate 128 MiB retained-intermediate
 safety guard never claims that the final HTML is that large; only the capped

@@ -2,12 +2,55 @@ package render
 
 import (
 	"html/template"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
+
+func projectTestConfig(t *testing.T) *config.Config {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatalf("mkdir claims dir: %v", err)
+	}
+	cfgPath := filepath.Join(dir, "project.config.yaml")
+	writeFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\n  - gateway\nclaims_dir: claims\n")
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	return cfg
+}
+
+func projectTestClaim(module, slug string, status model.Status) model.Claim {
+	return model.Claim{
+		ID:      module + ".contract." + slug,
+		Module:  module,
+		Facet:   "contract",
+		Status:  status,
+		Layout:  model.LayoutCard,
+		Body:    slug + " body",
+		RestsOn: model.RestsNone("test fixture"),
+	}
+}
+
+func renderProject(t *testing.T, cfg *config.Config, claims []model.Claim) string {
+	t.Helper()
+	cat, err := catalog.Build(claims, cfg)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	return out
+}
 
 // TestRender_ProjectClaimIsNotAnUngroupedModule pins where a project claim
 // (NIT-25) appears in the reading view: under the constitution's "Project
@@ -18,8 +61,8 @@ import (
 // PROJECT — NOT A MODULE. A claim that IS malformed (empty module, no scope)
 // still lands in the bucket, so nothing is dropped.
 func TestRender_ProjectClaimIsNotAnUngroupedModule(t *testing.T) {
-	cfg := trackTestConfig(t, "")
-	overview := trackTestClaim("widget", "overview", model.StatusDraft)
+	cfg := projectTestConfig(t)
+	overview := projectTestClaim("widget", "overview", model.StatusDraft)
 	overview.RestsOn = model.RestsOnIDs("project.scope")
 	scope := model.Claim{
 		ID:      "project.scope",
@@ -54,7 +97,7 @@ func TestRender_ProjectClaimIsNotAnUngroupedModule(t *testing.T) {
 
 	// Without a roof file the Project claims tab still lists the store and
 	// The file tab says so; with one, both render.
-	out := renderTrackProject(t, cfg, []model.Claim{scope, overview})
+	out := renderProject(t, cfg, []model.Claim{scope, overview})
 	if !strings.Contains(out, `<p class="claims-empty">No constitution.yaml yet.</p>`) {
 		t.Errorf("a project with no constitution.yaml must say so under The file")
 	}
@@ -62,7 +105,7 @@ func TestRender_ProjectClaimIsNotAnUngroupedModule(t *testing.T) {
 		t.Errorf("a project with no constitution.yaml must still list its project claims")
 	}
 	writeFile(t, cfg.ConstitutionPath(), "status: draft\ninvariants:\n  - slug: one-roof\n    title: One roof\n    body: This fixture keeps *every* module under <b>one</b> roof.\n")
-	out = renderTrackProject(t, cfg, []model.Claim{scope, overview})
+	out = renderProject(t, cfg, []model.Claim{scope, overview})
 	if !strings.Contains(out, `<p class="constitution-meter">12 of 800 words · draft</p>`) {
 		t.Errorf("the meter must count the roof's words (title and body, letter/number runs)")
 	}

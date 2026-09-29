@@ -274,26 +274,6 @@ func TestEdgesHTMLWithLinks_PanelSurvivesFooterSuppression(t *testing.T) {
 	}
 }
 
-// The comment markup must contribute ZERO id= attributes anywhere: a claim
-// rendered a second time on a track page may keep only one document id (see
-// render.stripDuplicateClaimIDs), so the chip/panel identify claims and
-// threads via data-claim-id / data-thread-id only.
-func TestEdgesHTMLWithLinks_CommentMarkupHasNoIDAttributes(t *testing.T) {
-	c := model.Claim{
-		ID:     "widget.contract.router",
-		Facet:  "contract",
-		Status: model.StatusDraft,
-		Comments: []model.Comment{
-			openThread("c-aaaaaa", "open one"),
-			resolvedThread("c-bbbbbb", "resolved one"),
-		},
-	}
-	got := string(CommentChipHTML(c)) + string(EdgesHTMLWithLinks(c, nil, nil, nil))
-	if n := strings.Count(got, ` id="`); n != 0 {
-		t.Fatalf("comment markup must emit zero id= attributes, found %d in: %s", n, got)
-	}
-}
-
 // Comment bodies are server-rendered through the shared markdown renderer and
 // therefore HTML-escaped: a hostile body renders inert (escaped), never as live
 // markup.

@@ -180,13 +180,13 @@ const (
 
 	// RuleLockContentDrift: a locked claim whose current content no longer
 	// hashes to what its ledger record says was approved. This is the rule
-	// that covers the ten fields ContentHash cannot see — headed by
+	// that covers the eight fields ContentHash cannot see — headed by
 	// raw_html_reviewed, the flag that promotes an allowlisted claim's
 	// raw_html to trusted, unescaped output.
 	//
-	// sources and tracks joined that list when they were added to the schema,
-	// and sources is the clearest case for this rule since raw_html_reviewed:
-	// a claim's evidence is exactly what a reader re-validates months later,
+	// sources joined that list when it was added to the schema, and it is
+	// the clearest case for this rule since raw_html_reviewed: a claim's
+	// evidence is exactly what a reader re-validates months later,
 	// so a citation swapped after approval is a changed claim even though
 	// nothing it PROMISES moved. That is also why ContentHash stays blind to
 	// it — provenance is not contract, and editing a citation must not flip

@@ -822,7 +822,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	openGraphPane(t, ctx)
 
 	// On load the first module is the visible one.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden`)
 
 	// Change a graph filter. The pane writes its segment through
 	// history.replaceState ONLY, which does not fire hashchange — so the
@@ -837,7 +837,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	if !strings.Contains(hash, "!g=") || !strings.Contains(hash, "ov=cycles") {
 		t.Fatalf("hash = %q, want a !g= segment carrying the graph state", hash)
 	}
-	if evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`) {
+	if evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden`) {
 		t.Fatal("a graph filter change must not move the reading view")
 	}
 
@@ -845,7 +845,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	// Both halves must apply.
 	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=review&ty=r&lb=1&ex=&se=';`)
 	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'review'`)
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section)')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
 		t.Fatalf("granularity from the pasted hash = %q, want module", got)
 	}

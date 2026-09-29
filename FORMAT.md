@@ -88,9 +88,6 @@ sources:                        # optional — what evidence BACKS this claim; c
     sha256: 8afd3c9a...         # internal only, REQUIRED
     supports: string            # optional, both kinds
     does_not_support: string    # optional, both kinds
-tracks:                         # optional — cross-cutting feature membership (see below)
-  - id: checkout                # must be in project.config.yaml's tracks[]
-    role: owns | cites          # optional, default cites; at most ONE owns per claim
 order: int                      # optional, viewer-only display sequencing (see below)
 comments:                       # optional, engine-managed review threads — authored via `dossierx comment`, not by hand (see below)
   - id: c-8f3a2b                # engine-generated: "c-" + 6 lowercase hex, unique within the file
@@ -676,84 +673,6 @@ what is not":
   byte-for-byte as it did before the field existed, so upgrading an existing
   project reports no drift on a single claim.
 
-### `tracks` and the second ownership axis
-
-`tracks` is optional and additive, and it answers a question `module` cannot.
-
-`module` answers **"who guarantees this?"** — exactly one per claim, which is the
-right partition for writing and reviewing contracts, because a guarantee with two
-owners has none. It cannot answer **"what does the user get, and is it
-finished?"** A user-facing feature is assembled from claims spread across many
-modules, and one module serves many features: the relationship is many-to-many
-and the schema allowed one. The workaround was to generate a feature document
-outside the tool — which keeps the text true by regenerating it, but cannot reach
-the lock ledger, `dossierx check`, review threads or the claims graph, and is a
-second copy of the corpus by construction.
-
-A claim declares its membership as a list, each entry naming a track from
-`project.config.yaml`'s `tracks[]` and a role:
-
-```yaml
-tracks:
-  - id: checkout
-    role: owns          # owns | cites; omitted means cites
-  - id: refunds         # role omitted — cites
-```
-
-**The invariant that keeps this from being tagging: every claim has exactly one
-owner on each axis.** One `module`, and at most one track whose `role` is `owns`.
-Everything else is `cites` — a reference, never a copy. Owning is what earns the
-axis its keep: a feature's trigger, its failure behaviour and its acceptance
-criteria are statements that belong to no single module, and without an owning
-track they have nowhere in the corpus to live. With one, they are an ordinary
-claim: linted, reviewable, and lockable like any other.
-
-**Track membership is not an edge.** `rests_on` is a semantic dependency,
-which is why it carries a cycle lint — a loop in it is a set of claims that can
-only be reviewed together, and drift has no order to propagate in. A track is a
-*set*, and a set has no direction to run in a circle. Track membership therefore
-joins no cycle walk.
-
-**Five lints police the axis:**
-
-| Lint | Severity | What it catches |
-|---|---|---|
-| `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` is: a third value invented by a typo would be a membership nothing reads. |
-| `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary for tracks, exactly as it is for `modules[]` (facets are engine-fixed: `contract` \| `internals`); a typo that created a track would put a claim in a feature nobody is looking at. |
-| `track-multi-owner` | ERROR | two claims claiming `role: owns` on the same track. The one-owner-per-axis invariant, enforced. |
-| `track-empty` | WARNING | a track declared in config that no claim references. Nothing a reader is told is wrong; the track page is empty, and the human decides whether the track is premature or the claims are missing. |
-| `track-unowned` | WARNING | a track with citations but no owner. The assembled document renders as references with no statement of what the feature *is* — incomplete, not false. |
-
-**Track membership never gates `dossierx claim lock`, and this is a non-goal
-rather than an omission.** A claim locks on its own merits — lint clean, the
-constitution locked, no unresolved comment thread — and adding a second axis must
-not add a second way to be refused. `dossierx track status <id>` **reports**:
-a track is COMPLETE when every claim it owns and every claim it cites is locked,
-and an incomplete track is a fact about the feature, not a verdict on any claim
-in it. Changing a locked claim's tracks is `unlock → fix → lock` like every other
-change to a locked claim, and for the same reason — `tracks` is signed by
-`LockedClaimHash`.
-
-Three leaf commands read the axis, and none of them writes a claim:
-
-```
-dossierx track list             # every track the project declares
-dossierx track show <id>        # one track and its claims — the one it owns, then the ones citing it
-dossierx track status <id>      # whether every claim the track owns and cites is locked
-```
-
-In the viewer, tracks are a group in the sidebar, each track has a page
-rendering the assembled document, and the claims graph gains a track filter. A
-**cited** claim renders on a track page as a reference — its id, its owning
-module and its lock state — and never as an inlined duplicate of its body. That
-is the same rule as everywhere else in this format: one claim, one home, and
-every other appearance is a pointer to it.
-
-Like `sources`, `tracks` is `omitempty` and outside the dependency-drift
-`ContentHash`: a claim carrying no tracks is byte-identical to what it was before
-the field existed, and adding a claim to a track never flips its dependents
-`review_pending`.
-
 ### `comments`
 
 `comments` is optional, engine-managed review discussion attached to a claim —
@@ -800,10 +719,14 @@ decoding never rejects it.
 
 A claim file carrying a key the schema does not have fails strict decode at
 `load` (`invalid_claim`). That includes the retired `build_role`,
-`governed_by`, `mirrors` and `migrated_from`; the `dossierx-upgrading` skill
-folds a corpus that still carries them. `LockedClaimHash` signed
-`migrated_from` even when it was empty, so its removal in v0.7.22 moves every
-locked claim's hash once. What to implement next is locked claims, module
+`governed_by`, `mirrors`, `migrated_from` and `tracks`; the
+`dossierx-upgrading` skill folds a corpus that still carries them.
+`LockedClaimHash` signed `migrated_from` even when it was empty, so its
+removal in v0.7.22 moves every locked claim's hash once. `tracks` (also
+v0.7.22) was signed only when present, so it moves only the hash of a claim
+that carried it. Either field on a claim, and `tracks` in the config, is
+refused with a hint naming its fold; for `tracks` the hint opens with
+`tracks-retired`. What to implement next is locked claims, module
 `depends_on`, and claim `rests_on`; viewer reading order is `order` /
 `section`.
 
@@ -878,13 +801,6 @@ any other error-severity finding does:
    that flips dependents to `review_pending` has no order to run in. Every
    claim in the loop is reported by the `cycle` lint, with the cycle path in
    the message.
-
-`tracks` is not a second edge kind and appears in no graph. It is a
-membership set, not a dependency: no claim's truth rests on another claim's track
-membership, so there is no direction for a track to run in a circle and nothing
-for a cycle walk to find. Two claims in the same track constrain each other in
-exactly one way — `track-multi-owner`, at most one owner apiece — which is a
-per-track count, not a walk. See "`tracks` and the second ownership axis" above.
 
 A claim may never name **its own id** in `rests_on`
 (`self-edge`). A self-edge is trivially satisfied by every content rule —
@@ -1097,18 +1013,17 @@ Everything else is signed, **including any field added to the schema later**.
 This is deliberately not the same hash as the dependency-drift `ContentHash`,
 which covers a hand-picked eleven fields and must stay byte-identical
 forever: `raw_html_reviewed`, `kind`, `section`, `order`,
-`emphasis`, `sources`, `tracks`, and `audit_notes` are
+`emphasis`, `sources`, and `audit_notes` are
 invisible to it —
 `raw_html` was in that blind list through v0.4.0, but as of v0.4.1 a
 non-empty `raw_html` is one of the eleven, because it can now sit on a
 rule-bearing claim other claims `rests_on`, and a dependent needs
 `ContentHash` to notice that edit, not only a reviewer re-locking the claim
-itself. `sources` and `tracks` join the blind list by the same rule that put
-the others there and are meant to stay on it: neither changes what a claim
-*promises*, so a corrected citation or a new track membership must not flip
-every dependent to `review_pending` — provenance is not contract, and
-membership is not contract either. That leaves nine fields `ContentHash` still
-cannot see, and
+itself. `sources` joins the blind list by the same rule that put the others
+there and is meant to stay on it: it does not change what a claim
+*promises*, so a corrected citation must not flip every dependent to
+`review_pending` — provenance is not contract. That leaves eight fields
+`ContentHash` still cannot see, and
 `LockedClaimHash` is the net for all of them regardless of what
 `ContentHash` tracks: it signs everything a claim persists except `status`,
 `review_pending`, and `comments` (above), so a swapped `raw_html` payload —
@@ -1239,7 +1154,7 @@ read the sentence above as covering the file byte for byte.
 
 | The tampering | Named by |
 |---|---|
-| a locked claim's content edited — including `raw_html`, `section`, `order`, `sources`, `tracks` | `lock-content-drift` |
+| a locked claim's content edited — including `raw_html`, `section`, `order`, `sources` | `lock-content-drift` |
 | `status: draft` flipped to `locked` by hand, with no approval record | `lock-ledger-missing` |
 | a record deleted from a claim this engine locked | `lock-ledger-deleted` |
 | `status:` edited back to `locked` over a record `unlock` already released | `lock-ledger-released` |
@@ -1524,12 +1439,6 @@ eyebrow: string                  # optional one-line subtitle rendered under
                                    # eyebrow element at all.
 facets: [contract, internals]   # engine-fixed; both required, no other names
 modules: [string, ...]          # non-empty, no duplicates
-tracks:                          # optional; the whole vocabulary of cross-cutting
-  - id: checkout                 # feature tracks a claim may name. Unset/empty
-    title: Checkout              # means the project uses no tracks, and a claim
-    summary: string              # naming one anyway is `track-unknown`. `id` and
-                                  # `title` required, `summary` optional.
-                                  # See "Tracks" below.
 claims_dir: path                 # resolved relative to this file's own directory
                                   # (directory layout inside it is not part of
                                   # this spec — see "Directory layout" below)
@@ -1598,34 +1507,6 @@ viewer:
 All paths in this file are resolved relative to the config file's own
 location, never the process's current working directory — this is what
 lets the same engine binary be pointed at a config file from anywhere.
-
-### Tracks
-
-`tracks[]` declares the whole vocabulary of cross-cutting feature tracks, the
-same way `modules[]` declares modules. Facets are not a project vocabulary —
-they are engine-fixed (`contract`, `internals`). Each track entry is:
-
-- `id` — required, the value a claim's `tracks[].id` names. Kebab-case, unique
-  within the list.
-- `title` — required, what the viewer's sidebar and track page render.
-- `summary` — optional, one or two sentences saying what the user gets. It heads
-  the track page above the assembled claims.
-
-The field is optional as a whole: a project that declares no tracks behaves
-exactly as it did before the field existed, and the five `track-*` lints have
-nothing to report. A claim naming a track this list does not declare is
-`track-unknown` at error severity, which is deliberately the same treatment an
-unknown `module` gets — a typo that silently created a track would
-put a claim in a feature nobody is looking at, and the human would find out by
-noticing an absence.
-
-Declaring a track that no claim yet references is `track-empty` at **warning**
-severity, not error: a track declared ahead of the claims that will fill it is a
-normal way to start, and nothing a reader is told is wrong while it is empty.
-
-See "`tracks` and the second ownership axis" under Claim above for what a claim's
-own `tracks:` block means, why membership is not an edge, and why it never gates
-`dossierx claim lock`.
 
 ### Directory layout is not part of this spec (one exception)
 

@@ -75,9 +75,6 @@ facets:
 modules:
   - widget
   - gadget
-tracks:
-  - id: review
-    title: Review track
 claims_dir: claims
 max_claim_body_chars: 20000
 `
@@ -90,9 +87,6 @@ facet: contract
 module: widget
 status: draft
 summary: Fixture claim used by the viewer test suite.
-tracks:
-  - id: review
-    role: owns
 body: |
   the widget orientation claim.
 rests_on:
@@ -299,10 +293,9 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('navSearch')`)
-	requireAll(t, ctx, "mobile drawer must keep collapsed Tracks and the graph utility above its fixed footer theme control", `
+	requireAll(t, ctx, "mobile drawer must keep the graph utility above its fixed footer theme control", `
 		var footer = document.querySelector('.sidebar-footer');
 		var utilities = footer && footer.querySelector('.nav-utilities');
-		var tracks = document.querySelectorAll('.system-nav-group')[1];
 		var sidebar = document.querySelector('.sidebar');
 	`, [][2]string{
 		{"drawer width is 328px", `getComputedStyle(sidebar).width === '328px'`},
@@ -313,8 +306,6 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 		{"the utilities row has one action", `utilities.children.length === 1`},
 		{"the first action is #dxgOpen", `utilities.children[0].id === 'dxgOpen'`},
 		{"the first action is 40px tall", `getComputedStyle(utilities.children[0]).height === '40px'`},
-		{"a Tracks group exists", `tracks`},
-		{"the Tracks group is collapsed", `!tracks.open`},
 	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('navDrawerClose').focus(); document.getElementById('navDrawerClose').click()`, nil))
 	pollTrue(t, ctx, `!document.body.classList.contains('nav-open')`)
@@ -429,12 +420,12 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 		return scroll && footer && getComputedStyle(footer).flexShrink === '0' &&
 		  utilities && utilities.children.length === 1 && utilities.children[0].id === 'dxgOpen' &&
 		  getComputedStyle(utilities.children[0]).height === '30px' &&
-		  groups && groups.length === 2 && groups[0].open && !groups[1].open &&
+		  groups && groups.length === 1 && groups[0].open &&
 		  !scroll.querySelector('[data-dxg-open]') &&
 		  choices && choices.length === 2 && choices[0].dataset.themeChoice === 'light' && choices[1].dataset.themeChoice === 'dark' &&
 		  !footer.querySelector('[data-theme-choice="system"]');
 	})()`) {
-		t.Fatal("desktop navigation must match Paper's collapsed Tracks, graph-only footer, and Light/Dark-only control")
+		t.Fatal("desktop navigation must match Paper's open Modules group, graph-only footer, and Light/Dark-only control")
 	}
 	runCDP(t, ctx, chromedp.Click(`.theme-control [data-theme-choice="dark"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, `(function(){

@@ -332,8 +332,8 @@ func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 	after := readFooter(t, ctx, revealDeepID)
 	assertRevealed(t, before, after, revealDeepID, "after :target matched", targetRule)
 
-	// The rule must not fan out. render.stripDuplicateClaimIDs guarantees at most one
-	// element can match :target, so the OTHER claim's footer — which has its own
+	// The rule must not fan out. Each claim renders exactly once, so at most one
+	// element can match :target, and the OTHER claim's footer — which has its own
 	// edges and would be just as revealable — must still be collapsed.
 	baseAfter := readFooter(t, ctx, revealBaseID)
 	if baseAfter.Display != "none" {

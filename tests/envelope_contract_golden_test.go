@@ -262,56 +262,6 @@ func envEditedSinceApproval(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
-// envTracked is a project that has adopted the SECOND axis: two declared
-// tracks, one of them assembled from a claim it owns plus two it cites — one of
-// those in another module and still draft.
-//
-// It exists because the track payloads' whole contract lives inside lists, and
-// this file says so in its own header: an empty list is honest about the
-// invocation and silent about the type. A track fixture with nothing in it would
-// pin `owned_claims:[]` and hold nothing about what an entry in that list looks
-// like. The cross-module draft citation is what makes `blocking` non-empty for
-// the same reason.
-func envTracked(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	claimsDir := filepath.Join(dir, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims dir: %v", err)
-	}
-	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\n  - internals\n" +
-		"modules:\n  - checkout\n  - payments\n" +
-		"claims_dir: claims\n" +
-		"tracks:\n" +
-		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
-		"  - id: refunds\n    title: Refunds\n"
-	writeProjectConfigFile(t, filepath.Join(dir, "project.config.yaml"), cfg)
-	lockFixtureConstitution(t, dir)
-	claims := map[string]string{
-		"owned.yaml": "id: checkout.contract.guest-flow\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a guest completes a purchase without creating an account.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
-			"rests_on:\n  none: true\n  reason: fixture claim\n",
-		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a guest session expires after thirty minutes.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
-			"rests_on:\n  none: true\n  reason: fixture claim\n",
-		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
-			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a card is captured at authorization time.\n" +
-			"tracks:\n  - id: guest-checkout\n" +
-			"rests_on:\n  none: true\n  reason: fixture claim\n",
-	}
-	for name, body := range claims {
-		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
-	return nil
-}
-
 // envAgentThread is envFresh with one open thread the AGENT opened, so
 // "comment list" and "comment reply" have a real thread id to name.
 func envAgentThread(t *testing.T, dir string) map[string]string {
@@ -495,18 +445,6 @@ func envelopeCases() []envelopeCase {
 		{"comment add / a new thread", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "agent", "--body", "a note"}},
 		{"comment add / an actor that is neither role", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "robot", "--body", "a note"}},
 		{"comment reply / on the agent's own thread", envAgentThread, []string{"comment", "reply", "widget.contract.overview", "{thread}", "--as", "agent", "--body", "checked, it holds"}},
-
-		// The track leaves, against a project that has adopted the axis and one
-		// that has not. Both matter: the adopted project is where the lists have
-		// entries to pin, and the unadopted one is where "count:0 at exit 0" is
-		// pinned as a SUCCESS — a corpus that never declared a track must behave
-		// exactly as it did before the axis existed.
-		{"track list / two declared tracks", envTracked, []string{"track", "list"}},
-		{"track list / a project that declares none", envFresh, []string{"track", "list"}},
-		{"track show / one owned claim and two cited", envTracked, []string{"track", "show", "guest-checkout"}},
-		{"track show / a track nothing has joined", envTracked, []string{"track", "show", "refunds"}},
-		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
-		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
 
 		{"manifest show / one module file", envFresh, []string{"manifest", "show", "widget"}},
 		{"manifest show / isolation", envFresh, []string{"manifest", "show", "widget", "--isolation"}},

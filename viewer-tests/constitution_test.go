@@ -140,7 +140,7 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 	)
 	// The runtime resolves the initial hash asynchronously; wait for the
 	// default reading view (the first module) before reading the sidebar.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 1 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)').length === 1 && !document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden`)
 
 	// The pin, before anything is clicked: above the Modules group, first
 	// among the sidebar tabs, its kicker painted.
@@ -149,7 +149,7 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 		 var groups = document.querySelector('#nav .system-nav-groups');
 		 var tabs = document.querySelectorAll('#nav .sec-tab');
 		 var meta = document.querySelector('#nav .constitution-tab .sec-tab__meta');
-		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)');`,
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section)');`,
 		[][2]string{
 			{"pin exists", `!!pin`},
 			{"Modules group exists", `!!groups`},
@@ -172,7 +172,7 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 		 var meter = sec.querySelector('.constitution-meter');
 		 var file = document.getElementById('constitution-file');
 		 var claims = document.getElementById('constitution-project-claims');
-		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)');`,
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section)');`,
 		[][2]string{
 			{"section kicker text", `kicker && kicker.textContent.trim() === 'PROJECT — NOT A MODULE'`},
 			{"section kicker painted", `kicker && kicker.offsetParent !== null`},
@@ -266,7 +266,7 @@ func TestProjectClaimLinkNavigatesToTheRoof(t *testing.T) {
 		`var card = document.getElementById('project.scope');
 		 var r = card ? card.getBoundingClientRect() : null;
 		 var tabs = document.querySelectorAll('#constitution .sub-nav .subtab');
-		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)');`,
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section)');`,
 		[][2]string{
 			{"the hash names the claim", `decodeURIComponent(location.hash) === '#project.scope'`},
 			{"the Constitution pin is the active sidebar tab", `document.querySelector('#nav .constitution-tab').classList.contains('on')`},

@@ -20,7 +20,5 @@ steps:
     | draft | agent |
     | locked | human |
   - Approve it, or leave a comment thread on it.
-tracks:
-  - id: checkout
 rests_on:
   - widget.internals.fields

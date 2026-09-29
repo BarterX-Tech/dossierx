@@ -234,28 +234,6 @@ func claimSourceViews(sources []model.Source) []claimSourceView {
 	return out
 }
 
-// claimTrackView is one of a claim's track memberships, with the role resolved.
-//
-// Role is the EFFECTIVE role (model.TrackRef.EffectiveRole), never the raw
-// field. An omitted role means cites, and a payload that echoed the empty
-// string would make a consumer re-implement that default — which is the one
-// place it could be re-implemented differently from the engine.
-type claimTrackView struct {
-	TrackID string `json:"track_id"`
-	Role    string `json:"role"`
-}
-
-// claimTrackViews projects a claim's memberships into the payload shape, in
-// authored order — the same reasoning as claimSourceViews: the claim file's own
-// order is what a reader comparing the two will see, and it is total.
-func claimTrackViews(refs []model.TrackRef) []claimTrackView {
-	out := make([]claimTrackView, 0, len(refs))
-	for _, r := range refs {
-		out = append(out, claimTrackView{TrackID: r.ID, Role: string(r.EffectiveRole())})
-	}
-	return out
-}
-
 // claimEdgesData is a claim's graph position in BOTH directions. Outgoing edges
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
@@ -347,15 +325,7 @@ type claimShowData struct {
 	// The absent case and the empty case mean the same thing here — this claim
 	// cites nothing — and a consumer that has to test for null before ranging is
 	// being asked to encode a distinction the data does not make.
-	Sources []claimSourceView `json:"sources"`
-	// Tracks is this claim's membership in the cross-cutting axis, in either
-	// role. It is the inverse of "dossierx track show", and it is here because
-	// show is where an agent orients itself on one card: without it, a claim
-	// that OWNS a track — whose body is therefore a feature's own prose rather
-	// than one module's contract — reads here exactly like any other claim, and
-	// the agent about to unlock it cannot see that a track's completeness turns
-	// on it. Always present, as [] for a claim in no track.
-	Tracks        []claimTrackView     `json:"tracks"`
+	Sources       []claimSourceView    `json:"sources"`
 	Locked        bool                 `json:"locked"`
 	LockedAt      string               `json:"locked_at,omitempty"`
 	ReviewPending bool                 `json:"review_pending"`
@@ -622,7 +592,6 @@ func newClaimShowCmd() *cobra.Command {
 				Section:       claim.Section,
 				SourcePath:    claim.SourcePath,
 				Sources:       claimSourceViews(claim.Sources),
-				Tracks:        claimTrackViews(claim.Tracks),
 				Locked:        claim.Status == model.StatusLocked,
 				LockedAt:      lockedAt,
 				ReviewPending: assessment.ReviewPending,
@@ -737,9 +706,6 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 		if s.DoesNotSupport != "" {
 			fmt.Fprintf(out, "    does not support: %s\n", s.DoesNotSupport)
 		}
-	}
-	for _, tr := range d.Tracks {
-		fmt.Fprintf(out, "  track:              %s (%s)\n", tr.TrackID, tr.Role)
 	}
 	fmt.Fprintf(out, "  comments:           %d thread(s), %d open, %d reply(ies)\n",
 		d.Comments.Threads, d.Comments.Open, d.Comments.Replies)

@@ -16,10 +16,10 @@
 //
 //   - LockedClaimHash answers "is THIS locked claim still the bytes a human
 //     approved?" That question has no allowlist: every field a claim persists
-//     is part of what was approved. model.Claim persists twenty-three
-//     yaml-tagged fields; ContentHash covers eleven. The nine it cannot see —
+//     is part of what was approved. model.Claim persists twenty-two
+//     yaml-tagged fields; ContentHash covers eleven. The eight it cannot see —
 //     raw_html_reviewed, kind, scope, section, order, emphasis,
-//     audit_notes, sources, tracks — are all signed
+//     audit_notes, sources — are all signed
 //     here, as are the three no hash covers (status, review_pending,
 //     comments; see lockedClaimHashExcluded for why the engine's own
 //     bookkeeping is left out).
@@ -146,7 +146,6 @@ var lockedClaimHashExcluded = map[string]bool{
 var lockedClaimHashOmitWhenEmpty = map[string]bool{
 	"embodiment": true,
 	"sources":    true,
-	"tracks":     true,
 	"scope":      true,
 	"summary":    true,
 }
@@ -195,7 +194,7 @@ func LockedClaimHash(c model.Claim) string {
 // skipped here.
 //
 // exclude and omitWhenEmpty apply only at this level; nested structs
-// (model.Source, model.TrackRef, model.Embodiment) are called with both nil and
+// (model.Source, model.Embodiment) are called with both nil and
 // hash all of their own fields, since both maps name top-level claim fields.
 func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[string]bool) {
 	t := v.Type()
