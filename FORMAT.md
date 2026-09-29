@@ -77,7 +77,6 @@ rests_on:                       # REQUIRED — a list of claim ids, or none with
   # or, for a claim that rests on nothing:
   # none: true
   # reason: string              # required when none: true
-migrated_from: string           # optional provenance note — what this claim REPLACED
 sources:                        # optional — what evidence BACKS this claim; cited from prose as [n] (see below)
   - ref: 1                      # positive int, unique within the claim
     kind: external | internal   # closed enum
@@ -587,14 +586,13 @@ a module/facet group's claims are laid out in the rendered viewer
 
 `sources` is optional and names **what evidence backs this claim** — the pages,
 specifications and internal records a reader would have to open to check the
-sentence in front of them. It is a different question from `migrated_from`,
-which is unchanged, undeprecated, and stays exactly where it is: `migrated_from`
-answers *what this claim replaced*, `sources` answers *what makes it true*. A
-claim may carry either, both, or neither.
+sentence in front of them. What a claim *replaced* is not a field: git history
+answers it. (The free-text `migrated_from` note that used to record it was
+retired in v0.7.22; see Retired fields.)
 
 **Why it is a schema field and not a convention.** Before it, a claim could
-record *which* sources it came from — `migrated_from`, one free-text string —
-but not *what they were*, so a reader had to already know which external
+record *which* sources it came from — the retired `migrated_from`, one
+free-text string — but not *what they were*, so a reader had to already know which external
 registry to open before they could check one sentence. Writing the evidence into
 a sidecar file beside the claim is worse than untidy: a sidecar is invisible to
 `dossierx check`, invisible to the viewer, and invisible to the lock ledger's
@@ -802,8 +800,10 @@ decoding never rejects it.
 
 A claim file carrying a key the schema does not have fails strict decode at
 `load` (`invalid_claim`). That includes the retired `build_role`,
-`governed_by` and `mirrors`; the `dossierx-upgrading` skill folds a corpus
-that still carries them. What to implement next is locked claims, module
+`governed_by`, `mirrors` and `migrated_from`; the `dossierx-upgrading` skill
+folds a corpus that still carries them. `LockedClaimHash` signed
+`migrated_from` even when it was empty, so its removal in v0.7.22 moves every
+locked claim's hash once. What to implement next is locked claims, module
 `depends_on`, and claim `rests_on`; viewer reading order is `order` /
 `section`.
 
@@ -1097,7 +1097,7 @@ Everything else is signed, **including any field added to the schema later**.
 This is deliberately not the same hash as the dependency-drift `ContentHash`,
 which covers a hand-picked eleven fields and must stay byte-identical
 forever: `raw_html_reviewed`, `kind`, `section`, `order`,
-`emphasis`, `migrated_from`, `sources`, `tracks`, and `audit_notes` are
+`emphasis`, `sources`, `tracks`, and `audit_notes` are
 invisible to it —
 `raw_html` was in that blind list through v0.4.0, but as of v0.4.1 a
 non-empty `raw_html` is one of the eleven, because it can now sit on a
@@ -1107,7 +1107,7 @@ itself. `sources` and `tracks` join the blind list by the same rule that put
 the others there and are meant to stay on it: neither changes what a claim
 *promises*, so a corrected citation or a new track membership must not flip
 every dependent to `review_pending` — provenance is not contract, and
-membership is not contract either. That leaves ten fields `ContentHash` still
+membership is not contract either. That leaves nine fields `ContentHash` still
 cannot see, and
 `LockedClaimHash` is the net for all of them regardless of what
 `ContentHash` tracks: it signs everything a claim persists except `status`,

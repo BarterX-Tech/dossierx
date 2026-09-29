@@ -386,7 +386,7 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 		{"render --out", []string{"render", "--out", "viewer/index.html"}, "dossierx check", "removed in v0.3.0"},
 		{"deps <id>", []string{"deps", "widget.contract.a"}, "dossierx claim show", "removed in v0.3.0"},
 		{"stale --json", []string{"stale", "--json"}, "dossierx claim list --review-pending", "removed in v0.3.0"},
-		{"coverage --module", []string{"coverage", "--module", "widget"}, "dossierx claim list --migrated", "removed in v0.3.0"},
+		{"coverage --module", []string{"coverage", "--module", "widget"}, "run: dossierx claim list", "removed in v0.3.0"},
 		{"implink set", []string{"implink", "set", "widget.contract.a", "--file", "main.go"}, "dossierx claim link", "removed in v0.3.0"},
 		{"implink status", []string{"implink", "status", "--module", "widget"}, "dossierx claim show", "removed in v0.3.0"},
 

@@ -61,7 +61,6 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"steps":             {hashed: true, mutate: func(c *model.Claim) { c.Steps = []string{"step one", "step two"} }},
 	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = model.RestsOnIDs("widget.contract.elsewhere") }},
 	"scope":             {hashed: true, mutate: func(c *model.Claim) { c.Scope = model.ScopeProject }},
-	"migrated_from":     {hashed: true, mutate: func(c *model.Claim) { c.MigratedFrom = "docs/other.html" }},
 
 	// sources: SIGNED, and this field is close to the reason the hash is a
 	// deny-list. A claim's evidence is the part a reader re-validates months
@@ -118,7 +117,6 @@ func fullyPopulatedClaim() model.Claim {
 			{Ref: 2, Kind: model.SourceKindInternal, Title: "Requirement record", Path: "records/requirements.jsonl", RecordID: "REQ-001", SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 		},
 		Tracks:        []model.TrackRef{{ID: "widget-track", Role: model.TrackRoleOwns}},
-		MigratedFrom:  "docs/legacy.html",
 		Order:         3,
 		Emphasis:      true,
 		ReviewPending: true,
@@ -260,7 +258,6 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 		"section":           func(c *model.Claim) { c.Section = "somewhere else entirely" },
 		"order":             func(c *model.Claim) { c.Order = 1000 },
 		"emphasis":          func(c *model.Claim) { c.Emphasis = false },
-		"migrated_from":     func(c *model.Claim) { c.MigratedFrom = "somewhere/else.html" },
 		"audit_notes":       func(c *model.Claim) { c.AuditNotes = []string{"a note nobody wrote"} },
 	}
 
@@ -619,7 +616,11 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // (NIT-29), build_role (NIT-32) and mirrors all left model.Claim with no
 // shadow key, so every locked claim re-locks once on upgrade, with no
 // migration tooling by decision.
-const lockedClaimHashNoOptionalFields = "3baf7120328a942236d60021f11a941503eba8d6cfc5150e97874c4d14002748"
+//
+// v0.7.22 moves it once more, by decision (Nitin, NIT-191): migrated_from
+// left model.Claim with no shadow key, and since it was hashed even when
+// empty, every locked claim re-locks once on upgrade.
+const lockedClaimHashNoOptionalFields = "ee97989608983731f633b34418f1f24eeb54758c2a43345bb0715c896b44e3e1"
 
 // TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
 // the lockedClaimHashOmitWhenEmpty gate, because each half guards a different

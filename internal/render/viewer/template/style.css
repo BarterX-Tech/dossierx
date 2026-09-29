@@ -2287,7 +2287,7 @@ th {
 }
 
 /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
-   rests_on/depended-on-by/migrated_from/review_pending/
+   rests_on/depended-on-by/review_pending/
    implemented-in fact is its own <li>, stacked vertically rather than
    wrapped inline, so a card with many edges reads as a scannable list
    instead of a run-on line. Browser UA <ul> margin/padding/list-style is

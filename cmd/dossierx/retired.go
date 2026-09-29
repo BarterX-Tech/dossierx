@@ -168,8 +168,8 @@ func retiredTopLevelCmds() []*cobra.Command {
 			`stale: removed in v0.3.0; "stale" was a filter wearing a verb's clothes, and it is now a flag on claim list`,
 			`run: dossierx claim list --review-pending`),
 		retiredCmd("coverage",
-			`coverage: removed in v0.3.0; "coverage" was a filter wearing a verb's clothes, and it is now a flag on claim list`,
-			`run: dossierx claim list --migrated`),
+			`coverage: removed in v0.3.0; it measured migrated_from notes, and v0.7.22 retired that field — a claim's evidence is its sources, which claim list counts per claim`,
+			`run: dossierx claim list`),
 		retiredCmd("implink",
 			`implink: removed in v0.3.0; recording a code link is dossierx claim link, and reading one back is part of what claim show reports`,
 			// `claim link` is declared cobra.NoArgs and requires --module, --claim
@@ -205,9 +205,10 @@ const upgradingSkillStep = "run: dossierx skills export, then load the dossierx-
 // the file is still wrong for this binary; only the recovery is named.
 var retiredFields = map[string]map[string]string{
 	"model.Claim": {
-		"build_role":  "`build_role` is a retired claim field; " + upgradingSkillStep + "\"build_role is gone\" fold",
-		"governed_by": "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
-		"mirrors":     "`mirrors` is a retired claim field; " + upgradingSkillStep + "\"mirrors is gone\" fold",
+		"build_role":    "`build_role` is a retired claim field; " + upgradingSkillStep + "\"build_role is gone\" fold",
+		"governed_by":   "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
+		"mirrors":       "`mirrors` is a retired claim field; " + upgradingSkillStep + "\"mirrors is gone\" fold",
+		"migrated_from": "`migrated_from` is a retired claim field; " + upgradingSkillStep + "\"migrated_from is gone\" fold",
 	},
 	"config.Config": {
 		"doctrine_facet": "`doctrine_facet` is a retired config field (the doctrine hub is gone); " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",

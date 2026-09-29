@@ -1,6 +1,6 @@
 // retired_fields_cli_test.go pins the recovery a corpus from an older release
 // meets at load: a claim still carrying a retired field (build_role,
-// governed_by) or a config still setting doctrine_facet keeps its error code,
+// governed_by, migrated_from) or a config still setting doctrine_facet keeps its error code,
 // and the hint names the retired field and sends the agent to the
 // dossierx-upgrading skill, the only place the fold is written down.
 package main
@@ -29,6 +29,8 @@ func TestRetiredFieldLoadRefusalNamesTheUpgradeFold(t *testing.T) {
 			[]string{"`build_role` is a retired claim field", "dossierx skills export", "dossierx-upgrading", `"build_role is gone"`}},
 		{"governed_by", baseConfig, "governed_by:\n  - widget.contract.other\n", cliout.CodeInvalidClaim,
 			[]string{"`governed_by` is a retired claim field", "dossierx skills export", "dossierx-upgrading", `"governed_by and the doctrine hub are gone"`}},
+		{"migrated_from", baseConfig, "migrated_from: docs/tabs/widget.html\n", cliout.CodeInvalidClaim,
+			[]string{"`migrated_from` is a retired claim field", "dossierx skills export", "dossierx-upgrading", `"migrated_from is gone"`}},
 		{"doctrine_facet", baseConfig + "doctrine_facet: doctrine\n", "", cliout.CodeInvalidConfig,
 			[]string{"`doctrine_facet` is a retired config field", "dossierx skills export", "dossierx-upgrading", `"governed_by and the doctrine hub are gone"`}},
 	}

@@ -30,7 +30,7 @@ the five rules are there and are not repeated here.
 | build everything (catalog, viewer, code-link scan, ledger gate) | `dossierx check` |
 | know everything about one claim | `dossierx claim show <id>` |
 | find the claim a human described | `dossierx claim list --match "<their words>"` |
-| what is pending / migrated / drifted | `dossierx claim list --review-pending` · `--migrated` · `--drifted` |
+| what is pending / drifted | `dossierx claim list --review-pending` · `--drifted` |
 | freeze a claim, on the human's word | `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"` |
 | change a locked claim | `dossierx claim unlock <id> --reason "..."` → edit → `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "..."` |
 | a locked claim drifted from a changed dependency | `dossierx claim reaudit <id>` (preview) then `--confirm --reason "..."` |
@@ -142,7 +142,7 @@ claims tree or open claim files to orient yourself. The full reading order is in
 ## Citing your evidence — `sources`
 
 `sources` records **what makes this claim true**, in the claim, where `check`, the viewer and the
-lock ledger can all see it (`migrated_from` instead answers *what this claim replaced*). Never keep
+lock ledger can all see it. What a claim replaced is git history, not a field. Never keep
 evidence in a sidecar file: nothing checks it, so it could be rewritten after the human approved.
 
 ```yaml

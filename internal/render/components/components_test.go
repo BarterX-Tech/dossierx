@@ -317,14 +317,14 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 	// substring is trivially absent from "".
 	// 05 §4.6/R09.1: the footer is now a <div class="claim-footer"> strip
 	// wrapping a <details class="claim-links"> door, whose panel carries the
-	// "extra" facts (migrated_from among them) in a
+	// "extra" facts (review_pending among them) in a
 	// <ul class="claim-edges claim-edges-extra">.
-	withEdge := model.Claim{Facet: "contract", Module: "widget", MigratedFrom: "docs/tabs/widget.html"}
+	withEdge := model.Claim{Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true}
 	got = string(edgesHTML(withEdge))
 	if !strings.Contains(got, `<div class="claim-footer">`) || !strings.Contains(got, `class="claim-edges`) {
 		t.Fatalf("a claim with one edge must still render the footer strip and its edges ul, got: %s", got)
 	}
-	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-rests-on", "claim-review-pending"} {
+	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-rests-on"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("edgesHTML should omit %q, got: %s", absent, got)
 		}
@@ -341,8 +341,8 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 // a-time.md §6's "a noun and a count, never a score" (R-F.1), now
 // "N relationship"/"N relationships" rather than the pre-redesign "N links".
 // links counts what the reader FINDS ON EXPANDING — one per id inside the
-// three R09.4 direction blocks and the "extra" migrated_from/
-// review_pending rows — never the linked files or sources, which are their
+// three R09.4 direction blocks and the "extra" review_pending
+// row — never the linked files or sources, which are their
 // own doors (§6: "files and drifted do not appear in the strip"; sources is
 // its own door per R09.5) and no longer ride in this chip's count at all.
 //
@@ -401,8 +401,8 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 		},
 		{
 			// One relationship, singular.
-			name:     "only_migrated_from",
-			claim:    model.Claim{Facet: "contract", MigratedFrom: "docs/tabs/widget.html"},
+			name:     "only_one_rests_on",
+			claim:    model.Claim{Module: "widget", Facet: "contract", RestsOn: model.RestsOnIDs("widget.contract.a")},
 			wantChip: "1 relationship",
 		},
 		{
@@ -596,7 +596,7 @@ func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 	}{
 		{
 			name:     "neither_signal",
-			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked, MigratedFrom: "docs/x.html"},
+			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked},
 			files:    []implink.ViewFile{{File: "a.go"}},
 			wantOpen: false,
 		},
@@ -621,7 +621,7 @@ func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 			// ReviewPending is only meaningful on a locked claim; a draft
 			// carrying it renders no review_pending row and must not open.
 			name:     "draft_review_pending_does_not_open",
-			claim:    model.Claim{Facet: "contract", Status: model.StatusDraft, ReviewPending: true, MigratedFrom: "docs/x.html"},
+			claim:    model.Claim{Facet: "contract", Status: model.StatusDraft, ReviewPending: true, RestsOn: model.RestsOnIDs("widget.contract.a")},
 			wantOpen: false,
 		},
 	}
@@ -650,16 +650,14 @@ func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 }
 
 // The rests_on: none ROW itself — its class, its reason, and the inline
-// markdown ceiling on that reason — is asserted on a claim that also carries a
-// second edge, because "none" alone does not count as a link (see
-// TestEdgesHTMLWithLinks_RestsOnNoneAloneStillRendersTheStrip). MigratedFrom
-// is the cheapest edge that opens the disclosure: one flat <li>, no nested id
-// list, no claim-ref markup to confuse a Contains check on the reason.
+// markdown ceiling on that reason. "none" alone does not count as a link, but
+// it still renders the strip (see
+// TestEdgesHTMLWithLinks_RestsOnNoneAloneStillRendersTheStrip), so the claim
+// needs no second edge.
 func TestEdgesHTML_RestsOnNoneWithReason(t *testing.T) {
 	c := model.Claim{
-		Facet:        "contract",
-		MigratedFrom: "docs/tabs/widget.html",
-		RestsOn:      model.RestsNone("fixture <claim>"),
+		Facet:   "contract",
+		RestsOn: model.RestsNone("fixture <claim>"),
 	}
 	got := string(edgesHTML(c))
 	if !strings.Contains(got, `rests-on-none`) {
@@ -678,9 +676,8 @@ func TestEdgesHTML_RestsOnNoneWithReason(t *testing.T) {
 // other prose field already gets via the "markdown"/"cell" funcs.
 func TestEdgesHTML_RestsOnNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
 	c := model.Claim{
-		Facet:        "contract",
-		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
-		RestsOn:      model.RestsNone("see `widget.contract.retry-policy` for the real gate"),
+		Facet:   "contract",
+		RestsOn: model.RestsNone("see `widget.contract.retry-policy` for the real gate"),
 	}
 	got := string(edgesHTML(c))
 	if !strings.Contains(got, "<code>widget.contract.retry-policy</code>") {
@@ -697,9 +694,8 @@ func TestEdgesHTML_RestsOnNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
 // raw markup even after the switch away from a bare html.EscapeString.
 func TestEdgesHTML_RestsOnNoneReasonHostileHTMLStillEscaped(t *testing.T) {
 	c := model.Claim{
-		Facet:        "contract",
-		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
-		RestsOn:      model.RestsNone(`<script>alert(1)</script>`),
+		Facet:   "contract",
+		RestsOn: model.RestsNone(`<script>alert(1)</script>`),
 	}
 	got := string(edgesHTML(c))
 	if !strings.Contains(got, "rests-on-none") {
@@ -763,7 +759,6 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		Facet:         "contract",
 		Module:        "widget",
 		RestsOn:       model.RestsOnIDs("widget.contract.a", "widget.contract.b", "widget.contract.c"),
-		MigratedFrom:  "docs/tabs/widget.html",
 		Status:        model.StatusLocked,
 		ReviewPending: true,
 	}
@@ -778,7 +773,6 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 		`href="#widget.contract.a"`,
 		`href="#widget.contract.b"`,
 		`href="#widget.contract.c"`,
-		`migrated_from: docs/tabs/widget.html`,
 		`claim-review-pending`,
 	} {
 		if !strings.Contains(got, want) {
@@ -1177,7 +1171,7 @@ func TestClaimLabel_DerivesFromSlugOrFallsBackToRawID(t *testing.T) {
 // (writeRelationshipMeta) instead, shown on every row regardless of how far
 // the target is from the reader's own context. The three-tier elision this
 // test used to pin is real, but it now lives in writeClaimRef's OTHER
-// caller, writeIDListItems (migrated_from-adjacent extras) — see
+// caller, writeIDListItems (the extras) — see
 // TestEdgesHTML_ElisionTiers_ExtrasStillElide below for that half.
 func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	c := model.Claim{
@@ -1211,7 +1205,7 @@ func TestEdgesHTML_ElisionTiers(t *testing.T) {
 	}
 
 	// No prefix spans at all: the elided inline prefix is exclusively
-	// writeIDListItems' territory now (migrated_from-adjacent
+	// writeIDListItems' territory now (the
 	// extras), never a fixed-direction relationship row's.
 	if strings.Contains(got, "claim-ref-prefix") {
 		t.Errorf("a fixed-direction relationship row must carry no inline prefix span, got: %s", got)

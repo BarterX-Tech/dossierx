@@ -3,16 +3,16 @@ name: dossierx-upgrading
 description: >-
   Carrying a DossierX project across a binary upgrade. Use this WHENEVER you
   have upgraded the DossierX binary, WHENEVER a corpus you did not touch
-  refuses — a claim file carrying governed_by, build_role or mirrors fails to
-  load, a config setting doctrine_facet fails, every verb refuses
+  refuses — a claim file carrying governed_by, build_role, mirrors or
+  migrated_from fails to load, a config setting doctrine_facet fails, every verb refuses
   layout_legacy, check reports lock-ledger-pre-ledger / pre_ledger_unadopted,
   or an old corpus lacks summaries, manifests or code links — and whenever
   you run dossierx claim recover-approved-content or re-export the skills.
-  Covers the v0.7.20 → v0.7.21 pass in order, re-exporting skills (retired
+  Covers the v0.7.20 → v0.7.21 pass in order, the v0.7.22 migrated_from fold, re-exporting skills (retired
   bundles are pruned), the layout_legacy moves, the pre-ledger crossing,
   recovering approved wording from git, the lock-store diff when lock policy
   0 is carried over to v1, the hand folds for governed_by, the doctrine hub,
-  build_role and mirrors, and the new requirements (summary, manifest.yaml,
+  build_role, mirrors and migrated_from, and the new requirements (summary, manifest.yaml,
   facets, caps, code links). Every fold that
   re-locks is the human's approval, claim by claim. Load the DossierX router
   skill first.
@@ -159,6 +159,22 @@ this release; now the key itself is refused. Delete the `mirrors:` block from ev
 draft and locked alike. If the mirrored fact is one this claim depends on, say so with `rests_on`
 instead. A locked claim that carried the key re-locks after the edit, and that re-lock is the
 human's approval, in the same pass as the other folds.
+
+## `migrated_from` is gone
+
+v0.7.22. A claim file still carrying `migrated_from:` fails strict decode at load (`invalid_claim`,
+`stopped_at: load`), and `claim list --migrated` no longer exists. What a claim replaced is git
+history; what backs it is `sources`. Fold each note by hand:
+
+1. **The note names a file that still exists** (relative to the config's directory): replace it with
+   an internal source — `{ref: <next free>, kind: internal, title: "…", path: <that path>, sha256:
+   <sha256sum of the file>}` — and cite `[ref]` in the body where the claim leans on it
+   (`source-ref-unused` warns until it is cited).
+2. **Anything else** (free text, a file since deleted, an old claim id): delete the line.
+3. `dossierx check --validate` until clean apart from `lock-content-drift`. **Every** locked claim
+   reports it, note or not: the field was signed even when empty, so every hash moved. Re-lock each
+   once, on the human's yes: `claim unlock` → `claim lock --dry-run` →
+   `claim lock --reason "…" --proposal "<snapshot>"`, folding the note edit into the same re-lock.
 
 ## New requirements a v0.7.20 corpus does not meet
 
