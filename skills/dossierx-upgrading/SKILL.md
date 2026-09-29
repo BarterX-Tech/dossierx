@@ -171,9 +171,10 @@ history; what backs it is `sources`. Fold each note by hand:
    <sha256sum of the file>}` — and cite `[ref]` in the body where the claim leans on it
    (`source-ref-unused` warns until it is cited).
 2. **Anything else** (free text, a file since deleted, an old claim id): delete the line.
-3. `dossierx check --validate` until clean. Only claims that **carried** a note report
-   `lock-content-drift`; every other hash is unchanged. Re-lock each of those once, on the human's
-   yes: `claim unlock` → edit → `claim lock --dry-run` → `claim lock --reason "…" --proposal "<snapshot>"`.
+3. `dossierx check --validate` until clean apart from `lock-content-drift`. **Every** locked claim
+   reports it, note or not: the field was signed even when empty, so every hash moved. Re-lock each
+   once, on the human's yes: `claim unlock` → `claim lock --dry-run` →
+   `claim lock --reason "…" --proposal "<snapshot>"`, folding the note edit into the same re-lock.
 
 ## New requirements a v0.7.20 corpus does not meet
 

@@ -8,7 +8,7 @@ check (`readiness.go` local approval, `lock.Audit`'s `lock-content-drift`),
 which compares a ledger record's hash against `LockedClaimHash` of the claim
 on disk.
 
-- Candidate: commit `b6e3225` on `claude/nit-191-kill-migrated-from-nxzeqq`,
+- Candidate: the head of `claude/nit-191-kill-migrated-from-nxzeqq` (PR #126),
   based on `release/v0.7.22` at `da6b88d` (the v0.7.21 tag).
 - Comparison baseline: `v0.7.21` (`da6b88d`), built as a second binary.
 - Environment: go1.26.0 linux/amd64, cloud sandbox running as root.
@@ -17,32 +17,28 @@ on disk.
 
 The field, the `supersede` lint, `claim list --migrated` and the viewer row
 are gone. A claim file carrying `migrated_from` fails strict decode with a
-hint naming the upgrade fold. Claims that carried a note re-lock once.
+hint naming the upgrade fold. `LockedClaimHash` signed `migrated_from` even
+when empty, so its line leaves the hash and **every** locked claim's hash
+moves once; each re-locks on the human's approval (Nitin confirmed this in
+the project thread).
 
 ## Preserved invariants
 
-- **A claim that never carried a note keeps its `LockedClaimHash`.** The hash
-  wrote `migrated_from=s0:` for every claim (the field was not in
-  `lockedClaimHashOmitWhenEmpty`). `lockedClaimHashRetiredEmpty` keeps writing
-  exactly that line in its sorted place. Evidence:
-  `TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty` still matches the
-  pinned constant `3baf7120…`; the 30 locked claims in `fixture-graph-demo`
-  and `fixture-theme-flat` still verify against their committed ledgers
-  (`TestCommittedFixtureViewersAreNotStale`, plain `check` exit 0). With the
-  line removed, both fail (constant moves to `ee979896…`; every fixture claim
-  reports `lock-content-drift`). Both were run to confirm.
-- **A claim that carried a note fails the approval check until re-locked.**
-  End to end, v0.7.21 locked three claims (a: note naming an existing file,
-  b: free-text note, c: no note). After the fold under the candidate:
-
-  | claim | local_approved | dependency_ready | review_pending | ready | ledger finding |
-  |---|---|---|---|---|---|
-  | a | false | true | true | false | lock-content-drift |
-  | b | false | true | true | false | lock-content-drift |
-  | c | true | true | false | true | none |
-
-  After `claim unlock` and `claim lock --reason --proposal` on a and b, plain
-  `check` is clean (0 ledger findings, 0 lint errors).
+- **A moved hash fails closed.** End to end, v0.7.21 locked three claims
+  (a: note naming an existing file, b: free-text note, c: no note). After
+  the fold under the candidate, all three report `lock-content-drift`,
+  `local_approved: false`, `ready: false`. After `claim unlock` and
+  `claim lock --dry-run` / `--reason --proposal <snapshot>` on each, all
+  three are locked and `ready: true`, and plain `check` is clean (0 ledger
+  findings, 0 lint errors).
+- **The committed fixture ledgers were re-hashed record by record, only
+  where the old hash matched.** 361 fixture claims were hashed under the
+  v0.7.21 rule and the candidate rule; every committed ledger hash equal to
+  a claim's old hash was replaced by its new hash (30 records in
+  `fixture-graph-demo` and `fixture-theme-flat`, the 30 locked claims). No
+  other file in the tree held an old hash. `TestCommittedFixtureViewersAreNotStale`
+  re-verifies them. The pinned `lockedClaimHashNoOptionalFields` constant
+  moves to `ee979896…`.
 - **`ContentHash` is unchanged**, so no dependent's drift baseline moves and no
   `review_pending` propagates from this change alone.
 - **Read-only paths write nothing**: `check --validate` over the folded corpus
@@ -57,16 +53,15 @@ hint naming the upgrade fold. Claims that carried a note re-lock once.
 
 ## Known transient
 
-Between unlock and re-lock of a note-only claim (b above), the viewer's
-"edited since approval" panel says "The wording is unchanged since approval."
-and lists no moved field: the retained approved snapshot no longer has the
-field to diff. v0.7.21's `build_role` removal had the same shape. It clears at
-re-lock.
+Between unlock and re-lock, a claim whose only change is the hash (no note,
+or a deleted note) shows "The wording is unchanged since approval." in the
+viewer's "edited since approval" panel with no moved field listed: the
+retained approved snapshot has no field left to diff. v0.7.21's `build_role`
+removal had the same shape. It clears at re-lock.
 
 ## Complexity
 
-One constant line per claim hash: O(1) extra bytes per claim, O(V) per
-corpus. No traversal, record, witness or output-size term changes.
+One fewer line per claim hash. No traversal, record, witness or output-size term changes.
 
 ## Verdict
 

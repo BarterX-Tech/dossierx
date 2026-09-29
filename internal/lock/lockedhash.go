@@ -151,22 +151,6 @@ var lockedClaimHashOmitWhenEmpty = map[string]bool{
 	"summary":    true,
 }
 
-// lockedClaimHashRetiredEmpty is the other side of the same compatibility
-// gate: the on-disk names of fields that have LEFT model.Claim but were
-// hashed unconditionally while they existed, so every claim's hash carries
-// their empty line. Removing such a field outright would move the hash of
-// every claim that never used it, which is the silent project-wide
-// re-lock lockedClaimHashOmitWhenEmpty exists to prevent. The hash therefore
-// keeps writing the line a claim WITHOUT the field always wrote, and nothing
-// else: no claim can carry the field any more (strict decode refuses it), so
-// only a claim that did carry one hashes differently, and that claim re-locks
-// through the upgrade fold that removed its value.
-//
-// migrated_from (NIT-191) is the only entry. A retired field that was already
-// in lockedClaimHashOmitWhenEmpty needs no entry here: its empty form wrote
-// nothing, so removing it moves no hash.
-var lockedClaimHashRetiredEmpty = []string{"migrated_from"}
-
 // LockedClaimHash returns a deterministic hash over every persisted field of c
 // except the three in lockedClaimHashExcluded. It is what a lock-ledger record
 // stores, and what the ledger gate re-computes to decide whether a locked claim
@@ -187,7 +171,7 @@ func LockedClaimHash(c model.Claim) string {
 	// Domain separation: the version prefix means a future algorithm change
 	// cannot accidentally collide with a hash produced by this one.
 	fmt.Fprintf(h, "dossierx-locked-claim/v%d\n", lockedClaimHashVersion)
-	hashStructFields(h, reflect.ValueOf(c), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty, lockedClaimHashRetiredEmpty)
+	hashStructFields(h, reflect.ValueOf(c), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -213,11 +197,7 @@ func LockedClaimHash(c model.Claim) string {
 // exclude and omitWhenEmpty apply only at this level; nested structs
 // (model.Source, model.TrackRef, model.Embodiment) are called with both nil and
 // hash all of their own fields, since both maps name top-level claim fields.
-//
-// retiredEmpty names fields no longer in the struct whose empty line is still
-// written, in its sorted place; see lockedClaimHashRetiredEmpty. Like the two
-// maps, it applies only at the top level.
-func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[string]bool, retiredEmpty []string) {
+func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[string]bool) {
 	t := v.Type()
 	type taggedField struct {
 		tag string
@@ -241,9 +221,6 @@ func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[s
 			continue
 		}
 		fields = append(fields, taggedField{tag: tag, val: v.Field(i)})
-	}
-	for _, tag := range retiredEmpty {
-		fields = append(fields, taggedField{tag: tag, val: reflect.ValueOf("")})
 	}
 	sort.Slice(fields, func(i, j int) bool { return fields[i].tag < fields[j].tag })
 
@@ -339,7 +316,7 @@ func hashValue(h io.Writer, v reflect.Value) {
 			return
 		}
 		fmt.Fprint(h, "{")
-		hashStructFields(h, v, nil, nil, nil)
+		hashStructFields(h, v, nil, nil)
 		fmt.Fprint(h, "}")
 
 	default:

@@ -617,10 +617,10 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // shadow key, so every locked claim re-locks once on upgrade, with no
 // migration tooling by decision.
 //
-// v0.7.22 does NOT move it: migrated_from (NIT-191) left model.Claim too, but
-// lockedClaimHashRetiredEmpty keeps its empty line, so only a claim that
-// carried a note re-locks.
-const lockedClaimHashNoOptionalFields = "3baf7120328a942236d60021f11a941503eba8d6cfc5150e97874c4d14002748"
+// v0.7.22 moves it once more, by decision (Nitin, NIT-191): migrated_from
+// left model.Claim with no shadow key, and since it was hashed even when
+// empty, every locked claim re-locks once on upgrade.
+const lockedClaimHashNoOptionalFields = "ee97989608983731f633b34418f1f24eeb54758c2a43345bb0715c896b44e3e1"
 
 // TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
 // the lockedClaimHashOmitWhenEmpty gate, because each half guards a different
@@ -708,7 +708,7 @@ func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
 func TestLockedClaimHashSignsAnUntaggedExportedField(t *testing.T) {
 	hashOf := func(v taglessSchema) string {
 		h := sha256.New()
-		hashStructFields(h, reflect.ValueOf(v), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty, nil)
+		hashStructFields(h, reflect.ValueOf(v), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty)
 		return hex.EncodeToString(h.Sum(nil))
 	}
 

@@ -14,8 +14,9 @@ A claim file that still carries `migrated_from:` no longer loads
 skills, then follow the `dossierx-upgrading` skill's "migrated_from is gone"
 fold: a note naming a file that still exists becomes an internal `sources`
 entry (path and sha256, cited from the body as `[n]`); any other note is
-deleted. Only claims that carried a note report `lock-content-drift`; every
-other lock hash is unchanged. Re-lock those once, on the human's approval.
+deleted. Every locked claim then reports `lock-content-drift`, note or not:
+the lock hash signed the field even when it was empty, so every hash moved.
+Re-lock each once, on the human's approval.
 
 ### Removed
 
@@ -25,9 +26,8 @@ other lock hash is unchanged. Re-lock those once, on the human's approval.
   `claims[].migrated_from` keys on `claim list`, `migrated_from` on
   `claim show`, and the viewer's `migrated_from:` row. `sources` records what
   backs a claim; git records what it replaced. The retired `coverage` verb's
-  hint now points at plain `claim list`. `LockedClaimHash` keeps writing the
-  line an empty `migrated_from` always wrote, so no claim that never carried a
-  note changes hash. 35 lint rules (was 36).
+  hint now points at plain `claim list`. `LockedClaimHash` loses its
+  `migrated_from` line, so every lock hash moves once. 35 lint rules (was 36).
 
 ## [0.7.21] - 2026-09-25
 

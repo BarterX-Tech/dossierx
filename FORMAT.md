@@ -801,9 +801,9 @@ decoding never rejects it.
 A claim file carrying a key the schema does not have fails strict decode at
 `load` (`invalid_claim`). That includes the retired `build_role`,
 `governed_by`, `mirrors` and `migrated_from`; the `dossierx-upgrading` skill
-folds a corpus that still carries them. `migrated_from` still contributes the
-line its empty value always did to `LockedClaimHash`, so removing it moves the
-hash only of a claim that carried a note. What to implement next is locked claims, module
+folds a corpus that still carries them. `LockedClaimHash` signed
+`migrated_from` even when it was empty, so its removal in v0.7.22 moves every
+locked claim's hash once. What to implement next is locked claims, module
 `depends_on`, and claim `rests_on`; viewer reading order is `order` /
 `section`.
 
