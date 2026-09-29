@@ -4,11 +4,13 @@ description: >-
   Carrying a DossierX project across a binary upgrade. Use this WHENEVER you
   have upgraded the DossierX binary, WHENEVER a corpus you did not touch
   refuses — a claim file carrying governed_by, build_role, mirrors or
-  migrated_from fails to load, a config setting doctrine_facet fails, every verb refuses
+  migrated_from fails to load, tracks-retired names a claim or config still
+  carrying tracks, a config setting doctrine_facet fails, every verb refuses
   layout_legacy, check reports lock-ledger-pre-ledger / pre_ledger_unadopted,
   or an old corpus lacks summaries, manifests or code links — and whenever
   you run dossierx claim recover-approved-content or re-export the skills.
-  Covers the v0.7.20 → v0.7.21 pass in order, the v0.7.22 migrated_from fold, re-exporting skills (retired
+  Covers the v0.7.20 → v0.7.21 pass in order, the v0.7.22 migrated_from and
+  tracks folds, re-exporting skills (retired
   bundles are pruned), the layout_legacy moves, the pre-ledger crossing,
   recovering approved wording from git, the lock-store diff when lock policy
   0 is carried over to v1, the hand folds for governed_by, the doctrine hub,
@@ -177,6 +179,19 @@ history; what backs it is `sources`. Fold each note by hand:
    reports it, note or not: the field was signed even when empty, so every hash moved. Re-lock each
    once, on the human's yes: `claim unlock` → `claim lock --dry-run` →
    `claim lock --reason "…" --proposal "<snapshot>"`, folding the note edit into the same re-lock.
+
+## `tracks` are gone
+
+v0.7.22. `tracks-retired` means the corpus predates it: a claim file carrying `tracks:`
+(`invalid_claim`) or a config declaring `tracks:` (`invalid_config`), and the `track` noun no
+longer exists. A feature is now a brief that lists the claims it rests on; each old track folds into
+one once your installed DossierX has briefs. Until then:
+
+1. Keep a copy of the config's `tracks:` list and of each claim that owned a track (its body is the
+   feature's own prose) for that later fold. Then delete `tracks:` from the config.
+2. Delete the `tracks:` block from every claim file, draft and locked alike.
+3. Only a locked claim that carried `tracks:` reports `lock-content-drift` for it. Re-lock it on the
+   human's yes in the same pass as the `migrated_from` re-lock, so each claim re-locks once.
 
 ## New requirements a v0.7.20 corpus does not meet
 

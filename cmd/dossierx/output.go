@@ -189,7 +189,7 @@ func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error
 }
 
 // requireSubcommand is the RunE every NOUN carries — the command groups (claim,
-// comment, constitution, manifest, track, skills) that exist only to hold leaves and do
+// comment, constitution, manifest, skills) that exist only to hold leaves and do
 // no work of their own.
 //
 // Without it, cobra's default for a parent with no Run/RunE is to print its help

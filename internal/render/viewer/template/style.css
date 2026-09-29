@@ -2247,9 +2247,9 @@ th {
    attribute for it (the two the server does write are the drifted-file and
    the locked+review_pending signals); and doing it in JS would not survive
    the static file:// export, which is the case this has to work in.
-   .claim is the root <section> of every partial. render.stripDuplicateClaimIDs
-   removes id= from a track's inline copy of a claim, so at most ONE element
-   on the page can ever match :target — the rule cannot fan out.
+   .claim is the root <section> of every partial, and each claim is rendered
+   once, so at most ONE element on the page can ever match :target — the rule
+   cannot fan out.
 
    THIRD RETRY FIX (verifier item 2) simplified this considerably. Under the
    previous nested-panel structure, revealing a closed door's content meant
@@ -4889,17 +4889,12 @@ body.shell-body {
    padding that compensated for it, are both gone: the shipping row is flush
    (.sec-tab `border: 0` plus `padding: 7px 10px` further down). Because
    .sec-tab.on outranks .sec-tab, that orphaned padding-left survived and
-   pushed the SELECTED label 8px right of every other row, in the module rail
-   and in the Tracks list alike. Paper 4A-0 keeps selected and unselected on
+   pushed the SELECTED label 8px right of every other row in the module rail. Paper 4A-0 keeps selected and unselected on
    one 10px lane and marks selection with ground and weight only. */
 .sec-tab.on {
   color: var(--ink);
   background: var(--accent-bg);
 }
-
-/* .nav-group-label (the caption over the Tracks run) is gone: the sidebar
-   groups modules and tracks in .system-nav-group <details> (shell.html), and
-   nothing has emitted the class since the system-record redesign. */
 
 /* Secondary horizontal facet tab strip inside a module's content area,
    ported verbatim (selector + declarations) from the reference docs
@@ -4945,129 +4940,6 @@ body.shell-body {
 .claim-group-host,
 [data-dossierx-surface-host] {
   display: contents;
-}
-
-/* Tracks retain a label before their cited-claim appendix. Reading View no
-   longer repeats model.Claim.Section as headings between claim cards. */
-.cited-claims-heading {
-  margin: 1.75rem 0 0.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: var(--faint);
-}
-
-/* Only a cited-claim appendix label at the start of a track drops the
-   leading rule. */
-.claim-group > .cited-claims-heading:first-child,
-.claim-group > .claim-group-host:first-child > .cited-claims-heading:first-child,
-.claim-group > [data-dossierx-surface-host]:first-child > .cited-claims-heading:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-/* ---- track sections (render/track_view.go) ---------------------------
-
-   A track section is a .module-section in every way the show/hide machinery
-   can see, so it needs no layout rules of its own — only a head, because a
-   track states something a module never has to: what it is for, and how far
-   along it is. The .sub-nav a multi-facet module would carry has no analogue
-   here (a track has no facets), which is why this head sits directly against
-   the claim group with the same 16px gap .sub-nav leaves behind it. */
-.track-head {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
-  margin: 0 0 16px;
-}
-
-.track-title {
-  font-size: 17px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  color: var(--ink);
-}
-
-/* The completion pill is one of the existing .pill family and takes no new
-   token; only its margin is corrected here, since .pill's own margin-bottom
-   is tuned for sitting inline beside a claim label rather than under a
-   heading. It REPORTS and gates nothing — see trackCompletion. */
-.track-head > .pill {
-  margin-bottom: 0;
-}
-
-.track-summary {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-/* track-cites is the list of claims a track cites but does not own: pointers,
-   never bodies (see components/tracks.go). It is styled as a list of rows
-   rather than as cards precisely so it cannot be mistaken for the owned
-   claims above it — the visual difference IS the statement that these live
-   somewhere else.
-
-   Specificity note, the same one .claim-edges makes: the .claim-ref-prefix
-   and .claim-ref-label spans are styled under .claim-edges, which does not
-   scope this list, so both tiers are re-declared below. Rather than widening
-   those selectors — which would silently restyle every footer — the track
-   list states its own, and the two stay independently readable. */
-.track-cites {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.track-cite {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-
-.track-cite:last-child {
-  border-bottom: 0;
-}
-
-.track-cite a.claim-ref {
-  color: var(--link);
-  text-decoration: none;
-}
-
-.track-cite a.claim-ref:hover,
-.track-cite a.claim-ref:focus-visible {
-  text-decoration: underline;
-}
-
-.track-cite .claim-ref-prefix {
-  color: var(--faint);
-  font-weight: 400;
-}
-
-.track-cite .claim-ref-label {
-  font-weight: 500;
-}
-
-.track-cite .claim-ref-raw {
-  font-family: var(--font-mono);
-  font-size: 0.95em;
-  font-weight: 400;
-}
-
-/* The pill is pushed to the trailing edge so a column of rows reads as two
-   columns — what the claim is on the left, what state it is in on the right —
-   which is the scan a reader does on a track page. */
-.track-cite > .pill {
-  margin-left: auto;
-  margin-bottom: 0;
-  flex: none;
 }
 
 @media (max-width: 860px) {
@@ -6407,17 +6279,6 @@ body.shell-body {
 
 .claim { scroll-margin-top: 72px; }
 
-.cited-claims-heading {
-  margin: 34px 0 12px;
-  padding-top: 20px;
-  border-top-color: var(--border);
-  color: var(--faint);
-  font-size: 10px;
-  letter-spacing: .105em;
-}
-
-.cited-claims-heading:first-child { margin-top: 0; }
-
 /* The claim card's radius is a per-component literal, not --radius: 12px is
    off the engine's radius token and off Paper's own 4/8/999 scale, and
    docs/design/screens/07a-claim-draft-not-yet-approved.md open decision D4
@@ -6828,8 +6689,7 @@ code {
 }
 
 .claim-edges a,
-.claim-source-title,
-.track-cite a.claim-ref {
+.claim-source-title {
   color: var(--link);
   overflow-wrap: anywhere;
   text-underline-offset: 2px;
@@ -6879,35 +6739,6 @@ code {
   background: transparent;
   color: var(--faint);
 }
-
-.track-head {
-  margin: 0 0 24px;
-  padding: 38px 0 23px;
-  border-bottom: 1px solid var(--border-strong, #aab5c7);
-}
-
-.track-title {
-  margin-bottom: 9px;
-  font-size: clamp(28px, 4vw, 42px);
-  font-weight: 560;
-  letter-spacing: -.04em;
-  line-height: 1.06;
-}
-
-.track-summary {
-  max-width: 680px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.track-cite {
-  min-height: 43px;
-  padding: 10px 0;
-  border-bottom-color: var(--border);
-  font-size: 13px;
-}
-
-.track-cite > .pill { margin-left: auto; }
 
 /* 14 §4.1 (node 43Y-0): the board's -8px 0 24px shadow supersedes this layer's
    pre-revamp -14px 0 34px; border is --border-strong (D14.2's rail is
@@ -6994,7 +6825,7 @@ code {
    Seven live control groups (the board's five plus the pre-13 Granularity
    and Highlight-overlay axes, 13 §4.2's own comment: "neither control
    exists on any board") do not fit one 54px row at 1440 — measured via
-   probe at 1440/scoped state: two rows, module+facet+track+granularity+
+   probe at 1440/scoped state: two rows, module+facet+granularity+
    overlay filling the first, relations+view the second. Raised as a spec
    amendment against §3 rather than shipped silently; block padding is still
    sized so EACH row lands at the
@@ -7497,7 +7328,7 @@ code {
     scroll-snap-align: none;
   }
 
-  /* M5 — MODULE / FACET / TRACK eyebrows dropped; the select values name
+  /* M5 — MODULE / FACET eyebrows dropped; the select values name
      themselves. Granularity and Highlight overlay steer the canvas the
      same way VIEW does, and the canvas is gone (M1), so their eyebrows and
      their controls drop for the identical reason M4 drops VIEW — "this
@@ -7944,9 +7775,6 @@ code {
      extend either — there is deliberately no tablet-tier (521-860px) footer
      override, because .claim-footer's own flex-wrap already reflows the
      strip at that width with no special-casing. */
-  .track-head { padding-top: 28px; }
-  .track-title { font-size: 31px; }
-  .track-cite { align-items: flex-start; }
 }
 
 /* This container is RETIRED for the same reason as the footer half of the
@@ -8073,10 +7901,8 @@ code {
      .content-area, not just the card — 02 §3 gives the module head
      "padding: 14px 16px" and the claim-controls row the same 16px inline
      inset, with content width 390 - 32 = 358px. Restore it on every
-     .content-area child that is not the full-bleed card: the module head,
-     and a track's cited-claim appendix label. */
-  .system-record-head,
-  .cited-claims-heading {
+     .content-area child that is not the full-bleed card: the module head. */
+  .system-record-head {
     padding-inline: 16px;
   }
 
@@ -9208,11 +9034,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   min-height: 0;
   padding: 10px 8px 6px;
   color: var(--faint);
-}
-/* Paper 4X-0: TRACKS carries 18px of head space against the module list
-   above it, where MODULES (3P-0) carries 10px. */
-.system-nav-group + .system-nav-group .system-nav-group__toggle {
-  padding-top: 18px;
 }
 .system-nav-group__count {
   min-width: auto;

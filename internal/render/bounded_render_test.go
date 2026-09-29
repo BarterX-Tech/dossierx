@@ -130,38 +130,6 @@ func TestRenderBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	}
 }
 
-func TestBuildTrackSectionsWithBudget_ManyTrackRowsStayContained(t *testing.T) {
-	const count = 20_000
-	claims := make([]model.Claim, count)
-	for i := range claims {
-		claims[i] = model.Claim{
-			ID:     fmt.Sprintf("m.f.c%05d", i),
-			Module: "m",
-			Facet:  "f",
-			Status: model.StatusDraft,
-			Tracks: []model.TrackRef{{ID: "feature", Role: model.TrackRoleCites}},
-		}
-	}
-	cat := &catalog.Catalog{Claims: claims}
-	cfg := &config.Config{Tracks: []config.Track{{ID: "feature", Title: "Feature"}}}
-
-	var tracks []TrackSection
-	var err error
-	allocated := measuredTotalAlloc(func() {
-		tracks, err = buildTrackSectionsWithBudget(cat, cfg, nil, &renderByteBudget{remaining: 1 << 20})
-	})
-	if !errors.Is(err, ErrIntermediateCapacityExceeded) {
-		t.Fatalf("buildTrackSectionsWithBudget error = %v, want intermediate capacity exceeded", err)
-	}
-	if len(tracks) != 0 {
-		t.Fatal("shell-data overflow returned a partial projection")
-	}
-	if allocated >= boundedRenderAllocationBudget {
-		t.Fatalf("bounded shell-data build allocated %d bytes, budget is <%d", allocated, boundedRenderAllocationBudget)
-	}
-	t.Logf("shell-data overflow: cited rows=%d max=%d TotalAlloc=%d", count, 1<<20, allocated)
-}
-
 func TestRenderBounded_CustomShellWorkingSetErrorIsNotOutputCapacity(t *testing.T) {
 	claim := model.Claim{
 		ID: "m.f.working-set", Module: "m", Facet: "f", Layout: model.LayoutTree,

@@ -70,8 +70,7 @@
         firstModuleID = '';
         for (var mi = 0; mi < moduleSections.length; mi++) {
           var candidate = moduleSections[mi];
-          if (candidate.classList.contains('constitution-section') ||
-              candidate.classList.contains('track-section')) {
+          if (candidate.classList.contains('constitution-section')) {
             continue;
           }
           firstModuleID = candidate.id;
@@ -81,11 +80,8 @@
         // claimToFacet maps every individual claim card's own id (the full claim
         // id, e.g. "widget.doctrine.foo") to its owning .claim-group (facet) id,
         // so an edges-footer link (`href="#<claim-id>"`) resolves to a specific
-        // card instead of the unknown-hash fallback. A claim a track owns
-        // renders twice, but only its module's copy keeps the id
-        // (render.stripDuplicateClaimIDs strips the track copy's), so only that
-        // copy is indexed here — consistent with the comment JS keying off
-        // data-claim-id (never id) for state fan-out. A project claim's one
+        // card instead of the unknown-hash fallback. Every claim renders
+        // exactly once, so this map is one-to-one. A project claim's one
         // copy sits under the constitution's Project claims tab, which is a
         // .claim-group like any facet, so a RESTS ON link to it resolves here.
         claimToFacet = {};
@@ -111,10 +107,8 @@
         // MODULE for any hash it does not recognize — so without this index a
         // reader clicking a citation would be moved to a different module
         // entirely, which is both wrong and hard to attribute to the click.
-        // Only the canonical copy of a claim carries these ids
-        // (render.stripDuplicateClaimIDs removes them from a track's inline
-        // copy), so this map is
-        // one-to-one for the same reason claimToFacet is.
+        // Every claim renders exactly once, so this map is one-to-one for the
+        // same reason claimToFacet is.
         sourceToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
           var roots = [g];
@@ -148,9 +142,8 @@
       // triple. Checked in order: a claim id -> its own card's facet + module; a
       // source row's anchor id -> the same, but scrolled to the row rather than
       // to the card; a facet id -> its own module + itself; a bare module id
-      // (which a TRACK section also is — see track_view.go) -> that module +
-      // its default facet; anything else -> the first module + its default
-      // facet.
+      // -> that module + its default facet; anything else -> the first module
+      // + its default facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -199,8 +192,7 @@
 
       // Surfaces mount on first visit and STAY mounted. Clearing inactive
       // hosts would drop in-memory UI state (source-note clamps, open
-      // disclosures) and break tests that compare a module card with its
-      // track copy. The load-time win is still intact for large corpora: only
+      // disclosures). The load-time win is still intact for large corpora: only
       // the first surface is cloned during init; the rest remain inert
       // <template>s until navigated to (or until mountAllSurfaces runs).
       function mountSurface(surfaceID) {
@@ -248,13 +240,9 @@
       }
 
       function mountAllSurfaces() {
-        // Track claim-groups always soft-mount (see shell.html) and must stay
-        // inert until the reader opens them — mounting them here would
-        // materialize off-screen track copies and break first-paint measurers
-        // (source-note clamps). Only module/facet surfaces are remounted for
-        // the small-corpus getElementById witnesses.
+        // Every module/facet surface is remounted for the small-corpus
+        // getElementById witnesses.
         document.querySelectorAll('.claim-group[data-dossierx-surface]').forEach(function (g) {
-          if (g.closest('.track-section')) { return; }
           mountSurface(g.getAttribute('data-dossierx-surface') || g.id);
         });
       }
@@ -1707,7 +1695,7 @@
           return;
         }
         var subNav = section.querySelector(':scope > .sub-nav');
-        var header = section.querySelector(':scope > .system-record-head, :scope > .track-head');
+        var header = section.querySelector(':scope > .system-record-head');
         if (subNav) {
           if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
         } else if (header) {
@@ -3965,10 +3953,8 @@
           }
           return;
         }
-        // The source-note show more/show less control. It carries no id (a
-        // claim is rendered a second time inside any track that owns it, and
-        // ids may not be), so its handle on the note it governs is the parent
-        // it sits in — which is what makes both copies work independently.
+        // The source-note show more/show less control. It carries no id, so
+        // its handle on the note it governs is the parent it sits in.
         var noteToggle = e.target.closest('.claim-source-note-toggle');
         if (noteToggle) {
           var noteEl = noteToggle.parentNode;

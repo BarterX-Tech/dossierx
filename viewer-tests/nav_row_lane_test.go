@@ -6,7 +6,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// TestNavRowsShareOneLaneWhenSelected pins that selecting a module or track
+// TestNavRowsShareOneLaneWhenSelected pins that selecting a module
 // row does not move its label.
 //
 // `.sec-tab.on` carried `padding-left: 18px`, a fossil of a 2px accent

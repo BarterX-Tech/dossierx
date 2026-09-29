@@ -146,7 +146,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The nine nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The eight nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -427,7 +427,7 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 			if resolve(m[1]) {
 				continue
 			}
-			t.Errorf("%s names %q, which is not a command in the current surface — nine nouns, and dossierx lint/stale/coverage/deps/implink/migrate and comment resolve/reopen/edit/delete do not exist. If this is prose, write \"DossierX\" with a capital D.", path, strings.TrimSpace(m[0]))
+			t.Errorf("%s names %q, which is not a command in the current surface — eight nouns, and dossierx lint/stale/coverage/deps/implink/migrate and comment resolve/reopen/edit/delete do not exist. If this is prose, write \"DossierX\" with a capital D.", path, strings.TrimSpace(m[0]))
 		}
 		return nil
 	})
@@ -605,10 +605,8 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		// Issue #82: the decision trees, pinned where the wrong verb is chosen.
 		{"dossierx", "Which command", "the flag/unlock/reaudit table"},
 		{"dossierx", "`structured_layout`)", "flag refuses a structured claim; unlock is the path"},
-		{"dossierx", "gates nothing and orders nothing", "a track is never a lock gate or a build sequence"},
 		{"dossierx-comments", "structured_layout", "the discriminator's third arm"},
 		{"dossierx-code-links", "structured_layout", "the same third arm, same words"},
-		{"dossierx-claims", "never a gate, never a build sequence", "track verbs are the read-only axis"},
 		// Issue #78 Phase 1A: what a green check proves.
 		{"dossierx-code-links", "Linked is not followed", "the gate proves a pointer, not meaning"},
 		{"dossierx", "neither proves code links", "--validate and --staged are not sync"},

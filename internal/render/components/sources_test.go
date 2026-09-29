@@ -270,30 +270,6 @@ func TestEdges_SourceNoteShipsWholeWithAHiddenControl(t *testing.T) {
 	}
 }
 
-// TestEdges_SourceNoteControlCarriesNoID is a constraint from a different
-// feature, pinned here because nothing else would notice it breaking. A claim
-// owned by a track is rendered a SECOND time inside that track's section, and
-// render.stripDuplicateClaimIDs removes only the ids it can enumerate — the
-// claim's own and its source rows'. An id on this control would survive into
-// the copy, putting a duplicate id in the document; the control is wired by DOM
-// position precisely so that it cannot.
-func TestEdges_SourceNoteControlCarriesNoID(t *testing.T) {
-	c := sourcedClaim(model.Source{Ref: 1, Kind: model.SourceKindExternal, Title: "A page", Supports: "a note"})
-	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
-
-	toggle := strings.Index(got, `<button class="claim-source-note-toggle"`)
-	if toggle < 0 {
-		t.Fatalf("no control emitted: %s", got)
-	}
-	end := strings.Index(got[toggle:], ">")
-	if end < 0 {
-		t.Fatalf("unterminated control tag: %s", got)
-	}
-	if tag := got[toggle : toggle+end]; strings.Contains(tag, ` id="`) {
-		t.Errorf("the note control carries an id, which a track copy would duplicate: %s", tag)
-	}
-}
-
 // TestEdges_SourceWithoutNotesEmitsNoControl keeps the clutter rule honest one
 // level up from the clamp: a source that states no boundary line has nothing to
 // expand, so it must not carry a control at all.

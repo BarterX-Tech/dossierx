@@ -232,9 +232,9 @@ type Claim struct {
 	// dependency chain, and the drift baseline a locked claim is checked
 	// against. It is a list of claim ids, or the stated absence
 	// {none: true, reason} (NIT-24). The retired governed_by edge (NIT-29),
-	// the retired mirrors key and the retired migrated_from note (NIT-191)
-	// have no field and no shadow key: a claim file that still carries any
-	// of them fails strict decode.
+	// the retired mirrors key, the retired migrated_from note (NIT-191) and
+	// the retired tracks list (NIT-184) have no field and no shadow key: a
+	// claim file that still carries any of them fails strict decode.
 	RestsOn RestsOn `yaml:"rests_on,omitempty"`
 
 	// Sources is the evidence this claim rests on, cited from Body by "[n]"
@@ -247,17 +247,6 @@ type Claim struct {
 	// load-bearing, exactly as it is for Comments), and every source-* lint
 	// is a no-op on it.
 	Sources []Source `yaml:"sources,omitempty"`
-
-	// Tracks is this claim's membership in cross-cutting concerns — the
-	// second axis, orthogonal to Module. See model.TrackRef and
-	// model.TrackRole for why membership is not an edge and why the
-	// owns/cites pair is what keeps it from being tagging.
-	//
-	// Optional and additive in the same sense as Sources: a corpus that
-	// declares no tracks behaves exactly as it did before this field
-	// existed. Module is untouched by it — a claim keeps exactly one module,
-	// and track membership never gates locking.
-	Tracks []TrackRef `yaml:"tracks,omitempty"`
 
 	// Order is an optional, author-set hint for the VIEWER's per-group
 	// claim sequence (internal/render's orderClaims): claims with Order set

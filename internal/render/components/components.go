@@ -876,11 +876,6 @@ const claimFooterChevronHTML = `<svg class="claim-footer__chevron" aria-hidden="
 // inviting a click that resolves to nothing. The attribute lives on the SLOT,
 // not the button, which is the element shell.html's syncEmptyChips and the
 // chromedp suite reach for via closest('.claim-comments-slot').
-//
-// This func emits no ` id="` sequence anywhere, deliberately: render's
-// stripDuplicateClaimIDs matches a leading-space ` id="<claim-id>"` literal
-// to strip ids from a track's non-canonical copy, and it must keep hitting
-// only the root <section>.
 func CommentChipHTML(c model.Claim) template.HTML {
 	open := len(c.OpenThreadIDs())
 	total := len(c.Comments)
@@ -1113,6 +1108,17 @@ func ClaimLabel(id string) string {
 		return id
 	}
 	return DisplayCase(slug)
+}
+
+// ClaimRefHTML is one claim reference anchor, labelled exactly as an edges
+// footer labels it (writeClaimRef with the reader's module and facet as
+// context). The module Manifest tab (NIT-19) uses it for its provides and
+// depends_on ids, so a manifest id reads like every other pointer to that
+// claim. Escaped here: the id is author input.
+func ClaimRefHTML(targetID, fromModule, fromFacet string) template.HTML {
+	var b strings.Builder
+	writeClaimRef(&b, targetID, fromModule, fromFacet, nil, true)
+	return template.HTML(b.String())
 }
 
 // writeClaimRef writes one claim-to-claim edge as an anchor to targetID,

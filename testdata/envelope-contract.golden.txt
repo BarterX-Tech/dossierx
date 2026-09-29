@@ -166,7 +166,6 @@ claim show / a draft claim
                   status:string
                   summary:string
                   title:string
-                  tracks:[]
 
 claim show / an id no claim carries
     argv          claim show widget.contract.ghost
@@ -460,77 +459,6 @@ comment reply / on the agent's own thread
                   reply_id:string
                   thread_id:string
 
-track list / two declared tracks
-    argv          track list
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       track list
-    data          count:number
-                  tracks:[{cited_claims:number,complete:bool,locked_claims:number,owned_claims:number,summary:string,title:string,total_claims:number,track_id:string}|{cited_claims:number,complete:bool,locked_claims:number,owned_claims:number,title:string,total_claims:number,track_id:string}]
-
-track list / a project that declares none
-    argv          track list
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       track list
-    data          count:number
-                  tracks:[]
-
-track show / one owned claim and two cited
-    argv          track show guest-checkout
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       track show
-    data          cited_claims:[{claim_id:string,facet:string,locked:bool,module:string,review_pending:bool,status:string,title:string}]
-                  complete:bool
-                  locked_claims:number
-                  owned_claims:[{body:string,claim_id:string,facet:string,locked:bool,module:string,review_pending:bool,status:string,title:string}]
-                  summary:string
-                  title:string
-                  total_claims:number
-                  track_id:string
-
-track show / a track nothing has joined
-    argv          track show refunds
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       track show
-    data          cited_claims:[]
-                  complete:bool
-                  locked_claims:number
-                  owned_claims:[]
-                  title:string
-                  total_claims:number
-                  track_id:string
-
-track status / blocked by a cited draft claim in another module
-    argv          track status guest-checkout
-    exit          0
-    ok            true
-    envelope      command data ok
-    command       track status
-    data          blocking:[{claim_id:string,facet:string,module:string,review_pending:bool,role:string,status:string}]
-                  cited:{locked:number,total:number}
-                  complete:bool
-                  owned:{locked:number,total:number}
-                  title:string
-                  total_claims:number
-                  track_id:string
-
-track status / an id the config does not declare
-    argv          track status guest-chekout
-    exit          1
-    ok            false
-    envelope      command error ok
-    command       track status
-    error         code:string
-                  message:string
-    error.code    unknown_track
-
 manifest show / one module file
     argv          manifest show widget
     exit          0
@@ -711,7 +639,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 50)
+    pinned by an invocation above (13 of 49)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -722,7 +650,6 @@ ERROR-CODE COVERAGE
         not_locked                exit 2
         not_review_pending        exit 2
         unknown_module            exit 1
-        unknown_track             exit 1
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1

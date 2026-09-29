@@ -105,14 +105,6 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"comment", "inbox"},
 		{"comment", "add", "widget.contract.overview", "--as", "agent", "--body", "b", "--dry-run"},
 		{"comment", "reply", "widget.contract.overview", added.ThreadID, "--as", "agent", "--body", "b", "--dry-run"},
-		// The track leaves run against the SAME track-less fixture as everything
-		// else here: list answers with an empty registry, and show/status answer
-		// with the unknown-track refusal. All three are envelopes, which is what
-		// this test reads, and the refusal path is worth walking precisely
-		// because a failure envelope carries keys too.
-		{"track", "list"},
-		{"track", "show", "checkout"},
-		{"track", "status", "checkout"},
 	}
 
 	for _, args := range commands {

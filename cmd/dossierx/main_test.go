@@ -288,7 +288,8 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFourLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
+// TestSurfaceIsTwentyOneLeavesUnderEightNouns pins the headline of the v0.3.0
+// restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
@@ -305,16 +306,10 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // for the verb to do. It survives as a hidden retired stub, counted by
 // TestRetiredInvocationsNameTheirReplacement rather than here.
 //
-// THE THIRD MOVE IS THE TRACK NOUN, and it is an ADDITION — the first since the
-// restructure — taking nineteen-under-seven to twenty-two-under-eight. The
-// argument for it is not that the surface should grow but that every one of the
-// other seven nouns is organized on the MODULE axis, which answers "who
-// guarantees this claim?" and structurally cannot answer "what does the user
-// get, and is it finished?". No arrangement of the existing leaves gets there,
-// because the corpus itself did not carry the relationship until the tracks
-// field existed. Its three leaves are all read-only: this adds a way to LOOK at
-// the corpus and no new way to change it, which is why the addition does not
-// touch any lifecycle guarantee the other nineteen make.
+// THE THIRD MOVE WAS THE TRACK NOUN, an addition taking nineteen-under-seven
+// to twenty-two-under-eight: three read-only leaves over a second, feature
+// axis. v0.7.22 removed it (NIT-184) with no retired stub, because a feature
+// is a brief now; see the eighth move.
 //
 // Custom viewer themes and their CLI noun were removed; the surface at that
 // point contained twenty-four leaves under eight nouns. It has since grown
@@ -344,7 +339,12 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // left alone), and has nothing to do on a corpus it has already swept. It is a
 // LEAF and not a `check` side effect precisely so the lock store is written
 // only by a verb a human asked for.
-func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
+//
+// THE EIGHTH MOVE IS A REMOVAL: v0.7.22 retired tracks (NIT-184), taking the
+// track noun and its three leaves with them, from twenty-four-under-nine to
+// twenty-one-under-eight. `dossierx track` is an unknown command, like
+// build-order.
+func TestSurfaceIsTwentyOneLeavesUnderEightNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -362,10 +362,6 @@ func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 		"comment list":  true,
 		"comment add":   true,
 		"comment reply": true,
-
-		"track list":   true,
-		"track show":   true,
-		"track status": true,
 
 		"manifest show": true,
 		"manifest list": true,
@@ -421,8 +417,8 @@ func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 24 {
-		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 21 {
+		t.Errorf("the surface is 21 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -519,7 +515,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderNineNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyOneLeavesUnderEightNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

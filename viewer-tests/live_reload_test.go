@@ -175,7 +175,7 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 	ctx := serveAndOpenLive(t, p)
 
 	// On load: first module shown, second hidden.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section)')[1].hidden`)
 
 	// External change -> reload (a fresh card in gadget proves the swap ran).
 	p.writeClaim("gadget2.yaml", twoModuleClaim("gadget.contract.extra", "gadget"))
@@ -185,7 +185,7 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 	// document (the swapped <nav> buttons carry none), so a working switch proves
 	// delegation survived the fragment swap.
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab:not(.constitution-tab)')[1].click();`, nil))
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section)')[1].hidden`)
 }
 
 // ---------------------------------------------------------------------

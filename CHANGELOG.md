@@ -18,6 +18,14 @@ deleted. Every locked claim then reports `lock-content-drift`, note or not:
 the lock hash signed the field even when it was empty, so every hash moved.
 Re-lock each once, on the human's approval.
 
+A claim file carrying `tracks:`, or a config declaring `tracks:`, no longer
+loads either (`invalid_claim` / `invalid_config`; the hint opens with
+`tracks-retired`). Follow the upgrading skill's "tracks are gone" fold: keep a
+copy of the old track list and each owning claim for the later fold into
+feature briefs, then delete `tracks:` everywhere. `tracks` was signed only when
+present, so only a locked claim that carried it reports `lock-content-drift`;
+re-lock it in the same pass as the `migrated_from` re-lock.
+
 Re-running `dossierx skills export` also deletes the
 `docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
 nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
@@ -33,6 +41,19 @@ section, whose links now point at the exported `SKILL.md` files.
   backs a claim; git records what it replaced. The retired `coverage` verb's
   hint now points at plain `claim list`. `LockedClaimHash` loses its
   `migrated_from` line, so every lock hash moves once. 35 lint rules (was 36).
+- **Tracks** (NIT-184). A feature is a brief now (NIT-180), so the second
+  ownership axis is gone: `tracks` on claims and in `project.config.yaml`, the
+  `owns` / `cites` roles, the five lints `track-shape`, `track-unknown`,
+  `track-multi-owner`, `track-empty` and `track-unowned`, the `dossierx track`
+  noun and its `list` / `show` / `status` leaves (no retired stub, like
+  build-order), the `unknown_track` error code, `tracks` on `claim show`,
+  `claims[].tracks` in the catalog, `nodes[].tracks` and `groups.tracks` in the
+  graph payload, the viewer's Tracks sidebar group and track pages, and the
+  graph pane's track filter, legend rows and owner ruling. Either `tracks` key
+  is refused at load with a `tracks-retired` hint. `LockedClaimHash` signed
+  `tracks` only when present, so only a claim that carried it moves.
+  **Surface:** 21 leaves under 8 nouns (was 24 under 9), 30 lint rules (was
+  35), 49 error codes (was 50).
 - **`docs/dossierx-agent-guide.md`** (NIT-195). `dossierx skills export` no
   longer writes the concatenated guide, so DossierX creates nothing under a
   project's `docs/`. The `AGENTS.md` section links each companion skill to the

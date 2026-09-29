@@ -363,11 +363,6 @@ func writeInternalSource(b *strings.Builder, s model.Source) {
 // control, because a truncation whose "show more" cannot run would hide a
 // citation's stated limit behind a button that does nothing. Evidence is the
 // point; the clamp is the convenience.
-//
-// The control carries NO id, and must not gain one: a claim is rendered a
-// second time inside any track that owns it, and render.stripDuplicateClaimIDs
-// removes only the ids it knows how to enumerate. Its handle on the note it
-// governs is DOM position, which survives being copied.
 func writeSourceNote(b *strings.Builder, label, text string) {
 	if text == "" {
 		return

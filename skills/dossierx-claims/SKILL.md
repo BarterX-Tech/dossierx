@@ -7,8 +7,7 @@ description: >-
   flag or reaudit anything under a project's claims/ directory. Covers the
   claim schema and id grammar, dossierx claim new, the read-only authoring loop
   (dossierx check --validate), dossierx claim show and list, citing evidence with
-  sources and [n] markers, the cross-cutting track axis and dossierx track
-  list/show/status, how to write a claim worth keeping (one fact, a summary
+  sources and [n] markers, how to write a claim worth keeping (one fact, a summary
   that stands alone, contract vs internals, choosing rests_on), the three
   review_pending triggers, and the rule a locked claim hangs off — draft claims
   are free; body-only meaning drift is claim flag, and every other edit is unlock, fix, lock.
@@ -34,7 +33,6 @@ the five rules are there and are not repeated here.
 | freeze a claim, on the human's word | `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"` |
 | change a locked claim | `dossierx claim unlock <id> --reason "..."` → edit → `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "..."` |
 | a locked claim drifted from a changed dependency | `dossierx claim reaudit <id>` (preview) then `--confirm --reason "..."` |
-| read the feature axis (read-only; never a gate, never a build sequence) | `dossierx track list` · `show <id>` · `status <id>` — see Feature tracks below |
 
 ## Is this worth a claim? — and how to write one
 
@@ -99,7 +97,7 @@ it out.
   `*.internals.*`; a foreign module's `*.internals.*` is refused (`rests-on-target`). Never the
   constitution — it is not a target, not a node, not a ref grammar. Targets are **drift** edges (a
   target's content changing under a locked claim flags `review_pending`). A claim file carrying a
-  retired key (`governed_by`, `build_role`, `mirrors`) fails to load — **[`dossierx-upgrading`](../dossierx-upgrading/SKILL.md)**. **A `rests_on` loop is refused** at ERROR (`cycle`), and so is naming yourself (`self-edge`).
+  retired key (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks`) fails to load — **[`dossierx-upgrading`](../dossierx-upgrading/SKILL.md)**. **A `rests_on` loop is refused** at ERROR (`cycle`), and so is naming yourself (`self-edge`).
 - **Facets are hard law:** exactly `contract` and `internals`. Another module may cite only `contract`;
   foreign `internals` is refused (`rests-on-target`) and never exported (catalog, integration).
 - **Module context is `claims/<module>/manifest.yaml`** — required YAML, not a claim, which **you
@@ -107,8 +105,6 @@ it out.
 - `kind` — optional; omit it or set `fact`. Any other value is refused (`kind-shape`).
 - `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
   **Citing your evidence** below.
-- `tracks` — optional, cross-cutting feature membership: `- {id: checkout, role: owns|cites}`,
-  role defaulting to `cites`. See **Feature tracks** below.
 
 ## Authoring — `dossierx claim new`, not a text editor
 
@@ -168,26 +164,6 @@ failure, not a pass**) are ERROR; `source-ref-unused` (an entry nothing cites) i
 citation under a locked claim is `lock-content-drift`, exactly like editing the body — so the path
 is `unlock → fix → lock`. But adding or correcting a citation never flips a dependent to
 `review_pending`: provenance is not contract.
-
-## Feature tracks — the second ownership axis
-
-`module` says **who guarantees this**; a track says **what the user gets, and whether it is
-finished**. Declare the vocabulary in `project.config.yaml` (`tracks: [{id, title, summary}]`),
-then name them from a claim's own `tracks:` list, one `{id, role}` entry each.
-
-**One owner per axis.** Exactly one `module`, and **at most one** claim owning a track (`owns`);
-every other membership is `cites` — a reference, never a copy. Two owners is `track-multi-owner`
-(ERROR). Membership is **not an edge**. Other lints: `track-shape` and `track-unknown` (ERROR),
-`track-empty` and `track-unowned` (WARNING).
-
-**Three verbs, all read-only.** `dossierx track list` names the tracks the project declares;
-`dossierx track show <id>` reads a feature end to end, assembled across modules; `dossierx track
-status <id>` REPORTS whether it is finished: COMPLETE when every claim the track owns and every claim
-it cites is locked. **Never treat a track as a gate.** It does not block anything, and track
-membership never gates `dossierx claim lock` — a claim locks on its own merits, and the way to
-change a locked claim's `tracks` is `unlock → fix → lock`, since `tracks` is signed by the ledger
-like every other field. "Is the feature done?" is `track status`. What to implement next is
-locked claims, module `depends_on`, and claim `rests_on`.
 
 ## Finding the claim the human meant
 

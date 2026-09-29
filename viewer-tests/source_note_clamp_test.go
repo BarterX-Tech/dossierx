@@ -49,9 +49,6 @@ facets:
 modules:
   - widget
 claims_dir: claims
-tracks:
-  - id: checkout
-    title: Checkout
 `
 
 // longNote is the note that must overflow. It is written to need EIGHT lines or
@@ -262,11 +259,6 @@ func clampTabWithProbe(t *testing.T, p *project, noObserver bool) context.Contex
 // newClampProject writes one claim carrying two sources: the first has a note
 // that overflows and a second note that does not, the second has one short note.
 // Three notes, of which exactly ONE earns a control.
-//
-// The claim OWNS a track, so the viewer renders it a second time inside that
-// track's section. That copy is what TestSourceNoteClampWorksInATrackCopy reads:
-// the control carries no id precisely so it can be duplicated, and nothing else
-// in the suite would notice if it gained one.
 func newClampProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, clampConfig)
@@ -275,9 +267,6 @@ facet: contract
 module: widget
 status: draft
 summary: Fixture claim used by the engine test corpus.
-tracks:
-  - id: checkout
-    role: owns
 body: |
   one [1] two [2].
 sources:
@@ -338,9 +327,7 @@ func clampTab(t *testing.T, p *project) context.Context {
 // rather than the test.
 const noteDecidedExpr = `document.querySelectorAll('.claim-source-note:not(.is-clamped)').length > 0`
 
-// noteAt returns a JS expression for the nth .claim-source-note in the document,
-// scoped to one root so a track copy can be addressed separately from the
-// canonical card.
+// noteAt returns a JS expression for the nth .claim-source-note under root.
 func noteAt(root string, i int) string {
 	return fmt.Sprintf(`%s.querySelectorAll('.claim-source-note')[%d]`, root, i)
 }
@@ -551,76 +538,5 @@ func TestSourceNoteWithoutResizeObserverLeavesTextWhole(t *testing.T) {
 	}
 	if got := evalInt(t, ctx, `window.__sourceNoteProbe.deliveries.length`); got != 0 {
 		t.Fatalf("the no-observer fixture recorded %d deliveries", got)
-	}
-}
-
-// TestSourceNoteClampWorksInATrackCopy is the constraint that shaped the
-// markup. A claim owned by a track is rendered a SECOND time inside that
-// track's section with its element ids stripped, so the control cannot be wired
-// by id — it finds its note through the parent it sits in. Both copies must
-// therefore work, and independently: expanding one must leave the other shut.
-//
-// The two copies are read one at a time because the viewer shows one section at
-// a time, and that is not incidental to the test — it is the second thing being
-// asserted. A note in a section nobody has opened has never been laid out, so
-// the script has nothing to measure and correctly leaves it alone; the control
-// appears when the reader arrives, not before.
-func TestSourceNoteClampWorksInATrackCopy(t *testing.T) {
-	ctx := clampTab(t, newClampProject(t))
-
-	// SoftMount is off for this small fixture, so module and track claim
-	// copies are both eager in the live DOM. Count every note: three on the
-	// canonical card and three on the track copy.
-	if n := evalInt(t, ctx, `document.querySelectorAll('.claim-source-note').length`); n != 6 {
-		t.Fatalf("notes in the live DOM = %d, want 6 — three per copy of the claim", n)
-	}
-	if n := evalInt(t, ctx, `document.querySelectorAll('.claim-source-note-toggle[id]').length`); n != 0 {
-		t.Fatalf("%d note controls carry an id; a track copy would duplicate it", n)
-	}
-
-	canonical := noteAt(`document.querySelector('.module-section:not(.track-section)')`, 0)
-
-	requireOverflowingFixture(t, ctx, canonical)
-
-	// The canonical card is the one on screen, so it has been judged.
-	if !controlPaints(t, ctx, canonical) {
-		t.Fatal("the canonical note offers no control")
-	}
-	// The track copy is in a [hidden] section: it has never been laid out, so
-	// the clamp script has nothing to measure and correctly leaves the control
-	// unpainted until the reader arrives.
-	copiedHidden := noteAt(`document.querySelector('.track-section')`, 0)
-	if controlPaints(t, ctx, copiedHidden) {
-		t.Error("a note in a never-opened track section offered a control before visit")
-	}
-
-	// Arrive at the track. The copy gains a box, is measured, and earns the
-	// same control — through DOM position alone, since it carries no id.
-	evalVoid(t, ctx, `(function(){
-		var tab = document.querySelector('.sec-tab[data-target="#track-checkout"]');
-		var group = tab && tab.closest('details.system-nav-group');
-		if (group) { group.open = true; }
-		if (tab) { tab.click(); }
-	})()`)
-	pollTrue(t, ctx, `!document.querySelector('.track-section').hidden`)
-	copied := noteAt(`document.querySelector('.track-section')`, 0)
-	runCDP(t, ctx, chromedp.Evaluate(
-		`document.querySelectorAll('.track-section details.claim-links, .track-section details.claim-sources').forEach(function (d) { d.removeAttribute('name'); d.open = true; })`, nil))
-	settleFor(t, ctx, `(function () {
-		var n = document.querySelector('.track-section .claim-source-note');
-		return !!n && getComputedStyle(n.querySelector('.claim-source-note-toggle')).display !== 'none';
-	})()`)
-	if !controlPaints(t, ctx, copied) {
-		t.Fatal("the track copy's note offers no control once its section is open")
-	}
-
-	// Press it. The copy expands; the canonical card, still mounted in the
-	// section behind, stays exactly as the reader left it.
-	runCDP(t, ctx, chromedp.Evaluate(copied+`.querySelector('.claim-source-note-toggle').click()`, nil))
-	if evalBool(t, ctx, copied+`.classList.contains('is-clamped')`) {
-		t.Error("the track copy did not expand")
-	}
-	if !evalBool(t, ctx, canonical+`.classList.contains('is-clamped')`) {
-		t.Error("expanding the track copy also expanded the canonical card")
 	}
 }
