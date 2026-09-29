@@ -56,9 +56,8 @@ Set up DossierX in this repository.
    skills/instructions directory this harness actually reads. Run it AFTER
    step 2, never before: the export finds the project root through
    `project.config.yaml`, and only a rooted export maintains its section in
-   an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md`
-   under the root — run rootless it still exits 0, and nothing later in this
-   message exports again. Load what it wrote and follow it: those guides,
+   an `AGENTS.md` that already exists — run rootless it still exits 0, and
+   nothing later in this message exports again. Load what it wrote and follow it: those guides,
    not this message, are the contract.
 4. ASK ME before installing the git pre-commit hook. My answer decides the
    hook alone, never CI — CI is the authority either way. If I say yes, fetch
@@ -398,17 +397,16 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 
 DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the nine nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (write, find, and move claims through their lifecycle), `dossierx-modules` (work one module at a time through `manifest show`, draft `manifest.yaml`, and recover from every cap), `dossierx-constitution` (draft and keep the roof, and author project claims), `dossierx-comments` (run review threads, and when to comment versus `flag`), `dossierx-code-links` (implement from a locked module and ground the code in the claims it implements), and `dossierx-upgrading` (fold a corpus across a release that changed the format). See [`skills/`](skills/) for what each covers.
 
-`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. It also removes a retired bundle — a `dossierx-*` directory the tree's previous `dossierx-skills.lock` listed that this release no longer ships, such as `dossierx-build-order` — and never touches a directory whose name does not start with `dossierx`; `dossierx skills export --check` refuses `skills_drift` with `data.retired[]` for any such directory still on disk. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md` under the root, while a rootless one exits 0 having written the bundles and dropped the guide beside them instead, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
+`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. It also removes a retired bundle — a `dossierx-*` directory the tree's previous `dossierx-skills.lock` listed that this release no longer ships, such as `dossierx-build-order` — and the `docs/dossierx-agent-guide.md` releases up to v0.7.21 wrote (with `docs/` when nothing else is in it), and never touches a directory whose name does not start with `dossierx` or any other file under `docs/`; `dossierx skills export --check` refuses `skills_drift` with `data.retired[]` for any such directory or guide still on disk. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists, while a rootless one exits 0 having written only the bundles, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 
-The skills are one source written in three forms, because no two agent harnesses read the same file:
+The skills are one source written in two forms, because no two agent harnesses read the same file. DossierX writes nothing under `docs/`; a harness with no skill loader, or a human, reads the exported `SKILL.md` files directly — they are plain markdown.
 
 | Form | Where | Notes |
 | --- | --- | --- |
 | `SKILL.md` tree | the `[dir]` you name; otherwise every skills tree the repo already has — `.claude/skills` if `.claude/` exists and `.agents/skills` if `.agents/` exists — each with its own `dossierx-skills.lock` | verbatim bundles, frontmatter intact |
-| `AGENTS.md` section | an existing `AGENTS.md` only — never created | marker-delimited and idempotent; carries the router only, since this text is resident on every turn |
-| `dossierx-agent-guide.md` | `docs/` under the project root; `[dir]` itself when there is no project to root it in | always written — all seven bundles inline, self-contained, no loader or plugin needed |
+| `AGENTS.md` section | an existing `AGENTS.md` only — never created | marker-delimited and idempotent; carries the router only, since this text is resident on every turn, and links each companion to its `SKILL.md` in the tree this export wrote |
 
-Both derived forms are regenerated by re-running the export, so they are committed artifacts like the ledger: re-export to pick up a new release, and commit the result.
+Both forms are regenerated by re-running the export, so they are committed artifacts like the ledger: re-export to pick up a new release, and commit the result.
 
 ## Scope
 

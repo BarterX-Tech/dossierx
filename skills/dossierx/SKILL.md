@@ -229,10 +229,9 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
    `dossierx-skills.lock` beside them — `dossierx skills export --check` refuses `skills_drift` when
    a skill on disk was edited by hand or came from an older release), and run it **after
    step 2, never before**: the export finds the project root through `project.config.yaml`, and
-   only a rooted export maintains its section in an `AGENTS.md` that already exists and writes
-   `docs/dossierx-agent-guide.md` under the root, where that section links it. Run before the
-   config exists it still exits 0 — it installs the bundles and drops the guide beside them, no
-   `AGENTS.md` touched — and nothing later in this sequence exports again.
+   only a rooted export maintains its section in an `AGENTS.md` that already exists, linking each
+   companion to the bundle it wrote. Run before the config exists it still exits 0 — it installs
+   the bundles, no `AGENTS.md` touched — and nothing later in this sequence exports again.
 4. Ask before installing the git pre-commit hook. Their answer decides the hook alone, never CI:
    **CI is the authority either way**, and both answers end with the workflow installed — the hook
    is only fast local feedback on top of it, which git skips on merges, rebases, cherry-picks and

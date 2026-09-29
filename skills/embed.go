@@ -7,10 +7,10 @@
 // repository checked out alongside the installed binary.
 //
 // These files are the SINGLE SOURCE for every harness. The exporter in
-// cmd/dossierx/skills_embed.go derives Claude Code's .claude/skills tree, the
-// marker-delimited section it maintains in a repo's AGENTS.md (Codex), and the
-// self-contained docs/dossierx-agent-guide.md (Pi, Kimi, an editor, a human)
-// from exactly these bytes. Nothing downstream is hand-maintained, so a fix
+// cmd/dossierx/skills_embed.go writes them verbatim as a SKILL.md tree (Claude
+// Code, .agents/skills, or any directory a harness or a human reads) and derives
+// the marker-delimited section it maintains in a repo's AGENTS.md (Codex) from
+// exactly these bytes. Nothing downstream is hand-maintained, so a fix
 // written here reaches every harness at once.
 //
 // The go:embed directive lives here, in a file inside skills/ itself, rather

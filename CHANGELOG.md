@@ -18,6 +18,11 @@ deleted. Every locked claim then reports `lock-content-drift`, note or not:
 the lock hash signed the field even when it was empty, so every hash moved.
 Re-lock each once, on the human's approval.
 
+Re-running `dossierx skills export` also deletes the
+`docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
+nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
+section, whose links now point at the exported `SKILL.md` files.
+
 ### Removed
 
 - **`migrated_from`** (NIT-191). The free-text provenance note nothing
@@ -28,6 +33,14 @@ Re-lock each once, on the human's approval.
   backs a claim; git records what it replaced. The retired `coverage` verb's
   hint now points at plain `claim list`. `LockedClaimHash` loses its
   `migrated_from` line, so every lock hash moves once. 35 lint rules (was 36).
+- **`docs/dossierx-agent-guide.md`** (NIT-195). `dossierx skills export` no
+  longer writes the concatenated guide, so DossierX creates nothing under a
+  project's `docs/`. The `AGENTS.md` section links each companion skill to the
+  `SKILL.md` the export wrote (or names them and says where to export, when no
+  tree was written). An export deletes a guide that still opens with its
+  generated header, from `docs/` or from beside the bundles, and reports it in
+  `data.removed[]`; `skills export --check` reports any file by that name in
+  `data.retired[]`. The `generic-guide` form is gone from `data.forms[]`.
 
 ## [0.7.21] - 2026-09-25
 

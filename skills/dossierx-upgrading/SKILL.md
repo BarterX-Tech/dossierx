@@ -34,9 +34,11 @@ The skills on disk came from the old binary. Run `dossierx skills export` (it wr
 `.claude/skills` and `.agents/skills` the repo already has; name the directory when the harness reads
 another one), then `dossierx skills export --check`. The export **removes retired bundles** — a
 `dossierx-*` directory the tree's previous `dossierx-skills.lock` listed that this release no longer
-ships, such as `dossierx-build-order`. `--check` refuses `skills_drift` with `data.retired[]` for
-any `dossierx-*` directory still there that the lock never listed: ask the human, then delete it. It
-never touches a directory whose name does not start with `dossierx`.
+ships, such as `dossierx-build-order`, and the `docs/dossierx-agent-guide.md` older releases wrote
+(with `docs/` itself when nothing else is in it). `--check` refuses `skills_drift` with
+`data.retired[]` for any `dossierx-*` directory still there that the lock never listed, and for a
+guide file the export could not prove it wrote: ask the human, then delete it. It never touches a
+directory whose name does not start with `dossierx`, nor any other file under `docs/`.
 
 ## Coming from v0.7.20: one pass, in this order
 

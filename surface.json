@@ -202,7 +202,7 @@
     },
     {
       "path": "skills export",
-      "short": "Write the embedded skills in every form this repo uses: a SKILL.md tree, an idempotent AGENTS.md section, and a self-contained agent guide",
+      "short": "Write the embedded skills in every form this repo uses: a SKILL.md tree and an idempotent AGENTS.md section",
       "flags": [
         "--check",
         "--config",
@@ -514,7 +514,7 @@
   ],
   "render_fingerprint": "sha256:d8e0689c5e22c35d15063f23752d09d61950637c9e6633cc39dc5367231ddac2",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:b58f7e94f4ce8a7ef719f99559ea29e0a6bcf1b5f3d8b0dfa7b9ca846fe51642",
+    "cmd/dossierx": "sha256:287e9de16939bca0f341acc0881e16c97d055bca3193de57da42bfd9964f29d6",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -531,7 +531,7 @@
     "internal/graph": "sha256:7ac3b4676c2585147dfafabcbb2458a6ce4b8aa4178217c960d77610172a4ff8",
     "internal/implink": "sha256:eeed3cbd1ac99ec2844290f02554ba0599b7127fcf877be886b3231dbda83d65",
     "internal/layout": "sha256:6f2f699218c8402eccffef20eb46c7e30b08a39529381ff68bdc8b70e42ad07d",
-    "internal/lint": "sha256:5b0247af923d54540781ad7948a27256df0ce8a0a8e73c5c2b1a8690bf015b1e",
+    "internal/lint": "sha256:08ef119ea26cf746bf8c1d3412cae778c231afd8b325cabc7230b80316583d18",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
     "internal/lock": "sha256:b0a96ae064af0904ae8dc1f83eee2579f9602d9af45e7d541384903713ad1106",
     "internal/manifest": "sha256:b38a67f193608f0f3e16da7f5270da47640870f25f0b30d098aee89d12b4cd25",
@@ -549,7 +549,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:fb2819bd35872cbcb08d638353070527c2d8ad5a02ef2f5effe95756b5c8e375"
+    "skills": "sha256:deb42f1736a3e33d5b6132c0e1616a7278a021255541de392c6cc82fa00e729a"
   },
   "envelope": {
     "keys": [
@@ -867,6 +867,7 @@
         "count",
         "forms",
         "project_root",
+        "removed",
         "skipped",
         "target_dir",
         "written"
