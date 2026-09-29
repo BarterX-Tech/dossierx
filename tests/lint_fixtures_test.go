@@ -94,17 +94,15 @@ var coFiresWith = map[string][]string{
 }
 
 // lintFixtureExpectedExit is the exit code "dossierx check --validate" must
-// produce for a given rule's fixture: 0 for the six WARNING-severity rules (orphan,
-// body-edge-hint, comments-unresolved, source-ref-unused, track-empty,
-// track-unowned -- see their own doc comments in internal/lint), 1 (a lint
-// failure) for every ERROR-severity rule.
+// produce for a given rule's fixture: 0 for the four WARNING-severity rules
+// (orphan, body-edge-hint, comments-unresolved, source-ref-unused -- see their
+// own doc comments in internal/lint), 1 (a lint failure) for every
+// ERROR-severity rule.
 var lintFixtureExpectedExit = map[string]int{
 	"orphan":              0,
 	"body-edge-hint":      0,
 	"comments-unresolved": 0,
 	"source-ref-unused":   0,
-	"track-empty":         0,
-	"track-unowned":       0,
 }
 
 func TestLintRuleCoverageFixtures(t *testing.T) {
@@ -116,7 +114,7 @@ func TestLintRuleCoverageFixtures(t *testing.T) {
 
 	// The expected count is READ FROM THE LIVE REGISTRY rather than written
 	// here as a literal. It was a literal until the release that added the
-	// source-* and track-* families, and that made "one fixture per registered
+	// source-* and the since-retired track-* families, and that made "one fixture per registered
 	// rule" a fact two files had to keep in step by hand — with the number in
 	// THIS file being the half nobody is reminded to update. Deriving it means
 	// the assertion states the invariant it is named for (the corpus and the

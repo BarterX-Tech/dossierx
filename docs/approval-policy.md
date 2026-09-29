@@ -220,7 +220,7 @@ claim nothing reported.
 
 ## What readiness does not prove
 
-The number of locked claims, a complete track, passing fixture tests, or
+The number of locked claims, passing fixture tests, or
 a green local approval count is not an integrated-readiness certificate. The
 relevant dependency chain must be approved, current, and clear of active
 review, and the project still needs the implementation and independent

@@ -1419,8 +1419,7 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 				t.Errorf("a claim's own heading must not carry a prefix, got: %s", got)
 			}
 			// The root element's id= is untouched: it is what a #hash deep link
-			// and stripDuplicateClaimIDs both key off. The head's new spans add
-			// no second ` id="` for stripDuplicateClaimIDs to hit by mistake.
+			// keys off, and the head's new spans add no second ` id="`.
 			if !strings.Contains(got, ` id="widget.contract.retry-policy"`) {
 				t.Errorf("the root element must keep its id attribute, got: %s", got)
 			}

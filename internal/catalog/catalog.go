@@ -187,35 +187,13 @@ type Entry struct {
 
 	Edges Edges `json:"edges"`
 
-	// Tracks is the claim's cross-cutting membership, carried here because
-	// it is STRUCTURE — which named concerns this claim participates in, and
-	// in which role — the same category as Edges, and the thing a consumer
-	// asking "what makes up this feature" needs. It is deliberately not
-	// modelled inside Edges: those are claim-to-claim semantic dependencies
-	// with cycle lints attached, and membership is neither.
-	//
-	// `omitempty` is load-bearing for the same reason it is on the claim
-	// field: a project that declares no tracks writes a .catalog.json
-	// byte-identical to the one it wrote before tracks existed.
-	//
 	// Sources are deliberately NOT projected here. .catalog.json omits
 	// body/rows/steps because they are render concerns rather than catalog
 	// structure, and a claim's evidence sits on that same side of the line —
 	// it is read by a human on the claim, not resolved by a consumer of the
 	// index.
-	Tracks      []TrackMembership     `json:"tracks,omitempty"`
 	Readiness   *readiness.Assessment `json:"readiness,omitempty"`
 	Conformance *conformance.Result   `json:"conformance,omitempty"`
-}
-
-// TrackMembership is the serialized form of one claim's membership in one
-// track. Role is always written out explicitly — resolved through
-// model.TrackRef.EffectiveRole rather than copied raw — so a consumer never
-// has to know that an absent role means "cites", exactly as Entry.Kind
-// exports EffectiveKind rather than the raw field.
-type TrackMembership struct {
-	ID   string          `json:"id"`
-	Role model.TrackRole `json:"role"`
 }
 
 // Document is the full on-disk .catalog.json shape.
@@ -318,10 +296,6 @@ func entryFor(c model.Claim) Entry {
 	}
 	if ids := c.RestsOn.IDs; len(ids) > 0 {
 		e.Edges.RestsOn = append([]string(nil), ids...)
-	}
-
-	for _, t := range c.Tracks {
-		e.Tracks = append(e.Tracks, TrackMembership{ID: t.ID, Role: t.EffectiveRole()})
 	}
 
 	return e
@@ -492,11 +466,6 @@ func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget
 		}
 		add(claim.RestsOn.Reason)
 		addStrings(visibility.DropInternalsTargets(claim.RestsOn.IDs, internals))
-		for _, track := range claim.Tracks {
-			b.add(trackStructureBytes)
-			add(track.ID)
-			add(string(track.EffectiveRole()))
-		}
 		if assessment, ok := cat.Readiness[claim.ID]; ok {
 			assessment = redactAssessment(assessment, internals)
 			b.add(readinessAssessmentStructureBytes)
@@ -611,7 +580,6 @@ const (
 	// Catalog entries are array elements at indentation depth two. Values
 	// counted separately are intentionally blank in the skeleton.
 	catalogEntryStructureBytes  = uint64(len(`{"id":,"facet":,"module":,"status":,"layout":,"kind":,"edges":{}}`) + 5 + 7*(1+6) + 7 + (1 + 4))
-	trackStructureBytes         = uint64(len(`{"id":,"role":}`))
 	mapArrayEntryStructureBytes = uint64(len(`:[]`))
 
 	readinessAssessmentStructureBytes = uint64(len(`{"claim_id":,"policy_version":0,"local_approved":true,"locally_approved":true,"dependency_ready":true,"ready":true,"review_pending":true}`))
@@ -643,11 +611,6 @@ func catalogProjectionUpperBound(cat *Catalog, limit uint64) catalogBudget {
 		for _, value := range claim.RestsOn.IDs {
 			b.addString(value)
 			b.add(64)
-		}
-		for _, track := range claim.Tracks {
-			b.addString(track.ID)
-			b.addString(string(track.EffectiveRole()))
-			b.add(128)
 		}
 		if assessment, ok := cat.Readiness[claim.ID]; ok {
 			b.addReadiness(assessment)

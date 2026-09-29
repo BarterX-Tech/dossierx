@@ -194,13 +194,6 @@ type shellData struct {
 	// have. The client threshold in viewer-runtime.js must stay in lockstep.
 	SoftMount bool
 
-	// Tracks is the project's declared cross-cutting tracks, one section each,
-	// rendered after every module section and listed after every module in the
-	// sidebar. NIL FOR A PROJECT THAT DECLARES NONE, and shell.html guards
-	// every byte of track markup on that — a corpus with no tracks must render
-	// exactly as it did before the axis existed. See track_view.go.
-	Tracks []TrackSection
-
 	// Constitution is the project roof, pinned above Modules. Always present
 	// as a nav target; Present is false when the file is absent (NIT-11).
 	Constitution ConstitutionView
@@ -819,11 +812,7 @@ func buildShellStaticData(in shellInputs) shellData {
 		ConformanceStatusGuardJS: template.JS(in.conformanceStatusGuardJS),
 		ModuleGroups:             nil,
 		SoftMount:                claimCount >= softMountClaimThreshold,
-		// Built from the SAME renderedByID the module groups read, so a claim
-		// a track owns is rendered exactly once no matter how many sections
-		// point at it — the property newGroup's own lookup exists to hold.
-		Tracks:       nil,
-		Constitution: buildConstitutionView(in.cat, cfg, in.renderedByID),
+		Constitution:             buildConstitutionView(in.cat, cfg, in.renderedByID),
 	}
 }
 
@@ -982,43 +971,6 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 	markFirstInModule(groups)
 
 	return groups
-}
-
-// stripDuplicateClaimIDs returns one already-rendered claim with every element
-// id it carries removed, for use as a NON-CANONICAL copy: the same claim is
-// also rendered somewhere else on the page, and that copy keeps the ids.
-//
-// Tracks render the claims they own inline while their modules keep
-// guaranteeing them. A claim id may appear only once in a valid document.
-//
-// TWO KINDS OF ID, BOTH FROM THE SAME PLACE THAT WROTE THEM. The root
-// <section>'s ` id="<claim-id>"` is matched with its leading space and its
-// closing quote, so the .k header's data-claim-id and title — which are not
-// preceded by a space before `id="` and are not document-unique anyway — are
-// untouched and survive on every copy, exactly as they did before. The source
-// footer's row ids are enumerated from the claim's own Sources through
-// components.ClaimSourceAnchorID rather than pattern-matched, so this function
-// cannot disagree with the function that emitted them.
-//
-// The consequence for the duplicate copy is a degraded, never wrong, landing:
-// its citation markers still name the canonical copy's rows, so a reader
-// clicking one is taken to the same evidence in the claim's own module.
-//
-// Claim ids are constrained to [A-Za-z0-9_.-] (internal/lint's id-shape lint),
-// none of which html/template escapes in a double-quoted attribute value, so
-// the literal match is exact; components refuses to emit a source anchor at all
-// for an id outside that set (see ClaimSourceAnchorPrefix), so an unlinted
-// claim has nothing here to miss.
-func stripDuplicateClaimIDs(h template.HTML, c model.Claim) template.HTML {
-	s := strings.Replace(string(h), ` id="`+c.ID+`"`, "", 1)
-	for _, src := range c.Sources {
-		id := components.ClaimSourceAnchorID(c, src.Ref)
-		if id == "" {
-			continue
-		}
-		s = strings.Replace(s, ` id="`+id+`"`, "", 1)
-	}
-	return template.HTML(s)
 }
 
 // newMembershipPredicates builds the knownModule/knownFacet predicates used

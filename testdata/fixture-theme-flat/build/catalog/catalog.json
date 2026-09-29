@@ -53,12 +53,6 @@
         "rests_on_none": true,
         "rests_on_reason": "fixture claim, not backed by any real doctrine"
       },
-      "tracks": [
-        {
-          "id": "checkout",
-          "role": "owns"
-        }
-      ],
       "readiness": {
         "claim_id": "widget.contract.overview",
         "policy_version": 1,
@@ -85,12 +79,6 @@
           "panel.contract.api"
         ]
       },
-      "tracks": [
-        {
-          "id": "checkout",
-          "role": "cites"
-        }
-      ],
       "readiness": {
         "claim_id": "widget.contract.reviewed",
         "policy_version": 1,
@@ -159,12 +147,6 @@
       "edges": {
         "rests_on_internals_omitted": 1
       },
-      "tracks": [
-        {
-          "id": "checkout",
-          "role": "cites"
-        }
-      ],
       "readiness": {
         "claim_id": "widget.contract.walkthrough",
         "policy_version": 1,

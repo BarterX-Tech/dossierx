@@ -31,9 +31,9 @@
 //
 // They are HIDDEN (absent from --help, from the completion script, and from
 // requireSubcommand's "run one of:" list) because they are not surface: nothing
-// should discover them, and the eight-noun/twenty-four-leaf contract is a design
+// should discover them, and the eight-noun/twenty-one-leaf contract is a design
 // constraint the release argues for. annotationRetired is what keeps
-// TestSurfaceIsTwentyFourLeavesUnderEightNouns honest about that — it excludes these
+// TestSurfaceIsTwentyOneLeavesUnderEightNouns honest about that — it excludes these
 // by MARK, not by hidden-ness, so a real leaf can never be smuggled past the
 // count by hiding it.
 package main
@@ -200,6 +200,11 @@ var retiredFieldPattern = regexp.MustCompile(`field (\w+) not found in type (mod
 // retired field may also carry skills exported by the release that knew it.
 const upgradingSkillStep = "run: dossierx skills export, then load the dossierx-upgrading skill and follow its "
 
+// tracksRetiredHint is the one named error for both halves of the retired
+// track axis (NIT-184): `tracks:` on a claim and `tracks[]` in the config.
+// The same fold removes both, so both name it the same way.
+const tracksRetiredHint = "tracks-retired: `tracks` was retired in v0.7.22 (a feature is a brief now); " + upgradingSkillStep + "\"tracks are gone\" fold"
+
 // retiredFields maps a retired key, by the type that used to carry it, to the
 // hint naming its fold. The error codes stay invalid_claim / invalid_config:
 // the file is still wrong for this binary; only the recovery is named.
@@ -209,9 +214,11 @@ var retiredFields = map[string]map[string]string{
 		"governed_by":   "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
 		"mirrors":       "`mirrors` is a retired claim field; " + upgradingSkillStep + "\"mirrors is gone\" fold",
 		"migrated_from": "`migrated_from` is a retired claim field; " + upgradingSkillStep + "\"migrated_from is gone\" fold",
+		"tracks":        tracksRetiredHint,
 	},
 	"config.Config": {
 		"doctrine_facet": "`doctrine_facet` is a retired config field (the doctrine hub is gone); " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
+		"tracks":         tracksRetiredHint,
 	},
 }
 
