@@ -127,7 +127,6 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "claim", "show", "widget.contract.overview"},
 		{"--config", cfgPath, "claim", "list"},
 		{"--config", cfgPath, "claim", "list", "--review-pending"},
-		{"--config", cfgPath, "claim", "list", "--migrated"},
 		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--summary", "Fixture claim used by the engine test corpus.", "--body", "a new fact", "--rests-on-none-reason", "fixture"},
 		{"--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "unlock", "widget.contract.overview", "--reason", "approved", "--dry-run"},

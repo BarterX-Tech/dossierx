@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrading from v0.7.21
+
+A claim file that still carries `migrated_from:` no longer loads
+(`invalid_claim`, `stopped_at: load`; the error names the fold). Re-export the
+skills, then follow the `dossierx-upgrading` skill's "migrated_from is gone"
+fold: a note naming a file that still exists becomes an internal `sources`
+entry (path and sha256, cited from the body as `[n]`); any other note is
+deleted. Only claims that carried a note report `lock-content-drift`; every
+other lock hash is unchanged. Re-lock those once, on the human's approval.
+
+### Removed
+
+- **`migrated_from`** (NIT-191). The free-text provenance note nothing
+  resolved is gone from the claim schema, with the `supersede` lint (its only
+  check), `claim list --migrated` and the `filters.migrated` /
+  `claims[].migrated_from` keys on `claim list`, `migrated_from` on
+  `claim show`, and the viewer's `migrated_from:` row. `sources` records what
+  backs a claim; git records what it replaced. The retired `coverage` verb's
+  hint now points at plain `claim list`. `LockedClaimHash` keeps writing the
+  line an empty `migrated_from` always wrote, so no claim that never carried a
+  note changes hash. 35 lint rules (was 36).
+
 ## [0.7.21] - 2026-09-25
 
 This release replaces the doctrine hub, `governed_by`, `build_role`, the

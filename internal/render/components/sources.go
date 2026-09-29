@@ -3,7 +3,7 @@
 // citation marker in the body lands on.
 //
 // WHY PROVENANCE IS FOOTER METADATA AND NOT BODY PROSE. A source is a fact
-// ABOUT the claim, in the same family as rests_on and migrated_from — it is
+// ABOUT the claim, in the same family as rests_on — it is
 // authored in the claim's YAML, signed by the lock hash, and checked by the
 // source-* lints. Writing it into the body instead would put it beyond every
 // one of those: nothing could tell a citation from a sentence, so nothing

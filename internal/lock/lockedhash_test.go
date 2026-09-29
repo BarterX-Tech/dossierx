@@ -61,7 +61,6 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"steps":             {hashed: true, mutate: func(c *model.Claim) { c.Steps = []string{"step one", "step two"} }},
 	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = model.RestsOnIDs("widget.contract.elsewhere") }},
 	"scope":             {hashed: true, mutate: func(c *model.Claim) { c.Scope = model.ScopeProject }},
-	"migrated_from":     {hashed: true, mutate: func(c *model.Claim) { c.MigratedFrom = "docs/other.html" }},
 
 	// sources: SIGNED, and this field is close to the reason the hash is a
 	// deny-list. A claim's evidence is the part a reader re-validates months
@@ -118,7 +117,6 @@ func fullyPopulatedClaim() model.Claim {
 			{Ref: 2, Kind: model.SourceKindInternal, Title: "Requirement record", Path: "records/requirements.jsonl", RecordID: "REQ-001", SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 		},
 		Tracks:        []model.TrackRef{{ID: "widget-track", Role: model.TrackRoleOwns}},
-		MigratedFrom:  "docs/legacy.html",
 		Order:         3,
 		Emphasis:      true,
 		ReviewPending: true,
@@ -260,7 +258,6 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 		"section":           func(c *model.Claim) { c.Section = "somewhere else entirely" },
 		"order":             func(c *model.Claim) { c.Order = 1000 },
 		"emphasis":          func(c *model.Claim) { c.Emphasis = false },
-		"migrated_from":     func(c *model.Claim) { c.MigratedFrom = "somewhere/else.html" },
 		"audit_notes":       func(c *model.Claim) { c.AuditNotes = []string{"a note nobody wrote"} },
 	}
 
@@ -619,6 +616,10 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // (NIT-29), build_role (NIT-32) and mirrors all left model.Claim with no
 // shadow key, so every locked claim re-locks once on upgrade, with no
 // migration tooling by decision.
+//
+// v0.7.22 does NOT move it: migrated_from (NIT-191) left model.Claim too, but
+// lockedClaimHashRetiredEmpty keeps its empty line, so only a claim that
+// carried a note re-locks.
 const lockedClaimHashNoOptionalFields = "3baf7120328a942236d60021f11a941503eba8d6cfc5150e97874c4d14002748"
 
 // TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
@@ -707,7 +708,7 @@ func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
 func TestLockedClaimHashSignsAnUntaggedExportedField(t *testing.T) {
 	hashOf := func(v taglessSchema) string {
 		h := sha256.New()
-		hashStructFields(h, reflect.ValueOf(v), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty)
+		hashStructFields(h, reflect.ValueOf(v), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty, nil)
 		return hex.EncodeToString(h.Sum(nil))
 	}
 

@@ -312,8 +312,7 @@ func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
 }
 
 // edgesHTML renders the edge/metadata footer shared by every non-banner
-// component: rests_on, migrated_from, and a
-// review_pending flag. It is a Go helper rather than template markup so
+// component: rests_on and a review_pending flag. It is a Go helper rather than template markup so
 // every component gets identical, balanced markup without duplicating it
 // six times; values are HTML-escaped by hand since a FuncMap-returned
 // template.HTML value bypasses html/template's automatic escaping.
@@ -379,7 +378,7 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // doors" redesign (R09.1/R-F.1) — for the two doors this package owns:
 // RELATIONSHIPS (R09.4's fixed directions, DEPENDS ON / DEPENDED ON BY —
 // GOVERNED BY retired with the edge, NIT-29 — plus the
-// migrated_from/review_pending/implemented-in
+// review_pending/implemented-in
 // facts that ride along after them) and SOURCES, split out into its own peer
 // disclosure per R09.5. The other two doors the board names — readiness and
 // implementation checks — are rendered by sibling components
@@ -497,7 +496,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	}
 
 	// Facts that do not fit R09.4's three fixed directions (
-	// migrated_from, review_pending, implemented-in/drifted) ride after the
+	// review_pending, implemented-in/drifted) ride after the
 	// three direction blocks inside the same relationships panel, in the
 	// same hairline-divided row form, rather than inventing a fourth
 	// direction the reference rules do not name. review_pending's proper
@@ -505,12 +504,6 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 	// then it stays here, exactly where a reader could already find it, so
 	// nothing regresses to invisible.
 	var extra strings.Builder
-	if c.MigratedFrom != "" {
-		links++
-		extra.WriteString(`<li class="claim-migrated claim-relationship-extra">migrated_from: `)
-		extra.WriteString(html.EscapeString(c.MigratedFrom))
-		extra.WriteString(`</li>`)
-	}
 	reviewPending := c.Status == model.StatusLocked && c.ReviewPending
 	if reviewPending {
 		links++

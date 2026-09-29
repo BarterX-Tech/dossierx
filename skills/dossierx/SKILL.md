@@ -261,6 +261,6 @@ confirmed `claim reaudit` clears the human's flag having changed nothing — sil
 
 | gone | now |
 |---|---|
-| `lint`, `catalog`, `render` → `dossierx check` · `deps`, `implink status` → `dossierx claim show <id>` · `stale`, `coverage` → `dossierx claim list --review-pending` / `--migrated` · `implink set` → `dossierx claim link` · bare `lock`/`unlock`/`flag`/`reaudit` → `dossierx claim lock` / `unlock` / `flag` / `reaudit` · `comment resolve|reopen|edit|delete` → viewer only, the human does these | |
+| `lint`, `catalog`, `render` → `dossierx check` · `deps`, `implink status` → `dossierx claim show <id>` · `stale` → `dossierx claim list --review-pending` · `coverage` → `dossierx claim list` · `implink set` → `dossierx claim link` · bare `lock`/`unlock`/`flag`/`reaudit` → `dossierx claim lock` / `unlock` / `flag` / `reaudit` · `comment resolve|reopen|edit|delete` → viewer only, the human does these | |
 | `migrate --adopt` | no `dossierx migrate`: the pre-ledger crossing in `dossierx-upgrading` |
 | `build-order`, `build_role`, `governed_by`, `mirrors`, the doctrine hub | gone: `dossierx-upgrading` folds a corpus that still carries them |
