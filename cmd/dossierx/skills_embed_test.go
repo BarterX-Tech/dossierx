@@ -3,9 +3,9 @@
 // themselves.
 //
 // The command half runs in-process via execCLI (defined in
-// cli_inprocess_test.go) and asserts each of the three harness forms: the
-// verbatim SKILL.md tree, the idempotent AGENTS.md section, and the
-// always-written self-contained guide.
+// cli_inprocess_test.go) and asserts both harness forms: the verbatim SKILL.md
+// tree and the idempotent AGENTS.md section, plus the removal of the guide
+// older releases wrote under docs/.
 //
 // The content half is the part worth the most. The skills are the ONLY
 // documentation an agent operating this CLI ever reads, so a skill naming a
@@ -67,16 +67,12 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		}
 	}
 
-	// Every bundle, their lock file, plus the generic guide, which is always
-	// written — with no project root to put it in, it lands beside the bundles.
-	if want := fmt.Sprintf("wrote %d file(s)", len(wantSkillNames)+2); !strings.Contains(stdout, want) {
+	// Every bundle plus their lock file, and nothing else.
+	if want := fmt.Sprintf("wrote %d file(s)", len(wantSkillNames)+1); !strings.Contains(stdout, want) {
 		t.Fatalf("expected stdout to report %q, got:\n%s", want, stdout)
 	}
 	if _, statErr := os.Stat(filepath.Join(targetDir, skillsLockFile)); statErr != nil {
 		t.Fatalf("the lock file must be written beside the bundles: %v", statErr)
-	}
-	if _, statErr := os.Stat(filepath.Join(targetDir, "dossierx-agent-guide.md")); statErr != nil {
-		t.Fatalf("the generic guide must be written even with no project root: %v", statErr)
 	}
 }
 
@@ -155,14 +151,24 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
 	}
-	// Anything else: the guide, at its documented path.
-	if _, statErr := os.Stat(filepath.Join(project, "docs", "dossierx-agent-guide.md")); statErr != nil {
-		t.Fatalf("expected the generic guide at docs/dossierx-agent-guide.md: %v", statErr)
+	// Every companion link in the section resolves from AGENTS.md to a file
+	// this export wrote.
+	for _, name := range wantSkillNames[1:] {
+		href := ".claude/skills/" + name + "/SKILL.md"
+		if !strings.Contains(string(agents), "]("+href+")") {
+			t.Fatalf("expected AGENTS.md to link %s, got:\n%s", href, agents)
+		}
+		if _, statErr := os.Stat(filepath.Join(project, filepath.FromSlash(href))); statErr != nil {
+			t.Fatalf("AGENTS.md links %s, which does not exist: %v", href, statErr)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(project, "docs")); !os.IsNotExist(statErr) {
+		t.Fatalf("skills export must create nothing under docs/ (NIT-195), stat err=%v", statErr)
 	}
 }
 
-// Detection, not creation: a project with no .claude/ and no AGENTS.md gets the
-// one form that needs no harness, and is told what was skipped and why.
+// Detection, not creation: a project with no .claude/ and no AGENTS.md gets no
+// form at all, and is told what was skipped and why.
 func TestCLI_SkillsExport_CreatesNoHarnessTheProjectDoesNotUse(t *testing.T) {
 	project := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, project, "widget")
@@ -178,8 +184,8 @@ func TestCLI_SkillsExport_CreatesNoHarnessTheProjectDoesNotUse(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(project, "AGENTS.md")); statErr == nil {
 		t.Fatalf("skills export must not create an AGENTS.md the project did not have")
 	}
-	if _, statErr := os.Stat(filepath.Join(project, "docs", "dossierx-agent-guide.md")); statErr != nil {
-		t.Fatalf("the generic guide is always written: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(project, "docs")); !os.IsNotExist(statErr) {
+		t.Fatalf("skills export must create nothing under docs/ (NIT-195), stat err=%v", statErr)
 	}
 	if !strings.Contains(stdout, "skipped") {
 		t.Fatalf("expected the skipped forms to be reported, got:\n%s", stdout)
@@ -264,42 +270,6 @@ func TestSpliceAgentsSection_LeavesAnUnterminatedRemnantAlone(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------
-// Form 3 — the generic guide
-// ---------------------------------------------------------------------
-
-// "Self-contained" is a testable claim: every bundle in full, no frontmatter to
-// confuse a plain markdown reader, and no [[wikilink]] pointing at a file the
-// reader does not have.
-func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
-	guide, err := buildAgentGuide(dxskills.FS)
-	if err != nil {
-		t.Fatalf("buildAgentGuide: %v", err)
-	}
-
-	for _, name := range wantSkillNames {
-		if !strings.Contains(guide, `<a id="`+name+`"></a>`) {
-			t.Fatalf("expected an anchor for %s in the guide", name)
-		}
-		if !strings.Contains(guide, "[`"+name+"`](#"+name+")") {
-			t.Fatalf("expected the index to link to #%s", name)
-		}
-	}
-	if strings.Contains(guide, "[[dossierx") {
-		t.Fatalf("expected every [[wikilink]] rewritten to an in-document anchor, got a raw one")
-	}
-	if strings.Contains(guide, "\nname: dossierx") {
-		t.Fatalf("frontmatter must not leak into the guide")
-	}
-	// The router's body has to be present in full, not summarized: this is the
-	// only form some harnesses will ever read.
-	for _, want := range []string{"The eight nouns, twenty-one leaves", "Five rules that never bend", "unlock → fix → lock"} {
-		if !strings.Contains(guide, want) {
-			t.Fatalf("expected the guide to carry the router's %q section", want)
-		}
-	}
-}
-
 // skills.Order is the declared reading order and this file's wantSkillNames is
 // the test's copy of it; they must agree, or every assertion below is being made
 // against a set the exporter does not use.
@@ -315,8 +285,8 @@ func TestSkillsOrder_MatchesTheExpectedSet(t *testing.T) {
 }
 
 // A bundle added to skills/ without a place in skills.Order must be a loud
-// failure, not a section silently missing from the guide — a guide with four of
-// five skills in it reads exactly like a complete one.
+// failure, not an entry silently missing from the AGENTS.md index — an index
+// with four of five skills in it reads exactly like a complete one.
 func TestLoadSkillDocs_RefusesAnUnorderedBundle(t *testing.T) {
 	extra := fstest.MapFS{"dossierx-surprise/SKILL.md": &fstest.MapFile{Data: []byte("---\nname: dossierx-surprise\n---\n\nhi\n")}}
 	merged := multiFS{dxskills.FS, extra}
@@ -380,7 +350,7 @@ func TestLoadSkillDocs_PutsTheRouterFirst(t *testing.T) {
 // The always-on form carries the router and only the router — see
 // buildAgentsSection's doc comment for the context budget that decides this.
 func TestBuildAgentsSection_CarriesTheRouterAndPointsAtTheRest(t *testing.T) {
-	section, err := buildAgentsSection(dxskills.FS)
+	section, err := buildAgentsSection(dxskills.FS, ".agents/skills")
 	if err != nil {
 		t.Fatalf("buildAgentsSection: %v", err)
 	}
@@ -395,9 +365,24 @@ func TestBuildAgentsSection_CarriesTheRouterAndPointsAtTheRest(t *testing.T) {
 		t.Fatalf("the always-on section must not inline the companion skills")
 	}
 	for _, name := range wantSkillNames[1:] {
-		if !strings.Contains(section, agentGuidePath+"#"+name) {
-			t.Fatalf("expected the section to point at %s#%s", agentGuidePath, name)
+		if !strings.Contains(section, "](.agents/skills/"+name+"/SKILL.md)") {
+			t.Fatalf("expected the section to link .agents/skills/%s/SKILL.md, got:\n%s", name, section)
 		}
+	}
+
+	// With no tree written there is nothing to link: the index names each
+	// companion and says how to export, and no link points at a missing file.
+	bare, err := buildAgentsSection(dxskills.FS, "")
+	if err != nil {
+		t.Fatalf("buildAgentsSection: %v", err)
+	}
+	for _, name := range wantSkillNames[1:] {
+		if !strings.Contains(bare, "- `"+name+"` — ") {
+			t.Fatalf("expected the tree-less section to name %s, got:\n%s", name, bare)
+		}
+	}
+	if strings.Contains(bare, "SKILL.md)") || !strings.Contains(bare, "dossierx skills export <dir>") {
+		t.Fatalf("the tree-less section must link no SKILL.md and say how to export, got:\n%s", bare)
 	}
 }
 
@@ -975,5 +960,89 @@ func TestCLI_SkillsExport_PrunesRetiredBundlesAndCheckReportsThem(t *testing.T) 
 	}
 	if data = checkRetired(); len(data.Retired) != 0 {
 		t.Fatalf("retired = %v, want none", data.Retired)
+	}
+}
+
+// NIT-195: releases up to v0.7.21 wrote docs/dossierx-agent-guide.md under the
+// project root (or beside the bundles when rootless). An upgrade must leave no
+// trace of it: --check names it as retired, export removes a guide that opens
+// with the generated header, and docs/ with it when nothing else is there. A
+// client's own docs/ file, or a hand-written file by the guide's name, is never
+// removed.
+func TestCLI_SkillsExport_RemovesTheRetiredAgentGuide(t *testing.T) {
+	oldGuide := []byte("# DossierX — agent guide\n\nGenerated by `dossierx skills export` from the skill bundles embedded in the DossierX\nbinary.\n")
+	write := func(path string, body []byte) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exists := func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+	checkRetired := func(args ...string) []string {
+		t.Helper()
+		env, _, checkErr := execCLIJSON(t, append([]string{"skills", "export", "--check"}, args...)...)
+		var data skillsCheckData
+		envData(t, env, &data)
+		if len(data.Retired) > 0 && (checkErr == nil || env.Error == nil || env.Error.Code != cliout.CodeSkillsDrift) {
+			t.Fatalf("a retired guide must refuse skills_drift, got err=%v env=%+v", checkErr, env)
+		}
+		return data.Retired
+	}
+
+	// A rooted project whose docs/ held only the guide.
+	project := t.TempDir()
+	cfgPath, _ := icWriteFixtureProject(t, project, "widget")
+	write(filepath.Join(project, "AGENTS.md"), []byte("# House rules\n"))
+	guide := filepath.Join(project, "docs", "dossierx-agent-guide.md")
+	write(guide, oldGuide)
+
+	if got := checkRetired("--config", cfgPath); len(got) != 1 || got[0] != guide {
+		t.Fatalf("--check retired = %v, want [%s]", got, guide)
+	}
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "skills", "export")
+	if err != nil || !env.OK {
+		t.Fatalf("skills export: err=%v env=%+v", err, env)
+	}
+	var exported skillsExportData
+	envData(t, env, &exported)
+	if strings.Join(exported.Removed, ",") != guide+","+filepath.Join(project, "docs") {
+		t.Fatalf("removed = %v, want the guide then docs/", exported.Removed)
+	}
+	if exists(filepath.Join(project, "docs")) {
+		t.Fatalf("docs/ held only the guide and must be gone")
+	}
+	if got := checkRetired("--config", cfgPath); len(got) != 0 {
+		t.Fatalf("after export, retired = %v, want none", got)
+	}
+
+	// A project whose docs/ is also the client's: the note and docs/ stay,
+	// and a header-less file by the guide's name is reported, never removed.
+	client := t.TempDir()
+	clientCfg, _ := icWriteFixtureProject(t, client, "widget")
+	note := filepath.Join(client, "docs", "plan.md")
+	write(note, []byte("# Our plan\n"))
+	clientGuide := filepath.Join(client, "docs", "dossierx-agent-guide.md")
+	write(clientGuide, oldGuide)
+	tree := filepath.Join(client, "skills-out")
+	handmade := filepath.Join(tree, "dossierx-agent-guide.md")
+	write(handmade, []byte("# Our own notes on DossierX\n"))
+
+	if _, _, err := execCLI(t, "--config", clientCfg, "skills", "export", tree); err != nil {
+		t.Fatalf("skills export: %v", err)
+	}
+	if exists(clientGuide) || !exists(note) {
+		t.Fatalf("export must remove the generated guide and keep the client's note (guide %v, note %v)", exists(clientGuide), exists(note))
+	}
+	if !exists(handmade) {
+		t.Fatalf("a file without the generated header is not DossierX's to remove")
+	}
+	if got := checkRetired("--config", clientCfg, tree); len(got) != 1 || got[0] != handmade {
+		t.Fatalf("--check retired = %v, want [%s]", got, handmade)
 	}
 }

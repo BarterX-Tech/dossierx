@@ -549,7 +549,7 @@ skills export / into an explicit directory
     envelope      command data ok
     command       skills export
     data          count:number
-                  forms:[{action:string,form:string,harness:string,path:string,written:[string]}|{action:string,form:string,harness:string,path:string}]
+                  forms:[{action:string,form:string,harness:string,path:string,written:[string]}]
                   project_root:string
                   skipped:[string]
                   target_dir:string

@@ -26,6 +26,11 @@ feature briefs, then delete `tracks:` everywhere. `tracks` was signed only when
 present, so only a locked claim that carried it reports `lock-content-drift`;
 re-lock it in the same pass as the `migrated_from` re-lock.
 
+Re-running `dossierx skills export` also deletes the
+`docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
+nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
+section, whose links now point at the exported `SKILL.md` files.
+
 ### Removed
 
 - **`migrated_from`** (NIT-191). The free-text provenance note nothing
@@ -49,6 +54,14 @@ re-lock it in the same pass as the `migrated_from` re-lock.
   `tracks` only when present, so only a claim that carried it moves.
   **Surface:** 21 leaves under 8 nouns (was 24 under 9), 30 lint rules (was
   35), 49 error codes (was 50).
+- **`docs/dossierx-agent-guide.md`** (NIT-195). `dossierx skills export` no
+  longer writes the concatenated guide, so DossierX creates nothing under a
+  project's `docs/`. The `AGENTS.md` section links each companion skill to the
+  `SKILL.md` the export wrote (or names them and says where to export, when no
+  tree was written). An export deletes a guide that still opens with its
+  generated header, from `docs/` or from beside the bundles, and reports it in
+  `data.removed[]`; `skills export --check` reports any file by that name in
+  `data.retired[]`. The `generic-guide` form is gone from `data.forms[]`.
 
 ## [0.7.21] - 2026-09-25
 

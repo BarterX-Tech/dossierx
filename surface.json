@@ -202,7 +202,7 @@
     },
     {
       "path": "skills export",
-      "short": "Write the embedded skills in every form this repo uses: a SKILL.md tree, an idempotent AGENTS.md section, and a self-contained agent guide",
+      "short": "Write the embedded skills in every form this repo uses: a SKILL.md tree and an idempotent AGENTS.md section",
       "flags": [
         "--check",
         "--config",
@@ -484,7 +484,7 @@
   ],
   "render_fingerprint": "sha256:0671dfaa25d6e0cd6174c62907af3a4e69e6aeda97a854bd9a044e4b735c6406",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:0e62feed82f9bf995c4414f1e77c5aaf3b203e6909130db65d1df5d8802e12ff",
+    "cmd/dossierx": "sha256:9352860900ae5539a3fb08eec4fc5089fa9c16530c95f11e9a944650e41b75c2",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -519,7 +519,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:de3d812d369b2b513c43d37339c9c65f1e0d5ba3b8d78895a02df2cb0fd0d091"
+    "skills": "sha256:60fa0283f41851ab1e5b11f6f48d79cd9ead0f0e7749338237e203ed9b71a29d"
   },
   "envelope": {
     "keys": [
@@ -835,6 +835,7 @@
         "count",
         "forms",
         "project_root",
+        "removed",
         "skipped",
         "target_dir",
         "written"
