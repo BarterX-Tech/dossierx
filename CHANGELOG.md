@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**Surface** (net, against v0.7.21): 23 leaves under 9 nouns (was 24 under
-9: `track` and its three leaves out, `brief` and its two in), 30 lint rules
-(was 36) plus the 8 brief rules, a set of their own, 50 error codes (was 50:
-`unknown_track` out, `brief_not_found` in).
+**Surface** (net, against v0.7.21): 26 leaves under 9 nouns (was 24 under
+9: `track` and its three leaves out, `brief` and its five in), 30 lint rules
+(was 36) plus the 10 brief rules, a set of their own, 51 error codes (was 50:
+`unknown_track` out, `brief_not_found` and `comment_open` in).
 
 ### Upgrading from v0.7.21
 
@@ -47,6 +47,21 @@ yet. And a `claims_dir`,
 contains it now fails config load (`invalid_config`, naming the overlap): set
 `briefs_dir` to another name.
 
+Locking a brief moves `build/ledger/lock-store.json` to `version` `4` (it gains
+a `briefs` map); a store that never holds a brief record stays at `3`, byte for
+byte, and a v0.7.21 store loads unchanged. Upgrade every binary that touches
+the project — the pre-commit hook's, CI's and each collaborator's — before the
+first `brief lock`. Measured against a v0.7.21 binary: its `check --staged`
+does **not** refuse a commit carrying the version-4 store (it reads the store
+leniently and knows nothing of briefs, so it judges no brief at all), and a
+v0.7.21 write to the store (measured: `claim lock`, `constitution lock`)
+**drops the `briefs` map** while keeping `version` `4`. The next run of this
+release then reports every locked brief as `brief-unrecorded`; the recovery is
+restoring `build/ledger/lock-store.json` from the commit before that write, not
+re-locking. The comment digest store likewise gains a `briefs` map with the
+first thread on a brief, and a v0.7.21 `comment add` drops it the same way
+(this release then reports `comment-digest-unrecorded` on the brief).
+
 ### Added — briefs, the read side (NIT-204)
 
 - **Briefs.** A brief is a markdown document beside the claims —
@@ -59,8 +74,8 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   its second exception: the briefs tree is load-bearing beside `claims/`.
 - **`dossierx brief list` and `dossierx brief show`**, the ninth noun. `list`
   gives each brief's path, id, title, summary, status and review state
-  (`review_pending`, `review_pending_trigger`: present and empty until briefs
-  have a lock store; `--review-pending` therefore lists none today). `show
+  (`review_pending`, `review_pending_trigger`, filled by the lock store below).
+  `show
   <path|id>` gives the content, its SHA-256 digest and the status, and derives
   nothing from the claims a brief rests on. Both carry `findings` beside what
   they read — `list` the tree's own brief findings, `show` the findings on its
@@ -136,6 +151,49 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   briefs or not), and a brief row its title, file name, summary and folder. A `check` finding about a brief, its
   folder or the tree shows in the status strip on that brief's page, with a
   way to the brief from the Issues screen.
+
+### Added — briefs, lock, review and comments (NIT-205)
+
+- **`dossierx brief lock <path> --reason`**, **`brief unlock <path>
+  --reason`** and **`brief reaudit <path>`** (`--confirm --reason` to apply),
+  all with `--dry-run`: 26 commands under 9 nouns. `brief lock` sets the
+  brief's `status: locked` and records, under a `briefs` map in
+  `build/ledger/lock-store.json`, the brief's lock hash (summary, `rests_on`,
+  body — not `status`, not comments, not image files), the human's reason and
+  time, the approved text, and one baseline per `rests_on` claim (that claim's
+  content hash) with the claim as it read. It refuses `already_locked`
+  (locked and unchanged), `comment_open` (an open thread on the brief; the new
+  error code, exit 1) and `lint_failed` (an error finding on the brief).
+  `brief unlock` sets `status: draft` and stamps the release on the kept
+  record, as `claim unlock` does. `brief reaudit` shows each changed claim's
+  wording at the baseline and now; `--confirm` refreshes the baselines.
+- **Four findings.** `brief-content-drift` (a locked brief edited since its
+  approval) and `brief-unrecorded` (`status: locked` with no standing record)
+  ride in `ledger_findings` and fail `check` with `integrity_failed`;
+  `brief-dependency-drift` (a baselined claim moved: the brief is
+  `review_pending`, a warning) and `brief-rests-on-missing` (a baselined claim
+  is gone, an error) join the brief rules, now ten. `check --validate` and
+  `check --staged` report all four, `--staged` from the index's briefs and
+  store.
+- **Review state.** `brief list` and `brief show` report each brief's
+  `lock_state` (`draft`, `locked`, `edited`, `unrecorded`), `review_pending`
+  and its trigger and open threads; `brief list --review-pending` lists the
+  review-pending ones; `brief show` adds the changed claims and one entry per
+  `rests_on` claim with its status. The viewer payload gains the same, plus the
+  lock date and reason, each changed claim's wording then and now (from the
+  retained snapshot, else "earlier wording not available"), and the approved
+  text with its rendered HTML.
+- **Comment threads on briefs.** `comment add|reply|list` take a brief's path
+  where a claim id goes; `comment inbox` lists a brief's threads with
+  `kind: "brief"`. The threads live in the brief's frontmatter (`comments:`),
+  outside its lock hash, with their digests under a `briefs` map in
+  `build/ledger/comment-digest.json`; a hand-edited block is
+  `comment-ledger-drift` on the brief's path. `check` reports open brief
+  threads as `open_brief_comments`.
+- **Nothing flows back to a claim.** A brief in any state never refuses
+  `claim lock`, never sets `review_pending` on a claim and never enters the
+  claim graph; no brief byte enters a claim hash. See
+  `docs/graph-safety/nit-192-briefs.md`.
 
 ### Added
 

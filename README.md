@@ -28,7 +28,7 @@ What it does not do is also stated: a code link proves a pointer exists, not tha
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 23 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Surface** | the CLI: 26 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
 | **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
@@ -124,7 +124,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Twenty-three leaf commands under nine nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty-six leaf commands under nine nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, bounded projections, code-link scan and the ledger gate
@@ -133,7 +133,7 @@ check                    lint, bounded projections, code-link scan and the ledge
                          --staged    judge the git index — what the commit will actually
                                      contain — instead of the worktree, writes nothing
 
-brief        list · show             the briefs beside the claims (read-only; see FORMAT.md)
+brief        list · show · lock · unlock · reaudit   the briefs beside the claims (see FORMAT.md)
 claim        show · list · new · lock · unlock · flag · reaudit · link · recover-approved-content
 comment      inbox · list · add · reply
 constitution show · lock             the project-root constitution.yaml
@@ -216,6 +216,8 @@ The gate names each disagreement:
 | `comment-digest-missing` | the store is **there** but a claim holding a *standing* approval has no entry in it — the map was emptied rather than the file deleted, which is cheaper to miss in a diff. Every approval records the claim's comment digest in the same act it records the approval, so a standing record with no entry is a statement about the store. Restore the file from version control, or `git add` it if this is the commit that updated it — do **not** run a comment op to re-create the entry, which records whatever the claim says now |
 | `comment-digest-unrecorded` | in a ledger-covered project, a claim **holding comment threads** with no entry beside them in the digest store. The map was protected against being emptied wholesale, not against losing one key: hand-forge a thread as `resolved`, then drop that claim's key, and `comment-ledger-drift` had nothing to compare against — the claim locked, and the next ordinary command re-adopted the forged block as truth. An edit smaller than the one it was catching cleared the gate the whole review loop rests on. The predicate is the threads themselves, which is what survives the tamper: the single code path that writes a thread records the claim's digest in the same act, so threads with no entry means either the entry was removed or the threads were never written by the engine. Deliberately silent where evidence is honestly absent — an uncovered project, an absent store (`comment-digest-absent` says that once), and a claim with no threads at all. **`claim lock` and every comment op refuse this state** (`integrity_failed` / `comment_digest_drift`): an approval records the claim's comment digest in the same act, so locking here would manufacture the very evidence whose absence is the finding |
 | `comment-digest-abandoned` | a digest entry that recorded review history whose **claim id is no longer in the project** — the rename launder: delete a claim's `comments:` block *and* change its `id:` in one edit and every rule that starts from the claim went quiet, because the old entry is the only thing the tamper could not reach. Silent for an entry that recorded no threads, and for a claim whose record an honest `unlock` released |
+| `brief-content-drift` | a **locked brief**'s summary, `rests_on` or body no longer matches what `brief lock` approved (`claim_id` is the brief's path). The approved text is on the record; the human re-locks the edit with `brief lock`, or the file is restored |
+| `brief-unrecorded` | a brief says `status: locked` with no standing approval record — none, or one an unlock released. A hand-typed status approves nothing |
 | `store-gitignored` | a path the engine writes under `build/ledger` or `build/code-links` is **matched by `.gitignore` and not in the index** — the ordinary `build/` pattern a Gradle, CMake or Node template ships. The approval would never reach the repository: a collaborator or CI clones a project with no ledger, `check` fails there with `lock-ledger-absent`, and every flag vanishes on the next clone. Checked per FILE with `git check-ignore --no-index` (a directory check goes green the moment one file under it is force-added), one finding per path. A path that is ignored but already tracked is a `warnings[]` line, not a finding. The recovery is the replacement block under [Where DossierX writes](#where-dossierx-writes), or `build_dir` pointed at a directory the pattern does not match. `claim lock`, `claim flag` and `claim reaudit --confirm` refuse the same state with `error.code: store_gitignored` (`--dry-run` previews it as the `stores_are_tracked` precondition), and refuse too when the project is inside a git work tree and git cannot answer; `check`, `check --validate` and `check --staged` then report `data.gitignore_check` instead of a verdict and exit 0 |
 ### Where DossierX writes
 
@@ -224,7 +226,7 @@ Every file the engine generates lives under one directory, `build_dir` (default 
 | Kind | Path | Committed |
 |---|---|---|
 | code links, per module | `build/code-links/<module>.json` | yes |
-| lock ledger (claim approvals and the constitution's lock record) | `build/ledger/lock-store.json` | yes |
+| lock ledger (claim approvals, the constitution's lock record, brief approvals) | `build/ledger/lock-store.json` | yes |
 | comment digest | `build/ledger/comment-digest.json` | yes |
 | flag store | `build/ledger/flag-store.json` | yes |
 | catalog | `build/catalog/catalog.json` | no, regenerated by `check` |
