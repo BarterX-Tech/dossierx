@@ -134,9 +134,8 @@ binary predates that guard.
   and images against their caps, the body in document mode, and the claims it
   rests on and is cited by (claims whose `internal` source is the brief's
   path). The right rail lists its `##` headings ("On this page"; a sheet on a
-  phone), beside a Threads block whose Comment button is inert until brief
-  threads exist (drawn disabled, with a line saying threads on briefs arrive
-  later). A brief with no `##` gets no rail. The brief's title is the page's
+  phone), beside a Threads block (live since NIT-198, below). A brief with no
+  `##` gets no rail. The brief's title is the page's
   top heading and its body's headings sit below it. The sidebar heading of
   the group that holds the current page (Modules or Briefs) is drawn in the
   accent. Light, dark and the phone drawer all carry it, and the tree works
@@ -157,6 +156,29 @@ binary predates that guard.
   briefs or not), and a brief row its title, file name, summary and folder. A `check` finding about a brief, its
   folder or the tree shows in the status strip on that brief's page, with a
   way to the brief from the Issues screen.
+
+### Added — comment threads on briefs in the viewer (NIT-198)
+
+- **The human opens, reads and resolves a brief's threads in the viewer**, as
+  on a claim. Under `dossierx serve` the brief page's Comment buttons (the
+  rail's Threads block, and the page-foot "Comment on this brief" on a phone
+  and below the rail's width) open the comments rail on the brief — a bottom
+  sheet on a phone — with the composer, reply, resolve, reopen, edit and
+  delete. The Threads block counts the open threads. An open thread gives the
+  brief the blue mark in the sidebar tree (it outranks `draft` and `locked`)
+  and an "N open thread(s)" line on the "All briefs" index; resolving it
+  clears both on the live reload. The viewer never locks, restores or
+  confirms a brief: the agent does, once the human has said so in a thread.
+  In a static build a brief with threads opens them read only, a brief with
+  none has its buttons disabled, and a line says comments are written through
+  `dossierx serve`.
+- **Seven serve routes under `/api/briefs/{id}/comments`**, addressed by the
+  brief's `<folder>.<slug>` id (a path answers `brief_not_found`): `GET` lists
+  one brief's threads (`?open=1` for the open ones), and add, reply, resolve,
+  reopen, edit and delete are the claim routes' twins with the same
+  admission, rights (an agent cannot resolve the human's thread) and error
+  codes. A thread in a response carries `brief_id` and `path`. The claim
+  routes and `GET /api/comments` answer byte for byte as before.
 
 ### Added — briefs, lock, review and comments (NIT-205)
 
@@ -209,8 +231,8 @@ binary predates that guard.
   `build/ledger/comment-digest.json`; a hand-edited block is
   `comment-ledger-drift` on the brief's path, and threads recorded for a brief
   that was deleted or renamed away are `comment-digest-abandoned`. No CLI verb
-  resolves a thread, and the viewer's brief threads have not shipped, so an
-  open thread on a brief holds `brief lock` until they do. A comment verb
+  resolves a thread: the human resolves one in the served viewer, and until
+  then an open thread on a brief holds `brief lock`. A comment verb
   given a brief's id answers `claim_not_found` with the path in its hint. `check` reports open brief
   threads as `open_brief_comments`.
 - **Nothing flows back to a claim.** A brief in any state never refuses

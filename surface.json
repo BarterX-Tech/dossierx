@@ -553,9 +553,9 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:5b60a38e9a6d844084139f6b72489f444cf7bed38d2190b1b2bffbf76a51a60a",
+  "render_fingerprint": "sha256:9bc9dedb1e3b5a5d12618518170853fb72a61d9881ba43a25953ebdf89f0ee8c",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:d585e3fc91560a054f9a41ea08471ba4d80a835e0072a375146c3727a5b783d5",
+    "cmd/dossierx": "sha256:6c311baa0e4f7ff723f5625a87a9194e17284eb794bcf23fd8b1196b84f20b57",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -583,15 +583,15 @@
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:717a4d80ab5e22ea5030a59c1e8572e9094574bdd31a43f4521aa904078333f0",
-    "internal/render/components": "sha256:dc27f5f67831ae687248c6946641250a9f331861bb918a6c47a5423a9fd2537e",
+    "internal/render": "sha256:41b173714ae9928ffd6526b33c057d3a26f472c978a3625e233e2468827f45c1",
+    "internal/render/components": "sha256:a6550dc0897cdd91ed8cec0a252b23d7e41077f8695181f8fd3f7b0868036558",
     "internal/render/markdown": "sha256:28114410fe8fd4d85f8abf01e720d5449bfc2d08f68cd1f462cd2be13cc0bc17",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:efbd8229197f15cbcdbbc30e9a848dbe198448d78bd839fc234e4d55bd6ef2c5",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:d2d1135e2c77f6fcfda262cea483cf359075222ce9e82be2097dcaa099824651"
+    "skills": "sha256:f6151d8398dbc127be8d6bcf1c7d1c62a2f30dfc970062995f26d1aa9da96a3c"
   },
   "envelope": {
     "keys": [

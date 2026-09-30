@@ -1637,12 +1637,16 @@ A comment thread anchors on a brief's **path** the way it anchors on a claim id:
 `claim_not_found`, with the path in the hint: an id can collide with a claim
 id), and `comment inbox` lists a brief's threads with `kind: "brief"` (its
 `claims` count counts briefs with threads too). The rights are a claim's (an
-agent replies, the human resolves) — but resolving a brief's thread arrives
-with the viewer's brief threads, which have not shipped: no CLI verb resolves
-one, so until then an open thread on a brief holds `brief lock` and
-`brief reaudit --confirm` at `comment_open`. Those threads will be served by
-the brief's **id**, not its path: a route's `{id}` segment cannot carry the
-path's slashes. Each write records the brief's threads in
+agent replies, the human resolves). No CLI verb resolves a thread: the human
+resolves a brief's thread in the served viewer, on the brief's page, and until
+they do it holds `brief lock` and `brief reaudit --confirm` at `comment_open`.
+`dossierx serve` addresses those threads by the brief's **id**, not its path,
+under `/api/briefs/<folder>.<slug>/comments` (a route's `{id}` segment cannot
+carry the path's slashes, and a route given a path answers `brief_not_found`):
+`GET` lists the brief's threads (`?open=1` the open ones), and add, reply,
+resolve, reopen, edit and delete are the claim routes' twins with the claim
+routes' admission, rights and error codes; a thread in a response carries
+`brief_id` and `path` where a claim's carries `claim_id`. Each write records the brief's threads in
 `build/ledger/comment-digest.json` under `briefs`, and a block edited by hand is
 `comment-ledger-drift` on the brief's path (`comment-digest-unrecorded` for
 threads with no entry, in a ledger-covered project). An entry that recorded
@@ -1701,7 +1705,8 @@ A project that holds a brief outside `features/` gets a **Briefs** group in
 the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
 stays as written), each opening to its briefs. `features/` is left out of this
 tree: its briefs are features. Each brief row carries one state mark — a
-padlock for `locked`, a hollow dot for `draft` — and a legend above the theme
+padlock for `locked`, a hollow dot for `draft`, and a blue dot for a brief with
+an open comment thread, which outranks both — and a legend above the theme
 control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
 second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
 `BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
@@ -1711,8 +1716,16 @@ whose `path` is the brief's). The title is the page's top heading; the body's
 `##` sections sit one level below it, and a further `#` in the body sits at
 the same level as a `##` rather than above the title. The right rail is "On
 this page", the body's `##` headings, with a Threads block; on a phone it is a
-sheet. A brief with no `##` heading has no rail. Threads on briefs are not
-built yet: both Comment buttons are disabled and say so. The sidebar search
+sheet. A brief with no `##` heading has no rail. The Threads block counts the
+brief's open threads, and its Comment button (on a phone, and below the rail's
+width, the page-foot "Comment on this brief") opens the comments rail on the
+brief — a bottom sheet on a phone — where the human reads, adds, replies to and
+resolves threads as on a claim. The viewer never locks, restores or confirms
+a brief: the agent does that after the human settles it in a thread. In a
+static build there is nothing to write to: a brief with threads opens them
+read only, a brief with none has its buttons disabled, and a line says
+comments are written through `dossierx serve`. The "All briefs" index gives a
+brief with an open thread its count. The sidebar search
 reads "Search claims and briefs": a module row matches its claims' titles,
 summaries and ids, and a brief row its title, file name, summary and folder.
 A `check` finding whose `claim_id` is a brief's path, its folder's or the
