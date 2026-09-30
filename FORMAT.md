@@ -1758,8 +1758,12 @@ JSON block); a project with no brief has none of this, and its search reads
 
 A brief in `features/` is a **feature**. Features have their own **Features**
 entry in the sidebar, between Modules and Briefs: one row per feature in
-file-name order, labelled with its title, each carrying the brief's state mark
-in the same slot a brief row uses. A feature's page is the brief page with
+file-name order, labelled with its title, each carrying one state mark in the
+same slot a brief row uses. The mark is the brief's own lock and review state
+(its `lock_state`, `review_pending` and `open_threads`), in the legend's order:
+edited since approval, then review pending, then an open thread, then a
+padlock for locked or a hollow dot for draft. A file that says `status:
+locked` with no approval on record (`brief-unrecorded`) takes the draft mark. A feature's page is the brief page with
 these differences: the kicker is `FEATURE · path`; the meta line reads
 "Rests on N claims in <modules>", then "all locked" when every `rests_on` id
 names a locked claim and "M of N locked" otherwise (a phone shows "N claims,
@@ -1769,7 +1773,8 @@ claim under "Project"), modules in the order their first claim appears and
 rows in the order the file lists them, captioned "rests_on, not an order". An
 id that names no claim sits last, under "Not a claim". "On this page" ends
 with a "Made of" row. Home gains a **Features** tile: each feature and its
-`status`, or on a phone one line counting them. A feature shows its brief's
+state (`locked`, `edited`, `review` or `draft`), or on a phone one line
+counting them. A feature shows its brief's
 own state only: nothing built, specified or conformance-related.
 
 A link in any brief's body to another brief opens that brief's page: a

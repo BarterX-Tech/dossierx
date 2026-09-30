@@ -269,8 +269,10 @@ binary predates that guard.
 
 - **Features in the viewer** (NIT-201). A brief in `briefs/features/` is a
   feature. The sidebar lists features under their own **Features** entry,
-  between Modules and Briefs, in file-name order and by title, each with its
-  brief's own state mark (a padlock for `locked`, a hollow dot for `draft`);
+  between Modules and Briefs, in file-name order and by title, each with one
+  mark for its brief's own lock and review state (NIT-205): edited since
+  approval, review pending, an open thread, then a padlock for locked or a
+  hollow dot for draft;
   the Briefs tree still leaves `features/` out, so a feature is listed once.
   A feature's page is the brief page with a `FEATURE · path` kicker, a meta
   line counting what it rests on ("Rests on 6 claims in Expenses, Splitting
@@ -279,7 +281,7 @@ binary predates that guard.
   module in the order the file names them, each row the claim's lifecycle
   badge and a link to it, captioned "rests_on, not an order". "On this page"
   ends with a "Made of" row. Home gains a Features tile listing each feature
-  and its state. Nothing shows built, specified or conformance state. A link
+  and its state (locked, edited, review or draft). Nothing shows built, specified or conformance state. A link
   in any brief's body to another brief's file — relative
   (`../voice/talking-about-money.md`) or from the project root
   (`briefs/voice/talking-about-money.md`) — opens that brief's page, and so

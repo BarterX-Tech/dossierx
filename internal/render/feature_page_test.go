@@ -8,6 +8,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -177,6 +178,65 @@ func TestRender_NoFeatureNoFeatureMarkup(t *testing.T) {
 	for _, absent := range []string{`class="system-nav-group feature-nav"`, `data-tile="features"`, `feature-made-of`, `>Feature<`} {
 		if strings.Contains(body, absent) {
 			t.Errorf("a project with no features/ must not carry %s", absent)
+		}
+	}
+}
+
+// TestRender_BriefMarksReadTheReviewState: with the briefs' lock and review
+// state (NIT-205) a feature row's mark is the one the legend names, in the
+// legend's precedence — edited since approval, then review pending, then an
+// open thread, then the lock — and a file that says locked with no approval
+// on record is not drawn locked. Home's tile reads the same state, and a
+// Briefs tree row the same mark (one briefMark for all three).
+func TestRender_BriefMarksReadTheReviewState(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	thread := "comments:\n  - id: c-1\n    status: open\n    author: human\n    created: 2026-09-30T00:00:00Z\n    body: why?\n    edited: false\n"
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("features/a-locked.md", "---\nsummary: A.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# A locked\n"),
+		briefFile("features/b-review.md", "---\nsummary: B.\nstatus: locked\nrests_on: [widget.contract.overview]\n"+thread+"---\n# B review\n"),
+		briefFile("features/c-edited.md", "---\nsummary: C.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# C edited\n"),
+		briefFile("features/d-unrecorded.md", "---\nsummary: D.\nstatus: locked\n---\n# D unrecorded\n"),
+		briefFile("features/e-thread.md", "---\nsummary: E.\n"+thread+"---\n# E thread\n"),
+		briefFile("notes/f-edited.md", "---\nsummary: F.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# F edited\n"),
+	})
+	store, err := lock.LoadStore(t.TempDir() + "/lock-store.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	then := cat.Claims[0]
+	then.Body = "the wording the brief was approved against"
+	for _, b := range set.Briefs {
+		baseline := cat.Claims[0]
+		hash := b.LockHash
+		switch b.Slug {
+		case "b-review":
+			baseline = then
+		case "c-edited", "f-edited":
+			hash = "sha256:the-text-that-was-approved"
+		case "d-unrecorded", "e-thread":
+			continue
+		}
+		hashes, receipts, _ := briefs.Baselines(b, []model.Claim{baseline})
+		lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{Path: b.Path, Hash: hash, At: "2026-09-30T00:00:00Z", Reason: "approved", Baselines: hashes, Receipts: receipts})
+	}
+	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set, BriefReview: briefs.Evaluate(set, cat.Claims, store)}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`>A locked</span><span class="brief-mark" data-mark="locked" role="img" aria-label="Locked"`,
+		`>B review</span><span class="brief-mark" data-mark="review" role="img" aria-label="Review pending"`,
+		`>C edited</span><span class="brief-mark" data-mark="edited" role="img" aria-label="Edited since approval"`,
+		`>D unrecorded</span><span class="brief-mark" data-mark="draft" role="img" aria-label="Not locked: no approval on record"`,
+		`>E thread</span><span class="brief-mark" data-mark="thread" role="img" aria-label="1 open thread"`,
+		`>F edited</span><span class="brief-mark" data-mark="edited" role="img" aria-label="Edited since approval"`,
+		`<span class="home-feature__title">B review</span><span class="home-feature__state" data-state="review">review</span>`,
+		`<span class="home-feature__title">C edited</span><span class="home-feature__state" data-state="edited">edited</span>`,
+		`<span class="home-feature__title">E thread</span><span class="home-feature__state" data-state="draft">draft</span>`,
+		`<span class="home-tile__line home-narrow">5 · 1 locked · 1 edited · 1 review · 2 draft</span>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %s", want)
 		}
 	}
 }

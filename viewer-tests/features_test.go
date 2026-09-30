@@ -38,6 +38,9 @@ func featureProject(t *testing.T) *project {
 	writeBrief(t, p, "features/split-a-bill.md", "---\nsummary: Anyone in a group adds what they paid.\nstatus: locked\nrests_on:\n  - widget.contract.overview\n  - gadget.contract.core\n  - widget.contract.rounding\n---\n# Split a bill\n\n## What it is\n\nWording follows [Talking about money](../voice/talking-about-money.md).\n\n## How it works\n\nShares default to equal.\n")
 	writeBrief(t, p, "features/export-to-csv.md", "---\nsummary: Every expense as a CSV.\nrests_on:\n  - gadget.contract.core\n---\n# Export to CSV\n\n## What it is\n\nOne file.\n")
 	writeBrief(t, p, "voice/talking-about-money.md", "---\nsummary: How Tally says it.\n---\n# Talking about money\n\n## Words\n\nOwe, not debt.\n")
+	// A brief that says locked is approved through brief lock (NIT-205);
+	// the status line alone would be brief-unrecorded and fail check.
+	p.run("brief", "lock", "briefs/features/split-a-bill.md", "--reason", "fixture approval")
 	return p
 }
 

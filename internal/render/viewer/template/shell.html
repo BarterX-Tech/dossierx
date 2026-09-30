@@ -103,8 +103,8 @@
 {{- end}}
             </div>
           </details><!-- The Features entry (NIT-201, Paper B4): features/, one row per feature
-     in file-name order, each with the brief's own state mark in the slot a
-     brief row uses. Before Briefs, which leaves features/ out, so a feature is
+     in file-name order, each with its brief's lock and review mark
+     (render.briefMark) in the slot a brief row uses. Before Briefs, which leaves features/ out, so a feature is
      listed once. Its star is drawn inline for the reason the Briefs icon is.
      The comment hugs the closing tag, so a project with no feature gains not
      even a newline. -->{{with .Briefs}}{{if .Features}}

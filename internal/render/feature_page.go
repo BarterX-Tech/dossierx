@@ -20,10 +20,11 @@ import (
 // Features entry, not in the Briefs tree, and Home carries a Features tile.
 //
 // A feature shows the brief's own state and nothing else: no built,
-// specified or conformance state is read or drawn (decided 29 Sep). Its
-// state is the frontmatter status until the brief lock record (NIT-199) and
-// review (NIT-205) exist; the sidebar mark sits in the same slot a brief
-// row's does, so those marks land there without a markup change.
+// specified or conformance state is read or drawn (decided 29 Sep). Its row
+// mark and tile word are the brief's lock and review state (NIT-205's
+// Evaluation, the payload's lock_state, review_pending and open_threads;
+// briefMark), in the slot a brief row's mark takes. The page's pill and
+// the lock date stay the brief page's (NIT-197, NIT-199).
 
 // FeatureDetail is what a feature page adds to a brief page.
 type FeatureDetail struct {
@@ -36,6 +37,9 @@ type FeatureDetail struct {
 	Count   int
 	Locked  int
 	Modules int
+	// State is the word Home's tile shows for the feature: locked, draft,
+	// or, from the brief's review state (NIT-205), edited or review.
+	State string
 }
 
 // MadeOfGroup is one module's rows in a feature's Made of list.
@@ -187,21 +191,21 @@ type FeaturesTile struct {
 type FeatureTileRow struct {
 	ID    string
 	Title string
-	// State is the frontmatter status, the word the row shows.
+	// State is the word the row shows: FeatureDetail.State.
 	State string
 }
 
 // FeaturesTile summarises the features for Home. Zero Count hides the tile.
 func (v BriefsView) FeaturesTile() FeaturesTile {
 	var t FeaturesTile
-	locked, draft := 0, 0
+	counts := map[string]int{}
 	for _, p := range v.Features {
-		t.Rows = append(t.Rows, FeatureTileRow{ID: p.ID, Title: p.NavLabel, State: p.Status})
-		if p.Status == string(briefs.StatusLocked) {
-			locked++
-		} else {
-			draft++
+		state := p.Status
+		if p.Feature != nil && p.Feature.State != "" {
+			state = p.Feature.State
 		}
+		t.Rows = append(t.Rows, FeatureTileRow{ID: p.ID, Title: p.NavLabel, State: state})
+		counts[state]++
 	}
 	t.Count = len(t.Rows)
 	if t.Count == 0 {
@@ -209,11 +213,10 @@ func (v BriefsView) FeaturesTile() FeaturesTile {
 	}
 	t.FirstID = t.Rows[0].ID
 	parts := []string{strconv.Itoa(t.Count)}
-	if locked > 0 {
-		parts = append(parts, strconv.Itoa(locked)+" locked")
-	}
-	if draft > 0 {
-		parts = append(parts, strconv.Itoa(draft)+" draft")
+	for _, state := range []string{"locked", "edited", "review", "draft"} {
+		if n := counts[state]; n > 0 {
+			parts = append(parts, strconv.Itoa(n)+" "+state)
+		}
 	}
 	t.Line = strings.Join(parts, " · ")
 	return t

@@ -11427,6 +11427,8 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   text-align: right;
 }
 .home-feature__state[data-state="locked"] { color: var(--locked-confirmation); font-weight: 500; }
+.home-feature__state[data-state="review"] { color: var(--status-draft); font-weight: 500; }
+.home-feature__state[data-state="edited"] { color: var(--warn); font-weight: 500; }
 
 @media (max-width: 860px) {
   /* B4 MOBILE LIGHT: the Made of card is 14px 16px 6px, its module labels

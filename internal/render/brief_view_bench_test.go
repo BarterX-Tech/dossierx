@@ -66,7 +66,7 @@ func BenchmarkBriefsView(b *testing.B) {
 			b.ReportAllocs()
 			var size int
 			for i := 0; i < b.N; i++ {
-				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat)
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, nil)
 				size = 0
 				for _, f := range view.Folders {
 					for _, p := range f.Pages {
@@ -167,7 +167,7 @@ func BenchmarkFeaturesView(b *testing.B) {
 			b.ReportAllocs()
 			var size int
 			for i := 0; i < b.N; i++ {
-				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat)
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, nil)
 				size = 0
 				for _, p := range view.Features {
 					size += len(p.Body)
