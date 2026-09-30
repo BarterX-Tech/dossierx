@@ -772,8 +772,9 @@ func TestLoadConfig_ProjectClaimsDirInsideClaimsDirIsRefused(t *testing.T) {
 // TestLoadConfig_BriefsDirDefaultsBesideTheConfigAndRefusesOverlap: briefs_dir
 // (NIT-204) defaults to briefs/ beside project.config.yaml, a relative value
 // resolves against the config file rather than the cwd, and a briefs tree that
-// is the config directory or overlaps claims_dir, project_claims_dir or
-// build_dir is refused at load — a file there would have two readers.
+// is the config directory, sits inside a .git directory, or overlaps
+// claims_dir, project_claims_dir or build_dir is refused at load — a file
+// there would have two readers, or live in git's own store.
 func TestLoadConfig_BriefsDirDefaultsBesideTheConfigAndRefusesOverlap(t *testing.T) {
 	base := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"
 	dir := t.TempDir()
@@ -794,12 +795,20 @@ func TestLoadConfig_BriefsDirDefaultsBesideTheConfigAndRefusesOverlap(t *testing
 	if got, want := cfg.BriefsDirPath(), filepath.Join(dir, "docs", "briefs"); got != want {
 		t.Fatalf("briefs_dir = %q, want %q", got, want)
 	}
+	// A name that merely starts with .git is an ordinary directory.
+	if _, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", base+"briefs_dir: .github/briefs\n")); err != nil {
+		t.Fatalf("briefs_dir .github/briefs must load, got %v", err)
+	}
 
 	for _, tc := range []struct{ name, briefsDir, names string }{
 		{"the config directory", ".", "config file's own directory"},
 		{"inside claims_dir", "claims/briefs", "claims_dir"},
 		{"equal to project_claims_dir", "project-claims", "project_claims_dir"},
 		{"inside build_dir", "build/briefs", "build_dir"},
+		{"the repository's .git", ".git", ".git directory"},
+		{"inside the repository's .git", ".git/briefs", ".git directory"},
+		{"inside a nested .git", "docs/.git/briefs", ".git directory"},
+		{"climbing into a .git", "../.git/briefs", ".git directory"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", base+"briefs_dir: "+tc.briefsDir+"\n"))

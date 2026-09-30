@@ -598,8 +598,8 @@ func (c *Config) BriefCapLimits() BriefCaps {
 // every path absolute and cleaned (see validate for why path relationships are
 // never judged there). briefs_dir is a tree of its own: it may not be the
 // config directory — every file in the project would then be a brief-shape
-// refusal — and it may not sit inside, or contain, claims_dir,
-// project_claims_dir or build_dir. Each of those is walked by something else
+// refusal — it may not sit inside a .git directory, and it may not sit
+// inside, or contain, claims_dir, project_claims_dir or build_dir. Each of those is walked by something else
 // (the claims loader, the project-claims loader, nothing at all because it is
 // engine output), and a brief that also lived in one of them would have two
 // readers with two different ideas of what the file is.
@@ -607,6 +607,18 @@ func checkBriefsDirContainment(cfg *Config, configDir string) error {
 	briefs := filepath.Clean(cfg.BriefsDir)
 	if briefs == filepath.Clean(configDir) {
 		return fmt.Errorf("briefs_dir (%s) is the config file's own directory; briefs need a directory of their own — leave briefs_dir unset (it defaults to briefs) or set it to a subdirectory", briefs)
+	}
+	// A .git directory is git's own store, never a project tree: briefs there
+	// could never be committed, and every read would walk git's objects. Only
+	// the part of the path the config names is judged — the elements below the
+	// config directory, or climbing out of it — so a checkout that happens to
+	// live under some ancestor named .git is not refused for it.
+	if rel, err := filepath.Rel(filepath.Clean(configDir), briefs); err == nil {
+		for _, elem := range strings.Split(filepath.ToSlash(rel), "/") {
+			if elem == ".git" {
+				return fmt.Errorf("briefs_dir (%s) is inside a .git directory, which is git's own store; set briefs_dir to a directory of the project", briefs)
+			}
+		}
 	}
 	for _, other := range []struct {
 		key string

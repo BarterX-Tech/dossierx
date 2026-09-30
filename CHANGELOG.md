@@ -94,8 +94,9 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   when the project holds a brief; no pane draws it yet. `dossierx serve`
   watches `briefs_dir` too, so a brief edit reloads the page.
 - **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
-  `briefs_dir` that is the config directory, or overlaps `claims_dir`,
-  `project_claims_dir` or `build_dir`, is refused at load.
+  `briefs_dir` that is the config directory, sits inside a `.git` directory,
+  or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at
+  load.
 
 ### Added
 

@@ -1603,8 +1603,9 @@ constitution: path               # optional; default constitution.yaml at the pr
 project_claims_dir: path         # optional; default project-claims (scope: project nodes)
 briefs_dir: path                 # optional; default briefs, beside this file. The
                                   # briefs tree (see "Briefs"). Absent is no
-                                  # briefs. May not be this file's directory or
-                                  # overlap claims_dir, project_claims_dir or
+                                  # briefs. May not be this file's directory,
+                                  # sit inside a .git directory, or overlap
+                                  # claims_dir, project_claims_dir or
                                   # build_dir.
 max_brief_words: int             # optional; omit → 2000 words per brief
 max_brief_images: int            # optional; omit → 3 images per brief
