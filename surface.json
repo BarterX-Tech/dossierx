@@ -1,6 +1,23 @@
 {
   "commands": [
     {
+      "path": "brief list",
+      "short": "List every brief with its path, summary, status and review state; --review-pending lists only the briefs awaiting review",
+      "flags": [
+        "--config",
+        "--format",
+        "--review-pending"
+      ]
+    },
+    {
+      "path": "brief show",
+      "short": "Show one brief — its content, digest and status — by the path brief list prints or by its \u003cfolder\u003e.\u003cslug\u003e id",
+      "flags": [
+        "--config",
+        "--format"
+      ]
+    },
+    {
       "path": "check",
       "short": "Run lint, catalog, render and the lock-ledger gate in one shot, stopping at first failure; --validate for a read-only run, --staged to judge the git index",
       "flags": [
@@ -273,12 +290,23 @@
     "summary-oversize",
     "summary-required"
   ],
+  "brief_rules": [
+    "brief-folder-cap",
+    "brief-frontmatter",
+    "brief-image-cap",
+    "brief-rests-on-duplicate",
+    "brief-rests-on-unknown",
+    "brief-shape",
+    "brief-total-cap",
+    "brief-word-cap"
+  ],
   "error_codes": [
     "CONSTITUTION_NOT_LOCKED",
     "CONSTITUTION_OVER_CAP",
     "already_locked",
     "bad_request",
     "banner_claim",
+    "brief_not_found",
     "claim_file_changed",
     "claim_not_found",
     "claim_not_serializable",
@@ -482,17 +510,18 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:a70f798f77a2038c1c331ec732543beb760fe898bbe3375a10f14a3a42e3a957",
+  "render_fingerprint": "sha256:848dd1ff0fdf513c5f465f095567148baf09366105a6f0d4eee43616674b3dda",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:9352860900ae5539a3fb08eec4fc5089fa9c16530c95f11e9a944650e41b75c2",
+    "cmd/dossierx": "sha256:5c7f9b793111652d4a4212472f849a6a46be978aed7afd7f7cf51de09ebdb870",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
+    "internal/briefs": "sha256:5c2698da34eba91da466e909ad55a3aea38358e7bc893ccb72f1a5447672ec09",
     "internal/catalog": "sha256:5bc5134d2111471736bb91a16c1641a69d146e09f87070add6770fcc318a6d4b",
-    "internal/check": "sha256:2375b93295cfcdf78510a031da12825df5d7b42d7636e537b7c70113d9969700",
-    "internal/cliout": "sha256:d83043338d2eab2311ddde462832a1276d41086da30aaef1db7b5204e9479217",
+    "internal/check": "sha256:c3cc5862f904032938a8ce08b54e3ff299887b1447bf2d3ed60a5af004346cb3",
+    "internal/cliout": "sha256:a04e6cafb20a343658b42a09901a50e2d4c40ee218b63fdaf106e34d535f9789",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
-    "internal/config": "sha256:0285a9a77c13a28854bce8f8a390c443a53c2d422bc2d3b57ec4632949811aa2",
+    "internal/config": "sha256:bcc44fbad1f62df803e6548ab34fbd9f4448e5a4d9ff41838c895bb567017b41",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:1b0cfa30ba70ba12a5f01d67018b7aa0e73b01fe773f596678b692b0a86eb1f6",
     "internal/constitution/constitutiontest": "sha256:c1b3b79e4b7e7626ec10f17bf9937df4485c2b3c1c2762e0bcca298fd319d294",
@@ -511,15 +540,15 @@
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:22a7b5157ea195866dedf175de74d6005002756c95d8a86e4f293d697bf59e32",
+    "internal/render": "sha256:81e6c717e4d00e148e1ee492adba64825502c6865c14275b8a91b399db5ab513",
     "internal/render/components": "sha256:32e9f91788052670ec8c1a5f6fe7250e1d1ce1a7bd4f3dd12245a1b5f683f192",
-    "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
+    "internal/render/markdown": "sha256:c91a576d5649776a0211b1b7c9814196e9cab572740f2d166a391699d23803e4",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:ee0512704da761423b9adc7b79323cc309907631fa644b7efcaeabf9100cef3b",
+    "internal/serve": "sha256:8696da9f04b8cb3d10a0481dc19ceb71857fc2907c0f68b2afe07f609c998c43",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:60fa0283f41851ab1e5b11f6f48d79cd9ead0f0e7749338237e203ed9b71a29d"
+    "skills": "sha256:e5db890e8baf67e4913d88f0bb4e14a7f263dbd867e1b743fe1a20698cb8f8fd"
   },
   "envelope": {
     "keys": [
@@ -536,6 +565,7 @@
       "already_locked": 1,
       "bad_request": 1,
       "banner_claim": 1,
+      "brief_not_found": 2,
       "claim_file_changed": 1,
       "claim_not_found": 2,
       "claim_not_serializable": 1,
@@ -582,6 +612,27 @@
       "wrong_state": 2
     },
     "payloads": {
+      "briefListData": [
+        "briefs",
+        "count",
+        "review_pending_only",
+        "total"
+      ],
+      "briefShowData": [
+        "content",
+        "digest",
+        "folder",
+        "id",
+        "images",
+        "path",
+        "rests_on",
+        "review_pending",
+        "review_pending_trigger",
+        "status",
+        "summary",
+        "title",
+        "words"
+      ],
       "checkData": [
         "catalog_count",
         "catalog_error",
@@ -883,10 +934,11 @@
     }
   ],
   "counts": {
-    "commands": 21,
-    "error_codes": 49,
+    "brief_rules": 8,
+    "commands": 23,
+    "error_codes": 50,
     "http_routes": 14,
     "lint_rules": 30,
-    "nouns": 8
+    "nouns": 9
   }
 }

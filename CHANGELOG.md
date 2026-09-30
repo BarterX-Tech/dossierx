@@ -31,6 +31,53 @@ Re-running `dossierx skills export` also deletes the
 nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
 section, whose links now point at the exported `SKILL.md` files.
 
+### Added — briefs, the read side (NIT-204)
+
+- **Briefs.** A brief is a markdown document beside the claims —
+  `briefs/<folder>/<slug>.md`, one folder level, the `.md` files plus the
+  images they reference, every name in `[a-z0-9-]`, so a brief's id is
+  `<folder>.<slug>`. Frontmatter carries `summary` (required, at most 200
+  characters), `status` (`draft` or `locked`, default `draft`) and an optional
+  `rests_on` list of claim ids. A project with no `briefs/` sees no change
+  anywhere. FORMAT.md gains a "Briefs" section, and the directory-layout rule
+  its second exception: the briefs tree is load-bearing beside `claims/`.
+- **`dossierx brief list` and `dossierx brief show`**, the ninth noun: 23
+  commands under 9 nouns (was 21 under 8). `list` gives each brief's path, id,
+  title, summary, status and review state (`review_pending`,
+  `review_pending_trigger`: present and empty until briefs have a lock store;
+  `--review-pending` therefore lists none today). `show <path|id>` gives the
+  content, its SHA-256 digest and the status, and derives nothing from the
+  claims a brief rests on. A path or id that names no brief is the new
+  `brief_not_found` (exit 2): 50 error codes (was 49).
+- **Eight brief rules**, a rule set of their own beside the claim lints
+  (`surface.json` lists them as `brief_rules`): `brief-shape` (a file directly
+  under `briefs/`, anything deeper, any other file, a name outside the set, a
+  non-regular file, an image nothing references, a reference to an image the
+  folder lacks), `brief-frontmatter`, `brief-rests-on-unknown` (an id that is
+  not a claim), all errors; `brief-rests-on-duplicate` (two briefs with the same
+  `rests_on` set), a warning; and four final caps with config overrides, each
+  set only on the human's yes: `brief-word-cap` (2,000 words,
+  `max_brief_words`), `brief-image-cap` (3 images at 1 MiB each,
+  `max_brief_images`, `max_brief_image_bytes`), `brief-folder-cap` (12 per
+  folder, `max_briefs_per_folder`) and `brief-total-cap` (60,
+  `max_briefs`); images count toward neither of the last two. Findings ride in
+  `check`'s `lint_findings` with the brief's path as `claim_id`; `check
+  --staged` reads briefs from the index. `claim lock` never sees them, and the
+  claim `Lint` interface is unchanged.
+- **Document mode** in the markdown renderer: a brief's body renders `#` and
+  `##` as headings, where every claim body keeps rendering them as literal
+  text, and reads images from the brief's own folder.
+- **Briefs in the viewer payload.** A `dossierx-briefs` JSON block carries
+  every brief — id, path, folder, title (its first `#` heading, else the file
+  name title-cased), summary, status, `rests_on`, the body rendered in document
+  mode, its word and image counts, per-folder and total counts, and the caps —
+  charged to the same bounded render budget as the claims. It is emitted only
+  when the project holds a brief; no pane draws it yet. `dossierx serve`
+  watches `briefs_dir` too, so a brief edit reloads the page.
+- **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
+  `briefs_dir` that is the config directory, or overlaps `claims_dir`,
+  `project_claims_dir` or `build_dir`, is refused at load.
+
 ### Added
 
 - **Viewer Home page** (NIT-196). The viewer now opens on Home, which shows
