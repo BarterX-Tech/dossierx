@@ -81,7 +81,10 @@ func TestRender_BriefPageAndTree(t *testing.T) {
 			t.Errorf("sidebar is missing %s", want)
 		}
 	}
-	tree := nav[strings.Index(nav, `class="system-nav-group brief-nav"`):]
+	_, tree, ok := strings.Cut(nav, `class="system-nav-group brief-nav"`)
+	if !ok {
+		t.Fatal("no Briefs group in the sidebar")
+	}
 	if strings.Contains(tree, "features") || strings.Contains(tree, "split-a-bill") {
 		t.Error("features/ must be left out of the Briefs tree: a feature is listed once, under Features")
 	}

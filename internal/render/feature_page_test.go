@@ -65,7 +65,7 @@ func TestRender_FeaturePage(t *testing.T) {
 	if e >= r || r >= s {
 		t.Errorf("Features rows must be in file-name order: export %d, receipt %d, split %d", e, r, s)
 	}
-	if strings.Contains(nav[strings.Index(nav, `class="system-nav-group brief-nav"`):], "features") {
+	if _, tree, ok := strings.Cut(nav, `class="system-nav-group brief-nav"`); !ok || strings.Contains(tree, "features") {
 		t.Error("a feature must not be listed again in the Briefs tree")
 	}
 	if strings.Contains(out, "<script>alert(1)") {
@@ -99,7 +99,10 @@ func TestRender_FeaturePage(t *testing.T) {
 	}
 	// Made of: groups in first-appearance order, rows in rests_on order
 	// within a group, the id that names no claim last in a group of its own.
-	madeOf := page[strings.Index(page, `feature-made-of`):]
+	_, madeOf, ok := strings.Cut(page, `feature-made-of`)
+	if !ok {
+		t.Fatal("the feature page has no Made of list")
+	}
 	order := []string{
 		`<p class="feature-made-of__module">Splitting</p>`, `href="#splitting.contract.shares"`, `href="#splitting.contract.exact-fraction"`,
 		`<p class="feature-made-of__module">Expenses</p>`, `href="#expenses.contract.payer"`,
@@ -136,11 +139,15 @@ func TestRender_FeaturePage(t *testing.T) {
 		t.Errorf("a feature that rests on nothing says so in its meta and its Made of card\n%s", empty)
 	}
 
-	tile := out[strings.Index(out, `data-tile="features"`):]
-	tile = tile[:strings.Index(tile, "            </div>\n")]
-	if strings.Index(out, `data-tile="features"`) < strings.Index(out, `id="_home"`) {
+	_, home, ok := strings.Cut(out, `id="_home"`)
+	if !ok {
+		t.Fatal("no Home section")
+	}
+	_, tile, ok := strings.Cut(home, `data-tile="features"`)
+	if !ok {
 		t.Fatal("the Features tile belongs on Home")
 	}
+	tile, _, _ = strings.Cut(tile, "            </div>\n")
 	for _, want := range []string{
 		`<a class="home-tile__title home-tile__link" href="#brief-features-export-to-csv">Features</a><span class="home-tile__count home-wide">3</span>`,
 		`<a class="home-feature" href="#brief-features-export-to-csv"><span class="home-feature__title">Export to CSV</span><span class="home-feature__state" data-state="locked">locked</span></a>`,
