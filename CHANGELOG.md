@@ -125,8 +125,7 @@ binary predates that guard.
   lock loop, `rests_on` as what a brief describes and the reaudit loop it
   drives, feature briefs as composition that nothing reports as built, citing
   a brief from a claim only as evidence, and threads on a brief. The router's
-  companion table gains its row. Its `brief lock`, `unlock` and `reaudit`
-  lines describe the NIT-205 commands.
+  companion table gains its row.
 - **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
   `briefs_dir` that is the config directory, sits inside a `.git` directory,
   or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at

@@ -31,11 +31,12 @@ on claims, and it gates no claim work in any state.
 | check the tree's shape, frontmatter and caps, writing nothing | `dossierx check --validate` (`brief-*` findings in `data.lint_findings`, `claim_id` is a path) |
 | freeze a brief, on the human's word | `dossierx brief lock <path> --dry-run`, then `--reason "<their words>"` |
 | change a locked brief | `dossierx brief unlock <path> --reason "…"` → edit → `dossierx brief lock <path> --dry-run`, then `--reason "…"` |
-| a locked brief is `review_pending` because a `rests_on` claim changed | `dossierx brief reaudit <path>` (preview) → update the brief → `--confirm --reason "…"` |
-| answer the human's thread on a brief | `dossierx comment inbox`, then reply; never resolve |
+| a locked brief is `review_pending` because a `rests_on` claim changed | `dossierx brief reaudit <path>` (preview, read-only) → update the brief → `--confirm --reason "…"` |
+| answer the human's thread on a brief | `dossierx comment inbox`, then `dossierx comment reply <brief-path> <thread-id> --as agent --body "…"`; never resolve |
 
-`brief show` takes the path `brief list` prints (`briefs/checkout/flow.md`) or the id
+Every `brief` leaf takes the path `brief list` prints (`briefs/checkout/flow.md`) or the id
 (`checkout.flow`); anything else is `brief_not_found` (exit 2) — list, then pass what it printed.
+The `comment` verbs take the **path only** (below).
 
 ## Brief, claim, manifest line or comment?
 
@@ -134,23 +135,38 @@ it between folders, no ceremony. Locking is the human's act of approving what it
 1. When the brief is ready for them: `dossierx brief lock <path> --dry-run`. Show the preview and
    point them at the brief in the viewer; they read it there, not in your chat.
 2. On their yes: `dossierx brief lock <path> --reason "<their words>"`. It writes `status: locked`
-   and records the content hash, their reason and the approved markdown under the `briefs` map
-   in `build/ledger/lock-store.json`. Commit both files.
-3. To change a locked brief: `dossierx brief unlock <path> --reason "<their words>"` → edit →
-   step 1 again → step 2 on their yes.
+   and records, under `briefs` in `build/ledger/lock-store.json`, the hash of the summary,
+   `rests_on` and body, the sha256 of every image the brief references, the approved text, their
+   reason, and one baseline per `rests_on` claim. Commit both files.
+3. To change a locked brief: `dossierx brief unlock <path> --reason "<their words>"` (the record
+   is kept and stamped released, `not_locked` on a draft) → edit → step 1 again → step 2 on
+   their yes.
 
-**Never lock, unlock or re-lock a brief unasked.** `--reason` carries their words, never yours;
-a `--dry-run` that reports `blocked: true` is a successful answer (the router's dry-run rule), and
-`side_effects` is the part to show them. `brief lock` refuses `already_locked` on a locked,
-unchanged brief — a second lock would sign nothing — and `comment_open` while a thread on the
-brief is open: reply, and the human resolves it.
+**Never lock, unlock or re-lock a brief unasked.** `--reason` carries their words, never yours.
+The dry run always answers `ok: true`: read `data.blocked` and `data.missing[]`, not the exit
+status, and show `side_effects`. The real `brief lock` refuses `missing_flag` (no `--reason`),
+`lint_failed` (an error finding on the brief — fix the shape or the cap first), `comment_open`
+(a thread is open: reply, and the human resolves it in the viewer), `already_locked` (locked and
+unchanged, images included — a second lock would sign nothing), `store_gitignored`,
+`pre_ledger_unadopted`, `store_too_new` (a newer binary wrote the store: upgrade, never edit the
+store) and `write_conflict`, each per the router's table. A re-lock over a standing record signs
+**only the edit**: it keeps the baseline of every `rests_on` claim still listed
+(`carried_baselines`), so a claim that moved under the brief stays `review_pending` until
+`brief reaudit --confirm` has shown the human the change.
 
-**Drift is not yours to clear.** `brief-content-drift` (locked, and the hash moved) and
-`brief-unrecorded` (`status: locked` in the frontmatter, no record) mean a locked brief was edited
-outside that path — by hand, or by a merge. Both surface through `integrity_failed` in
-`data.ledger_findings`, on `check`, `--validate` and `--staged` alike. The recovery is restoring
-the file from git, or unlock → fix → lock with the human's words. **Never re-lock to make the
-finding go away**: that signs the edit nobody approved. Never write `status:` by hand either way.
+**Drift is not yours to clear.** Four integrity findings ride in `data.ledger_findings` and fail
+`check`, `--validate` and `--staged` alike with `integrity_failed`:
+
+| finding | what happened | recovery |
+|---|---|---|
+| `brief-content-drift` | locked, and the summary, `rests_on`, body or a referenced image's bytes moved since approval (the message names the image) | restore the file (and image) from git, or the human re-approves the edit: `brief lock` with their words |
+| `brief-unrecorded` | `status: locked` typed by hand, or a record an unlock released | the human approves it (`brief lock`), or set `status: draft` back |
+| `brief-unrecorded` naming a store with **no `briefs` map** | an older binary rewrote `build/ledger/lock-store.json` and dropped every brief's approval | **restore the store from git** and upgrade that binary; re-locking would discard the baselines and any pending review |
+| `brief-orphan` | `status: draft` with a standing record — flipped by hand | restore the file, or the human unlocks it |
+| `brief-abandoned` | a locked brief deleted or renamed with its record standing | restore it, or unlock first and then delete |
+
+**Never re-lock to make the finding go away**: that signs the edit nobody approved. Never write
+`status:` by hand either way.
 
 **A brief in any state never blocks claim work.** `claim lock` does not read a brief finding, a
 brief never enters `manifest show`, the catalog or the claims graph, and no brief byte enters a
@@ -168,17 +184,20 @@ When a listed claim's content changes after the brief was locked, the brief is `
 and `check` reports `brief-dependency-drift` (a WARNING, the drifted-claim tier). A listed claim
 that no longer exists is `brief-rests-on-missing` (ERROR): unlock, remove or replace the id, lock.
 
-1. `dossierx brief reaudit <path>` — the preview: one diff per changed claim, from the wording
-   the brief was approved against to today's. Read it.
+1. `dossierx brief reaudit <path>` — the preview, read-only and never refused by an open thread:
+   `data.changed_claims[]` carries each moved claim's wording at the baseline and now (a baseline
+   no snapshot matches reads "earlier wording not available"); empty when nothing is pending.
 2. Update the brief so it describes the claim as it now reads (unlock → edit → lock if the
    wording changes; the reaudit alone refreshes only the baselines).
 3. Show the human what changed and wait. On their yes:
    `dossierx brief reaudit <path> --confirm --reason "<their words>"`.
 
-`reaudit` refuses a brief that is not `review_pending` (the edit path is unlock → fix → lock)
-and refuses `comment_open` while a thread is open. A draft has no baselines and is never
-pending: `brief list --review-pending` lists locked briefs only. Nothing flows back — a brief's
-state never sets `review_pending` on a claim.
+`--confirm` refuses `not_locked` (exit 2), `not_review_pending` (exit 2; the edit path is unlock
+→ fix → lock), `wrong_state` (exit 2; a `rests_on` claim is gone — fix the list first),
+`integrity_failed` (the brief itself was edited since approval — settle that first, above),
+`comment_open` and `missing_flag`. A draft has no baselines and is never pending:
+`brief list --review-pending` lists locked briefs only. Nothing flows back — a brief's state
+never sets `review_pending` on a claim.
 
 ## Writing a feature brief
 
@@ -214,11 +233,15 @@ to edit rarely and deliberately.
 ## Comments on a brief
 
 The human can open a thread on a brief in the viewer, exactly as on a claim. It arrives in
-`dossierx comment inbox` with the rest, under the same cursor; reply to it with
-`dossierx comment reply` as the row names it, `--as agent`, and **never resolve it** — their
-Resolve click is the approval. An open thread blocks `brief lock` and `brief reaudit --confirm`
-(`comment_open`); an open thread never blocks a claim. Threads live in the brief's frontmatter
-and are excluded from its content hash, so a comment never drifts a locked brief.
+`dossierx comment inbox` with the rest, under the same cursor, as a row with `kind: "brief"` and
+the brief's **path** as `claim_id`; `check` counts it as `open comments: brief "<path>": N`. The
+`comment` verbs take that path, never the id (`comment add briefs/checkout/flow.md --as agent
+--body "…"`, `comment reply <brief-path> <thread-id> --as agent --body "…"`,
+`comment list <brief-path>`; an id is refused `claim_not_found`). Reply and **never resolve** —
+the human resolves it in the viewer, and their Resolve is the approval. An open thread blocks
+`brief lock` and `brief reaudit --confirm` (`comment_open`); an open thread never blocks a claim.
+Threads live in the brief's frontmatter, excluded from its hash, so a comment never drifts a
+locked brief; a brief renamed with its threads left behind is `comment-digest-abandoned`.
 
 ## Portability
 

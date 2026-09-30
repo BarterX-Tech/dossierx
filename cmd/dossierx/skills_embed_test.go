@@ -620,7 +620,7 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		{"dossierx-claims", "an exit code\nyou did not see is one you do not have", "report the envelope, never a belief"},
 		// NIT-193: a feature is a brief, and nothing reports it as built.
 		{"dossierx-briefs", "say a feature is built", "rests_on is composition; no command and no agent reports a feature as specified or built"},
-		{"dossierx-briefs", "Never re-lock to make the\nfinding go away", "brief-content-drift and brief-unrecorded are restore or unlock, fix, lock"},
+		{"dossierx-briefs", "Never re-lock to make the finding go away", "brief-content-drift and brief-unrecorded are restore or unlock, fix, lock"},
 	} {
 		raw, err := fs.ReadFile(dxskills.FS, tc.skill+"/SKILL.md")
 		if err != nil {
