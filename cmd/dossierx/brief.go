@@ -12,10 +12,11 @@
 // the author needs to read the file they wrote beside the rule it broke.
 // `check` is where a brief's findings fail a run.
 //
-// BUT NEITHER LEAF HIDES A FINDING. Both carry `findings` — the tree's own
-// brief findings (shape, frontmatter, caps; the two rests_on rules need the
-// claims, which these leaves do not load) in check's lint_findings shape, with
-// the path as claim_id — beside what they read. It is how manifest show
+// BUT NEITHER LEAF HIDES A FINDING. Both carry `findings` — brief findings
+// (shape, frontmatter, caps; the two rests_on rules need the claims, which
+// these leaves do not load) in check's lint_findings shape, with the path as
+// claim_id: list the tree's, show those on its own path or a folder above it —
+// beside what they read. It is how manifest show
 // reports a manifest's defects: the answer is still given, ok, and the defect
 // is in it. What matters most is the case where the answer is incomplete: an
 // unreadable folder is a finding and the other folders are still listed, and a

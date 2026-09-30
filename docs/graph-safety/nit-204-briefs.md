@@ -26,7 +26,7 @@ change writes a file: no store, no sentinel, no approval.
   `work/nit-204-engine-192a-briefs-read-side-discovery-caps-listshow-render`
   carrying this note; the figures below were measured on the commit that adds
   it, with the commands shown, and the byte-bound measurements and the
-  differential were rerun after the NIT-204 round-2 fixes.
+  differential were rerun after the NIT-204 round-3 fixes.
 - Environment: go1.26.5 darwin/arm64 (Apple M4 Pro).
 
 ## Preserved invariants
@@ -77,14 +77,35 @@ change writes a file: no store, no sentinel, no approval.
   (`TestBriefFindingsFollowTheTreeEachModeJudges`). A symlink under
   `briefs_dir` — including a linked `briefs_dir` — is refused by both
   (`TestBriefSymlinksAreRefusedInBothModes`), where the index used to drop it.
-  A submodule — a gitlink in the index, a directory holding a `.git` entry on
-  disk — as a brief folder or as `briefs_dir` itself is refused by both on the
-  same path and never read (`TestBriefSubmodulesAreRefusedInBothModes`, over a
-  real `git submodule add` and an embedded repository), where the working
-  tree used to read the checkout as a plain folder.
+  A submodule or embedded repository — a gitlink in the index — as a brief
+  folder or as `briefs_dir` itself is refused by both on the same path and
+  never read. On disk it is recognised by git's own rule, ported from
+  `is_nonbare_repository_dir` / `is_git_directory` (`internal/briefs/nested.go`):
+  the directory's `.git` is a file starting `gitdir: ` that names a git
+  directory, or is a git directory itself — `HEAD` a symlink into `refs/`, or
+  `ref:` then `refs/…`, or a 40-hex object name; `objects/` and `refs/` (in its
+  `commondir`, if any) existing with an execute bit, git's `access(X_OK)` read
+  from the mode bits (the engine makes no raw system calls, so an x bit set
+  for another user only, or a caller running as root, is where the two could
+  differ). Any other `.git` entry — empty
+  or junk `.git` file, a `gitdir:` naming a non-repository, an empty `.git`
+  directory, `HEAD` without `refs/`, a junk `HEAD` — is one `git add` stages
+  past, adding the folder's files as blobs, and both modes read that folder
+  normally. `TestBriefSubmodulesAreRefusedInBothModes` pins eleven rows, each
+  asserting the index mode git itself wrote (160000 for the four refused rows:
+  `git submodule add`, an embedded repository as a folder and as `briefs_dir`,
+  a git directory with a detached `HEAD`; 100644 for the seven read rows), and
+  its brief rests on an unknown claim so reading it and refusing it raise
+  different findings. Restoring the round-2 rule (any `.git` entry) fails the
+  seven read rows; dropping the object-name branch, the `refs/` check or the
+  gitfile's target check each fails its row. The one gap is git's: a folder
+  the index already tracks as files stays files there after a repository is
+  created inside it (git consults the index first), which `--staged` reads and
+  the working tree, which cannot see the index, refuses.
 - **Nothing is silently unread.** An unreadable folder or file is one
   `brief-shape` finding on its path and the rest of the tree is still read;
-  `brief list` and `brief show` carry the tree's findings in `data.findings`
+  `brief list` carries the tree's findings in `data.findings`, and `brief show`
+  the findings on its own path or a folder above it
   (`TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree`,
   `TestBriefListAndShowReportWhatTheyCouldNotRead`). A read error anywhere in
   the briefs tree, `briefs_dir`'s own included, is isolated to that tree's
@@ -105,12 +126,12 @@ to a sort; none enumerates paths or pairs.
 
 | Pass | Bound |
 | --- | --- |
-| Discovery (`Load` / `FromFiles`) | one walk, one `.git` Lstat per directory, and one sort of F entries, O(F log F); each brief parsed by four block scans of its own bytes (title, text, accepted images, refused images) plus the frontmatter, O(B) |
+| Discovery (`Load` / `FromFiles`) | one walk, one `.git` stat per directory, and one sort of F entries, O(F log F); a directory with a `.git` entry adds at most git's own reads — the `.git` file (git's 1 MiB gitfile limit), the first 255 bytes of `HEAD`, a `commondir` file and two `access` calls — none of which descends; each brief parsed by four block scans of its own bytes (title, text, accepted images, refused images) plus the frontmatter, O(B) |
 | Caps | one pass over briefs, images and folders, O(N + images) |
 | `brief-rests-on-unknown` | a claim-id set, O(C), and one lookup per `rests_on` entry, O(N·R) |
 | `brief-rests-on-duplicate` | one sorted key per brief, O(N·R log R); one finding per member of a group, each naming **one** other path and a count of the rest, so a group of k is O(k·P) bytes (it was O(k²·P) before REG-4) |
 | Findings order | one sort, O(K log K) for K findings |
-| Payload | one document-mode render per brief and one JSON encode, O(B); charged to the render budget before the shell executes |
+| Payload | one document-mode render per brief and one JSON encode, O(B); charged to the render budget before the shell executes, where the render has one (`check` always; `serve` only with a conformance report — see below) |
 | `check --staged` | two `git ls-files -s` over the briefs pathspec and one `cat-file --batch`, O(index entries under `briefs_dir`) |
 | `serve` watcher | one stat-walk of the briefs tree per poll, O(F) |
 | `brief list` / `brief show` | discovery plus one pass over the findings, O(F log F + B) |
@@ -122,21 +143,37 @@ can be any length. A brief inside every default cap (60 briefs, 2,000 words,
 3 images of 1 MiB) can therefore be any size, so per-brief memory and time
 are O(B) with B unbounded — as for a claim file, which has no byte cap
 either. The serialized output is bounded only by the render budget the
-payload is charged to: `conformance.MaxOutputBytes` (64 MiB) on the eager
-path and the 128 MiB intermediate budget (`maxBoundedRenderIntermediateBytes`)
-on the lazy one (that refusal is pinned by `TestLazyShell_BriefsPayload`, not
-measured here). Measured with the candidate binary on scratch copies of
-fixture-graph-demo, each adding one two-word brief `briefs/graph/huge.md`
-(`alpha` and one word of N MiB of `a`) under default caps:
+payload is charged to, and only where a render HAS a budget:
 
-| Brief | words (`brief show`) | `check` | wall | max RSS |
-| --- | --- | --- | --- | --- |
-| 20 MiB (20,971,564 bytes) | 2 | exit 0, no brief finding; `index.html` 22,455,056 bytes | 1.57 s | 286 MB |
-| 70 MiB (73,400,364 bytes) | 2 | exit 1, `conformance_capacity_exceeded` ("viewer requires more than 67108864 bytes"), no artifact replaced | 1.45 s | 859 MB |
+- **`check`** (every mode that renders) and **`serve` with a conformance
+  report** render through `RenderBoundedWith(…, conformance.MaxOutputBytes,
+  …)`: 64 MiB of output on the eager path and the 128 MiB intermediate budget
+  (`maxBoundedRenderIntermediateBytes`) on the lazy one (that refusal is
+  pinned by `TestLazyShell_BriefsPayload`, not measured here).
+- **`serve` without a conformance report** — no claim declares `embodiment`
+  (`conformance.Evaluate` returns nil), fixture-graph-demo included — renders
+  through `RenderWith`
+  (`internal/serve/server.go`, the `report == nil` branch): `maxBytes` 0 and
+  no budget, so briefs are rendered exactly as that path has rendered claims
+  since the baseline (`render.Render` there): unbounded, O(B) memory and
+  O(B) output per request. This change adds no bound to that path and takes
+  none away; a brief is one more input to it, as a claim body is.
+
+Measured with the candidate binary on scratch copies of fixture-graph-demo,
+each adding one two-word brief `briefs/graph/huge.md` (`alpha` and one word of
+N MiB of `a`) under default caps, with the commands below (byte counts are
+`wc -c` of the file they write):
+
+| Brief | words (`brief show`) | command | result | wall | max RSS |
+| --- | --- | --- | --- | --- | --- |
+| 20 MiB (20,971,563 bytes) | 2 | `check` | exit 0, no brief finding; `index.html` 22,455,056 bytes | 0.62 s | 246 MB |
+| 70 MiB (73,400,363 bytes) | 2 | `check` | exit 1, `conformance_capacity_exceeded` ("viewer requires more than 67108864 bytes"), no artifact replaced | 1.29 s | 732 MB |
+| 70 MiB (73,400,363 bytes) | 2 | `serve`, no conformance report | `GET /` 200, 74,883,856 bytes — past the 64 MiB `check` refuses | — | 829 MB (RSS after the request) |
 
     printf -- '---\nsummary: One word of 20 MiB.\n---\nalpha ' > briefs/graph/huge.md
     head -c $((20 * 1048576)) /dev/zero | tr '\0' 'a' >> briefs/graph/huge.md
     /usr/bin/time -l dossierx check
+    dossierx serve --port 18947 & curl -s -o index.html -w '%{http_code}' http://127.0.0.1:18947/
 
 The tables below are word-cap-shaped content — ordinary words of ordinary
 length — which is what the figures in them describe. Measured on the worst
@@ -161,7 +198,8 @@ if any one exceeds 256 bytes at k = 2,000. The payload at the word cap:
 
 About 0.6 MB for 60 briefs is the payload of word-cap-shaped content only; it
 is not a bound on a default project, whose payload can reach the budget, and a
-payload over it is refused at the payload (the 70 MiB row above).
+payload over it is refused at the payload where there is a budget (the 70 MiB
+`check` row above) and served whole where there is none (the `serve` row).
 
     go test ./internal/briefs -run '^$' -bench BriefsAtScale -benchmem
     go test ./internal/render -run '^$' -bench BriefsPayload -benchmem

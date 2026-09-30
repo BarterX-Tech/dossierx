@@ -59,8 +59,9 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   (`review_pending`, `review_pending_trigger`: present and empty until briefs
   have a lock store; `--review-pending` therefore lists none today). `show
   <path|id>` gives the content, its SHA-256 digest and the status, and derives
-  nothing from the claims a brief rests on. Both carry `findings`, the tree's
-  own brief findings, beside what they read: an unreadable folder is a finding
+  nothing from the claims a brief rests on. Both carry `findings` beside what
+  they read — `list` the tree's own brief findings, `show` the findings on its
+  own path or a folder above it: an unreadable folder is a finding
   while the other folders are still listed, never "no briefs". A path or id
   that names no brief is the new `brief_not_found` (exit 2).
 - **Eight brief rules**, a rule set of their own beside the claim lints
