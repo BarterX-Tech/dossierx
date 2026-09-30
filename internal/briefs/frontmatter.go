@@ -1,11 +1,14 @@
 package briefs
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
 // MaxSummaryChars is the ceiling on a brief's summary, in Unicode code points.
@@ -18,16 +21,20 @@ const MaxSummaryChars = 200
 // not carry, or carried in a shape parseFrontmatter refused, is its zero value;
 // the refusal itself is reported separately.
 type frontmatter struct {
-	summary string
-	status  string
-	restsOn []string
+	summary  string
+	status   string
+	restsOn  []string
+	comments []model.Comment
 }
 
 // frontmatterFields is the whole key set, in the order a message names it.
-var frontmatterFields = []string{"summary", "status", "rests_on"}
+// comments is engine-managed (NIT-205): the review threads on the brief, in the
+// claim's own comment shape, written by the comment ops and never by hand. It
+// is not signed by the brief's lock hash, as a claim's comments are not.
+var frontmatterFields = []string{"summary", "status", "rests_on", "comments"}
 
 // parseFrontmatter splits a brief into its frontmatter and its body and reads
-// the frontmatter under a strict decode: three keys and no others, each in the
+// the frontmatter under a strict decode: four keys and no others, each in the
 // one shape it may take.
 //
 // THE BLOCK. The file's first line is exactly "---", and the block runs to the
@@ -80,7 +87,7 @@ func parseFrontmatter(content string) (fm frontmatter, body string, problems []s
 		if root.Tag == "!!null" {
 			root = nil
 		} else {
-			return fm, body, []string{"the frontmatter must be a mapping of summary, status and rests_on"}
+			return fm, body, []string{"the frontmatter must be a mapping of summary, status, rests_on and comments"}
 		}
 	}
 
@@ -122,6 +129,10 @@ func parseFrontmatter(content string) (fm frontmatter, body string, problems []s
 				ids, p := restsOnList(value)
 				problems = append(problems, p...)
 				fm.restsOn = ids
+			case "comments":
+				threads, p := commentThreads(value)
+				problems = append(problems, p...)
+				fm.comments = threads
 			}
 		}
 	}
@@ -203,4 +214,34 @@ func nodeKind(n *yaml.Node) string {
 		return "a scalar"
 	}
 	return "an alias"
+}
+
+// commentThreads reads the engine-managed comments block: a list of threads in
+// model.Comment's shape, decoded strictly (an unknown key is refused), each
+// with a known status and author. A null or empty list is no threads.
+func commentThreads(n *yaml.Node) (threads []model.Comment, problems []string) {
+	if n.Kind == yaml.ScalarNode && n.Tag == "!!null" {
+		return nil, nil
+	}
+	if n.Kind != yaml.SequenceNode {
+		return nil, []string{"comments must be a list of comment threads, not " + nodeKind(n) + "; the comment ops write it, never a hand edit"}
+	}
+	raw, err := yaml.Marshal(n)
+	if err != nil {
+		return nil, []string{fmt.Sprintf("comments could not be read: %v", err)}
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+	if err := dec.Decode(&threads); err != nil {
+		return nil, []string{fmt.Sprintf("comments is not a list of comment threads: %v", err)}
+	}
+	for i, t := range threads {
+		if t.Status != model.CommentStatusOpen && t.Status != model.CommentStatusResolved {
+			problems = append(problems, fmt.Sprintf("comment thread %d has status %q; a thread is %q or %q", i+1, t.Status, model.CommentStatusOpen, model.CommentStatusResolved))
+		}
+		if t.Author != model.CommentRoleHuman && t.Author != model.CommentRoleAgent {
+			problems = append(problems, fmt.Sprintf("comment thread %d has author %q; an author is %q or %q", i+1, t.Author, model.CommentRoleHuman, model.CommentRoleAgent))
+		}
+	}
+	return threads, problems
 }

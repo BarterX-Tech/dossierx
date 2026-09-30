@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -45,6 +46,62 @@ func BenchmarkBriefsAtScale(b *testing.B) {
 				}
 			}
 			b.ReportMetric(float64(msgBytes), "finding-bytes")
+		})
+	}
+}
+
+// BenchmarkEvaluateAtScale is the scale evidence docs/graph-safety/
+// nit-192-briefs.md records for the lock lifecycle (NIT-205): n locked briefs,
+// each with a standing record and r rests_on baselines, EVERY baseline drifted
+// (the worst case: every changed claim carries its wording then and now), over
+// c claims of ordinary length. The brief's own receipts carry the baseline
+// wording, which is the path every record `brief lock` writes takes. It reports
+// the changed-claim count, which must be n·r, never more.
+func BenchmarkEvaluateAtScale(b *testing.B) {
+	cfg := testConfig(b, b.TempDir(), "")
+	for _, tc := range []struct{ n, r int }{{60, 10}, {600, 10}, {2000, 10}} {
+		claims := make([]model.Claim, 0, tc.r*4)
+		for i := 0; i < tc.r*4; i++ {
+			claims = append(claims, model.Claim{ID: fmt.Sprintf("widget.contract.c%03d", i), Summary: "s", Body: strings.Repeat("claim words ", 150)})
+		}
+		files := make([]File, 0, tc.n)
+		for i := 0; i < tc.n; i++ {
+			var rests strings.Builder
+			for j := 0; j < tc.r; j++ {
+				fmt.Fprintf(&rests, "  - %s\n", claims[(i+j)%len(claims)].ID)
+			}
+			f := md("---\nsummary: s\nstatus: locked\nrests_on:\n" + rests.String() + "---\n" + strings.Repeat("word ", 500) + "\n")
+			f.Rel = fmt.Sprintf("f%04d/b%04d.md", i/12, i)
+			files = append(files, f)
+		}
+		set := FromFiles(cfg, files)
+		store, err := lock.LoadStore(b.TempDir() + "/lock-store.json")
+		if err != nil {
+			b.Fatal(err)
+		}
+		for _, br := range set.Briefs {
+			hashes, receipts, _ := Baselines(br, claims)
+			lock.RecordBriefApproval(store, br.ID, lock.BriefRecord{Path: br.Path, Hash: br.LockHash, Baselines: hashes, Receipts: receipts})
+		}
+		moved := make([]model.Claim, len(claims))
+		for i, c := range claims {
+			c.Body += " moved"
+			moved[i] = c
+		}
+		b.Run(fmt.Sprintf("briefs=%d/rests_on=%d", tc.n, tc.r), func(b *testing.B) {
+			b.ReportAllocs()
+			var changed int
+			for i := 0; i < b.N; i++ {
+				e := Evaluate(set, moved, store)
+				changed = 0
+				for _, r := range e.Reviews {
+					changed += len(r.ChangedClaims)
+				}
+			}
+			if changed != tc.n*tc.r {
+				b.Fatalf("changed claims = %d, want %d", changed, tc.n*tc.r)
+			}
+			b.ReportMetric(float64(changed), "changed-claims")
 		})
 	}
 }

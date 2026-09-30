@@ -435,7 +435,7 @@ func (s *Server) renderViewer() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serve: build catalog: %w", err)
 	}
-	assessment, approvedEdits, err := s.readinessFor(claims)
+	assessment, approvedEdits, store, err := s.readinessAndStoreFor(claims)
 	if err != nil {
 		return nil, fmt.Errorf("serve: readiness: %w", err)
 	}
@@ -452,7 +452,10 @@ func (s *Server) renderViewer() ([]byte, error) {
 	// the watcher fingerprints briefs_dir too, so a brief edit reaches the page
 	// the same way a claim edit does. A brief with a finding still renders; the
 	// status strip (check.Status) is where its findings are shown.
-	extras := render.Extras{Briefs: briefs.Load(s.cfg)}
+	// Their lock and review state (NIT-205) is read against the SAME store
+	// load readiness used, so the two cannot disagree about one request.
+	set := briefs.Load(s.cfg)
+	extras := render.Extras{Briefs: set, BriefReview: briefs.Evaluate(set, claims, store)}
 	var html string
 	if report != nil {
 		html, err = render.RenderBoundedWith(cat, s.cfg, conformance.MaxOutputBytes, extras)
@@ -474,15 +477,22 @@ func (s *Server) renderViewer() ([]byte, error) {
 // claims have an unapproved edit — one listing a row the other draws no panel
 // for. Sharing the load makes that disagreement unrepresentable.
 func (s *Server) readinessFor(claims []model.Claim) (assessments map[string]readiness.Assessment, approvedEdits map[string]approvaledit.Change, err error) {
-	store, err := lock.LoadStore(s.storePath())
+	assessments, approvedEdits, _, err = s.readinessAndStoreFor(claims)
+	return assessments, approvedEdits, err
+}
+
+// readinessAndStoreFor is readinessFor that also hands back the one store load
+// both projections were computed from, for the briefs' review state.
+func (s *Server) readinessAndStoreFor(claims []model.Claim) (assessments map[string]readiness.Assessment, approvedEdits map[string]approvaledit.Change, store *lock.Store, err error) {
+	store, err = lock.LoadStore(s.storePath())
 	if err != nil {
-		return nil, nil, fmt.Errorf("load lock store: %w", err)
+		return nil, nil, nil, fmt.Errorf("load lock store: %w", err)
 	}
 	flags, err := reaudit.LoadFlagStore(s.flagStorePath())
 	if err != nil {
-		return nil, nil, fmt.Errorf("load flag store: %w", err)
+		return nil, nil, nil, fmt.Errorf("load flag store: %w", err)
 	}
-	return readiness.Compute(claims, store, flags), approvaledit.Compute(claims, store), nil
+	return readiness.Compute(claims, store, flags), approvaledit.Compute(claims, store), store, nil
 }
 
 // disarmUngatedMockups returns claims with RawHTMLReviewed cleared on every

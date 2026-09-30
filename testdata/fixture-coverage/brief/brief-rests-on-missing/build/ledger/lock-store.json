@@ -1,0 +1,63 @@
+{
+  "version": 4,
+  "policy_version": 1,
+  "hashes": {},
+  "locked_at": {},
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-30T10:33:50.664135Z"
+  },
+  "briefs": {
+    "flow.overview": {
+      "path": "briefs/flow/overview.md",
+      "hash": "478247a317978999c425554888f70e380dc3e7b63d4cea5caa6abf3793719230",
+      "at": "2026-09-30T16:56:31.04996Z",
+      "actor": "fixture",
+      "reason": "fixture approval",
+      "approved": {
+        "summary": "A locked brief resting on a claim that was deleted after its approval.",
+        "rests_on": [
+          "briefmod.contract.extra"
+        ],
+        "markdown": "Rests on a claim that is gone.\n"
+      },
+      "baselines": {
+        "briefmod.contract.extra": "3a335ebec33244c4b714d8b2d43f94f0f63c74314b0a27b2d0445882a695da2a"
+      },
+      "receipts": {
+        "briefmod.contract.extra": {
+          "ID": "briefmod.contract.extra",
+          "Facet": "contract",
+          "Module": "briefmod",
+          "Scope": "",
+          "Status": "draft",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "A claim the brief rested on, deleted after the brief was locked.",
+          "Body": "A claim the brief rested on.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "briefmod.contract.anchor"
+            ]
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        }
+      }
+    }
+  }
+}

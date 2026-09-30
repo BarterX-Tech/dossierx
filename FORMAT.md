@@ -944,12 +944,19 @@ file freeze locking project-wide and stop the viewer regenerating.
 The lock store also carries the constitution's lock record (`"constitution"`,
 see "The constitution"); a store that travels without it arrives with a roof
 that reads as `unrecorded`, and no claim in that clone locks until a human
-locks the roof again.
+locks the roof again. Once a brief is locked it carries the briefs' records
+too (`"briefs"`, see "Briefs"), and the store's `version` is `4`; a store that
+has never held a brief record stays at `version` `3`, byte for byte. A lock
+store or comment digest store whose `version` is above what this dossierx
+knows is refused rather than read — a command answers `store_too_new`, and
+`check` reports `lock-ledger-unreadable` naming the upgrade — because reading
+it would work and the next write would drop whatever this binary does not know,
+which is exactly how a v0.7.21 write drops the `briefs` map.
 
 | File | Holds |
 |---|---|
-| `build/ledger/lock-store.json` | the lock ledger: per locked claim, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
-| `build/ledger/comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
+| `build/ledger/lock-store.json` | the lock ledger: per locked claim, `{hash, at, actor, reason}`, plus the dependency-drift baselines; per locked brief, its record under `briefs` |
+| `build/ledger/comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write, and of each brief's under `briefs` |
 | `build/ledger/flag-store.json` | each flagged claim's pending `claim flag` trigger: `{claim_says, now_does, reason, flagged_at}`, consumed and deleted by a confirmed `claim reaudit` |
 
 All three live under the build directory (`build_dir`, default `build`,
@@ -1053,6 +1060,10 @@ certified exactly the edit that most needed a signature; it is built on
 | `comment-digest-abandoned` | A digest entry that recorded review history still has the claim it recorded it for. This is the comment half's reverse sweep, symmetric with `lock-ledger-abandoned`, and it is what makes the **rename** launder visible: deleting a claim's `comments:` block alone fires `comment-ledger-drift`, but deleting the block *and* changing `id:` in the same edit went completely quiet — the claim the store knows no longer exists, the claim that exists is one the store has never seen, and `claim lock <new id>` then succeeded on a claim whose human review had been erased. The old id's entry survives that edit precisely because it is not reachable from the file the tamper rewrote. It does not fire on the two accounted-for departures — an entry that recorded no threads, and a claim whose record an honest `unlock` released — and `lock.SweepCommentDigests` drops those entries so they never accumulate. `lock.AbandonedCommentDigests` owns the predicate for both the rule and the sweep, so the gate and the sweep cannot disagree. |
 | `store-gitignored` | Every path the engine writes under `build/ledger` and `build/code-links` is trackable. Checked per FILE with `git check-ignore --no-index` — the three ledger stores, `build/.gitignore`, and each module's code-links artifact, whether or not the file exists yet — because a directory-level check reads the index and goes green the moment one file under the directory is force-added, while every sibling stays ignored. One finding per ignored, untracked path, naming the pattern and its line; an ignored path that IS tracked is an envelope warning instead, since that ledger does reach collaborators. The recovery is the replacement block (`build/*` plus a slash-less negation and a `/*` re-include per tracked kind — git never re-enters an excluded directory, and a trailing-slash negation cannot match a directory that does not exist yet) or `build_dir` pointed at a directory the pattern does not match. Outside a work tree, or where git cannot answer, `check`'s read-only modes report `data.gitignore_check` and no finding; the approval-recording verbs refuse with `store_gitignored`. |
 | `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |
+| `brief-content-drift` | A locked brief's summary, `rests_on` and body still hash to what `brief lock` approved, and every image it references still has the sha256 recorded beside that hash (the same set, the same bytes); the message names each image that moved. The finding's `claim_id` is the brief's path. The approved text is kept on the record; the human re-locks the edit (`brief lock`) or the file is restored. See "Briefs". |
+| `brief-unrecorded` | A brief that says `status: locked` has a standing record in the lock store's `briefs` map — not none, and not one an unlock released. A status typed by hand approves nothing. `claim_id` is the brief's path. When the store is at version `4` but has no `briefs` map at all, an older dossierx rewrote it and dropped every brief record: the finding then says to restore the store from before that write and **not** to re-lock, which would discard the baselines and any review pending. |
+| `brief-orphan` | A `draft` brief holds no *standing* record. `brief unlock` releases the record before it rewrites the file, so a draft on a standing approval was flipped by hand — freeing the brief for edits nobody approved. The twin of `lock-ledger-orphan`. |
+| `brief-abandoned` | A standing brief record still has its brief. Deleting or renaming a locked brief's file removed it from every rule that starts from the briefs that exist; the record is what the deletion did not reach. Unlock first, then delete. `claim_id` is the path the brief was locked at. The twin of `lock-ledger-abandoned`. |
 
 `comment-digest-absent` is the comment half's answer to `lock-ledger-absent`,
 and it is **narrower on purpose**. The lock ledger guards the trust boundary —
@@ -1438,10 +1449,9 @@ for a finding: each answers with `data.findings` beside what it read (shape,
 frontmatter and cap findings, in `lint_findings`' shape) — `brief list` the
 tree's, `brief show` those on its own path or a folder above it — so an
 unreadable folder is a finding while every other folder is still listed, and
-an unreadable tree is never reported as a project with no briefs. The lock
-lifecycle for briefs (lock, unlock, reaudit, drift) is not in this release:
-`status` is read from the frontmatter and reported, and nothing records an
-approval for a brief.
+an unreadable tree is never reported as a project with no briefs. `brief
+lock`, `brief unlock` and `brief reaudit` give a brief an approval of its own,
+beside the claims' and never inside it (see "Lock, review and comments").
 
 ### The tree
 
@@ -1522,6 +1532,9 @@ rests_on:
   a claim is `brief-rests-on-unknown` (ERROR). Two briefs whose non-empty
   `rests_on` sets are identical are each `brief-rests-on-duplicate` (WARNING):
   they may be one brief.
+- `comments` — engine-managed: the brief's review threads, in a claim's comment
+  shape, written by the comment ops (never by hand). Absent until the first
+  thread.
 - No other key. The decode is strict and kind-checked: `summary: 5` is refused,
   not read as the string "5". Every frontmatter defect is `brief-frontmatter`
   (ERROR); the brief is still listed and shown.
@@ -1569,17 +1582,98 @@ Words are counted over the text the rendered body puts on the page, so image
 references and link targets are not words. Raising a cap is the human's call,
 only on their explicit approval, and every cap finding says so.
 
+### Lock, review and comments
+
+`dossierx brief lock <path-or-id> --reason "…"` sets the brief's `status` to
+`locked` (that token and nothing else in the file) and records, in
+`build/ledger/lock-store.json` under `briefs`, keyed by the brief's id:
+
+- the brief's **lock hash** — its `summary`, its `rests_on` set and its body.
+  `status` and `comments` are not signed, as a claim's are not. The hash is the
+  markdown's alone, so a claim's `sources` pin on the brief file is unaffected
+  by the images;
+- the **sha256 of every image** the brief references, beside the hash: an
+  image whose bytes change, or a change to the set referenced, is
+  `brief-content-drift` naming the image;
+- the human's `--reason`, the time and the actor;
+- the **approved text** (summary, `rests_on`, markdown), so an edited brief can
+  be shown beside what was approved;
+- one **baseline** per `rests_on` claim — that claim's content hash, the one
+  its dependents' baselines use — and the claim as it read then.
+
+It refuses `already_locked` for a brief that is locked and unchanged (images
+included), `comment_open` for one with an open thread, `lint_failed` for one
+with an error finding, and `write_conflict` for a file that changed while it
+was being locked. Locking an edited brief again is how its edit is approved,
+and only its edit: a re-lock over a standing record **keeps** the baselines of
+every `rests_on` claim still listed (`carried_baselines`), baselines a newly
+listed claim, and drops one no longer listed — so a claim that moved under the
+brief stays review-pending until `brief reaudit --confirm` shows it.
+`brief unlock <path-or-id> --reason "…"` releases the record (kept, stamped
+with the release, as `claim unlock` does) and then sets `status: draft`; a
+failure between the two leaves `status: locked` on a released record, which is
+`brief-unrecorded` and a re-run finishes it. Both take `--dry-run`.
+
+A locked brief is **review-pending** when a claim it rests on has moved since
+its baseline, or is gone; a draft never is. `dossierx brief reaudit <path-or-id>`
+shows each changed claim's wording at the baseline and now;
+`--confirm --reason "…"` records the human's yes and refreshes the baselines
+(refused `comment_open`, `not_review_pending`, and for a brief edited since
+approval). The brief's own approval is untouched by a reaudit.
+
+**Nothing flows back.** A brief in any state never refuses `claim lock`, never
+sets `review_pending` on a claim and never enters the claim graph, and no brief
+hash enters any claim's hashes.
+
+A comment thread anchors on a brief's **path** the way it anchors on a claim id:
+`comment add|reply|list briefs/<folder>/<slug>.md` (a brief's id is refused as
+`claim_not_found`, with the path in the hint: an id can collide with a claim
+id), and `comment inbox` lists a brief's threads with `kind: "brief"` (its
+`claims` count counts briefs with threads too). The rights are a claim's (an
+agent replies, the human resolves) — but resolving a brief's thread arrives
+with the viewer's brief threads, which have not shipped: no CLI verb resolves
+one, so until then an open thread on a brief holds `brief lock` and
+`brief reaudit --confirm` at `comment_open`. Those threads will be served by
+the brief's **id**, not its path: a route's `{id}` segment cannot carry the
+path's slashes. Each write records the brief's threads in
+`build/ledger/comment-digest.json` under `briefs`, and a block edited by hand is
+`comment-ledger-drift` on the brief's path (`comment-digest-unrecorded` for
+threads with no entry, in a ledger-covered project). An entry that recorded
+threads for a brief no longer in the tree — deleted, or renamed with the
+comments block left behind — is `comment-digest-abandoned` on the path its id
+names; silent, as for a claim, for an entry that recorded no thread and for a
+brief whose approval an unlock released. `check` counts a brief's
+open threads in `open_brief_comments`.
+
+The render payload carries each brief's `lock_state` (`draft`, `locked`,
+`edited`, `unrecorded`), `locked_at`, `lock_reason`, `review_pending` and its
+trigger, `changed_claims` (each with `changed_at` — when its current content
+was approved, empty when it has no standing approval — and its wording at the
+baseline and now; a baseline no retained snapshot matches reads "earlier
+wording not available"), `open_threads`, and the approved text with its
+rendered HTML.
+
 ### Findings
 
-The eight brief rules are a rule set of their own, beside the claim lints and
+The ten brief rules are a rule set of their own, beside the claim lints and
 never among them: `brief-shape`, `brief-frontmatter`, `brief-word-cap`,
 `brief-image-cap`, `brief-folder-cap`, `brief-total-cap`,
-`brief-rests-on-unknown` and `brief-rests-on-duplicate`. Their findings ride in
+`brief-rests-on-unknown`, `brief-rests-on-duplicate`, and the two that read a
+locked brief's baselines — `brief-rests-on-missing` (ERROR: a baselined claim
+is gone; it stands in for `brief-rests-on-unknown` on that id) and
+`brief-dependency-drift` (WARNING: a baselined claim moved; the brief is
+review-pending). Four more are integrity findings rather than rules:
+`brief-content-drift`, `brief-unrecorded`, `brief-orphan` and
+`brief-abandoned` (see "The findings") ride in
+`ledger_findings` and fail `check` with `integrity_failed`, like a claim's
+ledger findings. The ten rules' findings ride in
 `check`'s `data.lint_findings`, keyed by `lint` like every other finding, and a
 brief finding's `claim_id` is the **path** it is about — the brief
 (`briefs/checkout/flow.md`), the folder (`briefs/checkout/`) or the tree
 (`briefs/`). `check --staged` reads the briefs from the index, like the
-claims, and refuses a symlink entry there exactly as the working tree refuses
+claims — and the lock store and the comment digest from the index too, so a
+brief's `status: locked` staged without its record is `brief-unrecorded` at
+commit — and refuses a symlink entry there exactly as the working tree refuses
 the link. It also refuses a gitlink entry — a submodule or an embedded
 repository — which the working tree reads as an ordinary folder (see "The
 tree"). There the two modes differ in the safe direction: the hook is the
@@ -1590,7 +1684,9 @@ stricter.
 A claim never learns about briefs. A brief never enters `manifest show
 --isolation` or `--integration`, the catalog, or the claims graph. Brief state
 never affects claim readiness, locking or review — `claim lock` does not see a
-brief finding — and no brief byte enters any claim hash.
+brief finding — and no brief byte enters any claim hash. A brief's `rests_on`
+baselines are read in one direction only: a moved claim makes the brief
+review-pending, never the reverse.
 
 ### In the viewer
 

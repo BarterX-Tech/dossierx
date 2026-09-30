@@ -35,6 +35,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,6 +54,11 @@ var nowFunc = time.Now
 // StoreSchemaVersion is the on-disk schema version of the comment digest
 // store. Version 1 is its first shipped shape.
 const StoreSchemaVersion = 1
+
+// ErrStoreTooNew is a comment digest store written by a newer dossierx than
+// this one. It is refused on read, strictly and leniently, so this binary never
+// rewrites it and drops what the newer one recorded.
+var ErrStoreTooNew = errors.New("digest: the comment digest store was written by a newer dossierx")
 
 // digestVersion is the version of the DIGEST ALGORITHM below, mixed in as a
 // domain separator. Bumping it invalidates every recorded digest (every claim
@@ -113,6 +119,15 @@ type Store struct {
 	// the "no threads at all" state — see CommentsDigest for why recording the
 	// empty case is what makes a hand-added thread detectable.
 	Digests map[string]string `json:"digests"`
+
+	// Briefs maps a brief id (<folder>.<slug>) -> BriefCommentsDigest of its
+	// threads as of the engine's last comment write to the brief (NIT-205).
+	// It is a map of its own, never keys in Digests: every claim-side rule
+	// (comment-digest-abandoned among them) reads Digests as "the claims the
+	// store has seen", and a brief id there would read as a claim that was
+	// deleted. omitempty, so a store whose project never commented on a brief
+	// is byte-identical to the version-1 store it always was.
+	Briefs map[string]string `json:"briefs,omitempty"`
 
 	// Reaudits records every human-authorised RE-ADOPTION of a claim's comment
 	// block: who asked for it, when, and in whose words (see Store.Reaudit).
@@ -200,6 +215,9 @@ func DecodeStore(raw []byte) (*Store, error) {
 	if probe.Version == nil {
 		return nil, fmt.Errorf("digest: decode store: no version field")
 	}
+	if *probe.Version > StoreSchemaVersion {
+		return nil, fmt.Errorf("%w: version %d; this dossierx writes version %d — upgrade dossierx", ErrStoreTooNew, *probe.Version, StoreSchemaVersion)
+	}
 	if *probe.Version != StoreSchemaVersion {
 		return nil, fmt.Errorf("digest: decode store: version %d is not one this engine writes", *probe.Version)
 	}
@@ -217,6 +235,7 @@ func decodeInto(s *Store, raw []byte, strict bool) error {
 	var onDisk struct {
 		Version  int                  `json:"version"`
 		Digests  map[string]string    `json:"digests"`
+		Briefs   map[string]string    `json:"briefs"`
 		Reaudits map[string][]Reaudit `json:"reaudits"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -226,9 +245,15 @@ func decodeInto(s *Store, raw []byte, strict bool) error {
 	if err := dec.Decode(&onDisk); err != nil {
 		return err
 	}
+	// A store from a newer binary is refused rather than read: the next save
+	// would drop whatever this binary does not know. See ErrStoreTooNew.
+	if onDisk.Version > StoreSchemaVersion {
+		return fmt.Errorf("%w: version %d; this dossierx writes version %d. Upgrade dossierx (every binary that touches the project) — an older binary would drop what it does not know on its next write", ErrStoreTooNew, onDisk.Version, StoreSchemaVersion)
+	}
 	if onDisk.Digests != nil {
 		s.Digests = onDisk.Digests
 	}
+	s.Briefs = onDisk.Briefs
 	s.Reaudits = onDisk.Reaudits
 	s.fileExists = true
 	return nil
@@ -359,6 +384,30 @@ func (s *Store) Reaudit(c model.Claim, actor, reason string) {
 // because a rename cannot reach it.
 func (s *Store) Forget(claimID string) {
 	delete(s.Digests, claimID)
+}
+
+// BriefDigest returns the recorded digest of a brief's threads and whether the
+// store has one.
+func (s *Store) BriefDigest(briefID string) (string, bool) {
+	if s == nil || s.Briefs == nil {
+		return "", false
+	}
+	d, ok := s.Briefs[briefID]
+	return d, ok
+}
+
+// RecordBrief records a brief's threads as the engine just wrote them.
+func (s *Store) RecordBrief(briefID string, threads []model.Comment) {
+	if s.Briefs == nil {
+		s.Briefs = map[string]string{}
+	}
+	s.Briefs[briefID] = BriefCommentsDigest(briefID, threads)
+}
+
+// BriefCommentsDigest is CommentsDigest over a brief's threads, domain-separated
+// from a claim's by a "brief:" prefix on the id it hashes.
+func BriefCommentsDigest(briefID string, threads []model.Comment) string {
+	return CommentsDigest(model.Claim{ID: "brief:" + briefID, Comments: threads})
 }
 
 // EmptyCommentsDigest is CommentsDigest of claimID with NO comment threads —

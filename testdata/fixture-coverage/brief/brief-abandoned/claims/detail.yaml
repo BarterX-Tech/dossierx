@@ -1,0 +1,10 @@
+id: briefmod.contract.detail
+summary: A second claim, so the anchor is rested on and not an orphan.
+facet: contract
+module: briefmod
+status: draft
+layout: card
+body: |
+  A second claim, so the anchor is rested on and not an orphan.
+rests_on:
+  - briefmod.contract.anchor

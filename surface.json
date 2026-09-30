@@ -10,11 +10,42 @@
       ]
     },
     {
+      "path": "brief lock",
+      "short": "Lock a brief: record its content hash, the human's --reason and a baseline per rests_on claim",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
+      "path": "brief reaudit",
+      "short": "Show what changed in the claims a locked brief rests on; --confirm --reason records the human's yes and refreshes the baselines",
+      "flags": [
+        "--config",
+        "--confirm",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
       "path": "brief show",
       "short": "Show one brief — its content, digest and status — by the path brief list prints or by its \u003cfolder\u003e.\u003cslug\u003e id",
       "flags": [
         "--config",
         "--format"
+      ]
+    },
+    {
+      "path": "brief unlock",
+      "short": "Unlock a locked brief back to draft; --reason stamps the release on its record",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--reason"
       ]
     },
     {
@@ -134,7 +165,7 @@
     },
     {
       "path": "comment add",
-      "short": "Open a new comment thread on a claim",
+      "short": "Open a new comment thread on a claim, or on a brief by its path",
       "flags": [
         "--as",
         "--body",
@@ -154,7 +185,7 @@
     },
     {
       "path": "comment list",
-      "short": "List the comment threads on a claim (--open for unresolved only)",
+      "short": "List the comment threads on a claim or a brief (--open for unresolved only)",
       "flags": [
         "--config",
         "--format",
@@ -291,10 +322,12 @@
     "summary-required"
   ],
   "brief_rules": [
+    "brief-dependency-drift",
     "brief-folder-cap",
     "brief-frontmatter",
     "brief-image-cap",
     "brief-rests-on-duplicate",
+    "brief-rests-on-missing",
     "brief-rests-on-unknown",
     "brief-shape",
     "brief-total-cap",
@@ -312,6 +345,7 @@
     "claim_not_serializable",
     "comment_digest_drift",
     "comment_digest_unavailable",
+    "comment_open",
     "config_not_found",
     "conformance_capacity_exceeded",
     "conformance_failed",
@@ -336,6 +370,7 @@
     "rights_denied",
     "skills_drift",
     "store_gitignored",
+    "store_too_new",
     "structured_layout",
     "thread_not_found",
     "thread_open",
@@ -511,29 +546,29 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:8a56f7fe09190c16b4abdf9c0ba2345603a43b618554344e3ababbae8721123c",
+  "render_fingerprint": "sha256:5b60a38e9a6d844084139f6b72489f444cf7bed38d2190b1b2bffbf76a51a60a",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:e837c5b3e6c5bf08d190c74fcecb8a40681b7d8a16d1f25774b691402e71fefb",
+    "cmd/dossierx": "sha256:bee46527eb060f19ebf6432fee49662b3d5e55c72b733da72335112c08c9f9c9",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/briefs": "sha256:3d9b5ddb6ddd63d0df246a4da00af780a78238a3df2a5be0f785b249bb098f4b",
+    "internal/briefs": "sha256:01378e6a14976e9c19a999a3278e3aa7dd8947e13b31841c5d3671f31baa9d89",
     "internal/catalog": "sha256:5bc5134d2111471736bb91a16c1641a69d146e09f87070add6770fcc318a6d4b",
-    "internal/check": "sha256:03775747a2b3fe6a236705d994e10e49bb1add2bd0c91a34518f197a652ff9ea",
-    "internal/cliout": "sha256:a04e6cafb20a343658b42a09901a50e2d4c40ee218b63fdaf106e34d535f9789",
-    "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
+    "internal/check": "sha256:1cebb5bdc8187bce5b0e645445465af1bd24b19f5e9233b21490eb88a0255fb7",
+    "internal/cliout": "sha256:e460f69b8c78b7e674e58e4091864e4f1ed3c84b0a9cc8afd5d5ee3ba338525c",
+    "internal/comments": "sha256:1c5d7e70bb5a8cab30df11f35d577d8f958c91cbe5a6a4bcb124f9d514eab682",
     "internal/config": "sha256:57d35cdea588b0f3c409420233b9116fd75e19119fde369d89aec7905820643b",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/constitution": "sha256:1b0cfa30ba70ba12a5f01d67018b7aa0e73b01fe773f596678b692b0a86eb1f6",
     "internal/constitution/constitutiontest": "sha256:c1b3b79e4b7e7626ec10f17bf9937df4485c2b3c1c2762e0bcca298fd319d294",
-    "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
+    "internal/digest": "sha256:2afb97937b97348e3250f8bbde69deb6b022279c212e5b234258aa070879f15c",
     "internal/gitrepo": "sha256:3609e7cdfcbb95abea804cc179c55481659b8a3db6a7f010876ac6bc752bf933",
     "internal/graph": "sha256:5b22947cce259599fbdf178bf1aece321788e9556b3f25051f464587865bb34f",
     "internal/implink": "sha256:eeed3cbd1ac99ec2844290f02554ba0599b7127fcf877be886b3231dbda83d65",
     "internal/layout": "sha256:6f2f699218c8402eccffef20eb46c7e30b08a39529381ff68bdc8b70e42ad07d",
     "internal/lint": "sha256:cbcffc134fb2f0929a8eba862defac2f7b1ca86bad52e70cca09991e769ae1c7",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
-    "internal/lock": "sha256:a1a879a280841911a5581e6350b27a1f39e88b62fc1511db3f60141c514c879b",
+    "internal/lock": "sha256:fe404407e7cd957b7984ab3f4d43b9eb024f7b7906a46fb6db74a1fbde27a996",
     "internal/manifest": "sha256:b38a67f193608f0f3e16da7f5270da47640870f25f0b30d098aee89d12b4cd25",
     "internal/manifest/manifesttest": "sha256:9923dd2e327d0d8238fe3ec4b2de74e8ae0fd7a1d7efc8eb6cc638a19f990f94",
     "internal/model": "sha256:732aacf4060444d91efcf4fdcfe0bb4fb81750f0b3e68304e5607df28d97ef8e",
@@ -541,15 +576,15 @@
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:99b32a5839cc38b2cc8fecff456dc8ee95a1161a12532764d82383bee8f0114f",
+    "internal/render": "sha256:717a4d80ab5e22ea5030a59c1e8572e9094574bdd31a43f4521aa904078333f0",
     "internal/render/components": "sha256:dc27f5f67831ae687248c6946641250a9f331861bb918a6c47a5423a9fd2537e",
     "internal/render/markdown": "sha256:28114410fe8fd4d85f8abf01e720d5449bfc2d08f68cd1f462cd2be13cc0bc17",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:f00329da19d46f1245d9e0342c921856f35fe2586cc694e8cba779d946d14b29",
+    "internal/serve": "sha256:a4776843d3de2408abed4d138cb6c5827d0c14621120175515ecf6ff910e33e3",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:b6b6c764aa5d503ee459cbfc34604cd9a0a367e3809858ba1a76c81d5b6a46eb"
+    "skills": "sha256:d2d1135e2c77f6fcfda262cea483cf359075222ce9e82be2097dcaa099824651"
   },
   "envelope": {
     "keys": [
@@ -572,6 +607,7 @@
       "claim_not_serializable": 1,
       "comment_digest_drift": 1,
       "comment_digest_unavailable": 1,
+      "comment_open": 1,
       "config_not_found": 2,
       "conformance_capacity_exceeded": 1,
       "conformance_failed": 1,
@@ -596,6 +632,7 @@
       "rights_denied": 1,
       "skills_drift": 1,
       "store_gitignored": 1,
+      "store_too_new": 1,
       "structured_layout": 1,
       "thread_not_found": 2,
       "thread_open": 1,
@@ -620,21 +657,54 @@
         "review_pending_only",
         "total"
       ],
+      "briefLockData": [
+        "baselines",
+        "carried_baselines",
+        "hash",
+        "id",
+        "locked_at",
+        "path",
+        "reason",
+        "relocked"
+      ],
+      "briefReauditData": [
+        "changed_claims",
+        "confirmed",
+        "id",
+        "lock_state",
+        "path",
+        "reason",
+        "review_pending",
+        "review_pending_trigger"
+      ],
       "briefShowData": [
+        "changed_claims",
         "content",
+        "content_hash",
         "digest",
         "findings",
         "folder",
         "id",
         "images",
+        "lock_reason",
+        "lock_state",
+        "locked_at",
+        "open_threads",
         "path",
         "rests_on",
+        "rests_on_claims",
         "review_pending",
         "review_pending_trigger",
         "status",
         "summary",
         "title",
         "words"
+      ],
+      "briefUnlockData": [
+        "id",
+        "path",
+        "reason",
+        "released"
       ],
       "checkData": [
         "catalog_count",
@@ -655,6 +725,7 @@
         "lint_findings",
         "lint_warning_count",
         "next_steps",
+        "open_brief_comments",
         "open_comments",
         "read_only",
         "render_error",
@@ -937,9 +1008,9 @@
     }
   ],
   "counts": {
-    "brief_rules": 8,
-    "commands": 23,
-    "error_codes": 50,
+    "brief_rules": 10,
+    "commands": 26,
+    "error_codes": 52,
     "http_routes": 15,
     "lint_rules": 30,
     "nouns": 9

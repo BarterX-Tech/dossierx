@@ -33,6 +33,11 @@ const (
 	RuleTotalCap         = "brief-total-cap"
 	RuleRestsOnUnknown   = "brief-rests-on-unknown"
 	RuleRestsOnDuplicate = "brief-rests-on-duplicate"
+	// RuleRestsOnMissing and RuleDependencyDrift read a locked brief's
+	// baselines in the lock store (NIT-205, lockstate.go): a baselined claim
+	// that no longer exists, and one whose content moved since the baseline.
+	RuleRestsOnMissing  = "brief-rests-on-missing"
+	RuleDependencyDrift = "brief-dependency-drift"
 )
 
 // Rule is one entry of the brief rule set.
@@ -43,12 +48,20 @@ type Rule struct {
 
 // Rules is every brief rule, in report order: the shape of the tree first, then
 // each file's frontmatter, then the caps from the smallest scope to the
-// largest, then the two rules that need the claims.
+// largest, then the two rules that need the claims, then the two that need a
+// locked brief's baselines in the lock store.
 //
 // Every cap is an ERROR and final: `check` refuses the project until the brief
-// is split or trimmed, or the human raises the cap. Only the duplicate rule is
-// a WARNING — two briefs resting on exactly the same claims may well be one
-// brief, but that is a question for a reader, not a refusal.
+// is split or trimmed, or the human raises the cap. The duplicate rule is a
+// WARNING — two briefs resting on exactly the same claims may well be one
+// brief, but that is a question for a reader, not a refusal — and so is
+// dependency drift, the drifted-claim tier: a moved claim makes the brief
+// review-pending, which asks for a reader, and never fails `check`. A
+// baselined claim that is gone is an ERROR: the brief reads a claim that no
+// longer exists.
+//
+// The two integrity findings of a brief's lock (brief-content-drift,
+// brief-unrecorded) are not here: they are ledger findings (lockstate.go).
 var Rules = []Rule{
 	{RuleShape, lint.SeverityError},
 	{RuleFrontmatter, lint.SeverityError},
@@ -58,6 +71,8 @@ var Rules = []Rule{
 	{RuleTotalCap, lint.SeverityError},
 	{RuleRestsOnUnknown, lint.SeverityError},
 	{RuleRestsOnDuplicate, lint.SeverityWarning},
+	{RuleRestsOnMissing, lint.SeverityError},
+	{RuleDependencyDrift, lint.SeverityWarning},
 }
 
 // RuleNames is Rules' names, sorted — the form surface.json inventories.
@@ -129,11 +144,25 @@ func (s *Set) checkCaps() {
 // claims is read and never changed, and nothing here feeds back into a claim:
 // a brief resting on a claim is a fact about the brief.
 func (s *Set) Findings(claims []model.Claim) []lint.Finding {
+	return s.FindingsWith(claims, nil)
+}
+
+// FindingsWith is Findings plus the two lint findings of the lock lifecycle,
+// read off eval (Evaluate against the same claims and the lock store): a
+// baselined claim that is gone (brief-rests-on-missing, which then stands in
+// for brief-rests-on-unknown on that id, so one gone claim is one finding) and
+// a moved one (brief-dependency-drift). A nil eval is Findings.
+func (s *Set) FindingsWith(claims []model.Claim, eval *Evaluation) []lint.Finding {
 	if s == nil {
 		return nil
 	}
 	out := append([]lint.Finding(nil), s.findings...)
-	out = append(out, s.restsOnFindings(claims)...)
+	var baselined map[string]map[string]bool
+	if eval != nil {
+		baselined = eval.baselined
+		out = append(out, eval.Lint...)
+	}
+	out = append(out, s.restsOnFindings(claims, baselined)...)
 	sortFindings(out)
 	return out
 }
@@ -168,7 +197,7 @@ func sortFindings(out []lint.Finding) {
 // non-empty rests_on set is identical to another's. Two briefs that rest on
 // nothing are not duplicates of each other: an empty set says nothing about
 // what the briefs are about.
-func (s *Set) restsOnFindings(claims []model.Claim) []lint.Finding {
+func (s *Set) restsOnFindings(claims []model.Claim, baselined map[string]map[string]bool) []lint.Finding {
 	known := make(map[string]bool, len(claims))
 	for _, c := range claims {
 		known[c.ID] = true
@@ -178,7 +207,7 @@ func (s *Set) restsOnFindings(claims []model.Claim) []lint.Finding {
 	var keys []string
 	for _, b := range s.Briefs {
 		for _, id := range b.RestsOn {
-			if !known[id] {
+			if !known[id] && !baselined[b.Path][id] {
 				out = append(out, lint.Finding{
 					LintName: RuleRestsOnUnknown,
 					ClaimID:  b.Path,
