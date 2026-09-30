@@ -10838,7 +10838,17 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 
 /* The "On this page" rail is the facet panel (system-record.js renderToc)
    with a brief's ## headings for rows and a Threads block under them. */
-.facet-toc[data-kind="brief"] { padding-top: 36px; top: 0; height: 100vh; max-height: 100vh; }
+@media screen and (min-width: 1181px) {
+  /* The >=1181px rail: B1 starts it 36px down the viewport, level with the
+     kicker. The 861-1180px popover and the phone sheet keep their own
+     geometry. */
+  .facet-toc[data-kind="brief"] { padding-top: 36px; top: 0; height: 100vh; max-height: 100vh; }
+}
+@media (max-width: 1180px) {
+  /* The Threads block is a rail feature; the popover and the sheet have no
+     room for it, and the phone has the page-foot button instead. */
+  .facet-toc .facet-toc__threads { display: none; }
+}
 .facet-toc[data-kind="brief"] .facet-toc__list { flex: 0 0 auto; padding-bottom: 0; }
 .facet-toc[data-kind="brief"] .facet-toc__item { align-items: center; min-height: 30px; margin-bottom: 4px; padding: 6px 8px; }
 .facet-toc[data-kind="brief"] .facet-toc__item > strong { font: 400 14px/18px var(--font-sans); }
@@ -10996,8 +11006,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     font: 500 14px/18px var(--font-sans);
   }
   .brief-comment .dx-icon { width: 15px; height: 15px; stroke-width: 2.2; }
-  .facet-toc__threads { display: none; }
-  .facet-toc[data-kind="brief"] { padding-top: 0; top: auto; height: auto; }
   #nav .brief-nav .brief-nav__row { height: auto; min-height: 44px; }
 }
 

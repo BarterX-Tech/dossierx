@@ -147,7 +147,7 @@ testdata/fixture-basic/build/viewer/index.html  (rewritten)
                     testdata/fixture-basic/claims/widget-overview.yaml
                     testdata/fixture-basic/claims/widget/manifest.yaml
                     testdata/fixture-basic/constitution.yaml
-    size            23276 lines / 1234179 bytes -> 23915 lines / 1249423 bytes
+    size            23276 lines / 1234179 bytes -> 23923 lines / 1249742 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -241,7 +241,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (rewritten)
                     testdata/fixture-conformance-v1/claims/widget/manifest.yaml
                     testdata/fixture-conformance-v1/constitution.yaml
                     testdata/fixture-conformance-v1/project.config.yaml
-    size            23601 lines / 1288309 bytes -> 24251 lines / 1304718 bytes
+    size            23601 lines / 1288309 bytes -> 24259 lines / 1305037 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -3038,7 +3038,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
                     testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
-    size            23990 lines / 1496790 bytes -> 24524 lines / 1515685 bytes
+    size            23990 lines / 1496790 bytes -> 24532 lines / 1516004 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -3220,7 +3220,7 @@ testdata/fixture-portability/build/viewer/index.html  (rewritten)
                     testdata/fixture-portability/claims/beacon/manifest.yaml
                     testdata/fixture-portability/constitution.yaml
                     testdata/fixture-portability/project.config.yaml
-    size            23267 lines / 1238682 bytes -> 23906 lines / 1253663 bytes
+    size            23267 lines / 1238682 bytes -> 23914 lines / 1253982 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -3700,7 +3700,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
                     testdata/fixture-theme-flat/claims/widget/manifest.yaml
                     testdata/fixture-theme-flat/constitution.yaml
                     testdata/fixture-theme-flat/project.config.yaml
-    size            27403 lines / 4877586 bytes -> 24044 lines / 1287581 bytes
+    size            27403 lines / 4877586 bytes -> 24052 lines / 1287900 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it

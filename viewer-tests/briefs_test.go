@@ -97,6 +97,18 @@ func TestBriefPage_OpensByHashWithItsTreeAndImage(t *testing.T) {
 			{"the hash names the brief", `location.hash === '#` + roundBrief + `'`},
 		})
 
+	// Between 861 and 1180px the panel is the corner popover every facet
+	// gets: a select over the headings, and no Threads block.
+	runCDP(t, ctx, chromedp.EmulateViewport(1024, 900))
+	requireAll(t, ctx, "On this page at 1024px",
+		`var toc = document.getElementById('systemFacetToc');`,
+		[][2]string{
+			{"the select lists the headings", `getComputedStyle(toc.querySelector('.facet-toc__select')).display !== 'none' && toc.querySelector('.facet-toc__select').options.length === 2`},
+			{"the Threads block is left out", `getComputedStyle(toc.querySelector('.facet-toc__threads')).display === 'none'`},
+			{"the popover sits in the corner, not over the page", `toc.getBoundingClientRect().height < 200`},
+		})
+	desktopViewport(t, ctx)
+
 	// A features/ brief is left out of the tree, but its page resolves.
 	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#brief-features-split-a-bill';`, nil))
 	pollTrue(t, ctx, `!document.getElementById('brief-features-split-a-bill').hidden`)
