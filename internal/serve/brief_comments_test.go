@@ -51,6 +51,15 @@ func listBriefThreads(t *testing.T, base, id, query string) []briefThreadWire {
 	return out.Comments
 }
 
+func mustReadFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func briefWrite(t *testing.T, base, method, path, body string, wantStatus int) []byte {
 	t.Helper()
 	mods := allowedMutating(base)
@@ -94,7 +103,7 @@ func TestBriefComments_TheHumanOpensRepliesAndResolves(t *testing.T) {
 	}
 	for path, b := range claimsBefore {
 		if strings.Contains(path, string(filepath.Separator)+"claims"+string(filepath.Separator)) {
-			if now, _ := os.ReadFile(path); string(now) != string(b) {
+			if now := mustReadFile(t, path); now != string(b) {
 				t.Fatalf("a brief comment rewrote claim file %s", path)
 			}
 		}
@@ -183,12 +192,12 @@ func TestBriefComments_ABriefAndAClaimSharingAnIDNeverCross(t *testing.T) {
 	briefWrite(t, base, http.MethodPost, "/api/briefs/project.flow/comments", `{"body":"on the brief"}`, http.StatusOK)
 	briefWrite(t, base, http.MethodPost, "/api/claims/project.flow/comments", `{"body":"on the claim"}`, http.StatusOK)
 
-	briefRaw, _ := os.ReadFile(filepath.Join(root, "briefs", "project", "flow.md"))
-	claimRaw, _ := os.ReadFile(filepath.Join(root, "project-claims", "flow.yaml"))
-	if !strings.Contains(string(briefRaw), "on the brief") || strings.Contains(string(briefRaw), "on the claim") {
+	briefRaw := mustReadFile(t, filepath.Join(root, "briefs", "project", "flow.md"))
+	claimRaw := mustReadFile(t, filepath.Join(root, "project-claims", "flow.yaml"))
+	if !strings.Contains(briefRaw, "on the brief") || strings.Contains(briefRaw, "on the claim") {
 		t.Fatalf("the brief file holds the wrong threads:\n%s", briefRaw)
 	}
-	if !strings.Contains(string(claimRaw), "on the claim") || strings.Contains(string(claimRaw), "on the brief") {
+	if !strings.Contains(claimRaw, "on the claim") || strings.Contains(claimRaw, "on the brief") {
 		t.Fatalf("the claim file holds the wrong threads:\n%s", claimRaw)
 	}
 	onBrief := listBriefThreads(t, base, "project.flow", "")
