@@ -1541,7 +1541,13 @@ brief's path. An accepted image renders as an image at
 `brief-assets/<folder>/<name>`, relative to the viewer: `dossierx check`
 copies every referenced image there beside `build/viewer/index.html`, and
 `dossierx serve` answers the same path from the brief's folder. The copied
-images count toward the viewer's 64 MiB output bound together with the page.
+images count toward the viewer's 64 MiB output bound together with the page,
+and the default brief caps allow more image bytes than that bound holds (60
+briefs × 3 images × 1 MiB is about 180 MiB). A project inside every cap can
+therefore still exceed it; `check` then refuses with
+`conformance_capacity_exceeded`, a message naming the largest images, their
+total and the bound, and a hint to shrink or remove brief images. Nothing is
+written.
 A copy reads each image as a plain file only: an image that is no longer the
 plain file of the size `check` discovered (swapped for a symlink, resized,
 unreadable) fails the render with its path named rather than being copied.
@@ -1588,8 +1594,8 @@ brief finding — and no brief byte enters any claim hash.
 
 ### In the viewer
 
-A project that holds a brief gets a **Briefs** group in the sidebar, after
-Modules: "All briefs", then one row per folder (its name title-cased; the path
+A project that holds a brief outside `features/` gets a **Briefs** group in
+the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
 stays as written), each opening to its briefs. `features/` is left out of this
 tree: its briefs are features. Each brief row carries one state mark — a
 padlock for `locked`, a hollow dot for `draft` — and a legend above the theme
@@ -1598,13 +1604,21 @@ second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
 `BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
 words and images against their caps, the body, and the claims it **rests on**
 (its frontmatter) and is **cited by** (every claim with an `internal` source
-whose `path` is the brief's). The right rail is "On this page", the body's
-`##` headings; on a phone it is a sheet. The sidebar search reads "Search
-claims and briefs" and matches a brief's title, file name, summary and folder.
+whose `path` is the brief's). The title is the page's top heading; the body's
+`##` sections sit one level below it, and a further `#` in the body sits at
+the same level as a `##` rather than above the title. The right rail is "On
+this page", the body's `##` headings, with a Threads block; on a phone it is a
+sheet. A brief with no `##` heading has no rail. Threads on briefs are not
+built yet: both Comment buttons are disabled and say so. The sidebar search
+reads "Search claims and briefs": a module row matches its claims' titles,
+summaries and ids, and a brief row its title, file name, summary and folder.
 A `check` finding whose `claim_id` is a brief's path, its folder's or the
-tree's shows in the status strip on that brief's page. The viewer also carries
-the briefs as data (a `dossierx-briefs` JSON block); a project with no brief
-has none of this.
+tree's shows in the status strip and on the Issues screen of that brief's
+page. A project whose only briefs are in `features/` gets their pages, but no
+Briefs group, no index and no "…and briefs" in the search box. The viewer also
+carries the briefs as data (a `dossierx-briefs` JSON block); a project with no
+brief has none of this, and its search reads "Search modules" while still
+matching claims.
 
 ## Project config (`project.config.yaml`)
 

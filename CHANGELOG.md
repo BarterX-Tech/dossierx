@@ -114,16 +114,26 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   rests on and is cited by (claims whose `internal` source is the brief's
   path). The right rail lists its `##` headings ("On this page"; a sheet on a
   phone), beside a Threads block whose Comment button is inert until brief
-  threads exist. Light, dark and the phone drawer all carry it.
+  threads exist (drawn disabled, with a line saying threads on briefs arrive
+  later). A brief with no `##` gets no rail. The brief's title is the page's
+  top heading and its body's headings sit below it. The sidebar heading of
+  the group that holds the current page (Modules or Briefs) is drawn in the
+  accent. Light, dark and the phone drawer all carry it, and the tree works
+  from the keyboard.
 - **Brief images render.** An image a brief references is served by `dossierx
   serve` at `GET /brief-assets/{folder}/{name}` (an allowlist of what the page
   references, never the path as spelled — the fifteenth HTTP route), and
   `dossierx check` copies it to `build/viewer/brief-assets/` beside the static
-  viewer, charging its bytes to the viewer's 64 MiB bound. The payload's
+  viewer, charging its bytes to the viewer's 64 MiB bound. The default brief
+  caps allow more image bytes than that bound (about 180 MiB), so a project
+  inside every cap can exceed it: `check` then refuses with
+  `conformance_capacity_exceeded`, naming the largest images, their total and
+  the bound, with a hint to shrink or remove brief images. The payload's
   `body_html` now carries the same `<img>` tags, and each brief gains an
   `anchor`, its page id.
-- **Search covers briefs** ("Search claims and briefs"): a brief matches on its
-  title, file name, summary and folder. A `check` finding about a brief, its
+- **Search covers claims and briefs** ("Search claims and briefs"): a module
+  row now matches its claims' titles, summaries and ids (in every project,
+  briefs or not), and a brief row its title, file name, summary and folder. A `check` finding about a brief, its
   folder or the tree shows in the status strip on that brief's page, with a
   way to the brief from the Issues screen.
 

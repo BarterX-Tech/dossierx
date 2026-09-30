@@ -30,7 +30,7 @@ func briefPageFixture() (*catalog.Catalog, *config.Config, *briefs.Set) {
 	}}
 	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
 	set := briefs.FromFiles(cfg, []briefs.File{
-		briefFile("decisions/round-to-the-cent.md", "---\nsummary: Round once, at display.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# Balances round to the cent, once\n\n## Context\n\nThree people split a bill.\n\n![Split](split.png)\n\n## Decision\n\nRound once.\n"),
+		briefFile("decisions/round-to-the-cent.md", "---\nsummary: Round once, at display.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# Balances round to the cent, once\n\n## Context\n\nThree people split a bill.\n\n![Split](split.png)\n\n## Decision\n\nRound once.\n\n# A stray top heading\n\n### Detail\n"),
 		briefImage("decisions/split.png", 2048),
 		briefFile("decisions/no-bank-linking.md", "---\nsummary: No bank.\n---\nWe never link a bank.\n"),
 		briefFile("research/interviews.md", "---\nsummary: Twelve households.\n---\n## Findings\n\nMonthly.\n"),
@@ -96,7 +96,9 @@ func TestRender_BriefPageAndTree(t *testing.T) {
 		`<p class="brief-lede">Round once, at display.</p>`,
 		`class="pill ps brief-pill"`,
 		`of 2,000 words · 1 of 3 images`,
-		`<h2>Context</h2>`,
+		`<h3>Context</h3>`,
+		`<h3>A stray top heading</h3>`,
+		`<h4>Detail</h4>`,
 		`<img class="md-img" src="brief-assets/decisions/split.png" alt="Split">`,
 		`Rests on · 1 claim`,
 		`href="#widget.contract.overview"`,
@@ -106,11 +108,19 @@ func TestRender_BriefPageAndTree(t *testing.T) {
 		`claim-relationship-badge--draft">DRAFT<`,
 	} {
 		if !strings.Contains(page, want) {
-			t.Errorf("brief page is missing %s", want)
+			t.Errorf("brief page is missing %s\n%s", want, page)
 		}
 	}
-	if strings.Contains(page, "<h1>") {
-		t.Error("the title heading belongs in the header; the body must not repeat it")
+	// The title is the page's top heading: the body's sections sit below it,
+	// and a stray "#" after the title may not outrank it.
+	_, body, ok := strings.Cut(page, `<article class="brief-body">`)
+	if !ok {
+		t.Fatal("the brief page has no body")
+	}
+	for _, tag := range []string{"<h1>", "<h2>"} {
+		if strings.Contains(body, tag) {
+			t.Errorf("the body must hold no %s: the title is the page's h2 and its sections sit below it", tag)
+		}
 	}
 	draft := sectionHTML(t, out, "brief-decisions-no-bank-linking")
 	if !strings.Contains(draft, `class="pill pv brief-pill"`) || strings.Contains(draft, "brief-relations") {
@@ -145,6 +155,9 @@ func TestRender_BriefPageIDsAreUniqueOnThePage(t *testing.T) {
 		briefFile("a-b/c.md", "---\nsummary: One.\n---\none\n"),
 		briefFile("a/b-c.md", "---\nsummary: Two.\n---\ntwo\n"),
 		briefFile("q/contract.md", "---\nsummary: Three.\n---\nthree\n"),
+		// A title heading's id must not be a second brief's section id.
+		briefFile("f/x.md", "---\nsummary: Four.\n---\n# Ex\n"),
+		briefFile("f/x-title.md", "---\nsummary: Five.\n---\n# Ex title\n"),
 	})
 	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, time.Unix(1_700_000_000, 0).UTC(), 0)
 	if err != nil {
@@ -190,5 +203,39 @@ func TestRenderBoundedWith_ChargesBriefImagesToTheBound(t *testing.T) {
 	_, err = renderBoundedAt(cat, cfg, Extras{Briefs: set}, at, len(page)+imageBytes-1)
 	if !errors.Is(err, conformance.ErrCapacityExceeded) {
 		t.Fatalf("a bound one byte short of page+image must be refused, got %v", err)
+	}
+	// The refusal names the images as a part of the bound (F2): here they fit
+	// alone and the page tips it, and the message still says what they take.
+	if !errors.Is(err, ErrBriefImagesOverBound) || !strings.Contains(err.Error(), "briefs/decisions/split.png 2048 bytes") ||
+		!strings.Contains(err.Error(), "take 2048 of them") || !strings.Contains(err.Error(), "shrink or remove brief images") {
+		t.Fatalf("the refusal must name the brief images, their total and the recovery: %v", err)
+	}
+	// With no image in the bound, the refusal stays the page's own.
+	_, err = renderBoundedAt(cat, cfg, Extras{}, at, 1024)
+	if errors.Is(err, ErrBriefImagesOverBound) {
+		t.Fatalf("a viewer with no brief image must not blame images: %v", err)
+	}
+}
+
+// TestRender_FeaturesOnlyProjectMakesNoBriefsPromise: a project whose only
+// briefs are under features/ has no tree, so it gets no Briefs group, no
+// "All briefs" index and no "…and briefs" search promise — but its feature
+// pages still render, so a link to one resolves (NIT-197 F14).
+func TestRender_FeaturesOnlyProjectMakesNoBriefsPromise(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("features/split-a-bill.md", "---\nsummary: Splitting a bill.\n---\n# Split a bill\n"),
+	})
+	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, absent := range []string{"Search claims and briefs", `id="_briefs"`, `class="system-nav-group brief-nav"`, `class="brief-legend"`} {
+		if strings.Contains(out, absent) {
+			t.Errorf("a features-only project must not carry %s", absent)
+		}
+	}
+	if !strings.Contains(out, `id="brief-features-split-a-bill"`) {
+		t.Error("the feature brief's page must still render")
 	}
 }

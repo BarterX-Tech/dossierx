@@ -74,9 +74,14 @@ func TestBriefAsset_OnlyWhatABriefReferences(t *testing.T) {
 	}
 }
 
-// TestBriefAsset_ASymlinkedImageIsNotServed pins that a referenced image
-// swapped for a link after discovery is refused at the route: the file would
-// otherwise be a way to read anything the serve process can.
+// TestBriefAsset_ASymlinkedImageIsNotServed pins that a referenced image that
+// is a link is never served: the file would otherwise be a way to read
+// anything the serve process can. The guard this exercises is DISCOVERY —
+// briefs.Load reads a symlink as a non-regular entry (brief-shape), so the
+// image drops out of render.BriefAssets and the allowlist has no entry for it.
+// The route's own EvalSymlinks re-check behind the allowlist is defence in
+// depth for a link that appears between that read and the request, a window
+// this test cannot open deterministically, so it is not what passes here.
 func TestBriefAsset_ASymlinkedImageIsNotServed(t *testing.T) {
 	base, root := briefAssetProject(t)
 	img := filepath.Join(root, "briefs", "flow", "flow-diagram.png")

@@ -146,6 +146,10 @@ type Result struct {
 	// conformance, catalog, or render according to ConformanceFailurePhase.
 	ConformanceCapacityExceeded bool
 	ConformanceFailurePhase     string
+	// BriefImagesOverBound narrows a render capacity refusal: brief images
+	// took part of the viewer's bound (render.ErrBriefImagesOverBound), so the
+	// recovery the hint names is shrinking or removing them.
+	BriefImagesOverBound bool
 
 	// Readiness is the exact snapshot used for catalog/viewer capacity grading.
 	// Serve projects this same map instead of re-reading stores after Status.
@@ -357,6 +361,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+			res.BriefImagesOverBound = errors.Is(renderErr, render.ErrBriefImagesOverBound)
 			res.ConformanceFailurePhase = "render"
 			return res, fmt.Errorf("render: %w", renderErr)
 		}
@@ -421,6 +426,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+			res.BriefImagesOverBound = errors.Is(renderErr, render.ErrBriefImagesOverBound)
 			res.ConformanceFailurePhase = "render"
 			return res, fmt.Errorf("render: %w", renderErr)
 		}
@@ -752,6 +758,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 	if renderErr != nil {
 		res.RenderError = renderErr.Error()
 		res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+		res.BriefImagesOverBound = errors.Is(renderErr, render.ErrBriefImagesOverBound)
 		res.ConformanceFailurePhase = "render"
 		return res
 	}

@@ -1,6 +1,7 @@
 package render
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"path"
@@ -12,6 +13,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
@@ -82,13 +84,52 @@ func BriefAssets(cfg *config.Config, set *briefs.Set) []BriefAsset {
 	return out
 }
 
-// briefAssetBytes is the total size of BriefAssets(cfg, set).
-func briefAssetBytes(cfg *config.Config, set *briefs.Set) int64 {
-	var n int64
-	for _, a := range BriefAssets(cfg, set) {
-		n += a.Bytes
+// ErrBriefImagesOverBound is the refusal of a bounded render in which brief
+// images take part of the viewer's bound and the viewer does not fit. It is
+// also conformance.ErrCapacityExceeded (errors.Is holds for both), so every
+// caller that already branches on the capacity refusal keeps doing so; this
+// one tells it the recovery is the images. The default brief caps allow more
+// image bytes (60 briefs x 3 x 1 MiB) than the 64 MiB viewer bound holds, so
+// a project inside every cap can reach it.
+var ErrBriefImagesOverBound = errors.New("brief images over the viewer bound")
+
+// briefImagesNamed is how many images the refusal names, largest first.
+const briefImagesNamed = 5
+
+type briefImagesBoundError struct {
+	images []BriefAsset
+	total  int64
+	bound  int
+	// alone is true when the images by themselves reach the bound, before a
+	// byte of the page is counted.
+	alone bool
+}
+
+func briefImagesOverBound(images []BriefAsset, total int64, bound int, alone bool) error {
+	return &briefImagesBoundError{images: images, total: total, bound: bound, alone: alone}
+}
+
+func (e *briefImagesBoundError) Error() string {
+	largest := append([]BriefAsset(nil), e.images...)
+	sort.SliceStable(largest, func(i, j int) bool { return largest[i].Bytes > largest[j].Bytes })
+	var names []string
+	for i, a := range largest {
+		if i == briefImagesNamed {
+			names = append(names, fmt.Sprintf("and %d more", len(largest)-briefImagesNamed))
+			break
+		}
+		names = append(names, fmt.Sprintf("%s %d bytes", a.Display, a.Bytes))
 	}
-	return n
+	where := "the viewer does not fit"
+	if e.alone {
+		where = "the images alone reach it before the page is counted"
+	}
+	return fmt.Sprintf("%s: the static viewer is held to %d bytes, and its %d brief image(s) take %d of them, so %s (%s); shrink or remove brief images",
+		conformance.ErrCapacityExceeded.Error(), e.bound, len(e.images), e.total, where, strings.Join(names, ", "))
+}
+
+func (e *briefImagesBoundError) Is(target error) bool {
+	return target == ErrBriefImagesOverBound || target == conformance.ErrCapacityExceeded
 }
 
 // featuresFolder is the brief folder the Briefs tree leaves out: its briefs
@@ -306,7 +347,7 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 		Mark:         mark,
 		MarkLabel:    markLabel,
 		Pill:         components.BriefStatusPillHTML(string(b.Status)),
-		Body:         template.HTML(withoutTitleHeading(r.body, b.Body)),
+		Body:         template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body))),
 		Meta:         fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
 		MetaShort:    groupDigits(b.Words) + " words",
 		RestsOn:      components.BriefRelationRowsHTML(b.RestsOn, statuses),
@@ -335,6 +376,44 @@ func withoutTitleHeading(rendered, body string) string {
 		return rendered
 	}
 	return strings.TrimLeft(trimmed[end+len("</h1>"):], "\n")
+}
+
+// briefHeadingLevel is where each document-mode heading level sits on the
+// brief page. The page's title is its h2 (the level a module's or Home's title
+// takes, under the sidebar's h1), so the body starts one below it: a "##"
+// section is an h3, and a stray "#" after the title is an h3 too — it may not
+// outrank the title it sits under. "###" and deeper follow one step down,
+// with h6 as the floor.
+var briefHeadingLevel = [7]byte{0, '3', '3', '4', '5', '6', '6'}
+
+// briefBodyOutline moves the rendered body's headings under the page title
+// (briefHeadingLevel). The renderer writes a heading as a bare <hN> and </hN>
+// with no attribute, and escapes every "<" of author text, so the only "<h"
+// followed by a digit in its output is a heading tag. The claim page and the
+// payload's body_html keep document mode's own levels; this is the page's
+// outline only.
+func briefBodyOutline(body string) string {
+	var b strings.Builder
+	b.Grow(len(body))
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		if c == '<' && i+3 < len(body) {
+			j := i + 1
+			if body[j] == '/' {
+				j++
+			}
+			if j+2 < len(body) && body[j] == 'h' && body[j+1] >= '1' && body[j+1] <= '6' && body[j+2] == '>' {
+				b.WriteString(body[i:j])
+				b.WriteByte('h')
+				b.WriteByte(briefHeadingLevel[body[j+1]-'0'])
+				b.WriteByte('>')
+				i = j + 2
+				continue
+			}
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // internalCitations maps a brief path to the claims that cite it: every

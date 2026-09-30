@@ -8,12 +8,15 @@ on the relative `brief-assets/<folder>/<name>` path); the images a static build
 copies beside the viewer (`internal/check/brief_assets.go`) and the serve route
 that answers the same path (`internal/serve/brief_assets.go`); and the client
 code that routes to, lists and searches the pages (`viewer-runtime.js`,
-`system-record.js`).
+`system-record.js`). The audit round added one more reader: each module's
+sidebar row carries a `data-search` index of its claims' titles, summaries
+and ids (`ModuleGroup.Search`), so "Search claims and briefs" finds claims.
 
 The brief page is a consumer, never a producer. It reads the `briefs.Set`
 NIT-204 discovers, and from the catalog only each claim's `ID`, `Status`,
 `ReviewPending` (the lifecycle badge, through the existing
-`buildTargetStatusLookup`) and `Sources` (the cited-by index). It adds no
+`buildTargetStatusLookup`), `Sources` (the cited-by index), and `Summary`
+(the module rows' search index). It adds no
 claim edge, cause, condition, baseline or traversal; it computes no readiness;
 and it writes nothing but the copied images, which are build output.
 
@@ -63,20 +66,26 @@ and it writes nothing but the copied images, which are build output.
   `buildBriefsView` holds a `*catalog.Catalog` and reads four fields of each
   claim. `writeBriefAssets` writes only under `build/viewer/brief-assets/`,
   which it rebuilds whole.
-- **A project with no brief is unchanged outside the stylesheet and scripts.**
-  Every brief element in `shell.html` is conditional on the view, and each
-  comment hugs its action so the conditional adds no newline. Measured against
-  `7f0264c3`'s committed viewers with `<style>`/`<script>` bodies and the render
-  stamp masked, the four no-brief fixtures (basic, conformance-v1, portability,
-  theme-flat) are byte-identical; the CSS and JS blocks differ because they
-  carry the new rules. `TestRenderWith_BriefsPayload` pins the render-level
-  half (an empty set renders exactly what no `Extras` renders).
+- **A project with no brief gains only the claim search index outside the
+  stylesheet and scripts.** Every brief element in `shell.html` is
+  conditional on the view (on the tree having a folder, for the search
+  promise, the index and the group), and each comment hugs its action so the
+  conditional adds no newline. Measured against `7f0264c3`'s committed
+  viewers with `<style>`/`<script>` bodies, the render stamp and the module
+  rows' `data-search` attributes masked, the four no-brief fixtures (basic,
+  conformance-v1, portability, theme-flat) are byte-identical.
+  `TestRenderWith_BriefsPayload` pins the render-level half (an empty set
+  renders exactly what no `Extras` renders).
 - **Every id on the page names one element.** `brief-<folder>-<slug>` can be
   spelled by two briefs (`a-b/c`, `a/b-c`) or by a brief and a module's facet
   (`brief-q-contract`); the later claimant takes `-2`, `-3`, in brief-id order,
-  and the payload's `anchor` is the id the section carries
-  (`TestRender_BriefPageIDsAreUniqueOnThePage`; mutation: dropping the
-  collision loop fails it).
+  and the payload's `anchor` is the id the section carries. A page's title
+  heading is `<id>_title`: the underscore is outside every brief and module
+  id's alphabet, so a brief named `x-title` beside one named `x` no longer
+  shares an id with the other's heading (audit F3; the first round's
+  `<id>-title` made the claim above false for that pair).
+  `TestRender_BriefPageIDsAreUniqueOnThePage` holds all three shapes;
+  mutation: dropping the collision loop, or returning to `-title`, fails it.
 - **What is copied is what was counted.** The static viewer's 64 MiB bound
   (`conformance.MaxOutputBytes`, `RenderBoundedWith`) now charges the page and
   the images the page references, from one list (`render.BriefAssets`), before
@@ -84,11 +93,21 @@ and it writes nothing but the copied images, which are build output.
   source that is no longer the plain file of the size discovery read
   (`TestRenderBoundedWith_ChargesBriefImagesToTheBound`: exact fit passes, one
   byte short is `conformance_capacity_exceeded`;
-  `TestWriteBriefAssets_RefusesAnImageThatChangedUnderIt`).
+  `TestWriteBriefAssets_RefusesAnImageThatChangedUnderIt`). The default caps
+  admit about 180 MiB of images against the 64 MiB bound, so a lint-clean
+  project can reach it; the refusal then names the largest images, their
+  total and the bound, and the CLI hint says to shrink or remove them
+  (`render.ErrBriefImagesOverBound`, `TestCheck_BriefImagesOverTheViewerBoundAreNamed`).
+  Both write paths, plain and conformance-enabled, copy the images
+  (`TestRunConformanceWritesAgreementThenRemovesStaleStatus` holds the second).
 - **The serve route is an allowlist.** `GET /brief-assets/{folder}/{name}`
-  answers only a path `render.BriefAssets` lists for the current tree, then
-  refuses anything whose resolved path is not itself inside `briefs_dir`
-  (`TestBriefAsset_*`).
+  answers only a path `render.BriefAssets` lists for the current tree
+  (`TestBriefAsset_*`). What those tests exercise for a symlinked image is
+  discovery: `briefs.Load` reads the link as a non-regular entry, so it never
+  reaches the allowlist. The route's own `EvalSymlinks` re-check, which
+  refuses a resolved path that is not itself inside `briefs_dir`, is defence
+  in depth for a link that appears between discovery and the request; no test
+  opens that window, and removing the re-check passes the route tests.
 
 ## Complexity and output size
 
@@ -105,6 +124,11 @@ Output grows with the briefs' own bytes and with the cited-by rows, which are
 bounded by the number of internal sources in the corpus: each source adds at
 most one row to one brief. A brief body appears twice in the page (its section
 and the payload's `body_html`); both are charged to the viewer's bound.
+
+The module rows' search index is one pass over the claims already grouped
+(O(C)) and adds each claim's title, summary and id to the page once: 178
+bytes on fixture-basic, 5,877 on the 58-claim graph-demo, and at most about
+C × (summary cap + id + title) bytes in general, charged to the same bound.
 
     go test ./internal/render -run '^$' -bench 'BriefsView|BriefsPayload' -benchmem -benchtime=3x
 

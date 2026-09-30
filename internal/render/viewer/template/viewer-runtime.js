@@ -2973,9 +2973,13 @@
             return statusGroupClaimCount(b) - statusGroupClaimCount(a);
           });
           var weight = uniqueClaimCount(rows);
-          var note = stripSeverityFilter === 'needs_you'
-            ? weight + ' of ' + needsTotal + ' need you here'
-            : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
+          // A brief's findings block no claim: they are about the brief, its
+          // folder or the tree, so the head counts findings on this brief.
+          var note = activeBriefSection()
+            ? countLabel(rows.length, 'finding') + ' on this brief'
+            : stripSeverityFilter === 'needs_you'
+              ? weight + ' of ' + needsTotal + ' need you here'
+              : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
           stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
         });
 
@@ -3410,7 +3414,11 @@
             (data.rows.length - ISSUES_RAIL_MAX_ROWS) + ' more not shown'));
         }
         var caveat = '';
-        if (waiting && data.claims > 0) {
+        if (activeBriefSection() && data.claims > 0) {
+          // On a brief the ranked ids are paths: the brief's own, its
+          // folder's and the tree's (briefFindingPaths).
+          caveat = countLabel(data.claims, 'path') + ' with a finding on this brief: the brief, its folder or the whole tree.';
+        } else if (waiting && data.claims > 0) {
           caveat = countLabel(data.claims, 'claim') + ', ' + countLabel(data.causes, 'cause') +
             ' — a claim can be waiting for more than one reason and is counted under each.';
         } else if (!waiting && data.claims > 0) {
@@ -3437,7 +3445,23 @@
         if (issuesBreadcrumbSuffixEl) {
           issuesBreadcrumbSuffixEl.textContent = subtab ? ('· ' + subtab.textContent.trim()) : '';
         }
-        if (issuesSubtitleEl) {
+        // On a brief page the screen speaks of the brief: its scope, its sort
+        // and its sentence (NIT-197), as the strip already does.
+        var onBrief = !!activeBriefSection();
+        var facetScope = issuesScopeEl && issuesScopeEl.querySelector('[data-scope="facet"]');
+        if (facetScope) { facetScope.textContent = onBrief ? 'This brief' : 'This facet'; }
+        var sortValue = document.getElementById('issuesSortValue');
+        if (sortValue) { sortValue.textContent = onBrief ? 'Most findings' : 'Most claims blocked'; }
+        if (issuesSubtitleEl && onBrief) {
+          var data = lastStatusData || {};
+          var ids = activeFacetClaimIDs();
+          var n = findingsForActiveFacet(data.lint_errors || [], ids).length +
+            findingsForActiveFacet(data.lint_warnings || [], ids).length +
+            findingsForActiveFacet(data.ledger_findings || [], ids).length;
+          issuesSubtitleEl.textContent = n
+            ? countLabel(n, 'finding') + ' on this brief ' + (n === 1 ? 'needs' : 'need') + ' attention.'
+            : 'Nothing on this brief needs attention.';
+        } else if (issuesSubtitleEl) {
           var groups = collectStatusGroups(
             (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
             activeFacetClaimIDs(), [], [], [], []

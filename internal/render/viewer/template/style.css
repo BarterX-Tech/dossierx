@@ -206,6 +206,10 @@
      proved light-dark() does not track this engine's explicit Dark toggle,
      only the OS. Engine-owned: not in ThemeTokenAllowlist. */
   --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
+  /* The soft hairline between rows inside a card (B1's relation rows): a
+     step lighter than --border. Its own token because dark needs its own
+     value, #1E2530, which no mix of the dark tokens reaches. */
+  --hairline-soft: #EEF1F5;
 
   /* TYPE AND SPACING. Declared here, consumed by the screen lanes. Before
      this block every size, leading and tracking in this file was a literal in
@@ -295,6 +299,7 @@
        a --border/--paper mix cannot reach — see the :root declaration's
        comment above for why this is its own engine-owned property. */
     --issues-scope-trough: #080B10;
+    --hairline-soft: #1E2530;
   }
 }
 
@@ -370,6 +375,7 @@
        edge, so explicit Light puts it back to nothing. */
     --sheet-hairline: transparent;
     --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
+    --hairline-soft: #EEF1F5;
   }
 }
 
@@ -412,6 +418,7 @@
        a --border/--paper mix cannot reach — see the :root declaration's
        comment above for why this is its own engine-owned property. */
     --issues-scope-trough: #080B10;
+    --hairline-soft: #1E2530;
   }
 }
 
@@ -10537,6 +10544,16 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 .brief-nav__row .brief-mark { margin-left: auto; }
 
+/* The group that holds the current row reads as current (B1 HRP-0/HRQ-0):
+   its heading, icon and count in the accent, the label at 600. One rule for
+   every group, so Modules gets it on a module page as Briefs does on a brief. */
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle,
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle .site-nav__icon,
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle .system-nav-group__count {
+  color: var(--link);
+}
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle { font-weight: 600; }
+
 /* One mark per brief, in a fixed 18px slot so the marks form one lane.
    Locked is the padlock; every other state is an 8px dot. Draft is the
    hollow dot. edited, review and thread are drawn here for the legend and
@@ -10550,6 +10567,8 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 .brief-mark::before {
   content: "";
+  box-sizing: border-box;
+  flex: 0 0 8px;
   width: 8px;
   height: 8px;
   border-radius: 999px;
@@ -10582,7 +10601,8 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   color: var(--muted);
   font: 12px/16px var(--font-sans);
 }
-.brief-legend .brief-mark { width: 8px; flex-basis: 8px; }
+/* The legend's mark takes its dot's own size, so the dot is what is measured. */
+.brief-legend .brief-mark { width: auto; flex: 0 0 auto; }
 
 /* The page. It is a .module-section with no .claim-group, like Home. */
 .brief-wide { display: contents; }
@@ -10680,15 +10700,15 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   font: 17px/28px var(--font-serif);
 }
 .brief-body > * { margin: 0; }
-.brief-body h1,
-.brief-body h2 {
+/* The body's outline sits under the page's h2 title (briefBodyOutline): a
+   "##" section is an h3, drawn at B1's 20/26 section size. */
+.brief-body h3 {
   color: var(--ink);
   font: 600 20px/26px var(--font-sans);
   letter-spacing: -.01em;
   scroll-margin-top: 24px;
 }
-.brief-body > h2:not(:first-child) { padding-top: 10px; }
-.brief-body h3,
+.brief-body > h3:not(:first-child) { padding-top: 10px; }
 .brief-body h4,
 .brief-body h5,
 .brief-body h6 {
@@ -10793,7 +10813,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   min-height: 40px;
   margin: 0;
   padding: 0;
-  border-bottom: 1px solid var(--code-bg);
+  border-bottom: 1px solid var(--hairline-soft);
 }
 .brief-relations .brief-relation:last-child { border-bottom: 0; }
 .brief-relations .claim-relationship-dot { display: none; }
@@ -10830,11 +10850,46 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   text-align: right;
 }
 
-/* The page-foot Comment button is the phone's; the desktop one is in the
-   rail's Threads block. Threads on briefs are NIT-198's, so both are inert. */
-.brief-comment { display: none; }
+/* The page-foot Comment row is the phone's; the desktop one is in the
+   rail's Threads block. Threads on briefs are NIT-198's, so both buttons are
+   disabled and drawn so, and a line beside each says why in words a phone
+   can read (a title would be hover-only). */
+.brief-comment-row { display: none; }
 .brief-comment:disabled,
-.facet-toc__comment:disabled { cursor: not-allowed; }
+.facet-toc__comment:disabled {
+  border-color: var(--border);
+  background: var(--code-bg);
+  color: var(--faint);
+  cursor: not-allowed;
+}
+.brief-comment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font: 500 14px/18px var(--font-sans);
+}
+.brief-comment .dx-icon { width: 15px; height: 15px; stroke-width: 2.2; }
+.brief-comment-note,
+.facet-toc__threads-later {
+  margin: 0;
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+/* A brief with no section heading gets no rail (system-record.js), so on a
+   wide screen its Comment row comes forward to the page foot instead. */
+.brief-section[data-no-sections] .brief-comment-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
 
 /* The "On this page" rail is the facet panel (system-record.js renderToc)
    with a brief's ## headings for rows and a Threads block under them. */
@@ -10849,17 +10904,18 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
      room for it, and the phone has the page-foot button instead. */
   .facet-toc .facet-toc__threads { display: none; }
 }
-.facet-toc[data-kind="brief"] .facet-toc__list { flex: 0 0 auto; padding-bottom: 0; }
+.facet-toc[data-kind="brief"] .facet-toc__list { flex: 0 0 auto; margin-top: 4px; padding-bottom: 0; }
 .facet-toc[data-kind="brief"] .facet-toc__item { align-items: center; min-height: 30px; margin-bottom: 4px; padding: 6px 8px; }
 .facet-toc[data-kind="brief"] .facet-toc__item > strong { font: 400 14px/18px var(--font-sans); }
 .facet-toc[data-kind="brief"] .facet-toc__item.on > strong { color: var(--link); font-weight: 600; }
 .facet-toc[data-kind="brief"] .facet-toc__blocker-count { display: none; }
 .facet-toc[data-kind="brief"] .freshness-footer { display: none; }
+/* B1: 16px under the last row's 4px gap, so the rule sits 20px below it. */
 .facet-toc__threads {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 32px 20px 0 4px;
+  margin: 16px 20px 0 4px;
   padding: 18px 8px 0;
   border-top: 1px solid var(--border);
 }
@@ -10958,9 +11014,8 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     font-size: 16px;
     line-height: 26px;
   }
-  .brief-body h1,
-  .brief-body h2 { font-size: 18px; line-height: 24px; letter-spacing: 0; }
-  .brief-body > h2:not(:first-child) { padding-top: 6px; }
+  .brief-body h3 { font-size: 18px; line-height: 24px; letter-spacing: 0; }
+  .brief-body > h3:not(:first-child) { padding-top: 6px; }
   .brief-relations { gap: 6px; padding: 16px 18px 10px; border-radius: 10px; }
   .brief-relations__rule,
   .brief-relations__note { display: none; }
@@ -10993,20 +11048,19 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   }
   .brief-relations .claim-relationship-badge::before { content: " · "; white-space: pre; }
   .brief-relations .claim-relationship-badge--draft { color: var(--status-draft); }
-  .brief-comment {
+  .brief-comment-row,
+  .brief-section[data-no-sections] .brief-comment-row {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    align-items: stretch;
     gap: 8px;
-    height: 44px;
-    border: 1px solid var(--border-strong);
-    border-radius: 10px;
-    background: var(--card-bg);
-    color: var(--ink);
-    font: 500 14px/18px var(--font-sans);
   }
-  .brief-comment .dx-icon { width: 15px; height: 15px; stroke-width: 2.2; }
-  #nav .brief-nav .brief-nav__row { height: auto; min-height: 44px; }
+  .brief-comment-note { text-align: center; }
+
+  /* Every row in the phone drawer's tree is a 44px tap target. */
+  #nav .brief-nav .brief-nav__row,
+  #nav .brief-nav .brief-nav__all,
+  .brief-folder__toggle { height: auto; min-height: 44px; }
 }
 
 @media (max-width: 520px) {

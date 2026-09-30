@@ -447,7 +447,10 @@
   }
 
   function briefHeadings(section) {
-    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body h2')) : [];
+    // The body's section headings: "##" (and a stray "#") render as h3
+    // under the page's h2 title (render.briefBodyOutline). A heading inside a
+    // quote or a list is not a section, so only the body's own children count.
+    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3')) : [];
   }
 
   // tocTarget is the element a TOC row stands for: a claim card, or on a
@@ -576,9 +579,22 @@
   // renderBriefToc fills the panel for a brief page (Paper B1, "On this
   // page"): one row per ## heading in the body, then the Threads block.
   // Threads on a brief are NIT-198's; until they exist the block states that
-  // none is open and its Comment button is inert (disabled, with a title
-  // saying so), so it cannot be mistaken for a control that did nothing.
+  // none is open, its Comment button is disabled and drawn so, and a visible
+  // line says threads arrive later (a title would be hover-only).
   function renderBriefToc(toc, brief, kicker) {
+    var headings = briefHeadings(brief);
+    // A brief with no section heading has nothing to put on this page's
+    // rail: no rail on a wide screen, no trigger and no sheet on a phone.
+    // The section says so, so the stylesheet can bring the page-foot Comment
+    // row forward in the rail's place.
+    brief.toggleAttribute('data-no-sections', headings.length === 0);
+    if (!headings.length) {
+      toc.hidden = true;
+      closeFacetToc(false);
+      var stale = brief.querySelector('.brief-toc-slot .facet-toc-trigger');
+      if (stale) { stale.remove(); }
+      return;
+    }
     toc.hidden = false;
     toc.dataset.kind = 'brief';
     toc.setAttribute('aria-label', 'On this page');
@@ -589,7 +605,6 @@
     var select = toc.querySelector('.facet-toc__select');
     list.replaceChildren();
     select.replaceChildren();
-    var headings = briefHeadings(brief);
     headings.forEach(function (heading, index) {
       var label = heading.textContent.replace(/\s+/g, ' ').trim();
       var button = document.createElement('button');
@@ -612,7 +627,7 @@
     if (!toc.querySelector('.facet-toc__threads')) {
       var threads = document.createElement('div');
       threads.className = 'facet-toc__threads';
-      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note">None open. Comment on the brief or on any paragraph to ask the agent for a change.</p><button type="button" class="facet-toc__comment" disabled title="Threads on briefs are not available yet"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg>Comment</button>';
+      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note">None open. Comment on the brief or on any paragraph to ask the agent for a change.</p><button type="button" class="facet-toc__comment" disabled><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg>Comment</button><p class="facet-toc__threads-later">Threads on briefs arrive in a later release.</p>';
       list.insertAdjacentElement('afterend', threads);
     }
     updateTocActive();
