@@ -215,6 +215,12 @@ type shellData struct {
 	// filled wherever ModuleGroups is (buildEagerShellData, and lazily for a
 	// project shell).
 	Home HomeView
+
+	// Briefs is the Briefs sidebar tree and one page per brief (NIT-197),
+	// built beside ModuleGroups. Empty for a project with no briefs, and
+	// shell.html emits every brief element only when it is not, so such a
+	// project's viewer is byte-identical to one rendered before briefs.
+	Briefs BriefsView
 }
 
 // ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.
@@ -482,7 +488,19 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 	attachMockupOverride(tmpl.partials, cfg)
 
 	header := generatedHeader(generatedAt)
-	if maxBytes > 0 && len(header) >= maxBytes {
+	// A bounded render's budget is the whole static viewer, and the viewer is
+	// index.html plus the brief images copied beside it (BriefAssets, written
+	// by check): the images are charged first, so the page itself gets what
+	// they leave. An unbounded render is serve's, which copies nothing.
+	reserved := len(header)
+	if maxBytes > 0 {
+		assetBytes := briefAssetBytes(cfg, x.Briefs)
+		if assetBytes >= int64(maxBytes) {
+			return "", viewerCapacityError(maxBytes)
+		}
+		reserved += int(assetBytes)
+	}
+	if maxBytes > 0 && reserved >= maxBytes {
 		return "", viewerCapacityError(maxBytes)
 	}
 	inputs := shellInputs{
@@ -515,7 +533,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 		if maxBytes > 0 {
 			// The embedded shell emits every dynamic projection. Charging them
 			// against the output budget is therefore exact lower-bound containment.
-			outputBudget = &renderByteBudget{remaining: maxBytes - len(header), exceeded: conformance.ErrCapacityExceeded}
+			outputBudget = &renderByteBudget{remaining: maxBytes - reserved, exceeded: conformance.ErrCapacityExceeded}
 		}
 		eager, err := buildEagerShellData(inputs, tmpl.partials, outputBudget)
 		if err != nil {
@@ -530,7 +548,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 	var out bytes.Buffer
 	var dst io.Writer = &out
 	if maxBytes > 0 {
-		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - len(header)}
+		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - reserved}
 	}
 	if err := tmpl.shell.Execute(dst, data); err != nil {
 		if errors.Is(err, conformance.ErrCapacityExceeded) {

@@ -1,0 +1,395 @@
+package render
+
+import (
+	"fmt"
+	"html/template"
+	"path"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
+	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/render/components"
+	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
+	"github.com/BarterX-Tech/dossierx/internal/visibility"
+)
+
+// BriefAssetDir is the directory, beside the viewer's index.html, a brief's
+// images are served from: brief-assets/<folder>/<name>. The page names them by
+// that RELATIVE path, so the one URL works in both places a viewer is read:
+// `dossierx check` copies each referenced image there next to the static
+// build (check.writeBriefAssets), and `dossierx serve` answers the same path
+// from the brief's own folder (serve's brief-asset route). A folder and an
+// image name are both drawn from [a-z0-9-] (internal/briefs), so the path needs
+// no encoding at either end.
+const BriefAssetDir = "brief-assets"
+
+// BriefAssetURLPrefix is the URL prefix of every image in folder.
+func BriefAssetURLPrefix(folder string) markdown.AssetPrefix {
+	return markdown.AssetPrefix(path.Join(BriefAssetDir, folder) + "/")
+}
+
+// BriefAsset is one image the viewer references: where it is on disk, where
+// it goes beside the viewer, and its size as discovery read it.
+type BriefAsset struct {
+	// Src is the image's path on disk, in its brief folder.
+	Src string
+	// Rel is its slash-separated path relative to the viewer's directory,
+	// brief-assets/<folder>/<name> — exactly the src the page carries.
+	Rel   string
+	Bytes int64
+	// Display is the image's path as every brief finding names a file:
+	// relative to the config directory, "briefs/<folder>/<name>".
+	Display string
+}
+
+// BriefAssets lists every image a brief in set references and its folder
+// holds, once each, sorted by Rel. It is the list a static build copies and
+// the bytes RenderBoundedWith charges against the viewer's budget, so the
+// two can never disagree about which files the page needs. A reference to a
+// file the folder does not hold is absent: the page shows it as a broken
+// image, and check reports it (brief-shape).
+func BriefAssets(cfg *config.Config, set *briefs.Set) []BriefAsset {
+	if set.Empty() {
+		return nil
+	}
+	root := cfg.BriefsDirPath()
+	seen := map[string]bool{}
+	var out []BriefAsset
+	for _, b := range set.Briefs {
+		for _, img := range b.Images {
+			if !img.Present {
+				continue
+			}
+			rel := path.Join(BriefAssetDir, b.Folder, img.Name)
+			if seen[rel] {
+				continue
+			}
+			seen[rel] = true
+			out = append(out, BriefAsset{
+				Src:     filepath.Join(root, b.Folder, img.Name),
+				Rel:     rel,
+				Bytes:   img.Bytes,
+				Display: path.Join(set.DisplayDir, b.Folder, img.Name),
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Rel < out[j].Rel })
+	return out
+}
+
+// briefAssetBytes is the total size of BriefAssets(cfg, set).
+func briefAssetBytes(cfg *config.Config, set *briefs.Set) int64 {
+	var n int64
+	for _, a := range BriefAssets(cfg, set) {
+		n += a.Bytes
+	}
+	return n
+}
+
+// featuresFolder is the brief folder the Briefs tree leaves out: its briefs
+// are features, and they live under Features in the sidebar (NIT-194). Their
+// pages still render, so a link to one resolves.
+const featuresFolder = "features"
+
+// briefsIndexID is the id of the "All briefs" page. Like Home's "_home" it
+// carries an underscore, which slugify never emits, so no module can share it.
+const briefsIndexID = "_briefs"
+
+// BriefsView is the Briefs half of the viewer (NIT-197): the sidebar tree,
+// one page per brief, and the "All briefs" index they share.
+type BriefsView struct {
+	// Folders are the tree's folders in name order, features/ excluded.
+	Folders []BriefFolderView
+	// Features are the pages under features/, rendered but not in the tree.
+	Features []BriefPageView
+	// Total is how many briefs the tree lists.
+	Total int
+	// IndexID is the "All briefs" page's section id.
+	IndexID string
+}
+
+// Present reports whether the project holds any brief at all, which is what
+// every brief element in the shell is conditional on: a project with none
+// renders byte-identically to one rendered before briefs existed.
+func (v BriefsView) Present() bool { return len(v.Folders) > 0 || len(v.Features) > 0 }
+
+// BriefFolderView is one folder of the tree.
+type BriefFolderView struct {
+	Name  string
+	Label string
+	Count int
+	Pages []BriefPageView
+}
+
+// BriefPageView is one brief's page.
+type BriefPageView struct {
+	// ID is the section id and the hash that opens the page:
+	// brief-<folder>-<slug>, made unique on the page (briefAnchors).
+	ID          string
+	Path        string
+	Folder      string
+	FolderLabel string
+	Title       string
+	// NavLabel is the brief's row in the sidebar tree: its file name in
+	// sentence case ("round-to-the-cent" reads "Round to the cent"), as the
+	// B1 board draws the tree. The full title is the row's tooltip and one
+	// of the words the search matches.
+	NavLabel string
+	Summary  string
+	Status   string
+	// Mark is the brief's one sidebar state mark: draft or locked. The
+	// edited, review and open-thread marks outrank both and arrive with the
+	// brief lock record, review and threads (NIT-199, NIT-200, NIT-198).
+	Mark      string
+	MarkLabel string
+	Pill      template.HTML
+	Body      template.HTML
+	// Meta is the header's count line: words against the word cap, images
+	// against the image cap.
+	Meta string
+	// MetaShort is the phone's meta line, which has room for the words
+	// alone beside the pill and the "On this page" button.
+	MetaShort string
+	// RestsOn and CitedBy are relationship rows (components'
+	// writeRelationshipRow); the counts head each list.
+	RestsOn      template.HTML
+	RestsOnCount int
+	CitedBy      template.HTML
+	CitedByCount int
+	// Search is what the sidebar search matches a brief against: its title,
+	// summary and folder, lowercased.
+	Search string
+}
+
+// RestsOnLabel and CitedByLabel are the relationship lists' heads.
+func (p BriefPageView) RestsOnLabel() string { return "Rests on · " + claimCount(p.RestsOnCount) }
+func (p BriefPageView) CitedByLabel() string { return "Cited by · " + claimCount(p.CitedByCount) }
+
+func claimCount(n int) string {
+	if n == 1 {
+		return "1 claim"
+	}
+	return strconv.Itoa(n) + " claims"
+}
+
+// renderedBrief is one brief's body, rendered once per render and shared by
+// its page and the briefs payload, and the page id both name it by.
+type renderedBrief struct {
+	anchor string
+	body   string
+}
+
+// renderBriefs renders every brief body in document mode with its images on
+// brief-assets/<folder>/, and assigns each its page id.
+func renderBriefs(set *briefs.Set, cat *catalog.Catalog, cfg *config.Config) map[string]renderedBrief {
+	if set.Empty() {
+		return nil
+	}
+	anchors := briefAnchors(set, cat, cfg)
+	out := make(map[string]renderedBrief, len(set.Briefs))
+	for _, b := range set.Briefs {
+		out[b.ID] = renderedBrief{
+			anchor: anchors[b.ID],
+			body:   string(markdown.RenderDocument(b.Body, BriefAssetURLPrefix(b.Folder))),
+		}
+	}
+	return out
+}
+
+// briefAnchors gives each brief its page id, brief-<folder>-<slug>. Two
+// different briefs can spell the same one ("a-b/c" and "a/b-c"), and a
+// module's section or facet id can too, since every one of them is drawn
+// from [a-z0-9-]. A page id must name one element, so the second and later
+// claimant take -2, -3 and so on, in brief-id order. Briefs are sorted by
+// id, so the assignment is stable across renders of one tree.
+func briefAnchors(set *briefs.Set, cat *catalog.Catalog, cfg *config.Config) map[string]string {
+	taken := reservedSectionIDs(cat, cfg)
+	out := make(map[string]string, len(set.Briefs))
+	for _, b := range set.Briefs {
+		base := "brief-" + b.Folder + "-" + b.Slug
+		id := base
+		for n := 2; taken[id]; n++ {
+			id = base + "-" + strconv.Itoa(n)
+		}
+		taken[id] = true
+		out[b.ID] = id
+	}
+	return out
+}
+
+// reservedSectionIDs is every section id the shell renders besides briefs:
+// Home, the index, the Constitution's three, and each module's section and
+// its facet tabs, spelled exactly as buildGroups spells them.
+func reservedSectionIDs(cat *catalog.Catalog, cfg *config.Config) map[string]bool {
+	taken := map[string]bool{
+		"_home": true, briefsIndexID: true,
+		"constitution": true, "constitution-file": true, "constitution-project-claims": true,
+		ungroupedModuleName: true,
+	}
+	modules := map[string]bool{}
+	if cfg != nil {
+		for _, m := range cfg.Modules {
+			modules[m] = true
+		}
+	}
+	if cat != nil {
+		for _, c := range cat.Claims {
+			if c.Module != "" {
+				modules[c.Module] = true
+			}
+		}
+	}
+	for m := range modules {
+		taken[slugify(m)] = true
+		for _, f := range visibility.ViewerTabs() {
+			taken[slugify(m+"-"+f)] = true
+		}
+	}
+	return taken
+}
+
+// buildBriefsView assembles the tree and the pages. rendered is
+// renderBriefs' output for the same set.
+func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *catalog.Catalog) BriefsView {
+	view := BriefsView{IndexID: briefsIndexID}
+	if set.Empty() {
+		return view
+	}
+	statuses := buildTargetStatusLookup(cat)
+	citedBy := internalCitations(cat)
+	byFolder := map[string]*BriefFolderView{}
+	var names []string
+	for _, b := range set.Briefs {
+		page := briefPage(b, set.Caps, rendered[b.ID], statuses, citedBy[b.Path])
+		if b.Folder == featuresFolder {
+			view.Features = append(view.Features, page)
+			continue
+		}
+		f, ok := byFolder[b.Folder]
+		if !ok {
+			f = &BriefFolderView{Name: b.Folder, Label: components.DisplayCase(b.Folder)}
+			byFolder[b.Folder] = f
+			names = append(names, b.Folder)
+		}
+		f.Pages = append(f.Pages, page)
+		f.Count++
+		view.Total++
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		view.Folders = append(view.Folders, *byFolder[n])
+	}
+	return view
+}
+
+func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string) BriefPageView {
+	folderLabel := components.DisplayCase(b.Folder)
+	mark := string(b.Status)
+	markLabel := "Draft"
+	if b.Status == briefs.StatusLocked {
+		markLabel = "Locked"
+	}
+	return BriefPageView{
+		ID:           r.anchor,
+		Path:         b.Path,
+		Folder:       b.Folder,
+		FolderLabel:  folderLabel,
+		Title:        b.Title,
+		NavLabel:     sentenceCase(b.Slug),
+		Summary:      b.Summary,
+		Status:       string(b.Status),
+		Mark:         mark,
+		MarkLabel:    markLabel,
+		Pill:         components.BriefStatusPillHTML(string(b.Status)),
+		Body:         template.HTML(withoutTitleHeading(r.body, b.Body)),
+		Meta:         fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
+		MetaShort:    groupDigits(b.Words) + " words",
+		RestsOn:      components.BriefRelationRowsHTML(b.RestsOn, statuses),
+		RestsOnCount: len(b.RestsOn),
+		CitedBy:      components.BriefRelationRowsHTML(citedBy, statuses),
+		CitedByCount: len(citedBy),
+		Search:       strings.ToLower(strings.Join([]string{b.Title, sentenceCase(b.Slug), b.Summary, folderLabel}, " ")),
+	}
+}
+
+// withoutTitleHeading drops the level-1 heading a body opens with when that
+// heading is the brief's title: the page header already shows the title, and
+// the board draws the body starting at its first section. A body whose title
+// is not its opening line (a paragraph first, or the title inside a quote)
+// keeps every heading it has.
+func withoutTitleHeading(rendered, body string) string {
+	if _, ok := markdown.DocumentTitle(body); !ok {
+		return rendered
+	}
+	trimmed := strings.TrimLeft(rendered, " \n")
+	if !strings.HasPrefix(trimmed, "<h1>") {
+		return rendered
+	}
+	end := strings.Index(trimmed, "</h1>")
+	if end < 0 {
+		return rendered
+	}
+	return strings.TrimLeft(trimmed[end+len("</h1>"):], "\n")
+}
+
+// internalCitations maps a brief path to the claims that cite it: every
+// claim with an internal source whose path is the brief's, sorted by id,
+// each once. A source path is relative to the config directory, the same
+// anchor a brief's Path is.
+func internalCitations(cat *catalog.Catalog) map[string][]string {
+	out := map[string][]string{}
+	if cat == nil {
+		return out
+	}
+	for _, c := range cat.Claims {
+		seen := map[string]bool{}
+		for _, s := range c.Sources {
+			if s.Kind != model.SourceKindInternal || s.Path == "" {
+				continue
+			}
+			p := path.Clean(filepath.ToSlash(s.Path))
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			out[p] = append(out[p], c.ID)
+		}
+	}
+	for p := range out {
+		sort.Strings(out[p])
+	}
+	return out
+}
+
+// sentenceCase turns a [a-z0-9-] name into words with the first capitalized.
+func sentenceCase(name string) string {
+	s := strings.ReplaceAll(name, "-", " ")
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// groupDigits writes n with a comma between each group of three digits, as
+// the board spells a cap: "2,000".
+func groupDigits(n int) string {
+	s := strconv.Itoa(n)
+	neg := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(s, "-")
+	var b strings.Builder
+	for i, r := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(r)
+	}
+	if neg {
+		return "-" + b.String()
+	}
+	return b.String()
+}

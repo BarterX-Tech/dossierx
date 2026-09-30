@@ -76,7 +76,8 @@ const (
 	// fetch and no script involved, which is exactly what connect-src 'self'
 	// was chosen to prevent. 'self' re-allows
 	// exactly one thing — an image from this origin, which means the
-	// allowlisted /claim-assets/ route in claim_assets.go and nothing else.
+	// allowlisted /claim-assets/ route in claim_assets.go and the brief-image
+	// route in brief_assets.go, and nothing else.
 	// The rest of the policy is unchanged; in particular the comment above
 	// about "no external assets, ever" still holds, because 'self' is not
 	// external.
@@ -393,10 +394,14 @@ func (s *Server) assertOutputsOutsideClaimsTree() error {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleRoot)
-	// The only route that reads a file off disk, and the only non-API route
+	// A route that reads a file off disk, and one of the two non-API routes
 	// besides the root document. It answers from a computed allowlist rather
 	// than from the filesystem — see claim_assets.go for the whole argument.
 	mux.HandleFunc(assetRoutePattern, s.handleClaimAsset)
+	// A brief's images (NIT-197), on the same terms: an allowlist computed
+	// from what the page references, never the path as spelled. See
+	// brief_assets.go.
+	mux.HandleFunc(briefAssetRoutePattern, s.handleBriefAsset)
 	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.HandleFunc("GET /api/fragment", s.handleFragment)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)

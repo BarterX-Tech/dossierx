@@ -167,6 +167,11 @@
         if (Object.prototype.hasOwnProperty.call(moduleDefaultFacet, id)) {
           return { module: id, facet: moduleDefaultFacet[id] };
         }
+        // A brief's page and the "All briefs" index (NIT-197) are sections
+        // with no facet, as Home is, so each resolves to itself alone.
+        if (briefPageSection(id)) {
+          return { module: id };
+        }
         // Home (NIT-196) is the page the viewer opens on, and where any hash
         // it does not recognise lands. It holds no facet, so it resolves to
         // itself alone. Its id, HOME_ID, carries an underscore, which
@@ -190,6 +195,62 @@
 
       // HOME_ID is the Home section's element id and hash (shell.html).
       var HOME_ID = '_home';
+      // BRIEFS_INDEX_ID is the "All briefs" section's id (render.briefsIndexID).
+      var BRIEFS_INDEX_ID = '_briefs';
+
+      // briefPageSection returns the brief page or the "All briefs" index
+      // section with this id, or null. Both are .module-sections with no
+      // .claim-group; their ids come from render.briefAnchors and can never
+      // be a claim or facet id, which resolve() has already tried.
+      function briefPageSection(id) {
+        if (!id) { return null; }
+        var sec = document.getElementById(id);
+        if (!sec || !sec.classList.contains('module-section')) { return null; }
+        return (sec.classList.contains('brief-section') || sec.classList.contains('briefs-index-section')) ? sec : null;
+      }
+
+      // activeBriefSection is the brief page on screen, or null.
+      function activeBriefSection() {
+        return document.querySelector('.brief-section:not([hidden])');
+      }
+
+      // briefFindingPaths is every claim_id a check finding about the brief on
+      // screen can carry: the brief's own path, its folder's ("briefs/x/", a
+      // folder cap) and the tree's ("briefs/", the total cap). A brief finding
+      // names a PATH where a claim finding names a claim id (internal/briefs),
+      // so the strip shows it on the brief's page the way a claim finding
+      // shows on its facet. Rule ids are not listed: any finding whose
+      // claim_id is one of these paths belongs here, including rules added
+      // later (NIT-205's drift and review rules).
+      function briefFindingPaths(section) {
+        var ids = Object.create(null);
+        var p = section && section.getAttribute('data-brief-path');
+        if (!p) { return ids; }
+        ids[p] = true;
+        var folder = p.slice(0, p.lastIndexOf('/') + 1);
+        if (folder) { ids[folder] = true; }
+        var tree = folder.slice(0, folder.slice(0, -1).lastIndexOf('/') + 1);
+        if (tree) { ids[tree] = true; }
+        return ids;
+      }
+
+      // briefSectionForPath is the page of the brief a finding's claim_id
+      // names, or null for a folder or tree path (or a claim id).
+      function briefSectionForPath(p) {
+        if (!p || p.indexOf('/') < 0) { return null; }
+        var pages = document.querySelectorAll('.brief-section[data-brief-path]');
+        for (var i = 0; i < pages.length; i++) {
+          if (pages[i].getAttribute('data-brief-path') === p) { return pages[i]; }
+        }
+        return null;
+      }
+
+      // briefsIndexActive: the "All briefs" index, like Home, is not a
+      // facet, so the strip does not show there.
+      function briefsIndexActive() {
+        var index = document.getElementById(BRIEFS_INDEX_ID);
+        return !!index && !index.hidden;
+      }
 
       function homeActive() {
         var home = document.getElementById(HOME_ID);
@@ -365,15 +426,19 @@
       // syncNavGroups opens the sidebar's Modules group only while a module is
       // the current page (NIT-196: only the current section expands). A
       // search in progress keeps every group open so its matches show.
+      //
+      // Each group answers for itself: the Modules group is open on a module,
+      // the Briefs group (NIT-197) on a brief or the "All briefs" index, and
+      // inside it only the current brief's folder is open. A search opens
+      // every group and every folder that has a visible match.
       function syncNavGroups() {
         var search = document.getElementById('navSearch');
         var searching = !!(search && search.value.trim());
-        var onModule = false;
-        moduleTabs.forEach(function (b) {
-          if (b.classList.contains('on') && b.closest('.system-nav-group')) { onModule = true; }
-        });
         document.querySelectorAll('.system-nav-group').forEach(function (group) {
-          group.open = searching || onModule;
+          group.open = searching || !!group.querySelector('.sec-tab.on');
+        });
+        document.querySelectorAll('.brief-folder').forEach(function (folder) {
+          folder.open = searching ? !folder.hidden : !!folder.querySelector('.sec-tab.on');
         });
       }
 
@@ -1430,6 +1495,8 @@
       }
 
       function activeFacetClaimIDs() {
+        var brief = activeBriefSection();
+        if (brief) { return briefFindingPaths(brief); }
         var ids = Object.create(null);
         var section = document.querySelector('.module-section:not([hidden])');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
@@ -1730,8 +1797,24 @@
           row.appendChild(action);
           return row;
         }
+        // A finding about one brief (its claim_id is the brief's path) leads
+        // to that brief's page, as a Needs-you row leads to its claim.
+        var briefPage = ids.length === 1 ? briefSectionForPath(ids[0]) : null;
+        if (briefPage) {
+          var open = textEl('button', 'status-finding-action', 'Open brief');
+          open.type = 'button';
+          open.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeIssuesView();
+            if (window.location.hash !== '#' + briefPage.id) { window.location.hash = '#' + briefPage.id; }
+          });
+          row.appendChild(open);
+          return row;
+        }
         var n = ids.length || group.count;
-        row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
+        var noun = ids.length && ids.every(function (id) { return id.indexOf('/') >= 0; }) ? ' brief' : ' claim';
+        row.appendChild(textEl('span', 'status-finding-msg', n + noun + (n === 1 ? '' : 's')));
         return row;
       }
 
@@ -1754,7 +1837,9 @@
           return;
         }
         var subNav = section.querySelector(':scope > .sub-nav');
-        var header = section.querySelector(':scope > .system-record-head');
+        // A brief page's header is its own (.brief-head); the strip sits
+        // under it, above the body, as it sits under a module's header.
+        var header = section.querySelector(':scope > .system-record-head') || section.querySelector(':scope > .brief-head');
         if (subNav) {
           if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
         } else if (header) {
@@ -1778,6 +1863,8 @@
       // know (a project-wide finding with no claim_id at all) resolves to ''
       // and moduleLabel below renders it as the "Other" catch-all group.
       function ownerModuleID(group) {
+        var owner = group.ownerModuleClaimID || '';
+        if (owner.indexOf('/') >= 0) { return BRIEFS_INDEX_ID; }
         var facetID = claimToFacet[group.ownerModuleClaimID];
         return facetID ? facetToModule[facetID] : '';
       }
@@ -1788,6 +1875,7 @@
       // Issues nav tab, so this is read-only lookup, never a written one.
       function moduleLabel(moduleID) {
         if (!moduleID) { return 'Other'; }
+        if (moduleID === BRIEFS_INDEX_ID) { return 'Briefs'; }
         var tab = document.querySelector('.sec-tab[data-target="#' + moduleID.replace(/"/g, '') + '"] .sec-tab__label');
         return tab ? (tab.textContent || '').trim() : moduleID;
       }
@@ -2783,7 +2871,7 @@
         // Home is not a facet: its cards already say what is waiting, and a
         // strip there would count findings "in this facet" for a page that
         // has none. The strip returns with the next module page.
-        if (!groups.length || !actionable || homeActive()) {
+        if (!groups.length || !actionable || homeActive() || briefsIndexActive()) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
@@ -2931,10 +3019,11 @@
       // progress that nobody has approved yet.
       function statusStripRows(groups, ledger, lintErrors, claimIDs) {
         var rows = [];
+        var here = activeBriefSection() ? 'on this brief' : 'in this facet';
         if (ledger.length) {
           rows.push({
             tone: 'alarm', severity: 'critical',
-            text: countLabel(ledger.length, 'approval record issue') + ' in this facet need' +
+            text: countLabel(ledger.length, 'approval record issue') + ' ' + here + ' need' +
               (ledger.length === 1 ? 's' : '') + ' attention'
           });
         }
@@ -2945,7 +3034,7 @@
         if (lintErrors.length) {
           rows.push({
             tone: 'alarm', severity: 'critical',
-            text: countLabel(lintErrors.length, 'issue') + ' in this facet need' +
+            text: countLabel(lintErrors.length, 'issue') + ' ' + here + ' need' +
               (lintErrors.length === 1 ? 's' : '') + ' attention'
           });
         }
@@ -2964,7 +3053,7 @@
         if (!rows.length) {
           rows.push({
             tone: 'alarm', severity: '',
-            text: countLabel(groups.length, 'grouped issue') + ' in this facet'
+            text: countLabel(groups.length, 'grouped issue') + ' ' + here
           });
         }
         return rows;
@@ -3339,7 +3428,7 @@
       // (§4.2) off the SAME active-module/active-facet DOM the rest of the
       // reading view already maintains — read-only, no new state.
       function issuesSyncHeader() {
-        var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
+        var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label') || document.querySelector('.sec-tab.on .brief-nav__label');
         var activeSection = document.querySelector('.module-section:not([hidden])');
         var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
         if (issuesBreadcrumbFacetEl) {
@@ -4106,9 +4195,16 @@
           document.querySelectorAll('.system-nav-group').forEach(function (group) {
             var rows = Array.prototype.slice.call(group.querySelectorAll('.sec-tab'));
             var matches = rows.filter(function (row) {
-              var visible = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+              // A brief row matches on its title, summary and folder
+              // (data-search, render.BriefPageView.Search), not just the
+              // title it shows.
+              var text = row.hasAttribute('data-search') ? row.getAttribute('data-search') : row.textContent.toLowerCase();
+              var visible = !query || text.indexOf(query) !== -1;
               row.hidden = !visible;
               return visible;
+            });
+            group.querySelectorAll('.brief-folder').forEach(function (folder) {
+              folder.hidden = query !== '' && !folder.querySelector('.sec-tab:not([hidden])');
             });
             group.hidden = query !== '' && matches.length === 0;
           });

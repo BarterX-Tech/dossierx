@@ -392,6 +392,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			return res, err
 		}
 		res.ConformancePath = statusPath
+		if err := writeBriefAssets(cfg, inputs.briefs, filepath.Dir(renderPath)); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", err)
+		}
 		if err := atomicfile.Write(renderPath, viewerData, 0o644); err != nil {
 			res.RenderError = err.Error()
 			res.ConformanceFailurePhase = "render"
@@ -448,6 +453,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.RenderError = err.Error()
 			res.ConformanceFailurePhase = "render"
 			return res, fmt.Errorf("render: create output dir: %w", err)
+		}
+		if err := writeBriefAssets(cfg, inputs.briefs, filepath.Dir(renderPath)); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", err)
 		}
 		if err := atomicfile.Write(renderPath, viewerData, 0o644); err != nil {
 			res.RenderError = err.Error()

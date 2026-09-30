@@ -243,7 +243,9 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		// lint.Registry: brief-shape, brief-frontmatter, the four caps, and
 		// the two rests_on rules.
 		"brief_rules": 8,
-		"http_routes": 14,
+		// 14 -> 15 with GET /brief-assets/{folder}/{name}, serve's answer
+		// for a brief page's images (NIT-197).
+		"http_routes": 15,
 	}
 	for name, expected := range want {
 		if got := doc.Counts[name]; got != expected {
