@@ -183,13 +183,25 @@ type BriefPageView struct {
 	NavLabel string
 	Summary  string
 	Status   string
-	// Mark is the brief's one sidebar state mark: draft or locked. The
-	// edited, review and open-thread marks outrank both and arrive with the
-	// brief lock record, review and threads (NIT-199, NIT-200, NIT-198).
+	// Mark is the brief's one sidebar state mark. The board's priority is
+	// edited, review, open thread, draft, locked; an open thread (NIT-198)
+	// outranks draft and locked here, and the edited and review marks, which
+	// outrank it, arrive with their pages (NIT-199, NIT-200).
 	Mark      string
 	MarkLabel string
-	Pill      template.HTML
-	Body      template.HTML
+	// BriefID is the brief's <folder>.<slug> id, which the comment rail and
+	// the /api/briefs/{id}/comments routes address it by (NIT-198).
+	BriefID string
+	// OpenThreads and Threads are the brief's unresolved and total comment
+	// threads; OpenThreads is internal/briefs' OpenThreads, the number the
+	// payload's open_threads carries.
+	OpenThreads int
+	Threads     int
+	// CommentsPanel is the brief's threads baked into the page for a
+	// static build's read-only rail; empty for a brief with none.
+	CommentsPanel template.HTML
+	Pill          template.HTML
+	Body          template.HTML
 	// Meta is the header's count line: words against the word cap, images
 	// against the image cap.
 	Meta string
@@ -206,6 +218,9 @@ type BriefPageView struct {
 	// summary and folder, lowercased.
 	Search string
 }
+
+// OpenThreadsLabel is the index row's thread count, "1 open thread".
+func (p BriefPageView) OpenThreadsLabel() string { return openThreadsLabel(p.OpenThreads) }
 
 // RestsOnLabel and CitedByLabel are the relationship lists' heads.
 func (p BriefPageView) RestsOnLabel() string { return "Rests on · " + claimCount(p.RestsOnCount) }
@@ -330,32 +345,54 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 
 func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string) BriefPageView {
 	folderLabel := components.DisplayCase(b.Folder)
-	mark := string(b.Status)
-	markLabel := "Draft"
-	if b.Status == briefs.StatusLocked {
-		markLabel = "Locked"
-	}
+	mark, markLabel := briefMark(b)
 	return BriefPageView{
-		ID:           r.anchor,
-		Path:         b.Path,
-		Folder:       b.Folder,
-		FolderLabel:  folderLabel,
-		Title:        b.Title,
-		NavLabel:     sentenceCase(b.Slug),
-		Summary:      b.Summary,
-		Status:       string(b.Status),
-		Mark:         mark,
-		MarkLabel:    markLabel,
-		Pill:         components.BriefStatusPillHTML(string(b.Status)),
-		Body:         template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body))),
-		Meta:         fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
-		MetaShort:    groupDigits(b.Words) + " words",
-		RestsOn:      components.BriefRelationRowsHTML(b.RestsOn, statuses),
-		RestsOnCount: len(b.RestsOn),
-		CitedBy:      components.BriefRelationRowsHTML(citedBy, statuses),
-		CitedByCount: len(citedBy),
-		Search:       strings.ToLower(strings.Join([]string{b.Title, sentenceCase(b.Slug), b.Summary, folderLabel}, " ")),
+		ID:            r.anchor,
+		Path:          b.Path,
+		Folder:        b.Folder,
+		FolderLabel:   folderLabel,
+		Title:         b.Title,
+		NavLabel:      sentenceCase(b.Slug),
+		Summary:       b.Summary,
+		Status:        string(b.Status),
+		Mark:          mark,
+		MarkLabel:     markLabel,
+		BriefID:       b.ID,
+		OpenThreads:   b.OpenThreads(),
+		Threads:       len(b.Comments),
+		CommentsPanel: components.BriefCommentsPanelHTML(b.ID, b.Comments),
+		Pill:          components.BriefStatusPillHTML(string(b.Status)),
+		Body:          template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body))),
+		Meta:          fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
+		MetaShort:     groupDigits(b.Words) + " words",
+		RestsOn:       components.BriefRelationRowsHTML(b.RestsOn, statuses),
+		RestsOnCount:  len(b.RestsOn),
+		CitedBy:       components.BriefRelationRowsHTML(citedBy, statuses),
+		CitedByCount:  len(citedBy),
+		Search:        strings.ToLower(strings.Join([]string{b.Title, sentenceCase(b.Slug), b.Summary, folderLabel}, " ")),
 	}
+}
+
+// briefMark is a brief's sidebar mark and its label: an open thread
+// outranks the draft and locked states (the board's priority, below edited
+// and review), so a locked brief with a thread the human has not resolved
+// shows the thread.
+func briefMark(b briefs.Brief) (mark, label string) {
+	if n := b.OpenThreads(); n > 0 {
+		return "thread", openThreadsLabel(n)
+	}
+	if b.Status == briefs.StatusLocked {
+		return string(b.Status), "Locked"
+	}
+	return string(b.Status), "Draft"
+}
+
+// openThreadsLabel is "1 open thread" or "N open threads".
+func openThreadsLabel(n int) string {
+	if n == 1 {
+		return "1 open thread"
+	}
+	return strconv.Itoa(n) + " open threads"
 }
 
 // withoutTitleHeading drops the level-1 heading a body opens with when that

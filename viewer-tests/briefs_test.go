@@ -100,6 +100,8 @@ func TestBriefPage_OpensByHashWithItsTreeAndImage(t *testing.T) {
 			{"the static build carries the image", `img.getAttribute('src') === 'brief-assets/decisions/split.png' && img.naturalWidth === 40`},
 			{"the title is the header's, not the body's", `sec.querySelector('.brief-title').textContent === 'Balances round to the cent, once' && !sec.querySelector('.brief-body h1')`},
 			{"On this page lists the two sections", `!toc.hidden && toc.dataset.kind === 'brief' && Array.prototype.map.call(toc.querySelectorAll('.facet-toc__item strong'), function (s) { return s.textContent; }).join('|') === 'Context|Decision'`},
+			// NIT-198: a static build has nothing to write to, and this
+			// brief has no thread to read, so its Comment is disabled.
 			{"the Threads block's Comment is inert", `toc.querySelector('.facet-toc__comment').disabled === true`},
 			{"the hash names the brief", `location.hash === '#` + roundBrief + `'`},
 			// F8: the group holding the current row reads as current.
@@ -116,9 +118,10 @@ func TestBriefPage_OpensByHashWithItsTreeAndImage(t *testing.T) {
 			// F13: B1's rail geometry and row hairline.
 			{"Threads sits 20px under the last row", `(function(){ var items = toc.querySelectorAll('.facet-toc__item'); var th = toc.querySelector('.facet-toc__threads'); return Math.round(th.getBoundingClientRect().top - items[items.length - 1].getBoundingClientRect().bottom) === 20; })()`},
 			{"the first row sits 4px under the kicker's band", `Math.round(toc.querySelector('.facet-toc__item').getBoundingClientRect().top - toc.querySelector('.facet-toc__head').getBoundingClientRect().bottom) === 4`},
-			// F6: the inert Comment reads as disabled and says why.
+			// F6: the inert Comment reads as disabled and says why (NIT-198's
+			// words: a static build is read only).
 			{"the rail's Comment is drawn disabled", `(function(){ var c = toc.querySelector('.facet-toc__comment'); return c.disabled && getComputedStyle(c).color !== getComputedStyle(document.querySelector('.brief-title')).color; })()`},
-			{"a visible line says why", `toc.querySelector('.facet-toc__threads-later').textContent === 'Threads on briefs arrive in a later release.' && toc.querySelector('.facet-toc__threads-later').getBoundingClientRect().height > 0`},
+			{"a visible line says why", `toc.querySelector('.facet-toc__threads-later').textContent === 'Read only: comments are written through dossierx serve.' && toc.querySelector('.facet-toc__threads-later').getBoundingClientRect().height > 0`},
 		})
 
 	// F12: a brief with no section heading has no rail; its Comment row
@@ -143,6 +146,8 @@ func TestBriefPage_OpensByHashWithItsTreeAndImage(t *testing.T) {
 		[][2]string{
 			{"the select lists the headings", `getComputedStyle(toc.querySelector('.facet-toc__select')).display !== 'none' && toc.querySelector('.facet-toc__select').options.length === 2`},
 			{"the Threads block is left out", `getComputedStyle(toc.querySelector('.facet-toc__threads')).display === 'none'`},
+			// NIT-198: so the page-foot Comment row stands in for it.
+			{"the page-foot Comment row stands in", `document.querySelector('#` + roundBrief + ` .brief-comment').getBoundingClientRect().height === 44`},
 			{"the popover sits in the corner, not over the page", `toc.getBoundingClientRect().height < 200`},
 		})
 	desktopViewport(t, ctx)

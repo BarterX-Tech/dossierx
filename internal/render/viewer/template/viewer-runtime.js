@@ -632,10 +632,16 @@
         empty_body: 'the comment body is empty',
         thread_not_found: 'that thread no longer exists',
         reply_not_found: 'that reply no longer exists',
-        claim_not_found: 'that claim no longer exists'
+        claim_not_found: 'that claim no longer exists',
+        brief_not_found: 'that brief no longer exists'
       };
-      function errMsg(prefix, err) {
+      // errMsg words a failed op for the toast. key is the rail's subject
+      // (see BRIEF_KEY below): a brief's file that changed under a write is
+      // the brief's, not a claim's, though the server gives it the claim
+      // routes' code.
+      function errMsg(prefix, err, key) {
         var code = err && err.code;
+        if (code === 'claim_file_changed' && isBriefKey(key)) { return prefix + ': the brief changed on disk — reload the page'; }
         if (code && ERR_TEXT[code]) { return prefix + ': ' + ERR_TEXT[code]; }
         return prefix + '.';
       }
@@ -674,8 +680,36 @@
           });
         });
       }
+      // ---- the rail's subject: a claim or a brief (NIT-198) -------------
+      // Every function below that takes a `claimID` takes the rail's SUBJECT
+      // KEY. A claim's key is its id, unchanged, so every claim path reads as
+      // it always did. A brief's key is BRIEF_KEY + its <folder>.<slug> id.
+      // The prefix starts with U+0000, which no data-claim-id can: the HTML
+      // parser turns a NUL in an attribute value into U+FFFD, so no claim
+      // chip can ever spell a brief's key, even for a claim whose id is the
+      // same string as a brief's (a project claim and a brief are both two
+      // dot-separated segments). The two namespaces also never share a route
+      // (/api/claims vs /api/briefs) or an attribute (data-claim-id vs
+      // data-brief-id).
+      var BRIEF_KEY = '\u0000brief:';
+      function briefKey(briefID) { return BRIEF_KEY + briefID; }
+      function isBriefKey(key) { return typeof key === 'string' && key.indexOf(BRIEF_KEY) === 0; }
+      function briefIDOf(key) { return key.slice(BRIEF_KEY.length); }
+      // briefSectionFor is the page of the brief a key names, or null.
+      function briefSectionFor(key) {
+        if (!isBriefKey(key)) { return null; }
+        return document.querySelector('.brief-section[data-brief-id="' + cssAttr(briefIDOf(key)) + '"]');
+      }
+      // claimPath is the subject's comments collection: every write URL is
+      // this plus /<thread>[/replies|/resolve|/reopen].
       function claimPath(claimID) {
+        if (isBriefKey(claimID)) {
+          return '/api/briefs/' + encodeURIComponent(briefIDOf(claimID)) + '/comments';
+        }
         return '/api/claims/' + encodeURIComponent(claimID) + '/comments';
+      }
+      function threadPath(claimID, tid) {
+        return claimPath(claimID) + '/' + encodeURIComponent(tid);
       }
 
       // ---- chip / card state fan-out ----------------------------------
@@ -685,6 +719,7 @@
       // one with an id. Each chip's owning card is reached with closest('.claim').
       function chipsFor(claimID) {
         var out = [];
+        if (isBriefKey(claimID)) { return out; } // a brief has no chip; see briefControlsFor
         document.querySelectorAll('.comment-chip').forEach(function (chip) {
           if (chip.getAttribute('data-claim-id') === claimID) { out.push(chip); }
         });
@@ -696,12 +731,16 @@
       // shut, or an open rail on a claim with zero threads). Driven here
       // rather than folded into --open so the two facts never collide.
       function setChipExpanded(claimID, expanded) {
+        briefControlsFor(claimID).forEach(function (btn) {
+          btn.setAttribute('aria-expanded', String(expanded));
+        });
         chipsFor(claimID).forEach(function (chip) {
           chip.setAttribute('aria-expanded', String(expanded));
           chip.classList.toggle('comment-chip--active', expanded);
         });
       }
       function updateChips(claimID, openCount, totalCount) {
+        if (isBriefKey(claimID)) { updateBriefThreadCounts(claimID, openCount, totalCount); return; }
         chipsFor(claimID).forEach(function (chip) {
           var open = openCount > 0;
           var empty = totalCount === 0;
@@ -767,6 +806,11 @@
       // matching head is on the page (e.g. a chip inside a collapsed overview
       // whose canonical copy id was stripped elsewhere in the DOM tree).
       function claimTitleFor(claimID) {
+        if (isBriefKey(claimID)) {
+          var page = briefSectionFor(claimID);
+          var heading = page && page.querySelector('.brief-title');
+          return (heading && heading.textContent.trim()) || briefIDOf(claimID);
+        }
         var head = document.querySelector('.k[data-claim-id="' + cssAttr(claimID) + '"]');
         var titleEl = head && head.querySelector('.k-title');
         return (titleEl && titleEl.textContent.trim()) || claimID;
@@ -813,7 +857,10 @@
         // title= hover only, on the rail element itself.
         if (railTitle) { railTitle.textContent = 'Comments'; }
         if (railSubtitle) { railSubtitle.textContent = 'on ' + claimTitleFor(claimID); }
-        if (rail) { rail.title = claimID; }
+        if (rail) {
+          var briefPage = briefSectionFor(claimID);
+          rail.title = isBriefKey(claimID) ? ((briefPage && briefPage.getAttribute('data-brief-path')) || briefIDOf(claimID)) : claimID;
+        }
         if (railCount) { railCount.textContent = ''; } // cleared here; renderPanel below fills it in
         if (rail) {
           rail.hidden = false;
@@ -839,6 +886,64 @@
         if (rail) { rail.hidden = true; }
         if (currentClaimID) { setChipExpanded(currentClaimID, false); }
         currentClaimID = null;
+      }
+
+      // ---- threads on a brief (NIT-198) ---------------------------------
+      // A brief has no chip. Its rail opens from the page's Comment buttons
+      // (the "On this page" rail's Threads block, system-record.js, and the
+      // phone's page-foot row, shell.html), and from any caller that holds a
+      // brief id: B2's "Approve or restore in a thread" and B3's "Confirm in
+      // a thread" call openBriefCommentPanel. The viewer never locks,
+      // restores or confirms anything; it opens the thread where the human
+      // says so, and the agent acts on it.
+      //
+      // openBriefCommentPanel(briefID) opens the comments rail on the brief
+      // whose <folder>.<slug> id is briefID (the section's data-brief-id,
+      // the payload's "id"): the live composer under dossierx serve, the
+      // read-only threads in a static build. It returns false, opening
+      // nothing, when no brief page on screen carries that id. It is also
+      // window.dossierxOpenBriefCommentPanel for code outside this file.
+      function openBriefCommentPanel(briefID) {
+        var key = briefKey(String(briefID || ''));
+        if (!briefID || !briefSectionFor(key)) { return false; }
+        openCommentPanel(key);
+        return true;
+      }
+      window.dossierxOpenBriefCommentPanel = openBriefCommentPanel;
+
+      // briefControlsFor is every Comment button that opens this brief's
+      // rail: its page-foot button and, while its page is the one on
+      // screen, the rail's (which carries data-brief-id, set by
+      // system-record.js's syncBriefThreads).
+      function briefControlsFor(key) {
+        var out = [];
+        if (!isBriefKey(key)) { return out; }
+        var id = briefIDOf(key);
+        document.querySelectorAll('.brief-comment, .facet-toc__comment').forEach(function (btn) {
+          if (briefOwnerOf(btn) === id) { out.push(btn); }
+        });
+        return out;
+      }
+
+      // briefOwnerOf is the id of the brief a Comment button belongs to: its
+      // own data-brief-id (the rail's), else its page's (the page-foot's).
+      function briefOwnerOf(btn) {
+        var own = btn.getAttribute('data-brief-id');
+        if (own) { return own; }
+        var page = btn.closest('.brief-section');
+        return page ? page.getAttribute('data-brief-id') : null;
+      }
+
+      // updateBriefThreadCounts is updateChips for a brief: the rail's
+      // threads just loaded (or an optimistic resolve moved them), so the
+      // page's counts follow at once instead of waiting for the live
+      // reload's fresh render, which carries the same numbers.
+      function updateBriefThreadCounts(key, openCount, totalCount) {
+        var page = briefSectionFor(key);
+        if (!page) { return; }
+        page.setAttribute('data-open-threads', String(openCount));
+        page.setAttribute('data-threads', String(totalCount));
+        if (typeof window.dossierxSyncBriefThreads === 'function') { window.dossierxSyncBriefThreads(); }
       }
 
       // ---- panel rendering --------------------------------------------
@@ -867,8 +972,13 @@
       function renderPanelReadOnly(claimID) {
         railBody.textContent = '';
         var baked = null;
+        // A claim's baked panel carries data-claim-id, a brief's
+        // data-brief-id (components.BriefCommentsPanelHTML); neither kind
+        // can match the other's key.
+        var bakedAttr = isBriefKey(claimID) ? 'data-brief-id' : 'data-claim-id';
+        var bakedID = isBriefKey(claimID) ? briefIDOf(claimID) : claimID;
         document.querySelectorAll('.comments-panel').forEach(function (p) {
-          if (!baked && p.getAttribute('data-claim-id') === claimID) { baked = p; }
+          if (!baked && p.getAttribute(bakedAttr) === bakedID) { baked = p; }
         });
         var list = el('div', 'comments-threads');
         if (baked) {
@@ -893,17 +1003,20 @@
       }
 
       // Serve mode: fetch the authoritative thread list and rebuild the rail with
-      // live controls + composer. GET /api/comments returns every thread; we
-      // filter to this claim client-side (there is no per-claim GET endpoint).
+      // live controls + composer. For a claim, GET /api/comments returns every
+      // claim's threads and we filter to this claim client-side (there is no
+      // per-claim GET endpoint). A brief has its own list,
+      // GET /api/briefs/<id>/comments (NIT-198), which holds only its threads.
       function renderPanelFromAPI(claimID) {
         if (!railBody.querySelector('.comments-threads')) {
           railBody.textContent = '';
           railBody.appendChild(textEl('p', 'comments-loading', 'Loading…'));
         }
-        apiGet('/api/comments').then(function (data) {
+        var brief = isBriefKey(claimID);
+        apiGet(brief ? claimPath(claimID) : '/api/comments').then(function (data) {
           if (currentClaimID !== claimID) { return; } // panel switched/closed while loading
           var threads = ((data && data.comments) || []).filter(function (c) {
-            return c.claim_id === claimID;
+            return brief || c.claim_id === claimID;
           });
           // A JSON signature of exactly what buildPanel would render for this
           // claim. The server serializes deterministically, so two fetches of an
@@ -923,9 +1036,16 @@
           lastRenderedClaimID = claimID;
           lastRenderedThreadsJSON = sig;
           buildPanel(claimID, threads, drafts);
-        }).catch(function () {
+        }).catch(function (err) {
           if (currentClaimID !== claimID) { return; }
           railBody.textContent = '';
+          // A brief renamed or deleted while its rail was open answers 404:
+          // say so, and offer no composer that could only fail.
+          if (brief && err && err.status === 404) {
+            railBody.appendChild(textEl('p', 'comments-error', 'This brief is no longer in the project. It may have been renamed or deleted.'));
+            if (composerSlot) { composerSlot.textContent = ''; }
+            return;
+          }
           railBody.appendChild(textEl('p', 'comments-error', 'Could not load comments.'));
           if (composerSlot) {
             composerSlot.textContent = '';
@@ -1294,7 +1414,7 @@
             // so without growNow a multi-line draft renders clipped to one row).
             ta.value = body;
             growNow(ta);
-            toast(errMsg('Could not add comment', err));
+            toast(errMsg('Could not add comment', err, claimID));
           });
       }
 
@@ -1309,7 +1429,7 @@
         }
         ta.value = '';
         ta.style.height = 'auto';
-        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/replies', { as: 'human', body: body })
+        apiSend('POST', threadPath(claimID, tid) + '/replies', { as: 'human', body: body })
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
@@ -1319,7 +1439,7 @@
             // draft renders clipped to one row).
             ta.value = body;
             growNow(ta);
-            toast(errMsg('Could not reply', err));
+            toast(errMsg('Could not reply', err, claimID));
           });
       }
 
@@ -1327,12 +1447,12 @@
         var art = threadNode(tid);
         if (art) { art.classList.add('comment-thread--resolved'); }
         recomputeChipsFromPanel(claimID);
-        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/resolve', { as: 'human' })
+        apiSend('POST', threadPath(claimID, tid) + '/resolve', { as: 'human' })
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (art) { art.classList.remove('comment-thread--resolved'); }
             recomputeChipsFromPanel(claimID);
-            toast(errMsg('Could not resolve thread', err));
+            toast(errMsg('Could not resolve thread', err, claimID));
           });
       }
 
@@ -1340,12 +1460,12 @@
         var art = threadNode(tid);
         if (art) { art.classList.remove('comment-thread--resolved'); }
         recomputeChipsFromPanel(claimID);
-        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/reopen', { as: 'human' })
+        apiSend('POST', threadPath(claimID, tid) + '/reopen', { as: 'human' })
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (art) { art.classList.add('comment-thread--resolved'); }
             recomputeChipsFromPanel(claimID);
-            toast(errMsg('Could not reopen thread', err));
+            toast(errMsg('Could not reopen thread', err, claimID));
           });
       }
 
@@ -1362,7 +1482,7 @@
           node = art ? art.querySelector('.comment-reply[data-reply-id="' + cssAttr(rid) + '"]') : null;
         }
         if (node) { node.classList.add('comment-thread--deleting'); }
-        var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
+        var path = threadPath(claimID, tid);
         if (rid) { path += '?reply=' + encodeURIComponent(rid); }
         apiSend('DELETE', path)
           .then(function () {
@@ -1372,7 +1492,7 @@
           })
           .catch(function (err) {
             if (node) { node.classList.remove('comment-thread--deleting'); }
-            toast(errMsg('Could not delete', err));
+            toast(errMsg('Could not delete', err, claimID));
           });
       }
 
@@ -1415,7 +1535,7 @@
           e.preventDefault();
           var newBody = ta.value.trim();
           if (!newBody) { return; }
-          var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
+          var path = threadPath(claimID, tid);
           if (rid) { path += '?reply=' + encodeURIComponent(rid); }
           apiSend('PATCH', path, { as: 'human', body: newBody })
             .then(function () {
@@ -1428,7 +1548,7 @@
             .catch(function (err) {
               // Keep the edit form open with the user's revision (do NOT revert to
               // the rendered body) so a failed edit does not discard the text.
-              toast(errMsg('Could not edit', err));
+              toast(errMsg('Could not edit', err, claimID));
             });
         });
       }
@@ -4106,6 +4226,19 @@
         }
         if (e.target.closest('[data-dxg-close]') && graphFocusReturn) {
           restoreFocus(graphFocusReturn, '#dxgOpen');
+        }
+        var briefComment = e.target.closest('.brief-comment, .facet-toc__comment');
+        if (briefComment) {
+          e.preventDefault();
+          if (briefComment.disabled) { return; }
+          var owner = briefOwnerOf(briefComment);
+          if (!owner) { return; }
+          if (commentPanelOpen() && currentClaimID === briefKey(owner)) {
+            closeCommentPanel();
+          } else {
+            openBriefCommentPanel(owner);
+          }
+          return;
         }
         var chip = e.target.closest('.comment-chip');
         if (chip) {

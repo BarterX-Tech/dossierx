@@ -107,7 +107,10 @@ var commentsPanelTmpl = template.Must(
 // split into the open ones shown inline and the resolved ones tucked into the
 // <details> collapse.
 type commentsPanelView struct {
-	ClaimID  string
+	ClaimID string
+	// BriefID is set, and ClaimID empty, for a brief's panel
+	// (BriefCommentsPanelHTML): the panel is then keyed data-brief-id.
+	BriefID  string
 	Open     []model.Comment
 	Resolved []model.Comment
 }
@@ -118,14 +121,35 @@ type commentsPanelView struct {
 // is surfaced to the reader rather than silently swallowed into the collapse.
 func newCommentsPanelView(c model.Claim) commentsPanelView {
 	v := commentsPanelView{ClaimID: c.ID}
-	for _, cm := range c.Comments {
+	v.split(c.Comments)
+	return v
+}
+
+func (v *commentsPanelView) split(cs []model.Comment) {
+	for _, cm := range cs {
 		if cm.Status == model.CommentStatusResolved {
 			v.Resolved = append(v.Resolved, cm)
 		} else {
 			v.Open = append(v.Open, cm)
 		}
 	}
-	return v
+}
+
+// BriefCommentsPanelHTML bakes a brief's threads into its page (NIT-198) the
+// way a claim's are baked after its footer: the same comments.html panel,
+// hidden, read by the viewer's rail when no comment API answers (a static
+// build), keyed data-brief-id. A brief with no thread gets none.
+func BriefCommentsPanelHTML(briefID string, cs []model.Comment) template.HTML {
+	if len(cs) == 0 {
+		return ""
+	}
+	v := commentsPanelView{BriefID: briefID}
+	v.split(cs)
+	var b strings.Builder
+	if err := commentsPanelTmpl.Execute(&b, v); err != nil {
+		return ""
+	}
+	return template.HTML(b.String()) //nolint:gosec // comments.html auto-escapes; bodies go through markdown.Render
 }
 
 // Load parses the default embedded partial for every known layout and

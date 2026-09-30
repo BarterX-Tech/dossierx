@@ -277,7 +277,7 @@
 {{range .Folders}}          <section class="briefs-index-folder">
             <h3>{{.Label}} <span class="briefs-index-folder__count">{{.Count}}</span></h3>
             <ul>
-{{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{if .Summary}}<span>{{.Summary}}</span>{{end}}</li>
+{{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{if .OpenThreads}}<span class="briefs-index__threads"><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>{{.OpenThreadsLabel}}</span>{{end}}{{if .Summary}}<span>{{.Summary}}</span>{{end}}</li>
 {{end}}            </ul>
           </section>
 {{end}}        </section>
@@ -518,7 +518,7 @@
   <script>{{.GraphUIJS}}</script>
 </body>
 </html>
-{{define "briefPage"}}        <section class="module-section brief-section" id="{{.ID}}" hidden data-brief-path="{{.Path}}" aria-labelledby="{{.ID}}_title">
+{{define "briefPage"}}        <section class="module-section brief-section" id="{{.ID}}" hidden data-brief-path="{{.Path}}" data-brief-id="{{.BriefID}}" data-open-threads="{{.OpenThreads}}" data-threads="{{.Threads}}" aria-labelledby="{{.ID}}_title">
           <header class="brief-head">
             <p class="brief-kicker"><span class="brief-kicker__word">Brief</span> · <span class="brief-kicker__word">{{.FolderLabel}}</span><span class="brief-kicker__path"> · {{.Path}}</span></p>
             <div class="brief-title-row"><h2 class="brief-title" id="{{.ID}}_title">{{.Title}}</h2><span class="brief-wide">{{.Pill}}</span></div>
@@ -532,6 +532,7 @@
 {{end}}{{if .CitedByCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.CitedByLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">uses it as evidence</span></div>
             <ul class="brief-relations__list">{{.CitedBy}}</ul>
 {{end}}          </section>
-{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" disabled><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this brief</button><p class="brief-comment-note">Threads on briefs arrive in a later release.</p></div>
-        </section>
+{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" aria-controls="commentsPanel" aria-expanded="false"{{if not .Threads}} disabled{{end}}><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this brief</button><p class="brief-comment-note">Read only: comments are written through dossierx serve.</p></div>
+{{if .CommentsPanel}}          {{.CommentsPanel}}
+{{end}}        </section>
 {{end}}
