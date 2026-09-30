@@ -295,16 +295,22 @@ func TestRenderWith_BriefsPayloadCarriesTheReviewState(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := p.Briefs[0]
-	changed, _ := got["changed_claims"].([]any)
-	approved, _ := got["approved"].(map[string]any)
+	changed, okChanged := got["changed_claims"].([]any)
+	approved, okApproved := got["approved"].(map[string]any)
+	html, okHTML := got["approved_body_html"].(string)
+	if !okChanged || !okApproved || !okHTML {
+		t.Fatalf("payload field types: %+v", got)
+	}
 	if got["lock_state"] != "locked" || got["review_pending"] != true || got["review_pending_trigger"] != briefs.TriggerDependencyDrift ||
 		got["locked_at"] != "2026-09-30T00:00:00Z" || got["lock_reason"] != "approved" || got["open_threads"] != float64(1) ||
 		len(changed) != 1 || approved["markdown"] != "# Widget flow, as approved\n" ||
-		!strings.Contains(got["approved_body_html"].(string), "as approved") {
+		!strings.Contains(html, "as approved") {
 		t.Fatalf("review state in the payload = %+v", got)
 	}
-	c := changed[0].(map[string]any)
-	if c["id"] != "widget.contract.overview" || c["baseline"].(map[string]any)["body"] != then.Body || c["current"].(map[string]any)["body"] != cat.Claims[0].Body {
+	c, okC := changed[0].(map[string]any)
+	baseline, okB := c["baseline"].(map[string]any)
+	current, okN := c["current"].(map[string]any)
+	if !okC || !okB || !okN || c["id"] != "widget.contract.overview" || baseline["body"] != then.Body || current["body"] != cat.Claims[0].Body {
 		t.Fatalf("changed claim in the payload = %+v", c)
 	}
 

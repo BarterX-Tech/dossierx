@@ -312,12 +312,17 @@ func newBriefShowCmd() *cobra.Command {
 			if images == nil {
 				images = []briefs.Image{}
 			}
-			eval, claims, warnings, _ := briefReviewInputs(cfg, set)
+			eval, claims, warnings, claimsErr := briefReviewInputs(cfg, set)
 			r := eval.Review(b)
 			restsOnClaims := make([]briefRestsOnClaim, 0, len(b.RestsOn))
 			for _, id := range b.RestsOn {
 				entry := briefRestsOnClaim{ID: id}
-				if c, ok := loader.FindByID(claims, id); ok {
+				switch c, ok := loader.FindByID(claims, id); {
+				case claimsErr != nil:
+					// The claims did not load: whether this one exists is
+					// unknown, not false (the warning says why).
+					entry.Status = "unknown"
+				case ok:
 					entry.Exists, entry.Status, entry.ReviewPending = true, string(c.Status), c.ReviewPending
 				}
 				restsOnClaims = append(restsOnClaims, entry)

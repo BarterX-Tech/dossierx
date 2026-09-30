@@ -44,8 +44,8 @@ func mustOK(t *testing.T, args ...string) cliout.Envelope {
 
 func mustCode(t *testing.T, code cliout.Code, args ...string) cliout.Envelope {
 	t.Helper()
-	env, _, _ := execCLIJSON(t, args...)
-	if env.OK || env.Error == nil || env.Error.Code != code {
+	env, _, err := execCLIJSON(t, args...)
+	if err == nil || env.OK || env.Error == nil || env.Error.Code != code {
 		t.Fatalf("%v: want %s, got %+v", args, code, env)
 	}
 	return env
@@ -53,7 +53,10 @@ func mustCode(t *testing.T, code cliout.Code, args ...string) cliout.Envelope {
 
 func validateFindings(t *testing.T, cfgPath string) (lint []lintFindingData, ledger []lock.Finding) {
 	t.Helper()
-	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	if env.Data == nil {
+		t.Fatalf("check --validate returned no data: %v %+v", err, env.Error)
+	}
 	var data checkData
 	decodeData(t, env, &data)
 	return data.LintFindings, data.LedgerFindings
@@ -76,7 +79,7 @@ func TestBriefLockLifecycle(t *testing.T) {
 	if locked.Relocked || len(locked.Baselines) != 1 || locked.Baselines["widget.contract.overview"] == "" {
 		t.Fatalf("brief lock payload = %+v", locked)
 	}
-	raw, _ := os.ReadFile(briefPath)
+	raw := mustRead(t, briefPath)
 	if !strings.Contains(string(raw), "status: locked\n") || !strings.HasSuffix(string(raw), "# Widget flow\n\nOne paragraph.\n") {
 		t.Fatalf("the brief file after lock:\n%s", raw)
 	}
@@ -93,7 +96,7 @@ func TestBriefLockLifecycle(t *testing.T) {
 	}
 	mustCode(t, cliout.CodeAlreadyLocked, "--config", cfgPath, "brief", "lock", flow, "--reason", "again")
 
-	claim, _ := os.ReadFile(claimPath)
+	claim := mustRead(t, claimPath)
 	moved := strings.Replace(string(claim), "body: |\n", "body: |\n  rewritten.\n", 1)
 	if err := os.WriteFile(claimPath, []byte(moved), 0o644); err != nil {
 		t.Fatal(err)
@@ -123,15 +126,27 @@ func TestBriefLockLifecycle(t *testing.T) {
 	}
 
 	mustOK(t, "--config", cfgPath, "brief", "unlock", flow, "--reason", "rework")
-	raw, _ = os.ReadFile(briefPath)
+	raw = mustRead(t, briefPath)
 	if !strings.Contains(string(raw), "status: draft\n") {
 		t.Fatalf("unlock must set status: draft:\n%s", raw)
 	}
-	store, _ = lock.LoadStore(storeFile)
+	if store, err = lock.LoadStore(storeFile); err != nil {
+		t.Fatal(err)
+	}
 	if rec, ok := store.BriefRecordFor("widget.flow"); !ok || !rec.Released() || rec.ReleasedReason != "rework" || len(rec.Reaudits) != 1 {
 		t.Fatalf("unlock must keep the record and stamp its release: %+v", rec)
 	}
 	mustCode(t, cliout.CodeNotLocked, "--config", cfgPath, "brief", "unlock", flow, "--reason", "again")
+}
+
+// mustRead is os.ReadFile that fails the test instead of returning an error.
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func hasFinding(fs []lintFindingData, rule, path, severity string) bool {
@@ -199,7 +214,10 @@ func TestAnOpenThreadRefusesBriefLockAndReaudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps, _ := mutatingCommentDeps(cfg)
+	deps, err := mutatingCommentDeps(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := deps.BriefResolve(flow, added.ThreadID, "human"); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +227,7 @@ func TestAnOpenThreadRefusesBriefLockAndReaudit(t *testing.T) {
 	if _, err := deps.BriefReopen(flow, added.ThreadID, "human"); err != nil {
 		t.Fatal(err)
 	}
-	claim, _ := os.ReadFile(claimPath)
+	claim := mustRead(t, claimPath)
 	if err := os.WriteFile(claimPath, []byte(strings.Replace(string(claim), "body: |\n", "body: |\n  rewritten.\n", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +244,7 @@ func TestBriefStateNeverGatesAClaim(t *testing.T) {
 	root := filepath.Dir(cfgPath)
 	const flow = "briefs/widget/flow.md"
 	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
-	raw, _ := os.ReadFile(briefPath)
+	raw := mustRead(t, briefPath)
 	if err := os.WriteFile(briefPath, []byte(strings.Replace(string(raw), "One paragraph.", "One paragraph, edited.", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -242,14 +260,17 @@ func TestBriefStateNeverGatesAClaim(t *testing.T) {
 	}
 	var preview policyLockPreviewData
 	decodeData(t, env, &preview)
-	rawPreview, _ := json.Marshal(env.Data)
+	rawPreview, err := json.Marshal(env.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if preview.Blocked || strings.Contains(string(rawPreview), `"brief-`) {
 		t.Fatalf("brief state must not reach a claim lock: %s", rawPreview)
 	}
 	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
-	claim, _ := os.ReadFile(claimPath)
+	claim := mustRead(t, claimPath)
 	if strings.Contains(string(claim), "review_pending") {
 		t.Fatalf("a brief must never set review_pending on a claim:\n%s", claim)
 	}
@@ -272,12 +293,12 @@ func TestBriefLockRefusesALinkedBriefAndWritesNothing(t *testing.T) {
 	if err := os.Symlink(target, filepath.Join(root, "briefs", "widget", "linked.md")); err != nil {
 		t.Fatal(err)
 	}
-	storeBefore, _ := os.ReadFile(storeFile)
+	storeBefore := mustRead(t, storeFile)
 	mustCode(t, cliout.CodeBriefNotFound, "--config", cfgPath, "brief", "lock", "briefs/widget/linked.md", "--reason", "approved")
-	if got, _ := os.ReadFile(target); string(got) != draftWidgetFlow {
+	if got := mustRead(t, target); string(got) != draftWidgetFlow {
 		t.Fatal("the link's target was written")
 	}
-	if got, _ := os.ReadFile(storeFile); string(got) != string(storeBefore) {
+	if got := mustRead(t, storeFile); string(got) != string(storeBefore) {
 		t.Fatal("the lock store was written for a refused lock")
 	}
 }
@@ -323,11 +344,11 @@ func TestBriefLockAndReauditRefuseWhatTheyCannotSign(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
-	raw, _ := os.ReadFile(briefPath)
+	raw := mustRead(t, briefPath)
 	if err := os.WriteFile(briefPath, []byte(strings.Replace(string(raw), "One paragraph.", "One paragraph, edited.", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	claim, _ := os.ReadFile(claimPath)
+	claim := mustRead(t, claimPath)
 	if err := os.WriteFile(claimPath, []byte(strings.Replace(string(claim), "body: |\n", "body: |\n  rewritten.\n", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}

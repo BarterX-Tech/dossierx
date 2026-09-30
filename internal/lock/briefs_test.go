@@ -55,7 +55,10 @@ func TestAV0721StoreLoadsAndEarnsTheBriefsSchemaOnlyWhenABriefIsRecorded(t *test
 	if err := s.Save(); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := os.ReadFile(path)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(raw), `"version": 3`) || strings.Contains(string(raw), `"briefs"`) {
 		t.Fatalf("a save that records no brief must keep the store at version 3 with no briefs key:\n%s", raw)
 	}
@@ -74,7 +77,9 @@ func TestAV0721StoreLoadsAndEarnsTheBriefsSchemaOnlyWhenABriefIsRecorded(t *test
 	if got := claimSide(t, reloaded); got != before {
 		t.Fatalf("recording a brief changed the claim side of the store:\nbefore %s\nafter  %s", before, got)
 	}
-	raw, _ = os.ReadFile(path)
+	if raw, err = os.ReadFile(path); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := DecodeStore(raw); err != nil {
 		t.Fatalf("the version-4 store this engine wrote must decode strictly: %v", err)
 	}

@@ -307,7 +307,7 @@ func changedAt(store *lock.Store, c model.Claim) string {
 // `claim recover-approved-content` is a verb of its own), and every record
 // `brief lock` and `brief reaudit --confirm` write carries its receipts, so the
 // fallbacks serve only a record whose receipt was removed.
-func baselineWording(store *lock.Store, rec lock.BriefRecord, id, hash string) (*Wording, string) {
+func baselineWording(store *lock.Store, rec lock.BriefRecord, id, hash string) (wording *Wording, note string) {
 	if c, ok := rec.Receipts[id]; ok && lock.ContentHash(c) == hash {
 		return wordingOf(c), ""
 	}

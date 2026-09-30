@@ -16,10 +16,10 @@ import (
 const briefFlow = "---\nsummary: The widget flow.\nstatus: locked\nrests_on:\n  - widget.contract.a\n---\n# Flow\n\nText.\n"
 
 // briefProject is newProject with one brief at briefs/widget/flow.md.
-func briefProject(t *testing.T) (*project, string) {
+func briefProject(t *testing.T) (p *project, file string) {
 	t.Helper()
-	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	file := filepath.Join(p.root, "briefs", "widget", "flow.md")
+	p = newProject(t, map[string]string{"a.yaml": draftAYAML})
+	file = filepath.Join(p.root, "briefs", "widget", "flow.md")
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,10 @@ func TestBriefThreads_TheSameOpsAndRightsAsAClaim(t *testing.T) {
 	if len(after.Comments) != 1 || len(after.Comments[0].Replies) != 1 || after.Comments[0].Status != model.CommentStatusResolved {
 		t.Fatalf("threads on disk = %+v", after.Comments)
 	}
-	raw, _ := os.ReadFile(file)
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.HasSuffix(string(raw), "---\n# Flow\n\nText.\n") {
 		t.Fatalf("the body moved:\n%s", raw)
 	}
@@ -90,7 +93,10 @@ func TestBriefThreads_RefuseAHandEditedBlock(t *testing.T) {
 	if _, _, err := d.BriefAdd("briefs/widget/flow.md", model.CommentRoleHuman, "why?"); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := os.ReadFile(file)
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
 	forged := strings.Replace(string(raw), "status: open", "status: resolved", 1)
 	if forged == string(raw) {
 		t.Fatalf("fixture: no open thread to forge:\n%s", raw)
@@ -101,7 +107,7 @@ func TestBriefThreads_RefuseAHandEditedBlock(t *testing.T) {
 	if _, _, err := d.BriefAdd("briefs/widget/flow.md", model.CommentRoleAgent, "another"); !errors.Is(err, ErrCommentDigestDrift) {
 		t.Fatalf("a hand-edited brief block must refuse the next op, got %v", err)
 	}
-	if got, _ := os.ReadFile(file); string(got) != forged {
+	if got, err := os.ReadFile(file); err != nil || string(got) != forged {
 		t.Fatal("a refused op wrote the brief")
 	}
 }
@@ -124,7 +130,7 @@ func TestBriefThreads_NeverWriteThroughALinkOrOverAnEdit(t *testing.T) {
 	if _, _, err := d.BriefAdd("briefs/widget/flow.md", model.CommentRoleHuman, "why?"); !errors.Is(err, ErrBriefFileChanged) {
 		t.Fatalf("an edit between read and write must refuse the op, got %v", err)
 	}
-	if got, _ := os.ReadFile(file); string(got) != edited {
+	if got, err := os.ReadFile(file); err != nil || string(got) != edited {
 		t.Fatalf("the editor's save was overwritten:\n%s", got)
 	}
 	mutateInterlude = func() {}
@@ -143,7 +149,7 @@ func TestBriefThreads_NeverWriteThroughALinkOrOverAnEdit(t *testing.T) {
 	if _, _, err := d.BriefAdd("briefs/widget/linked.md", model.CommentRoleHuman, "why?"); !errors.Is(err, ErrBriefNotFound) {
 		t.Fatalf("a symlinked brief is refused by discovery, so the op must not find it, got %v", err)
 	}
-	if got, _ := os.ReadFile(target); string(got) != briefFlow {
+	if got, err := os.ReadFile(target); err != nil || string(got) != briefFlow {
 		t.Fatal("the link's target was written")
 	}
 }

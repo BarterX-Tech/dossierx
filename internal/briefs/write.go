@@ -48,7 +48,7 @@ func frontmatterRoot(lines []string, end int) (*yaml.Node, error) {
 	block := strings.ReplaceAll(strings.Join(lines[1:end], ""), "\r\n", "\n")
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(block), &doc); err != nil {
-		return nil, fmt.Errorf("%w: the frontmatter is not valid YAML: %v", ErrFrontmatterNotRewritable, err)
+		return nil, fmt.Errorf("%w: the frontmatter is not valid YAML: %w", ErrFrontmatterNotRewritable, err)
 	}
 	if doc.Kind == 0 || len(doc.Content) == 0 {
 		return nil, nil

@@ -547,11 +547,11 @@
   ],
   "render_fingerprint": "sha256:5b60a38e9a6d844084139f6b72489f444cf7bed38d2190b1b2bffbf76a51a60a",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:ad6a651b9a326c4afbbb92aa9528f7b1e836207b3678f153375f9a07c046f8a3",
+    "cmd/dossierx": "sha256:f3aee06733517dda748739aeaf42db460aacee2b35b06c0c5fe0f385eb563aa5",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/briefs": "sha256:0d1df632f2997a895004211b0f038c9f8f79501add8af7ba8abaa99e0e4f0957",
+    "internal/briefs": "sha256:dc8cebe3c93764ba11fe953e5e98ad050c2974c3931fda545b83f88cd6131efc",
     "internal/catalog": "sha256:5bc5134d2111471736bb91a16c1641a69d146e09f87070add6770fcc318a6d4b",
     "internal/check": "sha256:a09f5bf44de10ae6b795cd26d648471630c2d483447c868318ec812f126764a3",
     "internal/cliout": "sha256:fdc2c02a8b086078cbea536bf0699656e8e33aa249eaa138f9761d39aeea19c7",
