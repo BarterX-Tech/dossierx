@@ -148,8 +148,9 @@ func TestRender_HomeEmptyStates(t *testing.T) {
 	// "status: locked" with no lock record is the gate's "unrecorded": never
 	// approved, so neither the tile nor the sidebar may say Locked.
 	out = renderProject(t, cfg, claims)
-	if tile := between(t, out, `<a class="home-tile" data-tile="constitution"`, `</a>`); !strings.Contains(tile, `data-state="unrecorded">Not locked`) {
-		t.Errorf("an unrecorded roof must read Not locked:\n%s", tile)
+	if tile := between(t, out, `<a class="home-tile" data-tile="constitution"`, `</a>`); !strings.Contains(tile, `data-state="unrecorded">Not locked`) ||
+		!strings.Contains(tile, `<span class="home-pill home-narrow" data-state="unrecorded">Pending</span>`) {
+		t.Errorf("an unrecorded roof must read Not locked, and Pending on the phone row:\n%s", tile)
 	}
 	if strings.Contains(out, `class="dx-icon dx-icon--lock site-nav__lock"`) {
 		t.Errorf("the sidebar shows a lock for a roof with no lock record")
@@ -273,6 +274,7 @@ func TestRender_HomeSizeIsIndependentOfCorpusSize(t *testing.T) {
 	}
 	small, _ := homeBytes(10)
 	large, home := homeBytes(2000)
+	t.Logf("Home section bytes: %d at 10 claims, %d at 2,000 claims", small, large)
 	if large-small > 64 {
 		t.Errorf("Home grew %d bytes from 10 to 2,000 claims (%d -> %d); it must grow only by count digits", large-small, small, large)
 	}

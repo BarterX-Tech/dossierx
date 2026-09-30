@@ -106,7 +106,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 // GeneratedAt is the same render's stamp, read from the sidebar's
 // data-generated-at (the <aside> itself is not swapped). The client copies it
 // onto the sidebar before re-running initViewer, so the Home header's "last
-// check" and the freshness footer move with each live re-render. It is not
+// check" moves with each live re-render. It is not
 // inside either subtree on purpose: a stamp there would make every fragment
 // differ from the page it was sliced from. Empty when a shell override
 // carries no stamp.

@@ -76,23 +76,24 @@ Measured on a synthetic corpus in which every claim carries an open thread and
 an `upstream_dependency_review` cause and half are drafts (the worst case for
 Home: every card populated by every claim):
 
-| Claims | `buildHomeView` time | allocations | bytes allocated | Home section bytes |
-| --- | --- | --- | --- | --- |
-| 10 | 6.5 µs | 98 | 32 KB | 3,644 |
-| 1,000 | 0.58 ms | 2,602 | 2.6 MB | 3,668 |
-| 10,000 | 6.0 ms | 25,125 | 40 MB | 3,680 |
+| Claims | `buildHomeView` time | allocations | bytes allocated |
+| --- | --- | --- | --- |
+| 10 | 6.5 µs | 98 | 32 KB |
+| 1,000 | 0.58 ms | 2,602 | 2.6 MB |
+| 10,000 | 6.0 ms | 25,125 | 40 MB |
 
 Time and allocations come from `BenchmarkBuildHomeView` (in
 `internal/render/home_view_test.go`; it builds without a config, so the two
-file reads are not in the figures). The byte growth is the digits of the
-counts; the bound is pinned by `TestRender_HomeSizeIsIndependentOfCorpusSize`
-(10 versus 2,000 fully loaded claims across five modules, growth at most 64
-bytes, and the draft card's three-module cap). That the swapped subtrees
-carry no render stamp is pinned by `TestRender_SwappedSubtreesCarryNoRenderStamp`
-and `TestFragment_ReturnsBothSubtrees`.
+file reads are not in the figures). The rendered Home section is 3,660 bytes
+at 10 claims and 3,695 bytes at 2,000 (five modules, every claim on every
+card), as `TestRender_HomeSizeIsIndependentOfCorpusSize` logs; the growth is
+the digits of the counts, and the test fails if it exceeds 64 bytes or the
+draft card names more than three modules. That the swapped subtrees carry no
+render stamp is pinned by `TestRender_SwappedSubtreesCarryNoRenderStamp` and
+`TestFragment_ReturnsBothSubtrees`.
 
     go test ./internal/render -run '^$' -bench BuildHomeView -benchmem
-    go test ./internal/render -run 'TestRender_Home|TestRender_Swapped' -count=1 -v
+    go test ./internal/render -run 'TestRender_Home|TestRender_Swapped' -count=1 -v   # logs the section bytes
 
 ## Verdict
 

@@ -3908,7 +3908,9 @@
         // The <aside id="sidebar"> is not swapped, so its data-generated-at
         // would keep the page-load time. The fragment carries the same
         // render's stamp beside the two subtrees; initViewer's
-        // localizeHomeCheck and the freshness footer read it from here.
+        // localizeHomeCheck reads it from here. (The facet TOC's freshness
+        // footer copies the stamp once when it is built and does not
+        // re-read it; that predates Home and is unchanged.)
         if (typeof frag.generated_at === 'string' && frag.generated_at) {
           var sidebarEl = document.getElementById('sidebar');
           if (sidebarEl) { sidebarEl.setAttribute('data-generated-at', frag.generated_at); }
