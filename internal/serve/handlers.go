@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -101,9 +102,18 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 // <main class="content-area"> claim body. Each value is the element's full outer
 // HTML, so the client can replace outerHTML and keep the #nav / .content-area
 // selectors valid, then re-run initViewer() against the fresh DOM.
+//
+// GeneratedAt is the same render's stamp, read from the sidebar's
+// data-generated-at (the <aside> itself is not swapped). The client copies it
+// onto the sidebar before re-running initViewer, so the Home header's "last
+// check" and the freshness footer move with each live re-render. It is not
+// inside either subtree on purpose: a stamp there would make every fragment
+// differ from the page it was sliced from. Empty when a shell override
+// carries no stamp.
 type fragmentDTO struct {
-	Nav     string `json:"nav"`
-	Content string `json:"content"`
+	Nav         string `json:"nav"`
+	Content     string `json:"content"`
+	GeneratedAt string `json:"generated_at,omitempty"`
 }
 
 // handleFragment serves the nav + content-area subtrees from the SAME
@@ -131,7 +141,21 @@ func (s *Server) handleFragment(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, fmt.Errorf("serve: GET /api/fragment: shell is missing a swap anchor (nav=%t content=%t); a shell.html override must keep <nav id=\"nav\"> and <main class=\"content-area\">", okNav, okContent))
 		return
 	}
-	writeJSON(w, http.StatusOK, fragmentDTO{Nav: nav, Content: content})
+	writeJSON(w, http.StatusOK, fragmentDTO{Nav: nav, Content: content, GeneratedAt: sidebarStamp(doc)})
+}
+
+// sidebarStampRE matches the render stamp shell.html writes on the sidebar
+// <aside>: data-generated-at="<RFC3339>".
+var sidebarStampRE = regexp.MustCompile(`<aside id="sidebar"[^>]*\sdata-generated-at="([0-9TZ:+\-.]+)"`)
+
+// sidebarStamp returns doc's sidebar render stamp, or "" when the shell has
+// none.
+func sidebarStamp(doc string) string {
+	m := sidebarStampRE.FindStringSubmatch(doc)
+	if m == nil {
+		return ""
+	}
+	return m[1]
 }
 
 // extractElement returns the outer HTML of the first element in doc that begins

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
@@ -21,8 +22,9 @@ import (
 
 // fragmentResp mirrors the endpoint's JSON shape for decoding.
 type fragmentResp struct {
-	Nav     string `json:"nav"`
-	Content string `json:"content"`
+	Nav         string `json:"nav"`
+	Content     string `json:"content"`
+	GeneratedAt string `json:"generated_at"`
 }
 
 // TestFragment_ReturnsBothSubtrees is the core Phase-5a contract: GET
@@ -80,6 +82,16 @@ func TestFragment_ReturnsBothSubtrees(t *testing.T) {
 	}
 	if !strings.Contains(string(page), frag.Content) {
 		t.Fatalf("content subtree is not a substring of GET / — the fragment and page renders disagree")
+	}
+
+	// The render stamp rides beside the subtrees, never inside them (NIT-196):
+	// the client copies it onto the unswapped sidebar so Home's "last check"
+	// moves with each live re-render.
+	if _, err := time.Parse(time.RFC3339, frag.GeneratedAt); err != nil {
+		t.Fatalf("generated_at = %q, want the render's RFC3339 stamp: %v", frag.GeneratedAt, err)
+	}
+	if strings.Contains(frag.Content, frag.GeneratedAt) || strings.Contains(frag.Nav, frag.GeneratedAt) {
+		t.Fatalf("the render stamp %q sits inside a swapped subtree", frag.GeneratedAt)
 	}
 }
 

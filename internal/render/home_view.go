@@ -282,7 +282,7 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 	case constitution.StateEdited:
 		t.Label, t.ShortLabel = "Edited since lock", "Edited"
 	case constitution.StateUnrecorded:
-		t.Label = "Not locked"
+		t.Label, t.ShortLabel = "Not locked", "Unlocked"
 	default:
 		t.Label = "Unreadable"
 	}

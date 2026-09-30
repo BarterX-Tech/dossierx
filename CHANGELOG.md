@@ -56,7 +56,9 @@ section, whose links now point at the exported `SKILL.md` files.
   which keeps only the Light/Dark control. The Constitution entry drops its
   "PROJECT — NOT A MODULE" label, shows a lock when the roof is locked, and is
   hidden when there is no `constitution.yaml` and no project claim; its page
-  stays reachable at `#constitution`.
+  stays reachable at `#constitution`. Under `dossierx serve`, a live reload now also
+  refreshes the render time Home and the freshness footer show
+  (`/api/fragment` carries `generated_at`).
 
 ### Removed
 

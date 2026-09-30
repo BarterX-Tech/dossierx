@@ -3904,6 +3904,16 @@
         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
         oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
+        // ---- carry the render stamp across the swap ----
+        // The <aside id="sidebar"> is not swapped, so its data-generated-at
+        // would keep the page-load time. The fragment carries the same
+        // render's stamp beside the two subtrees; initViewer's
+        // localizeHomeCheck and the freshness footer read it from here.
+        if (typeof frag.generated_at === 'string' && frag.generated_at) {
+          var sidebarEl = document.getElementById('sidebar');
+          if (sidebarEl) { sidebarEl.setAttribute('data-generated-at', frag.generated_at); }
+        }
+
         // ---- re-point every lookup map at the fresh DOM ----
         initViewer();
 

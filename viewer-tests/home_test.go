@@ -1,7 +1,9 @@
 package viewertests
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -151,4 +153,29 @@ func TestStatusStripStaysOffHome(t *testing.T) {
 
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('#nav .sec-tab[data-target="#widget"]').click();`, nil))
 	pollTrue(t, ctx, `!document.getElementById('widget').hidden && !document.getElementById('statusStrip').hidden`)
+}
+
+// Under serve, a live reload swaps <main> and <nav> but not the sidebar
+// <aside> that carries the render stamp. The fragment carries the new stamp
+// beside the subtrees, and Home's "last check" must move with it: new counts
+// under an old check time would say the view is older than it is.
+func TestHomeCheckTimeFollowsALiveReload(t *testing.T) {
+	p := newProject(t)
+	ctx := serveAndOpenLive(t, p, "#_home")
+	pollTrue(t, ctx, homeVisible)
+	pollTrue(t, ctx, `!!document.querySelector('.home-checked').getAttribute('datetime')`)
+	before := evalString(t, ctx, `document.querySelector('.home-checked').getAttribute('datetime')`)
+
+	// The stamp has one-second resolution; let a second pass so the next
+	// render's stamp is a different instant, then change the corpus.
+	time.Sleep(1100 * time.Millisecond)
+	p.writeClaim("second.yaml", railClaim("widget.contract.second", "contract", "widget", ""))
+	pollTrue(t, ctx, `document.querySelector('#_home .home-card[data-kind="draft"] .home-card__count').textContent.trim() === '2'`)
+
+	pollTrue(t, ctx, `document.querySelector('.home-checked').getAttribute('datetime') > `+fmt.Sprintf("%q", before))
+	requireAll(t, ctx, "Home after a live reload", `var t = document.querySelector('.home-checked');`, [][2]string{
+		{"the check time names the new render", `t.getAttribute('datetime') === document.getElementById('sidebar').dataset.generatedAt`},
+		{"the check time is shown", `t.textContent.trim() !== ''`},
+		{"Home is still the page", homeVisible},
+	})
 }

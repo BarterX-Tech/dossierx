@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
@@ -179,8 +180,18 @@ func TestRender_HomeEmptyStates(t *testing.T) {
 	}
 	writeFile(t, cfg.ConstitutionPath(), strings.Replace(roof, "One rule.", "One rule, edited.", 1))
 	edited := renderProject(t, cfg, claims)
-	if tile := between(t, edited, `<a class="home-tile" data-tile="constitution"`, `</a>`); !strings.Contains(tile, `data-state="edited">Edited since lock`) {
+	tile := between(t, edited, `<a class="home-tile" data-tile="constitution"`, `</a>`)
+	if !strings.Contains(tile, `data-state="edited">Edited since lock`) {
 		t.Errorf("a roof edited after its lock must not read Locked:\n%s", tile)
+	}
+	// The phone row shares one line between the counts and the pill: a short
+	// pill word, and counts that only break between one another, so no line
+	// starts with a separator.
+	if !strings.Contains(tile, `<span class="home-pill home-narrow" data-state="edited">Edited</span>`) {
+		t.Errorf("the phone pill for an edited roof must be the short word:\n%s", tile)
+	}
+	if !strings.Contains(tile, "2\u00a0invariants\u00a0· 1\u00a0decision\u00a0· 0\u00a0terms") {
+		t.Errorf("the phone counts line must keep each count whole and break only after a separator:\n%s", tile)
 	}
 	if strings.Contains(edited, `class="dx-icon dx-icon--lock site-nav__lock"`) {
 		t.Errorf("the sidebar shows a lock for a roof edited after its lock")
@@ -188,7 +199,7 @@ func TestRender_HomeEmptyStates(t *testing.T) {
 	if !strings.Contains(out, `class="sec-tab site-nav__item constitution-tab"`) {
 		t.Errorf("Constitution sidebar entry missing once constitution.yaml exists")
 	}
-	tile := between(t, out, `<a class="home-tile" data-tile="constitution"`, `</a>`)
+	tile = between(t, out, `<a class="home-tile" data-tile="constitution"`, `</a>`)
 	for _, want := range []string{
 		`data-state="locked">Locked`,
 		`<span class="home-stat__count">2</span><span class="home-stat__label">invariants</span>`,
@@ -281,4 +292,69 @@ func between(t *testing.T, s, start, end string) string {
 		t.Fatalf("%q not found after %q", end, start)
 	}
 	return s[i : i+j]
+}
+
+// TestRender_SwappedSubtreesCarryNoRenderStamp pins why Home's "last check"
+// is filled in the browser: a live reload swaps <main> and <nav id="nav"> in
+// from a fresh render, and serve's fragment contract is that each subtree is a
+// verbatim slice of the page. Two renders of the same corpus a second apart
+// must therefore produce byte-identical subtrees; the stamp lives only on the
+// sidebar <aside>, outside both.
+func TestRender_SwappedSubtreesCarryNoRenderStamp(t *testing.T) {
+	cfg := projectTestConfig(t)
+	cat, err := catalog.Build([]model.Claim{projectTestClaim("widget", "a", model.StatusDraft)}, cfg)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	at := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	first, err := renderAt(cat, cfg, at)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	second, err := renderAt(cat, cfg, at.Add(time.Second))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, sub := range [][2]string{{`<main class="content-area">`, `</main>`}, {`<nav id="nav">`, `</nav>`}} {
+		a, b := between(t, first, sub[0], sub[1]), between(t, second, sub[0], sub[1])
+		if a != b {
+			t.Errorf("%s differs between renders one second apart; a render stamp is inside a swapped subtree", sub[0])
+		}
+	}
+	if !strings.Contains(first, `data-generated-at="2026-09-30T10:00:00Z"`) {
+		t.Errorf("the sidebar no longer carries the render stamp the Home header reads")
+	}
+}
+
+// BenchmarkBuildHomeView is the timing harness behind the table in
+// docs/graph-safety/nit-196-home.md: every claim on every card (half drafts,
+// each with an open thread and an upstream_dependency_review cause).
+//
+//	go test ./internal/render -run '^$' -bench BuildHomeView -benchmem
+func BenchmarkBuildHomeView(b *testing.B) {
+	for _, n := range []int{10, 1000, 10000} {
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			var claims []model.Claim
+			ra := map[string]readiness.Assessment{}
+			for i := 0; i < n; i++ {
+				st := model.StatusDraft
+				if i%2 == 0 {
+					st = model.StatusLocked
+				}
+				c := projectTestClaim([]string{"widget", "gateway"}[i%2], "c"+strconv.Itoa(100000+i), st)
+				c.Comments = []model.Comment{openComment("c-"+strconv.Itoa(100000+i), "q")}
+				claims = append(claims, c)
+				ra[c.ID] = readiness.Assessment{ReviewPending: true, ReviewCauses: []readiness.Cause{{Kind: readiness.CauseUpstreamDependencyReview}}}
+			}
+			cat, err := catalog.Build(claims, nil)
+			if err != nil {
+				b.Fatalf("catalog.Build: %v", err)
+			}
+			cat.SetReadiness(ra)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				buildHomeView(cat, nil, nil)
+			}
+		})
+	}
 }

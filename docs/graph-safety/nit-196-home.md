@@ -2,7 +2,10 @@
 
 Scope: a new viewer projection, `render.HomeView` (`internal/render/home_view.go`),
 rendered by the embedded shell as the Home page, and the sidebar and routing
-changes around it (`shell.html`, `viewer-runtime.js`, `system-record.js`).
+changes around it (`shell.html`, `viewer-runtime.js`, `system-record.js`),
+plus one field on `dossierx serve`'s `/api/fragment` answer (`generated_at`,
+the render stamp read off the same render's sidebar, so a live reload moves
+Home's "last check").
 Home is a consumer of readiness, never a producer: it reads the live
 `readiness.Assessment` already on the catalog, the approved-edit projection,
 each claim's comments and the module groups the shell already builds. For the
@@ -13,8 +16,8 @@ it) and the lock store's constitution record, which it passes to
 cause, condition, baseline or traversal, and writes nothing.
 
 - Candidate: the head of `claude/project-thread-u0i976` (PR #131), based on
-  `release/v0.7.22` at `a17942e`. The figures below were re-measured on the
-  commit that adds this revision of the note.
+  `release/v0.7.22` at `a17942e`. The figures below were measured on the
+  commit that adds this revision of the note, with the commands shown.
 - Environment: go1.26.5 darwin/arm64.
 
 ## What Home reads, and the one judgement it makes
@@ -41,8 +44,9 @@ re-derives them; the saved `review_pending` field on the claim file is not read.
   it calls no readiness or reaudit function and holds no writer. The one lock
   call is `lock.LoadStore`, a read; the store, flags, receipts and claim files
   are untouched by construction.
-- **The roof's state is the gate's.** The tile and the sidebar lock icon show
-  `constitution.Evaluate`'s verdict against the store's record, the same
+- **The roof's state is the gate's.** The tile, the sidebar lock icon and
+  the Constitution page's word meter show `constitution.Evaluate`'s verdict
+  against the store's record, the same
   evaluator `check` refuses on, so a hand-flipped `status: locked` with no
   record reads "Not locked" and a locked file edited since reads "Edited since
   lock" (`TestRender_HomeEmptyStates`).
@@ -72,19 +76,23 @@ Measured on a synthetic corpus in which every claim carries an open thread and
 an `upstream_dependency_review` cause and half are drafts (the worst case for
 Home: every card populated by every claim):
 
-| Claims | `buildHomeView` | Home section bytes |
-| --- | --- | --- |
-| 10 | 18 µs | 3,696 |
-| 1,000 | 0.76 ms | 3,720 |
-| 10,000 | 6.0 ms | 3,732 |
+| Claims | `buildHomeView` time | allocations | bytes allocated | Home section bytes |
+| --- | --- | --- | --- | --- |
+| 10 | 6.5 µs | 98 | 32 KB | 3,644 |
+| 1,000 | 0.58 ms | 2,602 | 2.6 MB | 3,668 |
+| 10,000 | 6.0 ms | 25,125 | 40 MB | 3,680 |
 
-The byte growth is the digits of the counts. The table was measured with a
-throwaway benchmark over `buildHomeView` and `Render`; the bound itself is
-pinned in the suite by `TestRender_HomeSizeIsIndependentOfCorpusSize`
+Time and allocations come from `BenchmarkBuildHomeView` (in
+`internal/render/home_view_test.go`; it builds without a config, so the two
+file reads are not in the figures). The byte growth is the digits of the
+counts; the bound is pinned by `TestRender_HomeSizeIsIndependentOfCorpusSize`
 (10 versus 2,000 fully loaded claims across five modules, growth at most 64
-bytes, and the draft card's three-module cap):
+bytes, and the draft card's three-module cap). That the swapped subtrees
+carry no render stamp is pinned by `TestRender_SwappedSubtreesCarryNoRenderStamp`
+and `TestFragment_ReturnsBothSubtrees`.
 
-    go test ./internal/render -run 'TestRender_Home' -count=1 -v
+    go test ./internal/render -run '^$' -bench BuildHomeView -benchmem
+    go test ./internal/render -run 'TestRender_Home|TestRender_Swapped' -count=1 -v
 
 ## Verdict
 
