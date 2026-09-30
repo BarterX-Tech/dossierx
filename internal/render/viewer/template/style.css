@@ -11118,6 +11118,13 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   font: 500 14px/18px var(--font-sans);
 }
 .brief-comment .dx-icon { width: 15px; height: 15px; stroke-width: 2.2; }
+/* The open count the Threads block shows on the rail, carried by the
+   page-foot row where the rail is not drawn (NIT-198). */
+.brief-comment-count {
+  margin: 0;
+  color: var(--link);
+  font: 500 13px/18px var(--font-sans);
+}
 .brief-comment-note,
 .facet-toc__threads-later {
   margin: 0;
@@ -11315,7 +11322,8 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     align-items: stretch;
     gap: 8px;
   }
-  .brief-comment-note { text-align: center; }
+  .brief-comment-note,
+  .brief-comment-count { text-align: center; }
 
   /* Every row in the phone drawer's tree is a 44px tap target. */
   #nav .brief-nav .brief-nav__row,

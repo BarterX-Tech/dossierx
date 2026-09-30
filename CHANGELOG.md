@@ -171,14 +171,31 @@ binary predates that guard.
   confirms a brief: the agent does, once the human has said so in a thread.
   In a static build a brief with threads opens them read only, a brief with
   none has its buttons disabled, and a line says comments are written through
-  `dossierx serve`.
+  `dossierx serve`. Below the rail's width the page-foot row shows the open
+  count, and the composer on a brief says the comment is saved in the brief's
+  file.
+- **Home's Open threads card counts brief threads** beside claim threads, and
+  leads to the first such brief when no claim has an open thread.
+- **A claim's pin on a brief ignores its threads and status.** An `internal`
+  source whose `path` is a brief (no `record_id`) now records the brief's
+  content hash — summary, `rests_on` and body, what `brief lock` signs;
+  `brief show` prints it as `content:` (`content_hash` in JSON) — instead of
+  the file's sha256, and `source-internal-drift` compares that. Every thread
+  the human opens, answers or resolves is written into the brief's
+  frontmatter, and under a whole-file pin each one failed `check` for every
+  claim citing the brief. A body, summary or `rests_on` edit still drifts;
+  every other internal source keeps its whole-file pin. Briefs have not
+  shipped, so no released pin changes meaning.
 - **Seven serve routes under `/api/briefs/{id}/comments`**, addressed by the
   brief's `<folder>.<slug>` id (a path answers `brief_not_found`): `GET` lists
   one brief's threads (`?open=1` for the open ones), and add, reply, resolve,
   reopen, edit and delete are the claim routes' twins with the same
   admission, rights (an agent cannot resolve the human's thread) and error
-  codes. A thread in a response carries `brief_id` and `path`. The claim
-  routes and `GET /api/comments` answer byte for byte as before.
+  codes; a brief whose frontmatter cannot be rewritten in place is `422
+  claim_not_serializable`, and anything else under `/api/briefs/` (a path
+  written unescaped, say) is JSON `404 brief_not_found`. A thread in a
+  response carries `brief_id` and `path`. The claim routes and
+  `GET /api/comments` answer byte for byte as before, now pinned by a test.
 
 ### Added — briefs, lock, review and comments (NIT-205)
 

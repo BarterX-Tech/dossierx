@@ -532,7 +532,7 @@
 {{end}}{{if .CitedByCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.CitedByLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">uses it as evidence</span></div>
             <ul class="brief-relations__list">{{.CitedBy}}</ul>
 {{end}}          </section>
-{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" aria-controls="commentsPanel" aria-expanded="false"{{if not .Threads}} disabled{{end}}><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this brief</button><p class="brief-comment-note">Read only: comments are written through dossierx serve.</p></div>
+{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" aria-controls="commentsPanel" aria-expanded="false"{{if not .Threads}} disabled{{end}}><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this brief</button><p class="brief-comment-count"{{if not .OpenThreads}} hidden>{{else}}>{{.OpenThreadsLabel}}{{end}}</p><p class="brief-comment-note">Read only: comments are written through dossierx serve.</p></div>
 {{if .CommentsPanel}}          {{.CommentsPanel}}
 {{end}}        </section>
 {{end}}

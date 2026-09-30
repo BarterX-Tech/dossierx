@@ -910,6 +910,12 @@
         return true;
       }
       window.dossierxOpenBriefCommentPanel = openBriefCommentPanel;
+      // dossierxCommentRailBrief is the id of the brief the open rail
+      // shows, or null: system-record.js reads it for the Threads block's
+      // aria-expanded, since that one button follows the page on screen.
+      window.dossierxCommentRailBrief = function () {
+        return commentPanelOpen() && isBriefKey(currentClaimID) ? briefIDOf(currentClaimID) : null;
+      };
 
       // briefControlsFor is every Comment button that opens this brief's
       // rail: its page-foot button and, while its page is the one on
@@ -1322,7 +1328,12 @@
         // OD14.7: serve-only copy — a static export mounts no composer at all
         // for this caption to sit beside (renderPanelReadOnly never calls
         // buildComposer), so it never needs its own file://-guard here.
-        footer.appendChild(textEl('span', 'comment-composer-caption', 'Saved to the served viewer, not to this file.'));
+        // A claim's comment is not written into the static file a reader
+        // may have saved; a brief's is written into the brief itself
+        // (NIT-198), so its caption says where it goes.
+        footer.appendChild(textEl('span', 'comment-composer-caption', isBriefKey(claimID)
+          ? 'Saved in the brief\'s file by dossierx serve.'
+          : 'Saved to the served viewer, not to this file.'));
         var btn = textEl('button', 'comment-composer-submit', 'Comment');
         btn.type = 'submit';
         footer.appendChild(btn);

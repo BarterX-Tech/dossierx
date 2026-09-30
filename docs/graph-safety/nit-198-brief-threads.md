@@ -1,10 +1,13 @@
 # Graph-safety evidence: comment threads on briefs in the viewer (NIT-198, v0.7.22)
 
-Scope: viewer data and serve routes. The brief page (NIT-197) gains its
-thread counts and, for a static build, its threads baked in; the sidebar mark
-gains the open-thread state; the "All briefs" index gains a per-brief count;
-and `dossierx serve` gains seven routes under `/api/briefs/{id}/comments` that
-call the `Brief*` thread operations NIT-205 added to `internal/comments`.
+Scope: viewer data, serve routes and one lint rule. The brief page (NIT-197)
+gains its thread counts and, for a static build, its threads baked in; the
+sidebar mark gains the open-thread state; the "All briefs" index and Home's
+Open threads card count a brief's open threads; `dossierx serve` gains seven
+routes under `/api/briefs/{id}/comments` that call the `Brief*` thread
+operations NIT-205 added to `internal/comments`, and a catch-all under
+`/api/briefs/`; and `source-internal-drift` pins an internal source that
+cites a brief by the brief's content hash (audit F1, below).
 
 The change is a consumer and a router, never a producer of graph facts. It
 reads each brief's `comments` (already parsed by `internal/briefs`) and counts
@@ -14,8 +17,9 @@ cause, condition, baseline or traversal, computes no readiness, and writes
 nothing except through the NIT-205 operations, whose locking, digest and
 refusal rules are unchanged (docs/graph-safety/nit-192-briefs.md).
 
-- Candidate: the head of `work/nit-198-viewer-comment-threads-on-briefs`, cut
-  from `2bde5e52` (the NIT-178 combo branch after NIT-205). The figures below
+- Candidate: the head of `work/nit-198-viewer-comment-threads-on-briefs`,
+  rebased onto `41f603be` (the NIT-178 combo branch after NIT-205 and its
+  #137 follow-up) for the audit round. The figures below
   were measured on the working tree before this note was committed, with the
   commands shown.
 - Environment: go1.26.5 darwin/arm64.
@@ -30,16 +34,48 @@ refusal rules are unchanged (docs/graph-safety/nit-192-briefs.md).
 | Index line | `OpenThreads()` | "N open thread(s)" on a brief with any |
 | `GET /api/briefs/{id}/comments` | `comments.Deps.BriefList` | one brief's threads, from the working tree, no lock |
 | Brief writes | `comments.Deps.Brief{Add,Reply,Resolve,Reopen,Edit,Delete}` | unchanged NIT-205 operations |
+| Home's Open threads card | `OpenThreads()` of every brief, beside each claim's `OpenThreadIDs()` | summed; leads to the first claim with one, else the first brief |
+| `source-internal-drift` on a brief | `briefs.LockHash` via `lint.BriefContentHash` | see below |
+
+## The brief pin (audit F1)
+
+Before: an `internal` source's `sha256` pinned the whole file, so every thread
+write into a cited brief's frontmatter (and a `brief lock` flipping its
+status) was `source-internal-drift` on every claim citing it. After: when the
+source's path resolves to `briefs_dir/<folder>/<slug>.md` and `record_id` is
+unset, the pin is the brief's content hash — `briefs.LockHash(summary,
+rests_on, body)`, the value `brief lock` signs and `brief show` prints as
+`content` / `content_hash`. It is computed by parsing the file exactly as
+discovery does (`briefs.FromFiles` on one file), and handed to the lint
+through `lint.BriefContentHash`, which `internal/briefs` sets at init because
+it already imports `internal/lint`. A build that links no brief reader
+reports the source as unchecked rather than falling back to the whole file.
+Every other internal source keeps its whole-file (or JSONL record) pin.
+
+This is a lint verdict, not a graph fact: no edge, cause, baseline or
+readiness input changed. `sources` stays outside the dependency-drift
+`ContentHash` and inside the lock hash, as before; what changed is only which
+bytes of a brief the pin compares. `--validate`, `--staged` (which lints
+sources from the working tree, as it always has) and the NIT-202 relationship
+row (`sourceDriftCheck`, which runs the registered lint) share the one lint,
+so they cannot disagree. `TestACitedBriefsPinIgnoresItsThreadsAndStatus`
+(`internal/check`) runs both modes through a thread add, reply and resolve and
+a status flip (clean), a body edit (drift) and a status-line edit to a note
+outside `briefs_dir` (drift, whole-file). Mutations — skipping the brief
+branch, hashing the file digest instead of the lock hash, never reporting a
+brief mismatch — each fail it. Cost: one parse of the cited brief per source,
+O(brief bytes), memoised per pin in the render as before.
 
 ## Preserved invariants
 
-- **A claim never learns about a brief's threads.** No claim-side package
-  changed:
+- **A claim never learns about a brief's threads.** No readiness, lock or
+  catalog package changed; the only engine changes outside render and serve
+  are the brief pin (the `source-internal-drift` branch and the `briefs`
+  init that feeds it) and `brief show`'s `content:` line:
 
-      git diff --stat 2bde5e52 -- internal/lock internal/readiness \
-        internal/catalog internal/model internal/lint internal/manifest \
-        internal/loader internal/reaudit internal/briefs internal/comments \
-        internal/digest                                           # empty
+      git diff --stat 41f603be -- internal/lock internal/readiness \
+        internal/catalog internal/model internal/manifest internal/loader \
+        internal/reaudit internal/comments internal/digest       # empty
 
 - **The claim routes answer byte for byte as before.** `commentDTO` now embeds
   the thread fields as `threadDTO` after `claim_id`; `encoding/json` flattens

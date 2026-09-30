@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
@@ -20,10 +21,11 @@ import (
 // record, and nothing on it is written by the project except the title and
 // eyebrow, which the shell already carries.
 //
-// Briefs (NIT-192) are not in the engine yet, so the brief halves of the
-// cards and the Features and Briefs tiles do not exist here. That is the
-// "no briefs/" empty state the design fixes: those parts are hidden, not
-// shown as zero.
+// Of the brief halves, the Open threads card carries one (NIT-198): a
+// brief's open threads count on it beside the claims', since an open thread
+// on a brief holds `brief lock` as one on a claim holds `claim lock`. The
+// other cards' brief halves and the Features and Briefs tiles are not built
+// yet; they are hidden, not shown as zero, as in the "no briefs/" state.
 //
 // Cost: two passes over the claims (the cards, and the project-claim count)
 // plus one over each claim's comments, one over the module groups, and two
@@ -117,7 +119,29 @@ const (
 	homeDraftModules = 3
 )
 
-func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGroup) HomeView {
+// homeBriefThread is a brief with open threads, for the Open threads card:
+// its title and the page id its link opens.
+type homeBriefThread struct {
+	title, anchor string
+	open          int
+}
+
+// homeBriefThreads lists the briefs with open threads, in brief-id order
+// (set order), each with its page id from renderBriefs' anchors.
+func homeBriefThreads(set *briefs.Set, rendered map[string]renderedBrief) []homeBriefThread {
+	if set.Empty() {
+		return nil
+	}
+	var out []homeBriefThread
+	for _, b := range set.Briefs {
+		if n := b.OpenThreads(); n > 0 {
+			out = append(out, homeBriefThread{title: b.Title, anchor: rendered[b.ID].anchor, open: n})
+		}
+	}
+	return out
+}
+
+func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGroup, briefThreads []homeBriefThread) HomeView {
 	var view HomeView
 	view.Modules = homeModulesTile(modules)
 	view.Constitution = homeConstitutionTile(cat, cfg)
@@ -170,21 +194,44 @@ func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGro
 			Target:     review[0].ID,
 		})
 	}
+	for _, b := range briefThreads {
+		threads += b.open
+	}
 	if threads > 0 {
 		label := "Open threads"
 		if threads == 1 {
 			label = "Open thread"
 		}
-		view.Cards = append(view.Cards, HomeCard{
+		card := HomeCard{
 			Kind:       "thread",
 			Count:      threads,
 			Label:      label,
 			ShortLabel: label,
-			Detail:     "On " + claimNames(threaded) + ". A claim can't lock while a thread on it is open.",
-			Short:      components.ClaimLabel(threaded[0].ID),
 			Action:     "Open thread",
-			Target:     threaded[0].ID,
-		})
+		}
+		var names []string
+		for _, c := range threaded {
+			names = append(names, components.ClaimLabel(c.ID))
+		}
+		for _, b := range briefThreads {
+			names = append(names, b.title)
+		}
+		switch {
+		case len(briefThreads) == 0:
+			card.Detail = "On " + joinNames(names) + ". A claim can't lock while a thread on it is open."
+		case len(threaded) == 0:
+			card.Detail = "On " + joinNames(names) + ". A brief can't lock while a thread on it is open."
+		default:
+			card.Detail = "On " + joinNames(names) + ". A claim or brief can't lock while a thread on it is open."
+		}
+		// The first claim's thread, as before briefs; a brief's page when
+		// only briefs have one.
+		if len(threaded) > 0 {
+			card.Short, card.Target = components.ClaimLabel(threaded[0].ID), threaded[0].ID
+		} else {
+			card.Short, card.Target = briefThreads[0].title, briefThreads[0].anchor
+		}
+		view.Cards = append(view.Cards, card)
 	}
 	if len(drafts) > 0 {
 		byModule, order := draftsByModule(drafts)
@@ -312,15 +359,21 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 // claimNames lists the first homeCardNames claims by their readable label,
 // then how many more there are.
 func claimNames(claims []model.Claim) string {
-	var names []string
-	for i, c := range claims {
-		if i == homeCardNames {
-			break
-		}
+	names := make([]string, 0, len(claims))
+	for _, c := range claims {
 		names = append(names, components.ClaimLabel(c.ID))
 	}
-	out := strings.Join(names, ", ")
-	if rest := len(claims) - len(names); rest > 0 {
+	return joinNames(names)
+}
+
+// joinNames names at most homeCardNames of names, then a count of the rest.
+func joinNames(names []string) string {
+	shown := names
+	if len(shown) > homeCardNames {
+		shown = shown[:homeCardNames]
+	}
+	out := strings.Join(shown, ", ")
+	if rest := len(names) - len(shown); rest > 0 {
 		out += fmt.Sprintf(" and %d more", rest)
 	}
 	return out
