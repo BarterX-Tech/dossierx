@@ -197,6 +197,11 @@ type shellData struct {
 	// Constitution is the project roof, pinned above Modules. Always present
 	// as a nav target; Present is false when the file is absent (NIT-11).
 	Constitution ConstitutionView
+
+	// Home is the landing page (NIT-196), built from ModuleGroups, so it is
+	// filled wherever ModuleGroups is (buildEagerShellData, and lazily for a
+	// project shell).
+	Home HomeView
 }
 
 // ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.

@@ -15,8 +15,9 @@ import (
 // asserts the surface itself, in a real browser, on a project with a locked
 // constitution and one project claim:
 //
-//   - the Constitution pin sits above the Modules group in the sidebar, and
-//     its kicker "PROJECT — NOT A MODULE" is painted;
+//   - the Constitution tab sits in the sidebar's site nav, after Home and
+//     above the Modules group, and paints a lock icon because the roof is
+//     locked (NIT-196 dropped the tab's "PROJECT — NOT A MODULE" kicker);
 //   - the section carries the same kicker, two tabs "The file" and "Project
 //     claims", with "The file" open by default;
 //   - the word meter reads "N of 800 words" with N the engine's own count;
@@ -25,7 +26,7 @@ import (
 //     summary, its lock-state pill, its RESTS ON row and its comment chip;
 //   - a module claim's RESTS ON link to that project claim navigates: it
 //     switches to the Constitution section and its Project claims tab and
-//     lands on the card, instead of falling back to the first module;
+//     lands on the card, instead of falling back to the landing page;
 //   - the constitution's body is plain escaped text: a `*` and a `<b>` in the
 //     file appear literally, never as markup.
 
@@ -135,28 +136,34 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible(".constitution-tab", chromedp.ByQuery),
 	)
 	// The runtime resolves the initial hash asynchronously; wait for the
-	// default reading view (the first module) before reading the sidebar.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)').length === 1 && !document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden`)
+	// module's reading view before reading the sidebar.
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)').length === 1 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden`)
 
-	// The pin, before anything is clicked: above the Modules group, first
-	// among the sidebar tabs, its kicker painted.
-	requireAll(t, ctx, "the Constitution pin in the sidebar",
-		`var pin = document.querySelector('#nav .constitution-pin');
+	// The tab, before anything is clicked: in the site nav after Home, above
+	// the Modules group, its lock icon painted. The site nav is outside the
+	// Modules group on purpose — the Constitution is not a module.
+	requireAll(t, ctx, "the Constitution tab in the sidebar",
+		`var site = document.querySelector('#nav .site-nav');
 		 var groups = document.querySelector('#nav .system-nav-groups');
 		 var tabs = document.querySelectorAll('#nav .sec-tab');
-		 var meta = document.querySelector('#nav .constitution-tab .sec-tab__meta');
-		 var modules = document.querySelectorAll('.module-section:not(.constitution-section)');`,
+		 var tab = document.querySelector('#nav .constitution-tab');
+		 var lock = tab && tab.querySelector('.site-nav__lock');
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)');`,
 		[][2]string{
-			{"pin exists", `!!pin`},
+			{"site nav exists", `!!site`},
 			{"Modules group exists", `!!groups`},
-			{"pin precedes the Modules group", `!!(pin.compareDocumentPosition(groups) & Node.DOCUMENT_POSITION_FOLLOWING)`},
-			{"pin is the first sidebar tab", `tabs.length >= 2 && tabs[0].classList.contains('constitution-tab')`},
-			{"kicker text", `meta && meta.textContent.trim() === 'PROJECT — NOT A MODULE'`},
-			{"kicker painted", `meta && meta.offsetParent !== null && getComputedStyle(meta).visibility !== 'hidden'`},
+			{"the old pin wrapper is gone", `!document.querySelector('#nav .constitution-pin')`},
+			{"the tab is in the site nav", `!!tab && tab.parentElement === site && !groups.contains(tab)`},
+			{"site nav precedes the Modules group", `!!(site.compareDocumentPosition(groups) & Node.DOCUMENT_POSITION_FOLLOWING)`},
+			{"Home then Constitution are the first sidebar tabs", `tabs.length >= 3 && tabs[0].classList.contains('home-tab') && tabs[1] === tab`},
+			{"the tab carries no kicker", `!tab.querySelector('.sec-tab__meta') && tab.textContent.indexOf('NOT A MODULE') < 0`},
+			{"the tab is labelled Constitution", `tab.querySelector('.sec-tab__label').textContent.trim() === 'Constitution'`},
+			{"lock icon for the locked roof", `!!lock && lock.getAttribute('aria-label') === 'Locked'`},
+			{"lock icon painted", `!!lock && lock.getBoundingClientRect().width > 0 && getComputedStyle(lock).visibility !== 'hidden' && getComputedStyle(lock).display !== 'none'`},
 			{"one module section beside it", `modules.length === 1 && !modules[0].hidden`},
 			{"section starts hidden", `document.getElementById('constitution').hidden === true`},
 		})
@@ -172,7 +179,7 @@ func TestConstitutionSectionRendersTheRoof(t *testing.T) {
 		 var meter = sec.querySelector('.constitution-meter');
 		 var file = document.getElementById('constitution-file');
 		 var claims = document.getElementById('constitution-project-claims');
-		 var modules = document.querySelectorAll('.module-section:not(.constitution-section)');`,
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)');`,
 		[][2]string{
 			{"section kicker text", `kicker && kicker.textContent.trim() === 'PROJECT — NOT A MODULE'`},
 			{"section kicker painted", `kicker && kicker.offsetParent !== null`},
@@ -266,10 +273,10 @@ func TestProjectClaimLinkNavigatesToTheRoof(t *testing.T) {
 		`var card = document.getElementById('project.scope');
 		 var r = card ? card.getBoundingClientRect() : null;
 		 var tabs = document.querySelectorAll('#constitution .sub-nav .subtab');
-		 var modules = document.querySelectorAll('.module-section:not(.constitution-section)');`,
+		 var modules = document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)');`,
 		[][2]string{
 			{"the hash names the claim", `decodeURIComponent(location.hash) === '#project.scope'`},
-			{"the Constitution pin is the active sidebar tab", `document.querySelector('#nav .constitution-tab').classList.contains('on')`},
+			{"the Constitution tab is the active sidebar tab", `document.querySelector('#nav .constitution-tab').classList.contains('on')`},
 			{"Project claims is the active tab", `tabs[1].classList.contains('on') && !tabs[0].classList.contains('on')`},
 			{"The file is hidden", `document.getElementById('constitution-file').hidden === true`},
 			{"the module section gave way", `modules.length === 1 && modules[0].hidden === true`},

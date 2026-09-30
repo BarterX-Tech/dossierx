@@ -31,6 +31,24 @@ Re-running `dossierx skills export` also deletes the
 nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
 section, whose links now point at the exported `SKILL.md` files.
 
+### Added
+
+- **Viewer Home page** (NIT-196). The viewer now opens on Home, which shows
+  what is waiting on the human, then one tile per section. "Waiting on you"
+  has up to four cards: claims edited after approval, locked claims to re-read
+  because something they rest on changed, open threads, and draft claims to
+  lock, grouped by module. A card at zero is hidden, and with nothing waiting
+  the row is one "Nothing waiting on you" line. The Constitution tile (shown
+  when `constitution.yaml` exists) gives its lock state and invariant,
+  decision and glossary counts; the Modules tile gives claims locked out of
+  total. Every card and tile links to what it counts. The project name and a
+  new Home sidebar item lead back, and a hash the viewer does not recognise
+  lands on Home instead of the first module.
+- **Sidebar** (NIT-196). Home, Constitution, Modules and Claims graph as one
+  list with icons. The Modules list opens only while a module is the current
+  page, and the Claims graph moves up from the footer. Features and Briefs
+  join the list with briefs (NIT-192, NIT-194).
+
 ### Removed
 
 - **`migrated_from`** (NIT-191). The free-text provenance note nothing

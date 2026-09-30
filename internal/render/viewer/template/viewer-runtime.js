@@ -70,7 +70,7 @@
         firstModuleID = '';
         for (var mi = 0; mi < moduleSections.length; mi++) {
           var candidate = moduleSections[mi];
-          if (candidate.classList.contains('constitution-section')) {
+          if (candidate.classList.contains('constitution-section') || candidate.classList.contains('home-section')) {
             continue;
           }
           firstModuleID = candidate.id;
@@ -136,6 +136,7 @@
         // are released in the same pass that adopts their replacements. The
         // delegated click that works the control is still attached once, below.
         mountSourceNoteClamps();
+        localizeHomeCheck();
       }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
@@ -165,6 +166,13 @@
         }
         if (Object.prototype.hasOwnProperty.call(moduleDefaultFacet, id)) {
           return { module: id, facet: moduleDefaultFacet[id] };
+        }
+        // Home (NIT-196) is the page the viewer opens on, and where any hash
+        // it does not recognise lands. It holds no facet, so it resolves to
+        // itself alone. A shell override without a Home section keeps the
+        // older landing: the first module.
+        if (document.getElementById('home')) {
+          return { module: 'home' };
         }
         return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
       }
@@ -256,6 +264,7 @@
         moduleTabs.forEach(function (b) {
           b.classList.toggle('on', b.dataset.target === '#' + moduleID);
         });
+        syncNavGroups();
 
         var activeSection = document.getElementById(moduleID);
         if (activeSection) {
@@ -341,6 +350,34 @@
         var at = raw.indexOf('!');
         if (at >= 0) { raw = raw.slice(0, at); }
         return decodeURIComponent(raw);
+      }
+
+      // syncNavGroups opens the sidebar's Modules group only while a module is
+      // the current page (NIT-196: only the current section expands). A
+      // search in progress keeps every group open so its matches show.
+      function syncNavGroups() {
+        var search = document.getElementById('navSearch');
+        var searching = !!(search && search.value.trim());
+        var onModule = false;
+        moduleTabs.forEach(function (b) {
+          if (b.classList.contains('on') && b.closest('.system-nav-group')) { onModule = true; }
+        });
+        document.querySelectorAll('.system-nav-group').forEach(function (group) {
+          group.open = searching || onModule;
+        });
+      }
+
+      // The Home header's "last check" arrives as the RFC3339 instant; show it
+      // as a date and time in the reader's own zone.
+      function localizeHomeCheck() {
+        var t = document.querySelector('.home-checked[datetime]');
+        if (!t) { return; }
+        var d = new Date(t.getAttribute('datetime'));
+        if (isNaN(d.getTime())) { return; }
+        try {
+          t.textContent = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) +
+            ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {}
       }
 
       function showFromHash(opts) {
@@ -4031,6 +4068,7 @@
             });
             group.hidden = query !== '' && matches.length === 0;
           });
+          syncNavGroups();
         });
       }
       if (navOverlay) {

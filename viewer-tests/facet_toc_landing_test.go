@@ -36,7 +36,7 @@ func TestFacetTocRowLandsImmediately(t *testing.T) {
 			p.writeClaim("widget-internals.yaml", longBodyClaim("widget.internals.detail", "internals", 4))
 			ctx := browserContext(t)
 			runCDP(t, ctx, chromedp.EmulateViewport(tier.w, tier.h),
-				chromedp.Navigate(p.renderStatic()),
+				chromedp.Navigate(p.renderStatic()+widgetPage),
 				chromedp.WaitVisible(".claim", chromedp.ByQuery))
 			pollTrue(t, ctx, `document.querySelectorAll('#systemFacetToc .facet-toc__item').length > 1`)
 

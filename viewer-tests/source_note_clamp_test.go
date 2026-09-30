@@ -233,7 +233,7 @@ func clampTabWithProbe(t *testing.T, p *project, noObserver bool) context.Contex
 	url := p.renderStatic()
 	ctx := browserContext(t)
 	installSourceNoteProbe(t, ctx, noObserver)
-	runCDP(t, ctx, chromedp.Navigate(url))
+	runCDP(t, ctx, chromedp.Navigate(url+widgetPage))
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own
@@ -299,7 +299,7 @@ func clampTab(t *testing.T, p *project) context.Context {
 	t.Helper()
 	url := p.renderStatic()
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.Navigate(url))
+	runCDP(t, ctx, chromedp.Navigate(url+widgetPage))
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own
 	// <details class="claim-sources">, so a source note's clamp control
@@ -468,7 +468,7 @@ func TestSourceNoteControlWorksOverHTTPAndRefresh(t *testing.T) {
 	base := p.ensureServe()
 	ctx := browserContext(t)
 	installSourceNoteProbe(t, ctx, false)
-	runCDP(t, ctx, chromedp.Navigate(base+"/"))
+	runCDP(t, ctx, chromedp.Navigate(base+"/"+widgetPage))
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own

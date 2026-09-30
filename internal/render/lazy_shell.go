@@ -25,6 +25,7 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
+	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups)
 	return data, nil
 }
 
@@ -46,6 +47,14 @@ func newLazyShellData(in shellInputs, partials map[model.Layout]*template.Templa
 
 func (d *lazyShellData) ModuleGroups() ([]ModuleGroup, error) {
 	return d.projection.moduleGroups()
+}
+
+func (d *lazyShellData) Home() (HomeView, error) {
+	groups, err := d.projection.moduleGroups()
+	if err != nil {
+		return HomeView{}, err
+	}
+	return buildHomeView(d.projection.in.cat, d.projection.in.cfg, groups), nil
 }
 
 func (d *lazyShellData) GraphPayload() (template.JS, error) {

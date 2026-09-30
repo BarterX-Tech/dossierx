@@ -286,7 +286,9 @@ func assertRevealed(t *testing.T, before, after footerState, claimID, how, rule 
 }
 
 // revealFixtureTab renders the two-claim fixture as a STATIC viewer and opens
-// it. file:// is the destination that matters here: the deep-link reveal exists
+// it on the widget module's page (the viewer opens on Home without a hash;
+// #widget names the module, never a claim, so no .claim is :target). file://
+// is the destination that matters here: the deep-link reveal exists
 // precisely because it must work with no server and no runtime behind it.
 func revealFixtureTab(t *testing.T) context.Context {
 	t.Helper()
@@ -298,11 +300,15 @@ func revealFixtureTab(t *testing.T) context.Context {
 
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible("details.claim-links", chromedp.ByQuery),
 	)
 	return ctx
 }
+
+// noClaimFragmentExpr is true while the page's fragment is the module page
+// the fixture tab opened and no claim matches :target.
+const noClaimFragmentExpr = `window.location.hash === '` + widgetPage + `' && document.querySelector('.claim:target') === null`
 
 // ---------------------------------------------------------------------
 // C9 — landing on #<claim-id> reveals that claim's footer, on screen.
@@ -311,10 +317,10 @@ func revealFixtureTab(t *testing.T) context.Context {
 func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 	ctx := revealFixtureTab(t)
 
-	// No fragment yet, and no print emulation: this is the ordinary on-screen
-	// reading state, in which every footer is collapsed.
-	if got := evalString(t, ctx, `window.location.hash`); got != "" {
-		t.Fatalf("the fixture tab must start with no fragment, got %q", got)
+	// No claim fragment yet, and no print emulation: this is the ordinary
+	// on-screen reading state, in which every footer is collapsed.
+	if !evalBool(t, ctx, noClaimFragmentExpr) {
+		t.Fatalf("the fixture tab must start on %s with no claim targeted, got %q", widgetPage, evalString(t, ctx, `window.location.hash`))
 	}
 	before := readFooter(t, ctx, revealDeepID)
 	assertCollapsed(t, before, revealDeepID)
@@ -353,10 +359,10 @@ func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 func TestPrintMediaRevealsCollapsedFooter(t *testing.T) {
 	ctx := revealFixtureTab(t)
 
-	// Deliberately NO fragment: this must be the @media print block doing the
-	// work, not the .claim:target rule riding along.
-	if got := evalString(t, ctx, `window.location.hash`); got != "" {
-		t.Fatalf("the print case must run with no fragment set, got %q", got)
+	// Deliberately NO claim fragment: this must be the @media print block
+	// doing the work, not the .claim:target rule riding along.
+	if !evalBool(t, ctx, noClaimFragmentExpr) {
+		t.Fatalf("the print case must run on %s with no claim targeted, got %q", widgetPage, evalString(t, ctx, `window.location.hash`))
 	}
 	deepBefore := readFooter(t, ctx, revealDeepID)
 	assertCollapsed(t, deepBefore, revealDeepID)
@@ -563,14 +569,14 @@ func TestPrintCoversOnlyTheOnScreenFacet(t *testing.T) {
 
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible("details.claim-links", chromedp.ByQuery),
 	)
 
-	// No fragment: the facet on screen must be the one shell.html activates by
-	// default, not one a deep link selected.
-	if got := evalString(t, ctx, `window.location.hash`); got != "" {
-		t.Fatalf("the print-scope case must run with no fragment set, got %q", got)
+	// Only the module named: the facet on screen must be the one shell.html
+	// activates by default, not one a facet or claim deep link selected.
+	if !evalBool(t, ctx, noClaimFragmentExpr) {
+		t.Fatalf("the print-scope case must run on %s with no claim targeted, got %q", widgetPage, evalString(t, ctx, `window.location.hash`))
 	}
 
 	// The fixture is only meaningful if the two facets really are in the two

@@ -12,7 +12,7 @@ func TestGroup02ContinuousReadingCanvas(t *testing.T) {
 	p.writeClaim("long.yaml", longClaimYAML)
 	p.writeClaim("secondary.yaml", secondClaimYAML)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".reading-canvas .claim", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.querySelector('.reading-canvas .claim-body-disclosure') !== null`)
 	for _, width := range []int64{1440, 390} {
@@ -45,7 +45,7 @@ func TestGroup02StatusBelongsToActiveCanvas(t *testing.T) {
 	p := newProject(t)
 	p.writeClaim("issue.yaml", strings.ReplaceAll(contractIssueClaimYAML, "widget.contract.missing", "widget.contract.overview"))
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible("#statusStrip", chromedp.ByQuery))
 	if !evalBool(t, ctx, `(function(){
   var canvas=document.querySelector('.reading-canvas:not([hidden])');

@@ -41,7 +41,7 @@ rests_on:
 steps:
 `+steps.String())
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible("#widget\\.contract\\.stepped", chromedp.ByQuery))
 	pollTrue(t, ctx, `!!document.querySelector('#widget\\.contract\\.stepped .step')`)
 
