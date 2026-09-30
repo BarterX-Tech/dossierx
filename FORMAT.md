@@ -1458,21 +1458,29 @@ briefs/                       # briefs_dir; absent means no briefs
   `briefs/<folder>/<file>`, is refused (`brief-shape`).
 - A folder holds `<slug>.md` briefs and the `.png` `.jpg` `.jpeg` `.gif`
   `.webp` `.svg` images its briefs reference, and nothing else. Any other file,
-  a non-regular file (a symlink or a submodule), and an image no brief in the
-  folder references are refused (`brief-shape`), as is a reference to an image
-  the folder does not hold.
-- The tree is plain directories and plain files. A symlinked or submodule
-  folder is refused on its path, and a `briefs_dir` that is itself a symlink
-  or a submodule is refused on `briefs/` — never followed, never read, and
-  never read as no briefs. A submodule is what git itself stages as one
-  gitlink: a directory whose `.git` is a file starting `gitdir: ` that names a
-  git directory (what `git submodule add` checks out), or is itself a git
-  directory — a valid `HEAD` (`ref: refs/…` or an object name), with `objects/`
-  and `refs/` beside it (what `git init` makes). Any other `.git` entry — an
-  empty or junk `.git` file, an empty `.git` directory — is not a repository to
-  git, which stages the folder's files, so it is skipped like every dot-name
-  and the folder is read normally. A folder or file that cannot be read is
-  refused on its own path, and the rest of the tree is still read.
+  a non-regular file (a symlink, or a gitlink in the index), and an image no
+  brief in the folder references are refused (`brief-shape`), as is a
+  reference to an image the folder does not hold.
+- The tree is plain directories and plain files. A symlinked folder is
+  refused on its path, and a `briefs_dir` that is itself a symlink is refused
+  on `briefs/` — never followed, and never read as no briefs. A folder or file
+  that cannot be read is refused on its own path, and the rest of the tree is
+  still read.
+- A submodule or an embedded repository can never be committed as a brief
+  folder, but the two places briefs are read from see it differently. In the
+  working tree — `check`, `check --validate`, `brief list`, `brief show` and
+  `serve` — a directory holding a `.git` entry (a `git submodule add`
+  checkout, a repository made with `git init`, a stray `.git` file or
+  directory, or `briefs_dir` itself being one) is read as an ordinary folder:
+  its `.git` is a dot-name and is not read, and everything else in it is
+  judged as usual. The pre-commit hook, `check --staged`, reads the index,
+  where git records a submodule or an embedded repository as one gitlink entry
+  (mode 160000); it refuses that entry as `brief-shape` on its path (on
+  `briefs/` when `briefs_dir` itself is one). A stray `.git` that git does not
+  take for a repository is no gitlink: git stages the folder's files, and the
+  hook reads them as the working tree does. The hook is the stricter of the
+  two here: a submodule folder the working tree reads clean is still refused
+  at commit, never the other way round.
 - Folder names, brief names and image names are drawn from `[a-z0-9-]`, and
   every extension is lowercase. That is what makes a brief's id
   `<folder>.<slug>` slash-free, so it can be one route segment and one store
@@ -1554,12 +1562,11 @@ never among them: `brief-shape`, `brief-frontmatter`, `brief-word-cap`,
 brief finding's `claim_id` is the **path** it is about — the brief
 (`briefs/checkout/flow.md`), the folder (`briefs/checkout/`) or the tree
 (`briefs/`). `check --staged` reads the briefs from the index, like the
-claims, and refuses a symlink or a gitlink entry there exactly as the working
-tree refuses the link or the directory git stages as that gitlink (see "The
-tree"), so both read a folder holding any other `.git` entry the same way.
-The one gap is git's own: a folder the index already tracks as files stays
-files in the index after a repository is created inside it, which `--staged`
-then reads and the working tree refuses.
+claims, and refuses a symlink entry there exactly as the working tree refuses
+the link. It also refuses a gitlink entry — a submodule or an embedded
+repository — which the working tree reads as an ordinary folder (see "The
+tree"). There the two modes differ in the safe direction: the hook is the
+stricter.
 
 ### What a brief never touches
 

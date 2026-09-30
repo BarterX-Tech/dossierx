@@ -172,12 +172,14 @@ func (s *Set) Lookup(arg string) (Brief, bool) {
 // Rel is slash-separated and relative to briefs_dir. Data is the file's bytes
 // for a .md and may be nil for anything else; Size is always the file's size.
 //
-// Regular is false for anything that is not a plain file: a symlink, a git
-// submodule (a gitlink in the index, a checkout in the working tree) or a
-// device. Such an entry is still handed to FromFiles, so that it is REFUSED
-// under the same rule in both sources rather than silently absent from one.
-// Rel "." names briefs_dir itself, for the one case where the tree's root is
-// not a directory: a symlink, a submodule or a file where the folder should be.
+// Regular is false for anything that is not a plain file: a symlink, a device,
+// or — in the index only — a gitlink (160000, a submodule or embedded
+// repository). Such an entry is still handed to FromFiles, so that it is
+// REFUSED under the brief-shape rule rather than silently absent. A submodule
+// checkout in the working tree is a directory, not a File: Load reads it as an
+// ordinary folder (see Load). Rel "." names briefs_dir itself, for the one case
+// where the tree's root is not a directory: a symlink, a gitlink or a file
+// where the folder should be.
 type File struct {
 	Rel     string
 	Size    int64
@@ -193,12 +195,16 @@ type File struct {
 // The root is read with Lstat, not Stat: a briefs_dir that is a SYMLINK is
 // refused (brief-shape on the tree), for the reason a symlinked brief is. Stat
 // followed the link and WalkDir then declined to descend a symlinked root, so a
-// linked tree read as a project with no briefs at all. A directory git treats
-// as another repository's work tree — briefs_dir itself or any folder below
-// it, holding a .git file that names a git directory or a .git directory that
-// is one — is what `git add` stages as one gitlink, and it is refused the same
-// way, without being read. Any other .git entry is skipped like every dot-name
-// and its folder read normally, as git stages it (see nestedRepo).
+// linked tree read as a project with no briefs at all.
+//
+// A directory holding a .git entry — a submodule checkout, an embedded
+// repository, briefs_dir itself being one, or a stray .git file or directory —
+// is read like any other directory: its .git entry is a dot-name and is not
+// read, and everything else in it is judged as usual. Load does not ask
+// whether git would stage that directory as a gitlink. `check --staged` is the
+// stricter mode here: it refuses a gitlink (160000) entry under briefs_dir, so
+// a submodule or embedded repository can never be committed as a brief folder
+// (see stagedBriefs in internal/check).
 func Load(cfg *config.Config) *Set {
 	dir := cfg.BriefsDirPath()
 	info, err := os.Lstat(dir)
@@ -212,9 +218,6 @@ func Load(cfg *config.Config) *Set {
 	}
 	if !info.IsDir() {
 		return FromFiles(cfg, []File{{Rel: ".", Regular: info.Mode().IsRegular(), Size: info.Size()}})
-	}
-	if nestedRepo(dir) {
-		return FromFiles(cfg, []File{{Rel: "."}})
 	}
 	// An entry that cannot be read below the root is ONE finding on that
 	// entry, and the walk goes on: an unreadable folder must not drop every
@@ -260,19 +263,12 @@ func Load(cfg *config.Config) *Set {
 			}
 			return nil
 		}
+		if d.IsDir() {
+			return nil
+		}
 		rel, relErr := filepath.Rel(dir, p)
 		if relErr != nil {
 			return relErr
-		}
-		if d.IsDir() {
-			if nestedRepo(p) {
-				// A submodule checkout or embedded repository: the entry the
-				// index holds as a gitlink, refused under the same rule, never
-				// read.
-				files = append(files, File{Rel: filepath.ToSlash(rel)})
-				return filepath.SkipDir
-			}
-			return nil
 		}
 		f := File{Rel: filepath.ToSlash(rel), Regular: d.Type().IsRegular()}
 		if !f.Regular {

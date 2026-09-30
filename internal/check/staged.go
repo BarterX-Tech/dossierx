@@ -986,13 +986,18 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 // brief-shape, and dropping one from the index would let the hook pass a tree
 // --validate refuses. Each goes to FromFiles as a non-regular File, so both
 // modes judge it under the same rule — including a briefs_dir that is itself a
-// link, which the index lists as one entry at the spec (Rel "."). A submodule
-// or embedded repository is a gitlink here, and on disk a directory whose .git
-// is a file naming a git directory ("gitdir: <path>") or is a git directory
-// itself (a valid HEAD, objects/ and refs/); Load refuses exactly that
-// directory as the same non-regular entry, by git's own rule, so the two modes
-// agree on it. Any other .git entry git stages past, adding the folder's files
-// as blobs, and Load reads that folder normally too.
+// link, which the index lists as one entry at the spec (Rel ".").
+//
+// A submodule or embedded repository is a gitlink (160000) here, and it is
+// refused the same way, and it is where the two modes differ by design. On
+// disk it is a directory holding a .git entry, and Load reads it as an
+// ordinary folder (the .git entry is a dot-name, not read); Load does not
+// emulate git's rule for what it would stage as a gitlink. The difference runs
+// in the safe direction: the hook is the stricter mode, so a submodule or
+// embedded repository can never be committed as a brief folder, while
+// --validate at the keyboard may read that folder's files clean. A folder
+// whose .git git does not take for a repository has its files staged as
+// blobs, and both modes read them the same way.
 func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 	dir := cfg.BriefsDirPath()
 	spec, err := g.spec(dir)

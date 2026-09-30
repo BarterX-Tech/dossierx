@@ -71,37 +71,35 @@ change writes a file: no store, no sentinel, no approval.
 
   `TestRenderWith_BriefsPayload` pins the same byte-identity in-process, and
   the committed fixture viewers' staleness test proves it on four corpora.
-- **Both check modes judge the same tree.** `--validate` reads the working
-  tree and `--staged` the index, under the same `FromFiles` rules: a brief
+- **Both check modes judge the same tree, save for gitlinks.** `--validate`
+  reads the working tree and `--staged` the index, under the same `FromFiles`
+  rules: a brief
   edited but unstaged is seen by one and not the other
   (`TestBriefFindingsFollowTheTreeEachModeJudges`). A symlink under
   `briefs_dir` — including a linked `briefs_dir` — is refused by both
   (`TestBriefSymlinksAreRefusedInBothModes`), where the index used to drop it.
-  A submodule or embedded repository — a gitlink in the index — as a brief
-  folder or as `briefs_dir` itself is refused by both on the same path and
-  never read. On disk it is recognised by git's own rule, ported from
-  `is_nonbare_repository_dir` / `is_git_directory` (`internal/briefs/nested.go`):
-  the directory's `.git` is a file starting `gitdir: ` that names a git
-  directory, or is a git directory itself — `HEAD` a symlink into `refs/`, or
-  `ref:` then `refs/…`, or a 40-hex object name; `objects/` and `refs/` (in its
-  `commondir`, if any) existing with an execute bit, git's `access(X_OK)` read
-  from the mode bits (the engine makes no raw system calls, so an x bit set
-  for another user only, or a caller running as root, is where the two could
-  differ). Any other `.git` entry — empty
-  or junk `.git` file, a `gitdir:` naming a non-repository, an empty `.git`
-  directory, `HEAD` without `refs/`, a junk `HEAD` — is one `git add` stages
-  past, adding the folder's files as blobs, and both modes read that folder
-  normally. `TestBriefSubmodulesAreRefusedInBothModes` pins eleven rows, each
-  asserting the index mode git itself wrote (160000 for the four refused rows:
-  `git submodule add`, an embedded repository as a folder and as `briefs_dir`,
-  a git directory with a detached `HEAD`; 100644 for the seven read rows), and
-  its brief rests on an unknown claim so reading it and refusing it raise
-  different findings. Restoring the round-2 rule (any `.git` entry) fails the
-  seven read rows; dropping the object-name branch, the `refs/` check or the
-  gitfile's target check each fails its row. The one gap is git's: a folder
-  the index already tracks as files stays files there after a repository is
-  created inside it (git consults the index first), which `--staged` reads and
-  the working tree, which cannot see the index, refuses.
+  A submodule or embedded repository — a gitlink (160000) in the index — as
+  a brief folder or as `briefs_dir` itself is judged differently by the two
+  modes, by design and in the safe direction. `--staged` refuses the
+  gitlink as `brief-shape` on its path without reading it, so it can never be
+  committed as a brief folder. The working tree does not ask git what it
+  would stage: `Load` reads a directory holding a `.git` entry as an ordinary
+  folder, the `.git` entry is a dot-name and is not read, and its briefs are
+  judged as usual, so `check`, `--validate`, `brief list` and `serve` may read
+  it clean where the hook refuses it. A `.git` git does not take for a
+  repository (a junk `.git` file, an empty `.git` directory) is no gitlink:
+  git stages the folder's files as blobs and both modes read them alike.
+  `TestBriefSubmodulesAreReadInTheTreeAndRefusedAsGitlinks` pins six rows,
+  each asserting the index mode git itself wrote — 160000 for `git submodule
+  add`, an embedded repository as a folder and as `briefs_dir`; 100644 for a
+  junk `.git` file, an empty `.git` directory in a folder and in
+  `briefs_dir`. Its brief rests on an unknown claim, so reading the folder
+  raises `brief-rests-on-unknown` and refusing it only `brief-shape`: the
+  three gitlink rows expect the first under `--validate` and the second under
+  `--staged`, and the three blob rows the first in both. Refusing the folder
+  in the working tree again fails the three gitlink rows under `--validate`;
+  dropping 160000 from the index's non-regular entries fails them under
+  `--staged`.
 - **Nothing is silently unread.** An unreadable folder or file is one
   `brief-shape` finding on its path and the rest of the tree is still read;
   `brief list` carries the tree's findings in `data.findings`, and `brief show`
@@ -126,7 +124,7 @@ to a sort; none enumerates paths or pairs.
 
 | Pass | Bound |
 | --- | --- |
-| Discovery (`Load` / `FromFiles`) | one walk, one `.git` stat per directory, and one sort of F entries, O(F log F); a directory with a `.git` entry adds at most git's own reads — the `.git` file (git's 1 MiB gitfile limit), the first 255 bytes of `HEAD`, a `commondir` file and two `access` calls — none of which descends; each brief parsed by four block scans of its own bytes (title, text, accepted images, refused images) plus the frontmatter, O(B) |
+| Discovery (`Load` / `FromFiles`) | one walk and one sort of F entries, O(F log F); a dot-name entry — a `.git` file or directory among them — is skipped without being opened or descended; each brief parsed by four block scans of its own bytes (title, text, accepted images, refused images) plus the frontmatter, O(B) |
 | Caps | one pass over briefs, images and folders, O(N + images) |
 | `brief-rests-on-unknown` | a claim-id set, O(C), and one lookup per `rests_on` entry, O(N·R) |
 | `brief-rests-on-duplicate` | one sorted key per brief, O(N·R log R); one finding per member of a group, each naming **one** other path and a count of the rest, so a group of k is O(k·P) bytes (it was O(k²·P) before REG-4) |
