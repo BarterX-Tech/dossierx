@@ -173,6 +173,16 @@ func TestBriefListAndShowReportWhatTheyCouldNotRead(t *testing.T) {
 // lint_failed and a brief-word-cap finding naming the brief's path, AND the
 // same project's `claim lock --dry-run` is not blocked by it — brief state never
 // affects claim locking.
+//
+// The negative control has to be one the lock evaluator WOULD act on if brief
+// findings reached it. Its scoping rule (lock.findingAffects) holds a finding
+// against a candidate when the finding's claim_id is the candidate or its
+// message names it; a brief finding's claim_id is a path, so a word-cap finding
+// alone would pass even if routed in. The second brief's rests_on names an id
+// that CONTAINS the candidate's id, so its brief-rests-on-unknown ERROR names
+// the candidate in its message and would block the lock were brief findings
+// ever handed to claim lock; and no brief-* rule may appear anywhere in the
+// preview (routed-in findings on other paths would land in unrelated_findings).
 func TestBriefFindingsFailCheckAndNeverGateAClaim(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
@@ -182,6 +192,7 @@ func TestBriefFindingsFailCheckAndNeverGateAClaim(t *testing.T) {
 	}
 	writeProjectConfigFile(t, cfgPath, string(cfg)+"max_brief_words: 2\n")
 	writeBriefFile(t, root, "widget/flow.md", widgetFlowBrief)
+	writeBriefFile(t, root, "widget/retired.md", "---\nsummary: Rests on a retired id.\nrests_on:\n  - widget.contract.overview-retired\n---\nOk.\n")
 
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
 	if err == nil || env.OK || env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
@@ -189,14 +200,18 @@ func TestBriefFindingsFailCheckAndNeverGateAClaim(t *testing.T) {
 	}
 	var data checkData
 	decodeData(t, env, &data)
-	found := false
+	wordCap, namesCandidate := false, false
 	for _, f := range data.LintFindings {
 		if f.Lint == briefs.RuleWordCap && f.ClaimID == "briefs/widget/flow.md" && f.Severity == "error" {
-			found = true
+			wordCap = true
+		}
+		if f.Lint == briefs.RuleRestsOnUnknown && f.ClaimID == "briefs/widget/retired.md" && f.Severity == "error" &&
+			strings.Contains(f.Message, "widget.contract.overview") {
+			namesCandidate = true
 		}
 	}
-	if !found {
-		t.Fatalf("expected a brief-word-cap finding on the brief's path, got %+v", data.LintFindings)
+	if !wordCap || !namesCandidate {
+		t.Fatalf("expected a brief-word-cap error and a brief-rests-on-unknown error naming the candidate, got %+v", data.LintFindings)
 	}
 
 	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run")
@@ -207,5 +222,12 @@ func TestBriefFindingsFailCheckAndNeverGateAClaim(t *testing.T) {
 	decodeData(t, env, &preview)
 	if preview.Blocked {
 		t.Fatalf("a brief finding must not block a claim lock, got %+v", preview)
+	}
+	raw, err := json.Marshal(env.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"brief-`) {
+		t.Fatalf("no brief rule may reach any claim lock preview field, got %s", raw)
 	}
 }
