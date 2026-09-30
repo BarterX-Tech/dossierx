@@ -213,7 +213,7 @@ func Load(cfg *config.Config) *Set {
 	}
 	if err != nil {
 		s := newSet(cfg)
-		s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir could not be read: %v", err)
+		s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir could not be read: %v", readErrText(err))
 		return s
 	}
 	if !info.IsDir() {
@@ -292,7 +292,7 @@ func Load(cfg *config.Config) *Set {
 	})
 	if walkErr != nil {
 		s := newSet(cfg)
-		s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir could not be read: %v", walkErr)
+		s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir could not be read: %v", readErrText(walkErr))
 		return s
 	}
 	s := FromFiles(cfg, files)

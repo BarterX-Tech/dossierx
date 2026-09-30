@@ -237,12 +237,15 @@ func newBriefShowCmd() *cobra.Command {
 			treeFindings := set.TreeFindings()
 			b, ok := set.Lookup(args[0])
 			if !ok {
+				// The path shape is briefs_dir as the config names it (the
+				// Set's DisplayDir), the same spelling brief list prints.
+				listHint := fmt.Sprintf("run: dossierx brief list — and pass the path it prints (%s/<folder>/<slug>.md) or the <folder>.<slug> id", set.DisplayDir)
 				err := cliout.Errorf(cliout.CodeBriefNotFound, "brief show: no brief at %q", args[0]).
-					WithHint("run: dossierx brief list — and pass the path it prints (briefs/<folder>/<slug>.md) or the <folder>.<slug> id")
+					WithHint(listHint)
 				if len(treeFindings) > 0 {
 					// Not found in a tree that has findings is not "absent": the
 					// brief may sit in an entry that could not be read.
-					err = err.WithHint(fmt.Sprintf("the briefs tree has %d finding(s), in details.findings; a brief in an entry that could not be read is not found. run: dossierx brief list — and pass the path it prints (briefs/<folder>/<slug>.md) or the <folder>.<slug> id", len(treeFindings))).
+					err = err.WithHint(fmt.Sprintf("the briefs tree has %d finding(s), in details.findings; a brief in an entry that could not be read is not found. %s", len(treeFindings), listHint)).
 						WithDetails(map[string]any{"findings": briefFindingsData(treeFindings)})
 				}
 				return cmdResult{}, err

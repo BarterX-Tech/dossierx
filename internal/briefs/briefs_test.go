@@ -201,6 +201,30 @@ func TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree(t *testing.T) {
 			t.Fatalf("an unreadable entry's message must say so without the absolute path: %q", f.Message)
 		}
 	}
+
+	// briefs_dir itself unreadable — its listing refused (the walk's root
+	// error), or the path to it not a directory (Lstat's error) — is the
+	// whole-tree finding on briefs/, and its message carries no absolute path
+	// either.
+	root := filepath.Join(dir, "briefs")
+	if err := os.Chmod(root, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(root, 0o755) }) //nolint:errcheck // best-effort restore for TempDir cleanup
+	notADir := filepath.Join(dir, "file")
+	if err := os.WriteFile(notADir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, cfg := range map[string]*config.Config{
+		"listing refused": testConfig(t, dir, ""),
+		"not a directory": testConfig(t, dir, "briefs_dir: file/briefs\n"),
+	} {
+		got := Load(cfg).TreeFindings()
+		if len(got) != 1 || got[0].LintName != RuleShape || !strings.HasSuffix(got[0].ClaimID, "briefs/") ||
+			!strings.Contains(got[0].Message, "briefs_dir could not be read") || strings.Contains(got[0].Message, dir) {
+			t.Fatalf("%s: briefs_dir unreadable must be one brief-shape finding on the tree with no absolute path, got %+v", name, got)
+		}
+	}
 }
 
 // TestFromFiles_ShapeRefusals is the brief-shape rule's whole refusal list, one

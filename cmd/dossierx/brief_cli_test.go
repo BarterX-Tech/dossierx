@@ -113,6 +113,29 @@ func TestBriefListAndShow(t *testing.T) {
 	}
 }
 
+// TestBriefShowNotFoundNamesTheConfiguredBriefsDir pins that brief_not_found's
+// recovery hint spells the path shape the way brief list prints it — briefs_dir
+// relative to the config file, here docs/briefs — not a hard-coded briefs/,
+// which names a directory this project does not read.
+func TestBriefShowNotFoundNamesTheConfiguredBriefsDir(t *testing.T) {
+	root := t.TempDir()
+	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
+	cfg, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeProjectConfigFile(t, cfgPath, string(cfg)+"briefs_dir: docs/briefs\n")
+	writeBriefFile(t, filepath.Join(root, "docs"), "widget/flow.md", widgetFlowBrief)
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "brief", "show", "widget.nope")
+	if env.OK || env.Error == nil || env.Error.Code != cliout.CodeBriefNotFound || exitStatusFor(err) != 2 {
+		t.Fatalf("expected brief_not_found at exit 2, got %+v", env)
+	}
+	if !strings.Contains(env.Error.Hint, "(docs/briefs/<folder>/<slug>.md)") {
+		t.Fatalf("the hint must name the configured briefs_dir, got %q", env.Error.Hint)
+	}
+}
+
 // TestBriefListAndShowReportWhatTheyCouldNotRead pins the envelope when the
 // tree cannot be fully read: the command still answers (ok, as manifest show
 // answers with its findings), every readable brief is listed, and the
