@@ -25,7 +25,8 @@ change writes a file: no store, no sentinel, no approval.
   PR #131). Candidate: the head of
   `work/nit-204-engine-192a-briefs-read-side-discovery-caps-listshow-render`
   carrying this note; the figures below were measured on the commit that adds
-  it, with the commands shown.
+  it, with the commands shown, and the byte-bound measurements and the
+  differential were rerun after the NIT-204 round-2 fixes.
 - Environment: go1.26.5 darwin/arm64 (Apple M4 Pro).
 
 ## Preserved invariants
@@ -73,16 +74,23 @@ change writes a file: no store, no sentinel, no approval.
 - **Both check modes judge the same tree.** `--validate` reads the working
   tree and `--staged` the index, under the same `FromFiles` rules: a brief
   edited but unstaged is seen by one and not the other
-  (`TestBriefFindingsFollowTheTreeEachModeJudges`), and a symlink or gitlink
-  under `briefs_dir` — including a linked `briefs_dir` — is refused by both
+  (`TestBriefFindingsFollowTheTreeEachModeJudges`). A symlink under
+  `briefs_dir` — including a linked `briefs_dir` — is refused by both
   (`TestBriefSymlinksAreRefusedInBothModes`), where the index used to drop it.
+  A submodule — a gitlink in the index, a directory holding a `.git` entry on
+  disk — as a brief folder or as `briefs_dir` itself is refused by both on the
+  same path and never read (`TestBriefSubmodulesAreRefusedInBothModes`, over a
+  real `git submodule add` and an embedded repository), where the working
+  tree used to read the checkout as a plain folder.
 - **Nothing is silently unread.** An unreadable folder or file is one
   `brief-shape` finding on its path and the rest of the tree is still read;
   `brief list` and `brief show` carry the tree's findings in `data.findings`
   (`TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree`,
-  `TestBriefListAndShowReportWhatTheyCouldNotRead`). A read error in the
-  briefs tree is isolated to that tree's fingerprint, so claim live reload
-  continues (`TestSSE_UnreadableBriefFolderKeepsClaimReload`).
+  `TestBriefListAndShowReportWhatTheyCouldNotRead`). A read error anywhere in
+  the briefs tree, `briefs_dir`'s own included, is isolated to that tree's
+  fingerprint, so claim live reload continues
+  (`TestSSE_UnreadableBriefFolderKeepsClaimReload`, one row for a folder and
+  one for `briefs_dir`).
 - **The payload is charged.** Every payload byte comes off the output budget
   (eager) or the intermediate budget (lazy), once, and a budget one byte short
   refuses the render at the payload
@@ -97,7 +105,7 @@ to a sort; none enumerates paths or pairs.
 
 | Pass | Bound |
 | --- | --- |
-| Discovery (`Load` / `FromFiles`) | one walk and one sort of F entries, O(F log F); each brief parsed by four block scans of its own bytes (title, text, accepted images, refused images) plus the frontmatter, O(B) |
+| Discovery (`Load` / `FromFiles`) | one walk, one `.git` Lstat per directory, and one sort of F entries, O(F log F); each brief parsed by four block scans of its own bytes (title, text, accepted images, refused images) plus the frontmatter, O(B) |
 | Caps | one pass over briefs, images and folders, O(N + images) |
 | `brief-rests-on-unknown` | a claim-id set, O(C), and one lookup per `rests_on` entry, O(N·R) |
 | `brief-rests-on-duplicate` | one sorted key per brief, O(N·R log R); one finding per member of a group, each naming **one** other path and a count of the rest, so a group of k is O(k·P) bytes (it was O(k²·P) before REG-4) |
@@ -107,11 +115,34 @@ to a sort; none enumerates paths or pairs.
 | `serve` watcher | one stat-walk of the briefs tree per poll, O(F) |
 | `brief list` / `brief show` | discovery plus one pass over the findings, O(F log F + B) |
 
-The default caps (60 briefs, 2,000 words, 3 images of 1 MiB) bound a default
-project's briefs input; a raised cap raises it linearly. Measured on the
-worst case for the duplicate rule — every brief at the word cap, three present
-images each, twelve to a folder, and all resting on the same two claims, one
-group of N:
+The caps bound counts, not bytes. The word cap counts
+`constitution.CountWords` over the text the rendered body puts on the page: a
+link target, an image reference and punctuation are not words, and one word
+can be any length. A brief inside every default cap (60 briefs, 2,000 words,
+3 images of 1 MiB) can therefore be any size, so per-brief memory and time
+are O(B) with B unbounded — as for a claim file, which has no byte cap
+either. The serialized output is bounded only by the render budget the
+payload is charged to: `conformance.MaxOutputBytes` (64 MiB) on the eager
+path and the 128 MiB intermediate budget (`maxBoundedRenderIntermediateBytes`)
+on the lazy one (that refusal is pinned by `TestLazyShell_BriefsPayload`, not
+measured here). Measured with the candidate binary on scratch copies of
+fixture-graph-demo, each adding one two-word brief `briefs/graph/huge.md`
+(`alpha` and one word of N MiB of `a`) under default caps:
+
+| Brief | words (`brief show`) | `check` | wall | max RSS |
+| --- | --- | --- | --- | --- |
+| 20 MiB (20,971,564 bytes) | 2 | exit 0, no brief finding; `index.html` 22,455,056 bytes | 1.57 s | 286 MB |
+| 70 MiB (73,400,364 bytes) | 2 | exit 1, `conformance_capacity_exceeded` ("viewer requires more than 67108864 bytes"), no artifact replaced | 1.45 s | 859 MB |
+
+    printf -- '---\nsummary: One word of 20 MiB.\n---\nalpha ' > briefs/graph/huge.md
+    head -c $((20 * 1048576)) /dev/zero | tr '\0' 'a' >> briefs/graph/huge.md
+    /usr/bin/time -l dossierx check
+
+The tables below are word-cap-shaped content — ordinary words of ordinary
+length — which is what the figures in them describe. Measured on the worst
+case for the duplicate rule in that shape — every brief at the word cap,
+three present images each, twelve to a folder, and all resting on the same
+two claims, one group of N:
 
 | Briefs | `FromFiles` + `Findings` | allocations | bytes allocated | finding message bytes |
 | --- | --- | --- | --- | --- |
@@ -128,9 +159,9 @@ if any one exceeds 256 bytes at k = 2,000. The payload at the word cap:
 | 60 | 1.9 ms | 620 | 3.3 MB | 616,990 |
 | 2,000 | 61 ms | 20,040 | 132 MB | 20,561,333 |
 
-A default project's payload is therefore about 0.6 MB, under the 64 MiB viewer
-bound (`conformance.MaxOutputBytes`), which refuses a larger one at the
-payload.
+About 0.6 MB for 60 briefs is the payload of word-cap-shaped content only; it
+is not a bound on a default project, whose payload can reach the budget, and a
+payload over it is refused at the payload (the 70 MiB row above).
 
     go test ./internal/briefs -run '^$' -bench BriefsAtScale -benchmem
     go test ./internal/render -run '^$' -bench BriefsPayload -benchmem
