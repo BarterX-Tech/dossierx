@@ -340,7 +340,7 @@ func FromFiles(cfg *config.Config, files []File) *Set {
 		if f.Rel == "." {
 			// briefs_dir itself is not a directory (see File).
 			if f.Regular {
-				s.add(RuleShape, s.DisplayDir, "briefs_dir is a file, not a directory; briefs live in %s/<folder>/<slug>.md", s.DisplayDir)
+				s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir is a file, not a directory; briefs live in %s/<folder>/<slug>.md", s.DisplayDir)
 			} else {
 				s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir is a symlink or a submodule, not a directory; briefs are read from a plain directory only, so a linked tree is refused rather than read as no briefs")
 			}
@@ -353,6 +353,9 @@ func FromFiles(cfg *config.Config, files []File) *Set {
 		display := path.Join(s.DisplayDir, f.Rel)
 		switch {
 		case len(segs) == 1 && !f.Regular:
+			// It stands where only a folder may, so the finding is on that
+			// folder and spelled as every folder-level finding is.
+			display = dirPath(display)
 			s.add(RuleShape, display, "%s is a symlink or a submodule; directly under %s/ the briefs tree holds plain folders only, and a brief folder is a plain directory holding plain files", display, s.DisplayDir)
 			continue
 		case len(segs) == 1:

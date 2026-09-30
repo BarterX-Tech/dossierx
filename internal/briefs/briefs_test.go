@@ -139,7 +139,7 @@ func TestLoad_SymlinkedTreeIsRefusedNotEmpty(t *testing.T) {
 			t.Fatal(err)
 		}
 		got := Load(testConfig(t, dir, "")).Findings(nil)
-		if len(got) != 1 || got[0].LintName != RuleShape || got[0].ClaimID != "briefs/checkout" {
+		if len(got) != 1 || got[0].LintName != RuleShape || got[0].ClaimID != "briefs/checkout/" {
 			t.Fatalf("a symlinked folder must be one brief-shape finding on its path, got %+v", got)
 		}
 		if strings.Contains(got[0].Message, "a file directly under") || !strings.Contains(got[0].Message, "symlink") {
@@ -243,9 +243,9 @@ func TestFromFiles_ShapeRefusals(t *testing.T) {
 		{"folder name outside the set", map[string]File{"Check_Out/x.md": md(okFront)}, []string{"brief-shape briefs/Check_Out/x.md"}},
 		{"file name outside the set", map[string]File{"a/My Brief.md": md(okFront)}, []string{"brief-shape briefs/a/My Brief.md"}},
 		{"non-regular file", map[string]File{"a/x.md": {}}, []string{"brief-shape briefs/a/x.md"}},
-		{"non-regular folder (a symlink or a gitlink)", map[string]File{"a": {}}, []string{"brief-shape briefs/a"}},
+		{"non-regular folder (a symlink or a gitlink)", map[string]File{"a": {}}, []string{"brief-shape briefs/a/"}},
 		{"briefs_dir itself a link", map[string]File{".": {}}, []string{"brief-shape briefs/"}},
-		{"briefs_dir itself a file", map[string]File{".": {Regular: true}}, []string{"brief-shape briefs"}},
+		{"briefs_dir itself a file", map[string]File{".": {Regular: true}}, []string{"brief-shape briefs/"}},
 		{"image nothing references", map[string]File{"a/x.md": md(okFront + "text\n"), "a/orphan.png": {Regular: true, Size: 10}}, []string{"brief-shape briefs/a/orphan.png"}},
 		{"image referenced from another folder is still unreferenced", map[string]File{"a/x.md": md(okFront + "![f](f.png)\n"), "b/f.png": {Regular: true, Size: 10}}, []string{"brief-shape briefs/a/x.md", "brief-shape briefs/b/f.png"}},
 		{"referenced and present is clean", map[string]File{"a/x.md": md(okFront + "![f](f.png)\n"), "a/f.png": {Regular: true, Size: 10}}, nil},

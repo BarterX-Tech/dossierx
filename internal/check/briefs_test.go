@@ -97,7 +97,7 @@ func TestBriefSymlinksAreRefusedInBothModes(t *testing.T) {
 				"briefs/other":            "../elsewhere",
 			},
 			want: []string{
-				"brief-shape briefs/other",
+				"brief-shape briefs/other/",
 				"brief-shape briefs/widget/flow.md",
 				"brief-shape briefs/widget/linked.md",
 				"brief-shape briefs/widget/pic.svg",
@@ -207,7 +207,7 @@ func TestBriefSubmodulesAreReadInTheTreeAndRefusedAsGitlinks(t *testing.T) {
 			indexPath:    "briefs/vendored",
 			indexMode:    "160000",
 			wantWorktree: []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
-			wantStaged:   []string{"brief-shape briefs/vendored"},
+			wantStaged:   []string{"brief-shape briefs/vendored/"},
 		},
 		{
 			name:     "an embedded repository as a brief folder",
@@ -218,7 +218,7 @@ func TestBriefSubmodulesAreReadInTheTreeAndRefusedAsGitlinks(t *testing.T) {
 			indexPath:    "briefs/vendored",
 			indexMode:    "160000",
 			wantWorktree: []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
-			wantStaged:   []string{"brief-shape briefs/vendored"},
+			wantStaged:   []string{"brief-shape briefs/vendored/"},
 		},
 		{
 			name:     "an embedded repository as briefs_dir itself",
