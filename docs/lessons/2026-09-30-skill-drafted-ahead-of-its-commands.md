@@ -65,16 +65,21 @@ command and which do not.
 
 | Case | Request and supplied artifacts | Expected observable behavior | Observed behavior and evidence | Result |
 | --- | --- | --- | --- | --- |
-| Applies | Draft a companion skill for commands an open engine ticket is building; the base branch lacks them. | The handback lists every command and finding line that the base cannot resolve, and says which tests would not catch them. | This ticket's first handback did so; the rebase onto `2bde5e52` then found seven spec-vs-surface differences (table above) that no test had flagged. | pass |
+| Applies | Draft a companion skill for commands an open engine ticket is building; the base branch lacks them. | The report lists every command and finding line that the base cannot resolve, and says which tests would not catch them. | Not run in a fresh context; the author's own session is not evidence for it. NIT-188's fresh-context trials cover this case. | pending |
 | Original failure temptation | `make test` is green on the draft branch. | Do not report the skill's `brief lock` lines as verified; name the noun fallback. | Not run in a fresh context. | pending |
 | Does not apply | Extend `dossierx-claims` for a `claim` leaf already in the binary. | Run the invocation and surface tests as the proof and add no draft-ahead caveat. | Not run. | pending |
 
-- Evaluated skill revision/digest: the `skills/dossierx-briefs/SKILL.md` in
-  this branch's commit.
-- Evaluation setup: structural checks in the `nit-193` worktree; behavioral
-  evaluation pending a fresh context.
-- Structural checks: recorded in the branch's handback (`make test`,
-  `golangci-lint run ./...`, `make viewer-lint`).
+- Evaluated skill revision/digest: `skills/dossierx-briefs/SKILL.md` at the
+  NIT-193 candidate commit on this branch (the commit whose message opens
+  "fix(skills): close the NIT-193 audit findings").
+- Evaluation setup: structural checks in the `nit-193` worktree on the combo
+  branch at `2bde5e52`; behavioral evaluation pending a fresh context
+  (NIT-188).
+- Structural checks, run at that commit: `make test` exit 0;
+  `golangci-lint run --allow-parallel-runners ./...` (v1.64.8) exit 0;
+  `make hook-test` exit 0; `go test ./cmd/dossierx -run
+  TestSkills_StateTheRulesThatNeverBend` fails when the pinned sentence is
+  flipped to "Always say a feature is built" and passes as written.
 - Remaining uncertainty: the skill's command lines were checked by hand
   against `--help` and the code at `2bde5e52`; no test binds a companion
   skill's leaf or flag spellings, so a later renamed flag is caught by

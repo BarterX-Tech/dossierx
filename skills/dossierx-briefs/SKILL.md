@@ -9,7 +9,8 @@ description: >-
   is a brief or a claim, write a feature brief, choose a brief's rests_on, cite
   a brief from a claim's sources, or meet any brief-* finding — brief-shape,
   brief-frontmatter, the four caps, brief-rests-on-unknown / -missing /
-  -duplicate, brief-content-drift, brief-unrecorded, brief-dependency-drift.
+  -duplicate, brief-content-drift, brief-unrecorded, brief-orphan,
+  brief-abandoned, brief-dependency-drift.
   Covers the shape and the folder names, writing short, the human-gated lock
   loop, review_pending through rests_on, feature briefs (composition, never a
   gate), and comment threads on a brief. Load the DossierX router skill first.
@@ -30,8 +31,8 @@ on claims, and it gates no claim work in any state.
 | read one brief: content, digest, status, `rests_on` | `dossierx brief show <path or folder.slug>` |
 | check the tree's shape, frontmatter and caps, writing nothing | `dossierx check --validate` (`brief-*` findings in `data.lint_findings`, `claim_id` is a path) |
 | freeze a brief, on the human's word | `dossierx brief lock <path> --dry-run`, then `--reason "<their words>"` |
-| change a locked brief | `dossierx brief unlock <path> --reason "…"` → edit → `dossierx brief lock <path> --dry-run`, then `--reason "…"` |
-| a locked brief is `review_pending` because a `rests_on` claim changed | `dossierx brief reaudit <path>` (preview, read-only) → update the brief → `--confirm --reason "…"` |
+| change a locked brief | `dossierx brief unlock <path> --reason "…"` → edit → `dossierx brief lock <path> --dry-run`, then `--reason "…"` (a pending review survives it) |
+| a locked brief is `review_pending` because a `rests_on` claim changed | `dossierx brief reaudit <path>` (preview, read-only) → update the brief, on their yes → `dossierx brief reaudit <path> --confirm --reason "…"`, on their yes |
 | answer the human's thread on a brief | `dossierx comment inbox`, then `dossierx comment reply <brief-path> <thread-id> --as agent --body "…"`; never resolve |
 
 Every `brief` leaf takes the path `brief list` prints (`briefs/checkout/flow.md`) or the id
@@ -40,12 +41,13 @@ The `comment` verbs take the **path only** (below).
 
 ## Brief, claim, manifest line or comment?
 
-Run the three questions in **[`dossierx-claims`](../dossierx-claims/SKILL.md)** first. Three yeses
-is a claim, and no brief replaces it. What fails them and still has to be written down is a brief:
+Run the sorting step in **[`dossierx-claims`](../dossierx-claims/SKILL.md)** first: what the product
+does — a guarantee about UI behaviour included — goes to the three questions there, and three yeses
+is a claim no brief replaces. What fails them and still has to be written down is a brief:
 
 | you have… | it is |
 |---|---|
-| one fact another module or a locked promise would break on | a claim — never a brief |
+| one fact that passes all three questions in [Is this worth a claim?](../dossierx-claims/SKILL.md#is-this-worth-a-claim--and-how-to-write-one) | a claim — never a brief |
 | why a module exists, where to start in it | its `manifest.yaml` summary (**[`dossierx-modules`](../dossierx-modules/SKILL.md)**) |
 | a question, or a disagreement with a claim's wording | a comment on that claim (**[`dossierx-comments`](../dossierx-comments/SKILL.md)**) |
 | law every module builds toward | the constitution (**[`dossierx-constitution`](../dossierx-constitution/SKILL.md)**) |
@@ -89,6 +91,7 @@ rests_on:
 - `status` — `draft` or `locked`; only `brief lock` / `brief unlock` change it (see below).
 - `rests_on` — optional, claim ids, none repeated; an id no claim carries is
   `brief-rests-on-unknown`. Omit it unless the section below says to list one.
+- `comments` — engine-managed: the comment verbs and the viewer write it, you never do.
 - No other key. `#` and `##` are headings in a brief (they are literal text in a claim body). The
   first `#` heading is the title; otherwise the file name, title-cased.
 
@@ -130,7 +133,9 @@ ask, and wait for an explicit yes. Never raise a value in the same change that h
 ## The lock loop — the human's approval
 
 A brief starts `status: draft` and stays freely editable: rewrite it, rename it, delete it, move
-it between folders, no ceremony. Locking is the human's act of approving what it says.
+it between folders, no ceremony — unless it carries threads (a rename strands them: see Comments)
+or a claim cites it (the pin breaks: see Citing). Locking is the human's act of approving what it
+says.
 
 1. When the brief is ready for them: `dossierx brief lock <path> --dry-run`. Show the preview and
    point them at the brief in the viewer; they read it there, not in your chat.
@@ -139,7 +144,7 @@ it between folders, no ceremony. Locking is the human's act of approving what it
    `rests_on` and body, the sha256 of every image the brief references, the approved text, their
    reason, and one baseline per `rests_on` claim. Commit both files.
 3. To change a locked brief: `dossierx brief unlock <path> --reason "<their words>"` (the record
-   is kept and stamped released, `not_locked` on a draft) → edit → step 1 again → step 2 on
+   is kept and stamped released; `not_locked` on a draft) → edit → step 1 again → step 2 on
    their yes.
 
 **Never lock, unlock or re-lock a brief unasked.** `--reason` carries their words, never yours.
@@ -149,24 +154,25 @@ status, and show `side_effects`. The real `brief lock` refuses `missing_flag` (n
 (a thread is open: reply, and the human resolves it in the viewer), `already_locked` (locked and
 unchanged, images included — a second lock would sign nothing), `store_gitignored`,
 `pre_ledger_unadopted`, `store_too_new` (a newer binary wrote the store: upgrade, never edit the
-store) and `write_conflict`, each per the router's table. A re-lock over a standing record signs
-**only the edit**: it keeps the baseline of every `rests_on` claim still listed
-(`carried_baselines`), so a claim that moved under the brief stays `review_pending` until
-`brief reaudit --confirm` has shown the human the change.
+store) and `write_conflict`, each per the router's table. A lock over a standing **or released**
+record signs **only the edit**: it carries the baseline of every `rests_on` claim still listed
+(`carried_baselines`) — through unlock → edit → lock and through an in-place re-lock alike — so a
+claim that moved under the brief stays `review_pending` until `brief reaudit --confirm` has shown
+the human the change. No lock path accepts a changed claim unseen.
 
 **Drift is not yours to clear.** Four integrity findings ride in `data.ledger_findings` and fail
 `check`, `--validate` and `--staged` alike with `integrity_failed`:
 
 | finding | what happened | recovery |
 |---|---|---|
-| `brief-content-drift` | locked, and the summary, `rests_on`, body or a referenced image's bytes moved since approval (the message names the image) | restore the file (and image) from git, or the human re-approves the edit: `brief lock` with their words |
-| `brief-unrecorded` | `status: locked` typed by hand, or a record an unlock released | the human approves it (`brief lock`), or set `status: draft` back |
+| `brief-content-drift` | locked, and the summary, `rests_on`, body or a referenced image's bytes moved since approval (the message names the image) | restore the file (and image) from git, or unlock → fix → lock on the human's yes |
+| `brief-unrecorded` | `status: locked` typed by hand, or a record an unlock released | restore the file from git, or `brief unlock` (it writes `status: draft` and releases nothing); the human's yes then goes through `brief lock` |
 | `brief-unrecorded` naming a store with **no `briefs` map** | an older binary rewrote `build/ledger/lock-store.json` and dropped every brief's approval | **restore the store from git** and upgrade that binary; re-locking would discard the baselines and any pending review |
-| `brief-orphan` | `status: draft` with a standing record — flipped by hand | restore the file, or the human unlocks it |
+| `brief-orphan` | `status: draft` with a standing record — flipped by hand (`brief unlock` refuses it `not_locked`) | restore the file from git |
 | `brief-abandoned` | a locked brief deleted or renamed with its record standing | restore it, or unlock first and then delete |
 
 **Never re-lock to make the finding go away**: that signs the edit nobody approved. Never write
-`status:` by hand either way.
+`status:` by hand in either direction.
 
 **A brief in any state never blocks claim work.** `claim lock` does not read a brief finding, a
 brief never enters `manifest show`, the catalog or the claims graph, and no brief byte enters a
@@ -187,9 +193,10 @@ that no longer exists is `brief-rests-on-missing` (ERROR): unlock, remove or rep
 1. `dossierx brief reaudit <path>` — the preview, read-only and never refused by an open thread:
    `data.changed_claims[]` carries each moved claim's wording at the baseline and now (a baseline
    no snapshot matches reads "earlier wording not available"); empty when nothing is pending.
-2. Update the brief so it describes the claim as it now reads (unlock → edit → lock if the
-   wording changes; the reaudit alone refreshes only the baselines).
-3. Show the human what changed and wait. On their yes:
+2. Update the brief so it describes the claim as it now reads: unlock → edit → lock on the
+   human's yes, or an in-place re-lock when that is how they approved the edit. Both paths keep
+   the pending review (the baselines are carried); the reaudit alone refreshes only the baselines.
+3. Show the human the diff from step 1 and wait. On their yes:
    `dossierx brief reaudit <path> --confirm --reason "<their words>"`.
 
 `--confirm` refuses `not_locked` (exit 2), `not_review_pending` (exit 2; the edit path is unlock
@@ -209,13 +216,15 @@ which promises the feature is built from. It is never a gate, never a build sequ
 a status.
 
 - **No owner claim.** A claim that only says "the checkout feature exists" or narrates the
-  feature fails the three questions and is deleted. The brief is the feature's home.
-- **Two features with the same `rests_on` set** are `brief-rests-on-duplicate` (WARNING): they
-  are one feature. Merge them, or make one of them describe something the other does not.
+  feature fails the three questions and is not written; one already locked is unlocked, then
+  deleted, on the human's yes. The brief is the feature's home.
+- **Two briefs with the same `rests_on` set** — features or not — are `brief-rests-on-duplicate`
+  (WARNING): two features made of the same claims are one feature. Merge them, or make one of
+  them describe something the other does not.
 - **Nothing reports a feature as specified or built.** `brief show` derives nothing from the
   claims a brief rests on, `check` reports nothing of the kind, and neither do you: every claim
-  in `rests_on` locked and linked is evidence about the claims, not about the feature. **Never
-  say a feature is built** — say which of its claims are locked, which are linked, and stop.
+  in `rests_on` locked and linked is evidence about the claims, not about the feature.
+  **Never say a feature is built** — say which of its claims are locked, which are linked, and stop.
 
 ## Citing a brief from a claim
 
@@ -224,24 +233,28 @@ A claim may cite a brief in `sources` as an `internal` entry (`path` and `sha256
 research finding, a recorded decision. Never cite a guidance brief (voice, design system, a
 feature walkthrough): guidance is not what makes a claim true.
 
-The citation pins the brief's bytes. When the brief is re-locked, every citing claim reports
-`source-internal-drift` (ERROR) on the next `check`: expect it, and batch it — take the citing
-claims through unlock → refresh the `sha256` → lock in the **same review** as the brief, with the
-human's words, rather than meeting them one at a time later. A brief that claims cite is a brief
-to edit rarely and deliberately.
+The citation pins the **whole file's bytes** — not the lock hash. A lock or unlock (the `status:`
+write), any edit, and every comment thread opened or answered on the brief moves them, and every
+citing claim then reports `source-internal-drift` (ERROR) on the next `check`. Expect it, and
+batch it: refresh the citing claims' `sha256` **after the brief's final lock**, taking them
+through unlock → refresh → lock in the **same review** as the brief, with the human's words,
+rather than meeting them one at a time later. A thread on a cited brief carries that cost too,
+so a brief that claims cite is a brief to edit, and to discuss, rarely and deliberately.
 
 ## Comments on a brief
 
 The human can open a thread on a brief in the viewer, exactly as on a claim. It arrives in
 `dossierx comment inbox` with the rest, under the same cursor, as a row with `kind: "brief"` and
 the brief's **path** as `claim_id`; `check` counts it as `open comments: brief "<path>": N`. The
-`comment` verbs take that path, never the id (`comment add briefs/checkout/flow.md --as agent
---body "…"`, `comment reply <brief-path> <thread-id> --as agent --body "…"`,
-`comment list <brief-path>`; an id is refused `claim_not_found`). Reply and **never resolve** —
-the human resolves it in the viewer, and their Resolve is the approval. An open thread blocks
-`brief lock` and `brief reaudit --confirm` (`comment_open`); an open thread never blocks a claim.
-Threads live in the brief's frontmatter, excluded from its hash, so a comment never drifts a
-locked brief; a brief renamed with its threads left behind is `comment-digest-abandoned`.
+`comment` verbs take that path, never the id (`comment list <brief-path>`,
+`dossierx comment reply briefs/checkout/flow.md <thread-id> --as agent --body "…"`; an id is
+refused `claim_not_found`). Reply and **never resolve** — the human resolves it in the viewer,
+and their Resolve is the approval. An open thread blocks `brief lock` and
+`brief reaudit --confirm` (`comment_open`) until they do, so **do not open a thread on a brief
+you are about to lock unless the human asked for one**: a question about a draft goes in chat.
+An open thread never blocks a claim. Threads live in the brief's frontmatter, excluded from its
+lock hash, so a comment never drifts a locked brief — it does move a citing claim's pin (above).
+A brief renamed with its threads left behind is `comment-digest-abandoned`.
 
 ## Portability
 
