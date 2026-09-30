@@ -6,6 +6,7 @@
 package check_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,10 @@ import (
 )
 
 const lockedBrief = "---\nsummary: How the widget flow reads end to end.\nstatus: locked\nrests_on:\n  - widget.contract.overview\n---\n# Widget flow\n\nText.\n"
+
+// lockedBriefWithImage is lockedBrief referencing one image, so the parity
+// table can move the image as well as the markdown.
+const lockedBriefWithImage = "---\nsummary: How the widget flow reads end to end.\nstatus: locked\nrests_on:\n  - widget.contract.overview\n---\n# Widget flow\n\nText. ![diagram](diagram.svg)\n"
 
 // armBrief records the approval `brief lock` would record for every locked
 // brief in cfg's working tree — the fixture's "a human approved this brief".
@@ -36,6 +41,7 @@ func armBrief(t *testing.T, cfg *config.Config) {
 		lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{
 			Path: b.Path, Hash: b.LockHash, At: "2026-09-30T00:00:00Z", Actor: "fixture", Reason: "fixture approval",
 			Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: b.RestsOn, Markdown: b.Body},
+			Images:    b.ImageDigests(),
 			Baselines: hashes, Receipts: receipts,
 		})
 	}
@@ -54,8 +60,9 @@ func lifecycleIn(verdict []string) []string {
 			continue
 		}
 		switch parts[1] {
-		case briefs.RuleContentDrift, briefs.RuleUnrecorded, briefs.RuleDependencyDrift, briefs.RuleRestsOnMissing, briefs.RuleRestsOnUnknown:
-		case lock.RuleCommentLedgerDrift, lock.RuleCommentDigestUnrecorded:
+		case briefs.RuleContentDrift, briefs.RuleUnrecorded, briefs.RuleOrphan, briefs.RuleAbandoned,
+			briefs.RuleDependencyDrift, briefs.RuleRestsOnMissing, briefs.RuleRestsOnUnknown:
+		case lock.RuleCommentLedgerDrift, lock.RuleCommentDigestUnrecorded, check.RuleCommentDigestAbandoned:
 			if !strings.HasPrefix(parts[2], "briefs/") {
 				continue
 			}
@@ -85,7 +92,7 @@ func TestBriefLockFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 		{
 			name: "a locked brief edited since approval",
 			edit: func(t *testing.T, repo string) {
-				writeFixtureFile(t, filepath.Join(repo, flow), strings.Replace(lockedBrief, "Text.", "Text, rewritten.", 1))
+				writeFixtureFile(t, filepath.Join(repo, flow), strings.Replace(lockedBriefWithImage, "Text.", "Text, rewritten.", 1))
 			},
 			want: []string{"ledger|brief-content-drift|briefs/widget/flow.md"},
 		},
@@ -95,6 +102,31 @@ func TestBriefLockFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 				writeFixtureFile(t, filepath.Join(repo, "briefs", "widget", "other.md"), "---\nsummary: Another brief.\nstatus: locked\n---\nText.\n")
 			},
 			want: []string{"ledger|brief-unrecorded|briefs/widget/other.md"},
+		},
+		{
+			name: "a locked brief's status flipped to draft by hand",
+			edit: func(t *testing.T, repo string) {
+				writeFixtureFile(t, filepath.Join(repo, flow), strings.Replace(lockedBriefWithImage, "status: locked", "status: draft", 1))
+			},
+			want: []string{"ledger|brief-orphan|briefs/widget/flow.md"},
+		},
+		{
+			name: "a locked brief deleted",
+			edit: func(t *testing.T, repo string) {
+				for _, f := range []string{flow, filepath.Join("briefs", "widget", "diagram.svg")} {
+					if err := os.Remove(filepath.Join(repo, f)); err != nil {
+						t.Fatal(err)
+					}
+				}
+			},
+			want: []string{"ledger|brief-abandoned|briefs/widget/flow.md"},
+		},
+		{
+			name: "an image the locked brief references changed bytes",
+			edit: func(t *testing.T, repo string) {
+				writeFixtureFile(t, filepath.Join(repo, "briefs", "widget", "diagram.svg"), "<svg>swapped</svg>")
+			},
+			want: []string{"ledger|brief-content-drift|briefs/widget/flow.md"},
 		},
 		{
 			name: "a rests_on claim moved",
@@ -113,7 +145,7 @@ func TestBriefLockFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 		{
 			name: "a brief's comments block hand-edited",
 			edit: func(t *testing.T, repo string) {
-				writeFixtureFile(t, filepath.Join(repo, flow), strings.Replace(lockedBrief, "---\n# Widget", "comments:\n  - id: c-1\n    status: resolved\n    author: human\n    created: 2026-09-30T00:00:00Z\n    body: forged\n    edited: false\n---\n# Widget", 1))
+				writeFixtureFile(t, filepath.Join(repo, flow), strings.Replace(lockedBriefWithImage, "---\n# Widget", "comments:\n  - id: c-1\n    status: resolved\n    author: human\n    created: 2026-09-30T00:00:00Z\n    body: forged\n    edited: false\n---\n# Widget", 1))
 			},
 			want: []string{"ledger|comment-digest-unrecorded|briefs/widget/flow.md"},
 		},
@@ -121,8 +153,9 @@ func TestBriefLockFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := filepath.Join(t.TempDir(), "repo")
 			cfg := writeProjectFiles(t, repo, baseConfig, map[string]string{
-				"claims/overview.yaml":  draftClaim("widget.contract.overview"),
-				"briefs/widget/flow.md": lockedBrief,
+				"claims/overview.yaml":      draftClaim("widget.contract.overview"),
+				"briefs/widget/flow.md":     lockedBriefWithImage,
+				"briefs/widget/diagram.svg": "<svg>approved</svg>",
 			})
 			armBrief(t, cfg)
 			gitRepo(t, repo)
@@ -239,5 +272,74 @@ func TestABriefCommentBlockEditedAfterItsDigestIsDrift(t *testing.T) {
 	git(t, repo, "add", "-A")
 	if got, _ := stagedVerdict(t, cfg); strings.Join(lifecycleIn(got), ",") != want {
 		t.Fatalf("--staged once staged: got %v, want %s", lifecycleIn(got), want)
+	}
+}
+
+// TestRenamingABriefDoesNotEraseItsThread pins F2, the rename launder's brief
+// twin: a draft brief carrying a human's recorded thread is copied to a new
+// name WITHOUT its comments block and the original deleted. The new brief is
+// clean on its own, so the only evidence is the old digest entry:
+// comment-digest-abandoned on the old path, under --validate and, once staged,
+// --staged. The two accounted-for departures stay silent: an entry that
+// recorded no thread, and a brief whose approval an unlock released.
+func TestRenamingABriefDoesNotEraseItsThread(t *testing.T) {
+	const thread = "comments:\n  - id: c-1\n    status: open\n    author: human\n    created: 2026-09-30T00:00:00Z\n    body: \"no\"\n    edited: false\n"
+	draft := strings.Replace(lockedBrief, "status: locked", "status: draft", 1)
+	for _, tc := range []struct {
+		name     string
+		threads  bool
+		released bool
+		want     string
+	}{
+		{"a recorded thread, renamed away", true, false, "ledger|comment-digest-abandoned|briefs/widget/flow.md"},
+		{"an entry that recorded no thread", false, false, ""},
+		{"an unlocked brief with a thread, then removed", true, true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			content := draft
+			if tc.threads {
+				content = strings.Replace(draft, "---\n# Widget", thread+"---\n# Widget", 1)
+			}
+			repo := filepath.Join(t.TempDir(), "repo")
+			cfg := writeProjectFiles(t, repo, baseConfig, map[string]string{
+				"claims/overview.yaml":  draftClaim("widget.contract.overview"),
+				"briefs/widget/flow.md": content,
+			})
+			digests, err := digest.LoadStore(cfg.CommentDigestPath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := briefs.Load(cfg).Briefs[0]
+			digests.RecordBrief(b.ID, b.Comments)
+			if err := digests.Save(); err != nil {
+				t.Fatal(err)
+			}
+			if tc.released {
+				store, err := lock.LoadStore(cfg.LockStorePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{Path: b.Path, Hash: b.LockHash})
+				lock.ReleaseBriefApproval(store, b.ID, lock.Approval{Actor: "fixture", Reason: "rework"})
+				if err := store.Save(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			gitRepo(t, repo)
+			git(t, repo, "add", "-A")
+			git(t, repo, "commit", "-qm", "fixture")
+
+			if err := os.Remove(filepath.Join(repo, "briefs", "widget", "flow.md")); err != nil {
+				t.Fatal(err)
+			}
+			writeFixtureFile(t, filepath.Join(repo, "briefs", "widget", "renamed.md"), draft)
+			if got := strings.Join(lifecycleIn(worktreeVerdict(t, cfg)), ","); got != tc.want {
+				t.Fatalf("--validate: got %q, want %q", got, tc.want)
+			}
+			git(t, repo, "add", "-A")
+			if got, _ := stagedVerdict(t, cfg); strings.Join(lifecycleIn(got), ",") != tc.want {
+				t.Fatalf("--staged: got %v, want %q", lifecycleIn(got), tc.want)
+			}
+		})
 	}
 }

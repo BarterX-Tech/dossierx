@@ -28,6 +28,7 @@ package check
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -295,14 +296,19 @@ func briefEvaluation(claims []model.Claim, in ledgerInputs) *briefs.Evaluation {
 // digest, comment-digest-unrecorded for threads with no entry in a
 // ledger-covered project. The claim is named by the brief's PATH, which can
 // never be a claim id.
+//
+// It runs whether or not the tree holds a brief: a project whose last brief was
+// deleted is exactly the one brief-abandoned and the abandoned-digest rule
+// below exist for.
 func briefLedgerFindings(claims []model.Claim, in ledgerInputs) []lock.Finding {
-	if in.briefs.Empty() {
+	if in.briefs == nil {
 		return nil
 	}
 	findings := briefEvaluation(claims, in).Integrity
 	if in.digests == nil {
 		return findings
 	}
+	findings = append(findings, abandonedBriefDigests(in)...)
 	covered := in.store.LedgerCovered() && in.digests.FileExists()
 	for _, b := range in.briefs.Briefs {
 		recorded, known := in.digests.BriefDigest(b.ID)
@@ -565,4 +571,39 @@ func commentDigestAbsent(claims []model.Claim, in ledgerInputs) (lock.Finding, b
 			"this project has a lock ledger but no comment digest store (%s), so comment-thread drift is not being checked AT ALL on this run — for any of its %d claim(s). The engine writes that file the moment a project acquires a lock ledger, so its absence means it was deleted (which is how an edited-away review thread stops being reported, and it stays quiet even when the last thread went with it) or it is not part of this commit. Restore it from version control, or git add it if this commit is the one that created it. Do not re-create it by running a comment op: a re-created store records whatever the claims say NOW as the truth, which is exactly what a deletion was for.",
 			config.CommentDigestDisplayPath, len(claims)),
 	}, true
+}
+
+// abandonedBriefDigests is comment-digest-abandoned for briefs — the rename
+// launder's brief twin. A digest entry that recorded review threads, for a
+// brief no longer in the tree, is the one piece of evidence a rename (copy the
+// brief without its comments block, delete the original) cannot reach. Silent
+// for the two accounted-for departures the claim rule is silent for: an entry
+// that recorded no thread, and a brief whose approval record an honest unlock
+// released. The claim is named by the path the id stands for.
+func abandonedBriefDigests(in ledgerInputs) []lock.Finding {
+	present := make(map[string]bool, len(in.briefs.Briefs))
+	for _, b := range in.briefs.Briefs {
+		present[b.ID] = true
+	}
+	ids := make([]string, 0, len(in.digests.Briefs))
+	for id := range in.digests.Briefs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	var out []lock.Finding
+	for _, id := range ids {
+		if present[id] || in.digests.Briefs[id] == digest.BriefCommentsDigest(id, nil) {
+			continue
+		}
+		if rec, ok := in.store.BriefRecordFor(id); ok && rec.Released() {
+			continue
+		}
+		where := briefs.PathOf(in.briefs, id)
+		out = append(out, lock.Finding{
+			Rule:    RuleCommentDigestAbandoned,
+			ClaimID: where,
+			Message: fmt.Sprintf("%s records comment threads for the brief %s, which is no longer in the project: its file was deleted or renamed — and copying a brief to a new name without its comments block is how an open review thread disappears with nothing reported against the brief that replaces it. Restore the brief from version control; to remove a brief with a review history, unlock it first (if it is locked) so the removal is on the record.", config.CommentDigestDisplayPath, where),
+		})
+	}
+	return out
 }

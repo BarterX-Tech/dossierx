@@ -807,10 +807,6 @@ func finishStatus(res Result, claims []model.Claim, cfg *config.Config, set *bri
 	return res
 }
 
-// openCommentCounts returns module -> number of open comment threads across
-// that module's claims, for modules with at least one. The value form of
-// cmd/dossierx.reportOpenComments (the caller sorts modules and formats the
-// "open comments: module %q: %d" lines).
 // openBriefCommentCounts maps each brief with an open thread to how many it
 // has, by path; nil when none has one.
 func openBriefCommentCounts(set *briefs.Set) map[string]int {
@@ -829,6 +825,10 @@ func openBriefCommentCounts(set *briefs.Set) map[string]int {
 	return counts
 }
 
+// openCommentCounts returns module -> number of open comment threads across
+// that module's claims, for modules with at least one. The value form of
+// cmd/dossierx.reportOpenComments (the caller sorts modules and formats the
+// "open comments: module %q: %d" lines).
 func openCommentCounts(claims []model.Claim) map[string]int {
 	counts := map[string]int{}
 	for _, c := range claims {

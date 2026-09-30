@@ -338,7 +338,7 @@ func newCommentAddCmd() *cobra.Command {
 				}
 				claim, ok := loader.FindByID(claims, claimID)
 				if !ok {
-					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "comment add: claim %q not found: %w", claimID, comments.ErrClaimNotFound)
+					return cmdResult{}, briefIDHint(cfg, "comment add", claimID, cliout.Errorf(cliout.CodeClaimNotFound, "comment add: claim %q not found: %w", claimID, comments.ErrClaimNotFound))
 				}
 				dr := commentWriteDryRun("open a comment thread on "+claimID, cfg, claim, "", as, body)
 				return dryRunResult(cmd, "comment add", dr), nil
@@ -358,7 +358,7 @@ func newCommentAddCmd() *cobra.Command {
 			}
 			_, tid, err := deps.Add(claimID, actor, body)
 			if err != nil {
-				return cmdResult{}, commentOpError(cfg, claimID, err)
+				return cmdResult{}, briefIDHint(cfg, "comment add", claimID, commentOpError(cfg, claimID, err))
 			}
 			return cmdResult{
 				Data: commentWriteData{ClaimID: claimID, ThreadID: tid, Actor: string(actor), Body: body},
@@ -394,7 +394,7 @@ func newCommentReplyCmd() *cobra.Command {
 				}
 				claim, ok := loader.FindByID(claims, claimID)
 				if !ok {
-					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "comment reply: claim %q not found: %w", claimID, comments.ErrClaimNotFound)
+					return cmdResult{}, briefIDHint(cfg, "comment reply", claimID, cliout.Errorf(cliout.CodeClaimNotFound, "comment reply: claim %q not found: %w", claimID, comments.ErrClaimNotFound))
 				}
 				dr := commentWriteDryRun("reply to thread "+threadID+" on "+claimID, cfg, claim, threadID, as, body)
 				return dryRunResult(cmd, "comment reply", dr), nil
@@ -414,7 +414,7 @@ func newCommentReplyCmd() *cobra.Command {
 			}
 			_, rid, err := deps.Reply(claimID, threadID, actor, body)
 			if err != nil {
-				return cmdResult{}, commentOpError(cfg, claimID, err)
+				return cmdResult{}, briefIDHint(cfg, "comment reply", claimID, commentOpError(cfg, claimID, err))
 			}
 			return cmdResult{
 				Data: commentWriteData{ClaimID: claimID, ThreadID: threadID, ReplyID: rid, Actor: string(actor), Body: body},
@@ -547,7 +547,7 @@ func newCommentListCmd() *cobra.Command {
 				deps := &comments.Deps{Cfg: cfg, Claims: claims}
 				threads, err = deps.List(claimID, openOnly)
 				if err != nil {
-					return cmdResult{}, err
+					return cmdResult{}, briefIDHint(cfg, "comment list", claimID, err)
 				}
 			}
 			// commentThreadViews always returns a slice, so a claim with no

@@ -327,7 +327,8 @@ func TestBriefListAnswersWhenTheStoreCannotBeRead(t *testing.T) {
 // reaudit --confirm refuses a
 // brief edited since its approval (integrity_failed), because a reaudit
 // accepts moved claims and does not approve the brief's own edit; and locking
-// that edited brief again is how its edit is approved (relocked).
+// that edited brief again is how its edit is approved (relocked) — which keeps
+// the claim change pending for the reaudit it now allows.
 func TestBriefLockAndReauditRefuseWhatTheyCannotSign(t *testing.T) {
 	cfgPath, claimPath, briefPath, _ := briefLockProject(t)
 	const flow = "briefs/widget/flow.md"
@@ -359,7 +360,207 @@ func TestBriefLockAndReauditRefuseWhatTheyCannotSign(t *testing.T) {
 	if !relock.Relocked {
 		t.Fatalf("locking an edited brief is a re-lock, got %+v", relock)
 	}
+	// The re-lock signed the brief's edit and nothing else: the claim that moved
+	// is still a dependency-drift warning, which the now-allowed reaudit clears.
+	if lint, ledger := validateFindings(t, cfgPath); len(ledger) != 0 || !hasFinding(lint, briefs.RuleDependencyDrift, flow, "warning") {
+		t.Fatalf("a re-lock must sign the edit and keep the claim change pending: lint %+v ledger %+v", lint, ledger)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "reaudit", flow, "--confirm", "--reason", "the claim change is fine")
 	if lint, ledger := validateFindings(t, cfgPath); len(ledger) != 0 || hasBriefRule(lint) {
-		t.Fatalf("a re-lock signs the edit and re-baselines the claims: lint %+v ledger %+v", lint, ledger)
+		t.Fatalf("after the reaudit the project must be clean: lint %+v ledger %+v", lint, ledger)
+	}
+}
+
+// TestARelockKeepsAReviewPendingBriefPending pins F1: a brief review-pending
+// because a claim it rests on moved, then edited and re-locked, is STILL
+// review_pending — the re-lock approves the brief's words and carries the
+// baseline forward (carried_baselines names it) — and brief reaudit, allowed on
+// the re-locked brief, is what shows and clears the claim change. A claim newly
+// added to rests_on in the same edit is baselined as it reads now.
+func TestARelockKeepsAReviewPendingBriefPending(t *testing.T) {
+	cfgPath, claimPath, briefPath, _ := briefLockProject(t)
+	root := filepath.Dir(cfgPath)
+	const flow = "briefs/widget/flow.md"
+	extra := "id: widget.contract.extra\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: A second claim.\nbody: |\n  extra.\nrests_on:\n  - widget.contract.overview\n"
+	if err := os.WriteFile(filepath.Join(root, "claims", "extra.yaml"), []byte(extra), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+	claim := mustRead(t, claimPath)
+	if err := os.WriteFile(claimPath, []byte(strings.Replace(string(claim), "body: |\n", "body: |\n  rewritten.\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(mustRead(t, briefPath)), "  - widget.contract.overview\n", "  - widget.contract.overview\n  - widget.contract.extra\n", 1)
+	edited = strings.Replace(edited, "One paragraph.", "One paragraph, with a typo fixed.", 1)
+	if err := os.WriteFile(briefPath, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var relock briefLockData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "the typo fix is fine"), &relock)
+	if !relock.Relocked || strings.Join(relock.Carried, ",") != "widget.contract.overview" || relock.Baselines["widget.contract.extra"] == "" {
+		t.Fatalf("a re-lock must carry the standing baseline and baseline the new claim: %+v", relock)
+	}
+	var list briefListData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "list", "--review-pending"), &list)
+	if list.Count != 1 || list.Briefs[0].ReviewPendingTrigger != briefs.TriggerDependencyDrift {
+		t.Fatalf("the re-locked brief must stay review_pending on the moved claim, got %+v", list)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "reaudit", flow, "--confirm", "--reason", "the claim change is fine")
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "list", "--review-pending"), &list)
+	if list.Count != 0 {
+		t.Fatalf("brief reaudit --confirm must clear it, got %+v", list)
+	}
+}
+
+// TestBriefCommandsRefuseAStoreFromANewerBinary pins F5 at the CLI: the error
+// code is store_too_new whatever code the call site wraps a store load in, and
+// nothing is written.
+func TestBriefCommandsRefuseAStoreFromANewerBinary(t *testing.T) {
+	cfgPath, _, briefPath, storeFile := briefLockProject(t)
+	if err := os.WriteFile(storeFile, []byte(`{"version":9}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := string(mustRead(t, briefPath))
+	env := mustCode(t, cliout.CodeStoreTooNew, "--config", cfgPath, "brief", "lock", "briefs/widget/flow.md", "--reason", "approved")
+	if !strings.Contains(env.Error.Message, "newer dossierx") || string(mustRead(t, briefPath)) != before || string(mustRead(t, storeFile)) != `{"version":9}` {
+		t.Fatalf("a newer store must refuse before anything is written: %+v", env.Error)
+	}
+}
+
+// TestAFailedUnlockLandsInTheLoudState pins F6: brief unlock releases the
+// record before it rewrites the file, so when the file cannot be written the
+// project is left with status: locked on a released record — brief-unrecorded,
+// reported — never a draft on a standing approval.
+func TestAFailedUnlockLandsInTheLoudState(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions enforced: a read-only directory is still writable on Windows and to root")
+	}
+	cfgPath, _, briefPath, _ := briefLockProject(t)
+	const flow = "briefs/widget/flow.md"
+	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+	dir := filepath.Dir(briefPath)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) }) //nolint:errcheck // best-effort restore for TempDir cleanup
+	mustCode(t, cliout.CodeWriteFailed, "--config", cfgPath, "brief", "unlock", flow, "--reason", "rework")
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, ledger := validateFindings(t, cfgPath); len(ledger) != 1 || ledger[0].Rule != briefs.RuleUnrecorded {
+		t.Fatalf("a failed unlock must leave brief-unrecorded and nothing else, got %+v", ledger)
+	}
+}
+
+// TestCheckCountsOpenBriefThreads pins F9: check reports a brief's open threads
+// in data.open_brief_comments by path, and as an "open comments: brief" line.
+func TestCheckCountsOpenBriefThreads(t *testing.T) {
+	cfgPath, _, _, _ := briefLockProject(t)
+	const flow = "briefs/widget/flow.md"
+	mustOK(t, "--config", cfgPath, "comment", "add", flow, "--as", "human", "--body", "why?")
+	var data checkData
+	decodeData(t, mustOK(t, "--config", cfgPath, "check", "--validate"), &data)
+	if data.OpenBriefComments[flow] != 1 {
+		t.Fatalf("open_brief_comments = %+v", data.OpenBriefComments)
+	}
+	stdout, _, err := execCLI(t, "--config", cfgPath, "--format", "text", "check", "--validate")
+	if err != nil || !strings.Contains(stdout, `open comments: brief "briefs/widget/flow.md": 1`) {
+		t.Fatalf("text form: %v\n%s", err, stdout)
+	}
+}
+
+// TestCommentErrorsNameTheBrief pins F11: a thread op on a brief names the
+// brief, not a claim; and a comment verb given a brief's id (which the verbs
+// do not take) answers claim_not_found with a hint naming the brief's path.
+func TestCommentErrorsNameTheBrief(t *testing.T) {
+	cfgPath, _, _, _ := briefLockProject(t)
+	env := mustCode(t, cliout.CodeThreadNotFound, "--config", cfgPath, "comment", "reply", "briefs/widget/flow.md", "c-000000", "--as", "agent", "--body", "hi")
+	if !strings.Contains(env.Error.Message, "on brief briefs/widget/flow.md") || strings.Contains(env.Error.Message, "claim") {
+		t.Fatalf("a brief thread error must name the brief: %q", env.Error.Message)
+	}
+	for _, args := range [][]string{
+		{"comment", "list", "widget.flow"},
+		{"comment", "add", "widget.flow", "--as", "agent", "--body", "hi"},
+	} {
+		env = mustCode(t, cliout.CodeClaimNotFound, append([]string{"--config", cfgPath}, args...)...)
+		if !strings.Contains(env.Error.Hint, "briefs/widget/flow.md") {
+			t.Fatalf("%v: the hint must name the brief's path, got %q", args, env.Error.Hint)
+		}
+	}
+}
+
+// TestReauditPreviewShowsTheBodyAndIgnoresOpenThreads pins F12 and one of F13:
+// the text preview of a body-only claim change prints the removed and added
+// body lines, and an open thread on the brief does not refuse the preview (only
+// --confirm is the human's yes it waits for).
+func TestReauditPreviewShowsTheBodyAndIgnoresOpenThreads(t *testing.T) {
+	cfgPath, claimPath, _, _ := briefLockProject(t)
+	const flow = "briefs/widget/flow.md"
+	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+	claim := string(mustRead(t, claimPath))
+	if err := os.WriteFile(claimPath, []byte(strings.Replace(claim, "fixture claim for in-process CLI tests.", "a rewritten body line.", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, "--config", cfgPath, "comment", "add", flow, "--as", "human", "--body", "why?")
+	stdout, _, err := execCLI(t, "--config", cfgPath, "--format", "text", "brief", "reaudit", flow)
+	if err != nil || !strings.Contains(stdout, "- body: fixture claim for in-process CLI tests.") || !strings.Contains(stdout, "+ body: a rewritten body line.") {
+		t.Fatalf("the preview must print the body diff and not be refused by the open thread: %v\n%s", err, stdout)
+	}
+}
+
+// TestBriefWritesRefuseAFileThatMovedUnderThem pins F15 and one of F13: the
+// bytes a lock hashes must be the bytes it rewrites (briefBytesAsLoaded refuses
+// a file that changed since discovery), and the rewrite itself refuses a file
+// that changed since it was read, leaving the editor's bytes in place.
+func TestBriefWritesRefuseAFileThatMovedUnderThem(t *testing.T) {
+	cfgPath, _, briefPath, _ := briefLockProject(t)
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := briefs.Load(cfg).Lookup("widget.flow")
+	if !ok {
+		t.Fatal("fixture brief not found")
+	}
+	saved := draftWidgetFlow + "An editor's save.\n"
+	if err := os.WriteFile(briefPath, []byte(saved), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := briefBytesAsLoaded(cfg, b); err == nil {
+		t.Fatal("a file that changed since discovery must be refused before it is hashed")
+	}
+	if err := rewriteBriefFile(cfg, b, []byte(draftWidgetFlow), []byte("rewritten")); err == nil {
+		t.Fatal("a file that changed since it was read must not be rewritten")
+	}
+	if string(mustRead(t, briefPath)) != saved {
+		t.Fatal("the editor's save was overwritten")
+	}
+}
+
+// TestImagesInTheLock pins F8 through the lock path: brief lock records the
+// sha256 of the image the brief references (so the project is clean right
+// after the lock), a swapped image under the same name is then
+// brief-content-drift naming it, and the human's re-lock signs the new bytes.
+func TestImagesInTheLock(t *testing.T) {
+	cfgPath, _, briefPath, _ := briefLockProject(t)
+	root := filepath.Dir(cfgPath)
+	const flow = "briefs/widget/flow.md"
+	if err := os.WriteFile(briefPath, []byte(strings.Replace(draftWidgetFlow, "One paragraph.", "One paragraph. ![diagram](diagram.svg)", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeBriefFile(t, root, "widget/diagram.svg", "<svg>approved</svg>")
+	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+	if lint, ledger := validateFindings(t, cfgPath); len(ledger) != 0 || hasBriefRule(lint) {
+		t.Fatalf("a brief locked with its image must be clean: lint %+v ledger %+v", lint, ledger)
+	}
+	writeBriefFile(t, root, "widget/diagram.svg", "<svg>swapped</svg>")
+	_, ledger := validateFindings(t, cfgPath)
+	if len(ledger) != 1 || ledger[0].Rule != briefs.RuleContentDrift || !strings.Contains(ledger[0].Message, `"diagram.svg"`) {
+		t.Fatalf("a swapped image must be brief-content-drift naming it, got %+v", ledger)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "the new diagram is approved")
+	if _, ledger := validateFindings(t, cfgPath); len(ledger) != 0 {
+		t.Fatalf("the re-lock must sign the new image, got %+v", ledger)
 	}
 }

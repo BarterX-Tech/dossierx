@@ -213,6 +213,14 @@ const (
 	// not a claim id, so an agent that branches on unresolved_comments would
 	// go looking for a claim.
 	CodeCommentOpen Code = "comment_open"
+	// CodeStoreTooNew is a command refusing a lock store or comment digest
+	// store written by a NEWER dossierx (its version is above every version
+	// this binary knows). Reading it would work and the next write would drop
+	// what this binary does not know, so it is refused before anything is
+	// read or written. The recovery is upgrading this binary; nothing about
+	// the project is wrong. `check` reports the same state as
+	// lock-ledger-unreadable, naming the upgrade.
+	CodeStoreTooNew Code = "store_too_new"
 	// CodeConstitutionOverCap is check+lock refusing a present constitution.yaml
 	// that exceeds the 800-word cap. The wire token is the Done-when name.
 	CodeConstitutionOverCap Code = "CONSTITUTION_OVER_CAP"

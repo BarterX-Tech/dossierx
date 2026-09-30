@@ -29,6 +29,26 @@ func isBriefRef(arg string) bool {
 	return strings.Contains(arg, "/")
 }
 
+// briefIDHint turns a claim_not_found on a comment verb into one that says
+// what went wrong when the argument is a brief's <folder>.<slug> id: the verbs
+// take a brief by its path (an id can collide with a claim id), so the hint
+// names the path. Any other error, or an argument that is no brief's id, is
+// returned unchanged.
+func briefIDHint(cfg *config.Config, verb, arg string, err error) error {
+	if err == nil || cfg == nil {
+		return err
+	}
+	if e := errorForCLI(err); e == nil || e.Code != cliout.CodeClaimNotFound {
+		return err
+	}
+	b, ok := briefs.Load(cfg).Lookup(arg)
+	if !ok || b.ID != arg {
+		return err
+	}
+	return cliout.Errorf(cliout.CodeClaimNotFound, "%s: no claim %q — that is a brief's id, and comment verbs take a brief by its path: %w", verb, arg, err).
+		WithHint(fmt.Sprintf("run: dossierx %s %s … (the brief's path, as brief list prints it)", verb, b.Path))
+}
+
 // briefCommentError maps a brief comment op's error onto the envelope codes the
 // claim ops use.
 func briefCommentError(cfg *config.Config, ref string, err error) error {

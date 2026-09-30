@@ -240,8 +240,9 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		// `brief_not_found`, `brief show`'s refusal for a path or id that
 		// names no brief (NIT-204). 50 -> 51 with `comment_open`, `brief
 		// lock` and `brief reaudit` refusing a brief with an open thread
-		// (NIT-205).
-		"error_codes": 51,
+		// (NIT-205). 51 -> 52 with `store_too_new`, a store from a newer
+		// dossierx refused rather than read and re-saved (NIT-205).
+		"error_codes": 52,
 		// The brief rule set (NIT-204), a registry of its own beside
 		// lint.Registry: brief-shape, brief-frontmatter, the four caps, and
 		// the two rests_on rules. 8 -> 10 with the two that read a locked

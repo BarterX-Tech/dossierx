@@ -50,6 +50,9 @@ type briefLockData struct {
 	LockedAt  string            `json:"locked_at"`
 	Reason    string            `json:"reason"`
 	Baselines map[string]string `json:"baselines"`
+	// Carried is the rests_on ids whose baselines a re-lock kept from the
+	// standing record rather than re-reading (always empty on a first lock).
+	Carried []string `json:"carried_baselines"`
 }
 
 // briefUnlockData is `brief unlock`'s payload.
@@ -119,6 +122,22 @@ func rewriteBriefFile(cfg *config.Config, b briefs.Brief, before, after []byte) 
 	return atomicfile.Write(file, after, info.Mode().Perm())
 }
 
+// briefBytesAsLoaded reads a brief's bytes once more under the sentinels and
+// requires them to be the bytes the tree was just parsed from, so the hash a
+// lock records is the hash of exactly the file it rewrites: an editor's save
+// landing between discovery and this read is refused, never signed under the
+// old bytes' hash.
+func briefBytesAsLoaded(cfg *config.Config, b briefs.Brief) ([]byte, error) {
+	raw, err := readBriefFile(cfg, b)
+	if err != nil {
+		return nil, err
+	}
+	if strings.ReplaceAll(string(raw), "\r\n", "\n") != b.Content {
+		return nil, fmt.Errorf("%s changed while it was being read; nothing was written, run the command again", b.Path)
+	}
+	return raw, nil
+}
+
 // readBriefFile reads a brief's bytes, refusing a link.
 func readBriefFile(cfg *config.Config, b briefs.Brief) ([]byte, error) {
 	file := briefs.FilePath(cfg, b)
@@ -136,7 +155,7 @@ func newBriefLockCmd() *cobra.Command {
 	var reason string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "lock <path>",
+		Use:   "lock <path-or-id>",
 		Short: "Lock a brief: record its content hash, the human's --reason and a baseline per rests_on claim",
 		Long: "Lock a brief. Its status becomes locked and the lock store records the brief's\n" +
 			"hash (summary, rests_on and body), the human's --reason, the approved text and,\n" +
@@ -184,9 +203,9 @@ func newBriefLockCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
-			raw, err := readBriefFile(cfg, b)
+			raw, err := briefBytesAsLoaded(cfg, b)
 			if err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief lock: %w", err)
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteConflict, "brief lock: %w", err)
 			}
 			if fs := briefErrorFindings(set, b, claims); len(fs) > 0 {
 				return cmdResult{}, cliout.Errorf(cliout.CodeLintFailed, "brief lock: refused, %s has %d error finding(s)", b.Path, len(fs)).
@@ -208,7 +227,7 @@ func newBriefLockCmd() *cobra.Command {
 			}
 			rec, has := store.BriefRecordFor(b.ID)
 			standing := has && !rec.Released()
-			if b.Status == briefs.StatusLocked && standing && rec.Hash == b.LockHash {
+			if b.Status == briefs.StatusLocked && standing && briefs.ContentMoved(b, rec) == "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeAlreadyLocked,
 					"brief lock: %s is already locked and unchanged since %s", b.Path, rec.At).
 					WithHint("edit the brief first; a lock signs a change, and there is none. To accept claims that moved under it, dossierx brief reaudit " + b.Path)
@@ -219,7 +238,14 @@ func newBriefLockCmd() *cobra.Command {
 			// The store is saved below whatever the on-load migrations did.
 			_, adopted := prepareStore(cfg, store, claims)
 
-			hashes, receipts, unknown := briefs.Baselines(b, claims)
+			// A re-lock over a standing record carries its baselines forward:
+			// it approves the brief's own edit, and a claim that moved under
+			// the brief stays review_pending until brief reaudit shows it.
+			var prev *lock.BriefRecord
+			if standing {
+				prev = &rec
+			}
+			hashes, receipts, carried, unknown := briefs.RelockBaselines(b, claims, prev)
 			if len(unknown) > 0 {
 				// briefErrorFindings has already refused an unknown id; this is
 				// the belt to its braces, so a baseline is never silently missing.
@@ -243,6 +269,7 @@ func newBriefLockCmd() *cobra.Command {
 				Actor:     lock.DefaultActor(),
 				Reason:    reason,
 				Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: restsOn, Markdown: b.Body},
+				Images:    b.ImageDigests(),
 				Baselines: hashes,
 				Receipts:  receipts,
 			})
@@ -250,7 +277,10 @@ func newBriefLockCmd() *cobra.Command {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief lock: %w", err).
 					WithHint(fmt.Sprintf("%s now says status: locked with no record, which check reports as brief-unrecorded; fix the write failure and run brief lock again", b.Path))
 			}
-			data := briefLockData{ID: b.ID, Path: b.Path, Relocked: standing, Hash: b.LockHash, LockedAt: at, Reason: reason, Baselines: hashes}
+			if carried == nil {
+				carried = []string{}
+			}
+			data := briefLockData{ID: b.ID, Path: b.Path, Relocked: standing, Hash: b.LockHash, LockedAt: at, Reason: reason, Baselines: hashes, Carried: carried}
 			return cmdResult{
 				Warnings: append(gitignoreWarnings, adoptionWarnings(adopted)...),
 				Data:     data,
@@ -272,7 +302,7 @@ func newBriefLockCmd() *cobra.Command {
 // briefCommentOpen is the comment_open refusal.
 func briefCommentOpen(verb string, b briefs.Brief, n int) error {
 	return cliout.Errorf(cliout.CodeCommentOpen, "%s: refused, %s has %d open comment thread(s)", verb, b.Path, n).
-		WithHint(fmt.Sprintf("reply on the thread (dossierx comment list %s --open); the human resolves it in the viewer, and that is the yes this waits for", b.Path))
+		WithHint(fmt.Sprintf("run: dossierx comment list %s --open — reply on the thread; resolving it is the human's, and that is the yes this waits for. The viewer's brief threads (where the human resolves one) have not shipped yet, so until they do an open thread on a brief holds this refusal", b.Path))
 }
 
 // briefLockDryRun previews brief lock: every refusal the write path makes, in
@@ -293,19 +323,29 @@ func briefLockDryRun(cfg *config.Config, set *briefs.Set, b briefs.Brief, claims
 		fmt.Sprintf("%d open comment thread(s): the human resolves them first (comment_open)", open)))
 	dr.Require("store_readable", storeErr == nil, boolDetail(storeErr == nil,
 		config.LockStoreDisplayPath+" loads", fmt.Sprintf("%v", storeErr)))
+	var prev *lock.BriefRecord
 	if storeErr == nil {
 		rec, has := store.BriefRecordFor(b.ID)
-		already := b.Status == briefs.StatusLocked && has && !rec.Released() && rec.Hash == b.LockHash
+		already := b.Status == briefs.StatusLocked && has && !rec.Released() && briefs.ContentMoved(b, rec) == ""
 		dr.Require("not_already_locked", !already, boolDetail(!already,
 			"the brief is not locked-and-unchanged",
 			"already locked and unchanged since "+rec.At))
+		if has && !rec.Released() {
+			prev = &rec
+		}
 	}
 	preLedgerPrecondition(dr, cfg, claims)
-	hashes, _, _ := briefs.Baselines(b, claims)
+	hashes, _, carried, _ := briefs.RelockBaselines(b, claims, prev)
 	dr.Effect(fmt.Sprintf("%s's status is set to locked; every other byte stays as written", b.Path))
-	dr.Effect(fmt.Sprintf("the lock store records the brief's hash, your --reason, its approved text and %d rests_on baseline(s); a later change to one of those claims makes the brief review_pending", len(hashes)))
+	dr.Effect(fmt.Sprintf("the lock store records the brief's hash, the sha256 of each image it references, your --reason, its approved text and %d rests_on baseline(s); a later change to one of those claims makes the brief review_pending", len(hashes)))
+	if len(carried) > 0 {
+		dr.Effect(fmt.Sprintf("a re-lock: %d baseline(s) are kept from the standing approval (%s), so a claim that moved under the brief stays review_pending until brief reaudit --confirm", len(carried), strings.Join(carried, ", ")))
+	}
 	dr.Effect("no claim is touched: a brief gates no claim and sets review_pending on none")
-	dr.Propose("reason", reason).Propose("baselines", hashes)
+	if carried == nil {
+		carried = []string{}
+	}
+	dr.Propose("reason", reason).Propose("baselines", hashes).Propose("carried_baselines", carried)
 	return dr
 }
 
@@ -327,7 +367,7 @@ func newBriefUnlockCmd() *cobra.Command {
 	var reason string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "unlock <path>",
+		Use:   "unlock <path-or-id>",
 		Short: "Unlock a locked brief back to draft; --reason stamps the release on its record",
 		Long: "Unlock a brief. Its status becomes draft and its record in the lock store is\n" +
 			"kept and stamped released with --reason, as claim unlock does, so the evidence\n" +
@@ -389,18 +429,22 @@ func newBriefUnlockCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief unlock: %s: %w", b.Path, err)
 			}
-			// The file first: a release persisted while the file still says
-			// locked would read as a hand-flipped status (brief-unrecorded),
-			// which is loud; the reverse would leave a standing approval on a
-			// draft, which is quiet.
-			if err := rewriteBriefFile(cfg, b, raw, draft); err != nil {
-				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief unlock: %w", err)
-			}
+			// The release first, then the file. A failure between the two
+			// leaves the file saying locked on a released record, which check
+			// reports as brief-unrecorded — loud, and a re-run of this command
+			// finishes it. The reverse order left a draft on a standing record,
+			// which is brief-orphan now but used to be silent, and which this
+			// command would then refuse as not locked.
 			released := lock.ReleaseBriefApproval(store, b.ID, lock.Approval{Actor: lock.DefaultActor(), Reason: reason})
 			if released {
 				if err := store.Save(); err != nil {
-					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief unlock: %w", err)
+					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief unlock: %w", err).
+						WithHint("nothing was written; fix the write failure and run brief unlock again")
 				}
+			}
+			if err := rewriteBriefFile(cfg, b, raw, draft); err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "brief unlock: %w", err).
+					WithHint(fmt.Sprintf("the approval is released but %s still says status: locked (check reports brief-unrecorded): fix the write failure and run: dossierx brief unlock %s --reason \"<their words>\"", b.Path, b.Path))
 			}
 			data := briefUnlockData{ID: b.ID, Path: b.Path, Released: released, Reason: reason}
 			return cmdResult{
@@ -420,7 +464,7 @@ func newBriefReauditCmd() *cobra.Command {
 	var reason string
 	var confirm, dryRun bool
 	cmd := &cobra.Command{
-		Use:   "reaudit <path>",
+		Use:   "reaudit <path-or-id>",
 		Short: "Show what changed in the claims a locked brief rests on; --confirm --reason records the human's yes and refreshes the baselines",
 		Long: "Preview, for a locked brief, every rests_on claim whose content moved since the\n" +
 			"brief's baseline: its wording then and now. With --confirm and --reason, record the\n" +
@@ -512,7 +556,7 @@ func newBriefReauditCmd() *cobra.Command {
 			for _, c := range r.ChangedClaims {
 				ids = append(ids, c.ID)
 			}
-			if !lock.RecordBriefReaudit(store, b.ID, hashes, receipts, lock.Approval{Actor: lock.DefaultActor(), Reason: reason}, ids) {
+			if !lock.RecordBriefReaudit(store, b.ID, hashes, receipts, b.ImageDigests(), lock.Approval{Actor: lock.DefaultActor(), Reason: reason}, ids) {
 				return cmdResult{}, briefNotLocked("brief reaudit", b, r)
 			}
 			if err := store.Save(); err != nil {
@@ -581,14 +625,70 @@ func writeBriefReauditText(cmd *cobra.Command, d briefReauditData) {
 			continue
 		}
 		fmt.Fprintf(out, "  %s:\n", c.ID)
-		if c.Baseline == nil {
-			fmt.Fprintf(out, "    was: (%s)\n", c.BaselineNote)
-		} else {
-			fmt.Fprintf(out, "    was: %s\n", c.Baseline.Summary)
+		if c.Baseline == nil || c.Current == nil {
+			if c.Baseline == nil {
+				fmt.Fprintf(out, "    was: (%s)\n", c.BaselineNote)
+			}
+			if c.Current != nil {
+				fmt.Fprintf(out, "    now: %s\n", c.Current.Summary)
+			}
+			continue
 		}
-		if c.Current != nil {
-			fmt.Fprintf(out, "    now: %s\n", c.Current.Summary)
+		// A line diff of the wording a reader compares — summary, body and
+		// steps — so a body-only change shows up here as it does in the JSON.
+		for _, line := range wordingDiff(wordingLines(c.Baseline), wordingLines(c.Current)) {
+			fmt.Fprintf(out, "    %s\n", line)
 		}
 	}
 	fmt.Fprintf(out, "brief reaudit: the human confirms with dossierx brief reaudit %s --confirm --reason \"…\"\n", d.Path)
+}
+
+// wordingLines is a claim's wording as the lines a reaudit preview compares.
+func wordingLines(w *briefs.Wording) []string {
+	lines := []string{"summary: " + w.Summary}
+	for _, l := range strings.Split(strings.TrimRight(w.Body, "\n"), "\n") {
+		lines = append(lines, "body: "+l)
+	}
+	for i, st := range w.Steps {
+		lines = append(lines, fmt.Sprintf("step %d: %s", i+1, st))
+	}
+	return lines
+}
+
+// wordingDiff is a longest-common-subsequence line diff: "- " for a line only
+// the baseline has, "+ " for one only the current wording has, and "  " for a
+// line both keep. A claim's wording is short (its body is capped), so the
+// quadratic table is small.
+func wordingDiff(was, now []string) []string {
+	n, m := len(was), len(now)
+	lcs := make([][]int, n+1)
+	for i := range lcs {
+		lcs[i] = make([]int, m+1)
+	}
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			if was[i] == now[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else {
+				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
+			}
+		}
+	}
+	var out []string
+	i, j := 0, 0
+	for i < n || j < m {
+		switch {
+		case i < n && j < m && was[i] == now[j]:
+			out = append(out, "  "+was[i])
+			i++
+			j++
+		case j < m && (i == n || lcs[i][j+1] >= lcs[i+1][j]):
+			out = append(out, "+ "+now[j])
+			j++
+		default:
+			out = append(out, "- "+was[i])
+			i++
+		}
+	}
+	return out
 }

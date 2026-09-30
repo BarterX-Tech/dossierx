@@ -62,7 +62,7 @@ func (d *Deps) BriefAdd(ref string, actor model.CommentRole, body string) (brief
 	}
 	var tid string
 	b, err := d.mutateBrief(ref, func(path string) func(*model.Claim) error {
-		return addThreadOp(path, actor, body, &tid)
+		return addThreadOp(subjectBrief(path), actor, body, &tid)
 	})
 	if err != nil {
 		return briefs.Brief{}, "", err
@@ -80,7 +80,7 @@ func (d *Deps) BriefReply(ref, threadID string, actor model.CommentRole, body st
 	}
 	var rid string
 	b, err := d.mutateBrief(ref, func(path string) func(*model.Claim) error {
-		return replyOp(path, threadID, actor, body, &rid)
+		return replyOp(subjectBrief(path), threadID, actor, body, &rid)
 	})
 	if err != nil {
 		return briefs.Brief{}, "", err
@@ -94,7 +94,7 @@ func (d *Deps) BriefResolve(ref, threadID string, actor model.CommentRole) (brie
 		return briefs.Brief{}, err
 	}
 	return d.mutateBrief(ref, func(path string) func(*model.Claim) error {
-		return resolveOp(path, threadID, actor)
+		return resolveOp(subjectBrief(path), threadID, actor)
 	})
 }
 
@@ -104,7 +104,7 @@ func (d *Deps) BriefReopen(ref, threadID string, actor model.CommentRole) (brief
 		return briefs.Brief{}, err
 	}
 	return d.mutateBrief(ref, func(path string) func(*model.Claim) error {
-		return reopenOp(path, threadID, actor)
+		return reopenOp(subjectBrief(path), threadID, actor)
 	})
 }
 
@@ -117,7 +117,7 @@ func (d *Deps) BriefEdit(ref, threadID, replyID string, actor model.CommentRole,
 		return briefs.Brief{}, err
 	}
 	return d.mutateBrief(ref, func(path string) func(*model.Claim) error {
-		return editOp(path, threadID, replyID, actor, body)
+		return editOp(subjectBrief(path), threadID, replyID, actor, body)
 	})
 }
 
@@ -127,7 +127,7 @@ func (d *Deps) BriefDelete(ref, threadID, replyID string, actor model.CommentRol
 		return briefs.Brief{}, err
 	}
 	return d.mutateBrief(ref, func(path string) func(*model.Claim) error {
-		return deleteOp(path, threadID, replyID, actor)
+		return deleteOp(subjectBrief(path), threadID, replyID, actor)
 	})
 }
 

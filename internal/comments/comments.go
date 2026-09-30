@@ -152,7 +152,7 @@ func (d *Deps) Add(claimID string, actor model.CommentRole, body string) (model.
 		return model.Claim{}, "", err
 	}
 	var tid string
-	add := addThreadOp(claimID, actor, body, &tid)
+	add := addThreadOp(subjectClaim(claimID), actor, body, &tid)
 	c, err := d.mutate(claimID, func(c *model.Claim) error {
 		if c.Layout == model.LayoutBanner {
 			return fmt.Errorf("comments: claim %q: %w", claimID, ErrBannerClaim)
@@ -176,7 +176,7 @@ func (d *Deps) Reply(claimID, threadID string, actor model.CommentRole, body str
 		return model.Claim{}, "", err
 	}
 	var rid string
-	c, err := d.mutate(claimID, replyOp(claimID, threadID, actor, body, &rid))
+	c, err := d.mutate(claimID, replyOp(subjectClaim(claimID), threadID, actor, body, &rid))
 	if err != nil {
 		return model.Claim{}, "", err
 	}
@@ -191,7 +191,7 @@ func (d *Deps) Resolve(claimID, threadID string, actor model.CommentRole) (model
 	if err := validateActor(actor); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, resolveOp(claimID, threadID, actor))
+	return d.mutate(claimID, resolveOp(subjectClaim(claimID), threadID, actor))
 }
 
 // Reopen returns a resolved thread to open (recording the actor and time), and
@@ -200,7 +200,7 @@ func (d *Deps) Reopen(claimID, threadID string, actor model.CommentRole) (model.
 	if err := validateActor(actor); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, reopenOp(claimID, threadID, actor))
+	return d.mutate(claimID, reopenOp(subjectClaim(claimID), threadID, actor))
 }
 
 // Edit replaces the body of a thread root (replyID == "") or a specific reply,
@@ -212,7 +212,7 @@ func (d *Deps) Edit(claimID, threadID, replyID string, actor model.CommentRole, 
 	if err := validateBody(body); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, editOp(claimID, threadID, replyID, actor, body))
+	return d.mutate(claimID, editOp(subjectClaim(claimID), threadID, replyID, actor, body))
 }
 
 // Delete removes a whole thread (replyID == "") or a single reply. Rights key
@@ -222,7 +222,7 @@ func (d *Deps) Delete(claimID, threadID, replyID string, actor model.CommentRole
 	if err := validateActor(actor); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, deleteOp(claimID, threadID, replyID, actor))
+	return d.mutate(claimID, deleteOp(subjectClaim(claimID), threadID, replyID, actor))
 }
 
 // ErrReasonRequired: a recovery that re-adopts a comment block was called
@@ -827,26 +827,32 @@ func replyIndex(th *model.Comment, replyID string) int {
 	return -1
 }
 
-func threadNotFound(claimID, threadID string) error {
-	return fmt.Errorf("comments: thread %q on claim %q: %w", threadID, claimID, ErrThreadNotFound)
+// subjectClaim names a claim in an op's error: `claim "<id>"`, the wording
+// every claim message has always had. subjectBrief names a brief by its path.
+func subjectClaim(id string) string { return fmt.Sprintf("claim %q", id) }
+
+func subjectBrief(path string) string { return "brief " + path }
+
+func threadNotFound(subject, threadID string) error {
+	return fmt.Errorf("comments: thread %q on %s: %w", threadID, subject, ErrThreadNotFound)
 }
 
-func replyNotFound(claimID, threadID, replyID string) error {
-	return fmt.Errorf("comments: reply %q in thread %q on claim %q: %w", replyID, threadID, claimID, ErrReplyNotFound)
+func replyNotFound(subject, threadID, replyID string) error {
+	return fmt.Errorf("comments: reply %q in thread %q on %s: %w", replyID, threadID, subject, ErrReplyNotFound)
 }
 
-func rightsDenied(claimID, threadID string) error {
-	return fmt.Errorf("comments: thread %q on claim %q: %w", threadID, claimID, ErrRightsDenied)
+func rightsDenied(subject, threadID string) error {
+	return fmt.Errorf("comments: thread %q on %s: %w", threadID, subject, ErrRightsDenied)
 }
 
 // The thread operations, one per op, shared by the claim-keyed methods above
 // and the brief methods (briefs.go). Each takes the subject's name for its
-// error messages — a claim id, or a brief's path — and operates on the thread
+// error messages — subjectClaim(id) or subjectBrief(path) — and operates on the thread
 // list inside c; a brief's threads are handed in on a carrier model.Claim whose
 // only populated fields are ID and Comments, so ids, rights and thread states
 // are judged by exactly one implementation.
 
-func addThreadOp(claimID string, actor model.CommentRole, body string, tid *string) func(c *model.Claim) error {
+func addThreadOp(subject string, actor model.CommentRole, body string, tid *string) func(c *model.Claim) error {
 	return func(c *model.Claim) error {
 		used, err := backfillIDs(c)
 		if err != nil {
@@ -868,7 +874,7 @@ func addThreadOp(claimID string, actor model.CommentRole, body string, tid *stri
 	}
 }
 
-func replyOp(claimID, threadID string, actor model.CommentRole, body string, rid *string) func(c *model.Claim) error {
+func replyOp(subject, threadID string, actor model.CommentRole, body string, rid *string) func(c *model.Claim) error {
 	return func(c *model.Claim) error {
 		used, err := backfillIDs(c)
 		if err != nil {
@@ -876,10 +882,10 @@ func replyOp(claimID, threadID string, actor model.CommentRole, body string, rid
 		}
 		th, ok := findThread(c, threadID)
 		if !ok {
-			return threadNotFound(claimID, threadID)
+			return threadNotFound(subject, threadID)
 		}
 		if th.Status != model.CommentStatusOpen {
-			return fmt.Errorf("comments: thread %q on claim %q: %w", threadID, claimID, ErrThreadResolved)
+			return fmt.Errorf("comments: thread %q on %s: %w", threadID, subject, ErrThreadResolved)
 		}
 		*rid, err = mintUniqueID(replyIDPrefix, used)
 		if err != nil {
@@ -896,20 +902,20 @@ func replyOp(claimID, threadID string, actor model.CommentRole, body string, rid
 	}
 }
 
-func resolveOp(claimID, threadID string, actor model.CommentRole) func(c *model.Claim) error {
+func resolveOp(subject, threadID string, actor model.CommentRole) func(c *model.Claim) error {
 	return func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
 		th, ok := findThread(c, threadID)
 		if !ok {
-			return threadNotFound(claimID, threadID)
+			return threadNotFound(subject, threadID)
 		}
 		if !canAct(actor, th.Author) {
-			return rightsDenied(claimID, threadID)
+			return rightsDenied(subject, threadID)
 		}
 		if th.Status != model.CommentStatusOpen {
-			return fmt.Errorf("comments: thread %q on claim %q: %w", threadID, claimID, ErrThreadResolved)
+			return fmt.Errorf("comments: thread %q on %s: %w", threadID, subject, ErrThreadResolved)
 		}
 		th.Status = model.CommentStatusResolved
 		th.ResolvedBy = actor
@@ -918,20 +924,20 @@ func resolveOp(claimID, threadID string, actor model.CommentRole) func(c *model.
 	}
 }
 
-func reopenOp(claimID, threadID string, actor model.CommentRole) func(c *model.Claim) error {
+func reopenOp(subject, threadID string, actor model.CommentRole) func(c *model.Claim) error {
 	return func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
 		th, ok := findThread(c, threadID)
 		if !ok {
-			return threadNotFound(claimID, threadID)
+			return threadNotFound(subject, threadID)
 		}
 		if !canAct(actor, th.Author) {
-			return rightsDenied(claimID, threadID)
+			return rightsDenied(subject, threadID)
 		}
 		if th.Status != model.CommentStatusResolved {
-			return fmt.Errorf("comments: thread %q on claim %q: %w", threadID, claimID, ErrThreadOpen)
+			return fmt.Errorf("comments: thread %q on %s: %w", threadID, subject, ErrThreadOpen)
 		}
 		th.Status = model.CommentStatusOpen
 		th.ReopenedBy = actor
@@ -940,28 +946,28 @@ func reopenOp(claimID, threadID string, actor model.CommentRole) func(c *model.C
 	}
 }
 
-func editOp(claimID, threadID, replyID string, actor model.CommentRole, body string) func(c *model.Claim) error {
+func editOp(subject, threadID, replyID string, actor model.CommentRole, body string) func(c *model.Claim) error {
 	return func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
 		th, ok := findThread(c, threadID)
 		if !ok {
-			return threadNotFound(claimID, threadID)
+			return threadNotFound(subject, threadID)
 		}
 		if replyID == "" {
 			if !canAct(actor, th.Author) {
-				return rightsDenied(claimID, threadID)
+				return rightsDenied(subject, threadID)
 			}
 			th.Body = body
 			th.Edited = true
 		} else {
 			rp, ok := findReply(th, replyID)
 			if !ok {
-				return replyNotFound(claimID, threadID, replyID)
+				return replyNotFound(subject, threadID, replyID)
 			}
 			if !canAct(actor, rp.Author) {
-				return rightsDenied(claimID, threadID)
+				return rightsDenied(subject, threadID)
 			}
 			rp.Body = body
 			rp.Edited = true
@@ -970,27 +976,27 @@ func editOp(claimID, threadID, replyID string, actor model.CommentRole, body str
 	}
 }
 
-func deleteOp(claimID, threadID, replyID string, actor model.CommentRole) func(c *model.Claim) error {
+func deleteOp(subject, threadID, replyID string, actor model.CommentRole) func(c *model.Claim) error {
 	return func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
 		ti := threadIndex(c, threadID)
 		if ti < 0 {
-			return threadNotFound(claimID, threadID)
+			return threadNotFound(subject, threadID)
 		}
 		if replyID == "" {
 			if !canAct(actor, c.Comments[ti].Author) {
-				return rightsDenied(claimID, threadID)
+				return rightsDenied(subject, threadID)
 			}
 			c.Comments = append(c.Comments[:ti], c.Comments[ti+1:]...)
 		} else {
 			ri := replyIndex(&c.Comments[ti], replyID)
 			if ri < 0 {
-				return replyNotFound(claimID, threadID, replyID)
+				return replyNotFound(subject, threadID, replyID)
 			}
 			if !canAct(actor, c.Comments[ti].Replies[ri].Author) {
-				return rightsDenied(claimID, threadID)
+				return rightsDenied(subject, threadID)
 			}
 			c.Comments[ti].Replies = append(c.Comments[ti].Replies[:ri], c.Comments[ti].Replies[ri+1:]...)
 		}

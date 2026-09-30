@@ -77,6 +77,15 @@ type BriefRecord struct {
 	// Approved is the text behind Hash.
 	Approved BriefApproved `json:"approved"`
 
+	// Images is the sha256 of every image the approved brief references, by
+	// file name. Hash signs the markdown alone — it is the hash a claim's
+	// internal source pin on the brief file compares against, so it stays the
+	// file's — and the images are signed here beside it: a referenced image
+	// whose bytes change, or a change to the set referenced, is
+	// brief-content-drift. Always written (an empty map for a brief with no
+	// image); a record without the key compares as "no images approved".
+	Images map[string]string `json:"images"`
+
 	// Baselines is ContentHash of every rests_on claim as of the lock or the
 	// last confirmed reaudit, keyed by claim id — the same shape as a claim's
 	// dependency baselines (Store.Hashes[dependent]). Receipts keeps each of
@@ -129,13 +138,17 @@ func RecordBriefApproval(store *Store, id string, rec BriefRecord) {
 // the claims as they read now and appends the human's confirmation. The
 // brief's own hash, approval time and approved text are untouched: a reaudit
 // accepts moved claims, it does not re-approve the brief's words.
-func RecordBriefReaudit(store *Store, id string, baselines map[string]string, receipts map[string]model.Claim, ap Approval, claimIDs []string) bool {
+func RecordBriefReaudit(store *Store, id string, baselines map[string]string, receipts map[string]model.Claim, images map[string]string, ap Approval, claimIDs []string) bool {
 	r, ok := store.BriefRecordFor(id)
 	if !ok || r.Released() {
 		return false
 	}
 	r.Baselines = baselines
 	r.Receipts = receipts
+	// The caller refuses a brief whose content — images included — moved
+	// since approval, so this re-records the images the approval already
+	// signed; it can never widen the approval to a changed image.
+	r.Images = images
 	r.Reaudits = append(r.Reaudits, BriefReaudit{
 		At:     nowFunc().UTC().Format(time.RFC3339Nano),
 		Actor:  ap.Actor,

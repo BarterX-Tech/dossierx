@@ -375,13 +375,6 @@ func DecodeStore(raw []byte) (*Store, error) {
 	if err := dec.Decode(&probe); err != nil {
 		return nil, fmt.Errorf("lock: decode store: %w", err)
 	}
-	for key := range probe {
-		switch key {
-		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger", "constitution", "briefs":
-		default:
-			return nil, fmt.Errorf("lock: decode store: unknown key %q", key)
-		}
-	}
 	versionRaw, ok := probe["version"]
 	if !ok {
 		return nil, fmt.Errorf("lock: decode store: no version field")
@@ -389,6 +382,18 @@ func DecodeStore(raw []byte) (*Store, error) {
 	var version int
 	if err := json.Unmarshal(versionRaw, &version); err != nil {
 		return nil, fmt.Errorf("lock: decode store: version: %w", err)
+	}
+	if version > briefsSchemaVersion {
+		return nil, fmt.Errorf("%w: version %d; this dossierx writes at most version %d — upgrade dossierx", ErrStoreTooNew, version, briefsSchemaVersion)
+	}
+	// A newer store is named as one before its keys are judged: a key this
+	// binary does not know is exactly what a newer store carries.
+	for key := range probe {
+		switch key {
+		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger", "constitution", "briefs":
+		default:
+			return nil, fmt.Errorf("lock: decode store: unknown key %q", key)
+		}
 	}
 	if version != nestedHashSchemaVersion && version != storeSchemaVersion && version != briefsSchemaVersion {
 		return nil, fmt.Errorf("lock: decode store: version %d is not one this engine writes", version)
@@ -437,6 +442,18 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
+	}
+	// A store from a NEWER binary is refused, never read: reading it would
+	// work, and the next save would drop every key this binary does not
+	// know — which is exactly how a v0.7.21 write erases the briefs map. The
+	// strict decoder refuses the same versions (DecodeStore).
+	if onDisk.Version > briefsSchemaVersion {
+		return nil, fmt.Errorf("%w: %s is version %d; this dossierx writes at most version %d. Upgrade dossierx (every binary that touches the project: the pre-commit hook's, CI's, each collaborator's) — an older binary would drop what it does not know on its next write", ErrStoreTooNew, displayOr(path), onDisk.Version, briefsSchemaVersion)
+	}
+	// The briefs map landed at version 4 (the strict decoder's rule too): a
+	// lower version carrying one was not written by any dossierx.
+	if onDisk.Briefs != nil && onDisk.Version < briefsSchemaVersion {
+		return nil, fmt.Errorf("lock: parse store %s: version %d carries a briefs map, which only version %d stores hold", path, onDisk.Version, briefsSchemaVersion)
 	}
 	if onDisk.LockedAt != nil {
 		s.LockedAt = onDisk.LockedAt
@@ -980,6 +997,21 @@ func writeContentHashUint64(w hash.Hash, value uint64) {
 // error code, and the recovery — an ordered sequence of
 // ordinary commands — has to be reachable from the envelope rather than only
 // from the prose.
+// ErrStoreTooNew is a lock store written by a newer dossierx than this one
+// (its version is above every version this binary knows). It is refused on
+// read, strictly and leniently, so this binary never rewrites — and so never
+// drops — what the newer one recorded.
+var ErrStoreTooNew = errors.New("lock: the lock store was written by a newer dossierx")
+
+// displayOr names a store path for a message, or "the lock store" for an
+// in-memory blob.
+func displayOr(path string) string {
+	if path == "" {
+		return "the lock store"
+	}
+	return path
+}
+
 var ErrPreLedgerUnadopted = errors.New("lock: this project's lock store predates the lock ledger and still holds locked artifacts")
 
 // Unlock transitions claim back to draft. This is always human-initiated

@@ -2,7 +2,9 @@ package briefs
 
 import (
 	"fmt"
+	"path"
 	"sort"
+	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
@@ -37,7 +39,23 @@ const (
 	// record at all, or one an unlock released. `status: locked` typed by
 	// hand approves nothing.
 	RuleUnrecorded = "brief-unrecorded"
+	// RuleOrphan: a brief with status draft that still holds a STANDING
+	// record. `brief unlock` releases the record before it rewrites the file,
+	// so no honest sequence leaves this state: the status was flipped to draft
+	// by hand, which frees the brief for edits nobody approved. The twin of
+	// lock-ledger-orphan.
+	RuleOrphan = "brief-orphan"
+	// RuleAbandoned: a standing record whose brief is gone. Deleting (or
+	// renaming) a locked brief's file removes it from every rule that starts
+	// from the briefs that exist; the record is the evidence the deletion did
+	// not reach. Unlock first, then delete. The twin of lock-ledger-abandoned.
+	RuleAbandoned = "brief-abandoned"
 )
+
+// IntegrityRules is the four integrity findings of a brief's lock, the
+// ledger-side counterpart of Rules: surface and the fixture corpus
+// (testdata/fixture-coverage/brief) inventory them by this list.
+var IntegrityRules = []string{RuleAbandoned, RuleContentDrift, RuleOrphan, RuleUnrecorded}
 
 // LockState is a brief's state against its record.
 type LockState string
@@ -194,6 +212,13 @@ func evaluate(set *Set, claims []model.Claim, store *lock.Store, compare bool) *
 			r.Approved = &approved
 		}
 		if b.Status != StatusLocked {
+			if standing {
+				e.Integrity = append(e.Integrity, lock.Finding{
+					Rule:    RuleOrphan,
+					ClaimID: b.Path,
+					Message: fmt.Sprintf("%s says status: draft but still holds the standing approval of %s (%q): brief unlock releases the record before it changes the file, so the status was set to draft by hand — which frees the brief for edits nobody approved. Restore the file's status: locked from version control (and any edit made since); to change the brief, dossierx brief unlock %s --reason \"<their words>\" is the path that leaves a record.", b.Path, rec.At, rec.Reason, b.Path),
+				})
+			}
 			e.Reviews[b.ID] = r
 			continue
 		}
@@ -204,12 +229,12 @@ func evaluate(set *Set, claims []model.Claim, store *lock.Store, compare bool) *
 			continue
 		}
 		r.LockState = LockLocked
-		if rec.Hash != b.LockHash {
+		if moved := ContentMoved(b, rec); moved != "" {
 			r.LockState = LockEdited
 			e.Integrity = append(e.Integrity, lock.Finding{
 				Rule:    RuleContentDrift,
 				ClaimID: b.Path,
-				Message: fmt.Sprintf("%s is locked, and its summary, rests_on or body has changed since it was approved on %s (%q). Its approved text is kept in %s. Either the human re-approves the edit — dossierx brief lock %s --reason \"<their words>\" signs the brief as it reads now — or restore the file from version control. Do not re-lock to make this go away without the human's yes: re-locking records whatever the file says now as approved.", b.Path, rec.At, rec.Reason, config.LockStoreDisplayPath, b.Path),
+				Message: fmt.Sprintf("%s is locked, and %s since it was approved on %s (%q). Its approved text is kept in %s. Either the human re-approves the edit — dossierx brief lock %s --reason \"<their words>\" signs the brief as it reads now, and keeps the rests_on baselines, so a claim change stays for brief reaudit — or restore the file from version control. Do not re-lock to make this go away without the human's yes: re-locking records whatever the file says now as approved.", b.Path, moved, rec.At, rec.Reason, config.LockStoreDisplayPath, b.Path),
 			})
 		}
 		if !compare {
@@ -262,6 +287,7 @@ func evaluate(set *Set, claims []model.Claim, store *lock.Store, compare bool) *
 		}
 		e.Reviews[b.ID] = r
 	}
+	e.Integrity = append(e.Integrity, abandonedFindings(set, store)...)
 	sortFindings(e.Lint)
 	sort.SliceStable(e.Integrity, func(i, j int) bool {
 		if e.Integrity[i].ClaimID != e.Integrity[j].ClaimID {
@@ -273,18 +299,100 @@ func evaluate(set *Set, claims []model.Claim, store *lock.Store, compare bool) *
 }
 
 func unrecordedFinding(b Brief, store *lock.Store, rec lock.BriefRecord, has bool) lock.Finding {
+	if store != nil && store.OnDiskVersion() >= 4 && store.Briefs == nil {
+		// The dropped-map signature: a store that has been at the briefs
+		// schema carries no briefs map at all. Every dossierx that knows the
+		// map keeps it, so an OLDER binary rewrote the store (v0.7.21's claim
+		// lock, constitution lock and comment ops do) and every brief record
+		// went with it. Re-locking would record the files as they read now and
+		// drop each brief's baselines — the pending reviews — with them.
+		return lock.Finding{
+			Rule:    RuleUnrecorded,
+			ClaimID: b.Path,
+			Message: fmt.Sprintf("%s says status: locked, and %s is at version %d but holds no briefs map: an older dossierx rewrote the store and dropped every brief's approval record. Restore %s from the commit before that write (git log -p -- %s shows it), then upgrade the binary that wrote it. Do NOT re-lock: re-locking records the brief as it reads now and discards its rests_on baselines, and with them any review still pending.", b.Path, config.LockStoreDisplayPath, store.OnDiskVersion(), config.LockStoreDisplayPath, config.LockStoreDisplayPath),
+		}
+	}
 	why := "the lock store holds no approval record for it"
 	switch {
 	case store == nil:
 		why = "the lock store could not be read, so there is no evidence it was approved (the unreadable store is reported above)"
 	case has && rec.Released():
-		why = fmt.Sprintf("its approval was released by an unlock on %s (%q), and status was set back to locked by hand", rec.ReleasedAt, rec.ReleasedReason)
+		why = fmt.Sprintf("its approval was released by an unlock on %s (%q), and the file still says locked — set back by hand, or an unlock whose file write failed", rec.ReleasedAt, rec.ReleasedReason)
 	}
 	return lock.Finding{
 		Rule:    RuleUnrecorded,
 		ClaimID: b.Path,
 		Message: fmt.Sprintf("%s says status: locked, but %s. A status typed by hand approves nothing. If the human approves the brief as it reads, dossierx brief lock %s --reason \"<their words>\" records it; otherwise set status back to draft (or restore %s from version control).", b.Path, why, b.Path, config.LockStoreDisplayPath),
 	}
+}
+
+// ContentMoved names what of a locked brief no longer matches its record — the
+// markdown (summary, rests_on, body) and each image referenced, added, removed
+// or changed — or "" when nothing moved.
+func ContentMoved(b Brief, rec lock.BriefRecord) string {
+	var parts []string
+	if rec.Hash != b.LockHash {
+		parts = append(parts, "its summary, rests_on or body has changed")
+	}
+	now := b.ImageDigests()
+	var changed []string
+	for name, digest := range now {
+		if was, ok := rec.Images[name]; !ok {
+			changed = append(changed, fmt.Sprintf("image %q is newly referenced", name))
+		} else if was != digest {
+			changed = append(changed, fmt.Sprintf("image %q has changed", name))
+		}
+	}
+	for name := range rec.Images {
+		if _, ok := now[name]; !ok {
+			changed = append(changed, fmt.Sprintf("image %q is no longer referenced (or is gone)", name))
+		}
+	}
+	sort.Strings(changed)
+	parts = append(parts, changed...)
+	return strings.Join(parts, "; ")
+}
+
+// abandonedFindings is brief-abandoned: every standing record whose brief is no
+// longer in the tree, named by the path it was locked at.
+func abandonedFindings(set *Set, store *lock.Store) []lock.Finding {
+	if store == nil {
+		return nil
+	}
+	present := make(map[string]bool, len(set.Briefs))
+	for _, b := range set.Briefs {
+		present[b.ID] = true
+	}
+	var out []lock.Finding
+	for id, rec := range store.Briefs {
+		if present[id] || rec.Released() {
+			continue
+		}
+		where := rec.Path
+		if where == "" {
+			where = PathOf(set, id)
+		}
+		out = append(out, lock.Finding{
+			Rule:    RuleAbandoned,
+			ClaimID: where,
+			Message: fmt.Sprintf("%s holds a standing approval (%s, %q) for the brief %s, which is no longer in the project: its file was deleted or renamed, and every rule that starts from the briefs that exist went quiet. Restore it from version control; to remove a locked brief, dossierx brief unlock %s --reason \"<their words>\" first, then delete it, so the withdrawal is on the record.", config.LockStoreDisplayPath, rec.At, rec.Reason, where, id),
+		})
+	}
+	return out
+}
+
+// PathOf is the path a brief id names under set's briefs_dir: an id is
+// <folder>.<slug> and neither name may hold a dot, so the split is exact.
+func PathOf(set *Set, id string) string {
+	dir := config.DefaultBriefsDir
+	if set != nil {
+		dir = set.DisplayDir
+	}
+	folder, slug, ok := strings.Cut(id, ".")
+	if !ok {
+		return path.Join(dir, id)
+	}
+	return path.Join(dir, folder, slug+briefExt)
 }
 
 // changedAt is when c's current content was approved: its standing ledger
@@ -315,6 +423,44 @@ func baselineWording(store *lock.Store, rec lock.BriefRecord, id, hash string) (
 		return wordingOf(c), ""
 	}
 	return nil, UnavailableWording
+}
+
+// RelockBaselines is what `brief lock` records over a STANDING record prev (a
+// re-lock of an edited brief): the baselines and receipts prev holds for every
+// rests_on id still listed are carried forward unchanged, a newly listed claim
+// is baselined as it reads now, and an id no longer listed is dropped. A
+// re-lock approves the brief's own words; it must not also accept, unseen, a
+// claim that moved under the brief — that stays review-pending until `brief
+// reaudit --confirm`, the command that shows the change. carried is the ids
+// whose baselines came from prev. prev nil (no record, or a released one) is
+// Baselines: a fresh approval baselines every claim.
+func RelockBaselines(b Brief, claims []model.Claim, prev *lock.BriefRecord) (hashes map[string]string, receipts map[string]model.Claim, carried, unknown []string) {
+	hashes, receipts, unknown = Baselines(b, claims)
+	if prev == nil {
+		return hashes, receipts, nil, unknown
+	}
+	for _, id := range b.RestsOn {
+		base, ok := prev.Baselines[id]
+		if !ok {
+			continue
+		}
+		hashes[id] = base
+		if c, ok := prev.Receipts[id]; ok {
+			receipts[id] = c
+		} else {
+			delete(receipts, id)
+		}
+		carried = append(carried, id)
+	}
+	// A carried claim that no longer exists is not unknown to the lock: its
+	// baseline stands, and brief-rests-on-missing reports it.
+	var stillUnknown []string
+	for _, id := range unknown {
+		if _, ok := prev.Baselines[id]; !ok {
+			stillUnknown = append(stillUnknown, id)
+		}
+	}
+	return hashes, receipts, carried, stillUnknown
 }
 
 // Baselines returns the baseline hash and receipt of every claim b rests on

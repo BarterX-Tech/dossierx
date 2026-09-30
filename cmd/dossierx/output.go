@@ -23,6 +23,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -405,6 +406,13 @@ func usageErrorForCLI(err error) *cliout.Error {
 // cliout.ExitCode for why the three we have are enough now that error.code
 // carries the detail.
 func errorForCLI(err error) *cliout.Error {
+	// A store from a newer dossierx outranks whatever code the call site
+	// attached (most wrap a store load as write_failed): the one thing to do
+	// is upgrade this binary, and no other code says so.
+	if errors.Is(err, lock.ErrStoreTooNew) || errors.Is(err, digest.ErrStoreTooNew) {
+		return &cliout.Error{Code: cliout.CodeStoreTooNew, Message: err.Error(),
+			Hint: "upgrade dossierx to the release that wrote this store (dossierx version names this one); do not edit or restore the store to make an older binary read it"}
+	}
 	if e := cliout.As(err); e != nil {
 		return e
 	}
@@ -521,9 +529,9 @@ var reasonInvocations = map[string]string{
 	"claim recover-approved-content": "dossierx claim recover-approved-content",
 	"claim unlock":                   "dossierx claim unlock <id>",
 	"claim reaudit":                  "dossierx claim reaudit <id> --confirm",
-	"brief lock":                     "dossierx brief lock <path>",
-	"brief unlock":                   "dossierx brief unlock <path>",
-	"brief reaudit":                  "dossierx brief reaudit <path> --confirm",
+	"brief lock":                     "dossierx brief lock <path-or-id>",
+	"brief unlock":                   "dossierx brief unlock <path-or-id>",
+	"brief reaudit":                  "dossierx brief reaudit <path-or-id> --confirm",
 }
 
 func requireReason(verb, reason string) error {

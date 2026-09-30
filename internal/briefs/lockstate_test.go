@@ -1,6 +1,7 @@
 package briefs
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -64,7 +65,8 @@ func TestEvaluate_TheLockStatesAndTheirFindings(t *testing.T) {
 		want      []string // "rule path"
 	}{
 		{name: "draft, no record", status: "draft", evalWith: claims, wantState: LockDraft},
-		{name: "draft with a record whose claims moved is never pending", status: "draft", record: true, evalWith: moved, wantState: LockDraft},
+		{name: "draft on a standing record: orphaned, never pending", status: "draft", record: true, evalWith: moved, wantState: LockDraft, want: []string{"brief-orphan briefs/flow/overview.md"}},
+		{name: "draft on a released record", status: "draft", record: true, release: true, evalWith: moved, wantState: LockDraft},
 		{name: "locked and unchanged", status: "locked", record: true, evalWith: claims, wantState: LockLocked},
 		{name: "locked, no record", status: "locked", evalWith: claims, wantState: LockUnrecorded, want: []string{"brief-unrecorded briefs/flow/overview.md"}},
 		{name: "locked on a released record", status: "locked", record: true, release: true, evalWith: claims, wantState: LockUnrecorded, want: []string{"brief-unrecorded briefs/flow/overview.md"}},
@@ -203,5 +205,109 @@ func TestLockHash_SignsWhatAReaderReadsAndNothingElse(t *testing.T) {
 	}
 	if locked.OpenThreads() != 1 {
 		t.Errorf("open threads = %d, want 1", locked.OpenThreads())
+	}
+}
+
+// TestEvaluate_ADroppedBriefsMapSaysRestoreNotRelock pins F4: a store that is
+// at the briefs schema but carries no briefs map is the signature of an older
+// binary's write, and brief-unrecorded then says to restore the store from
+// before that write and NOT to re-lock (which would discard the baselines and
+// any review pending). A store that never held a record keeps the ordinary
+// message, which offers the lock.
+func TestEvaluate_ADroppedBriefsMapSaysRestoreNotRelock(t *testing.T) {
+	claims := []model.Claim{claimFor("widget.contract.a", "a"), claimFor("widget.contract.b", "b")}
+	set := lockedSet(t, "locked")
+	for _, tc := range []struct {
+		raw     string
+		dropped bool
+	}{
+		{`{"version":4,"hashes":{},"locked_at":{}}`, true},
+		{`{"version":3,"hashes":{},"locked_at":{}}`, false},
+	} {
+		path := filepath.Join(t.TempDir(), "lock-store.json")
+		if err := os.WriteFile(path, []byte(tc.raw), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		store, err := lock.LoadStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := Evaluate(set, claims, store)
+		if len(e.Integrity) != 1 || e.Integrity[0].Rule != RuleUnrecorded {
+			t.Fatalf("%s: want one brief-unrecorded, got %+v", tc.raw, e.Integrity)
+		}
+		msg := e.Integrity[0].Message
+		if says := strings.Contains(msg, "Do NOT re-lock") && strings.Contains(msg, "older dossierx"); says != tc.dropped {
+			t.Fatalf("%s: dropped-map wording = %v, want %v:\n%s", tc.raw, says, tc.dropped, msg)
+		}
+	}
+}
+
+// TestEvaluate_TheImagesAreSignedBesideTheMarkdown pins F8 at the owner: a
+// locked brief whose referenced image changed bytes, or whose set of referenced
+// images changed, is brief-content-drift naming the image, while the lock hash
+// (the markdown's) does not move for an image change.
+func TestEvaluate_TheImagesAreSignedBesideTheMarkdown(t *testing.T) {
+	cfg := testConfig(t, t.TempDir(), "")
+	body := func(refs string) File {
+		return md("---\nsummary: A brief.\nstatus: locked\n---\n# Flow\n\n" + refs + "\n")
+	}
+	img := func(b string) File { return File{Regular: true, Data: []byte(b), Size: int64(len(b))} }
+	approved := FromFiles(cfg, tree(map[string]File{"flow/overview.md": body("![a](a.svg)"), "flow/a.svg": img("<svg>a</svg>")}))
+	store, err := lock.LoadStore(filepath.Join(t.TempDir(), "lock-store.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := approved.Briefs[0]
+	lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{Path: b.Path, Hash: b.LockHash, Images: b.ImageDigests()})
+
+	for _, tc := range []struct {
+		name  string
+		files map[string]File
+		want  string
+	}{
+		{"unchanged", map[string]File{"flow/overview.md": body("![a](a.svg)"), "flow/a.svg": img("<svg>a</svg>")}, ""},
+		{"bytes changed", map[string]File{"flow/overview.md": body("![a](a.svg)"), "flow/a.svg": img("<svg>swapped</svg>")}, `image "a.svg" has changed`},
+		{"a new image referenced", map[string]File{"flow/overview.md": body("![a](a.svg) ![b](b.svg)"), "flow/a.svg": img("<svg>a</svg>"), "flow/b.svg": img("<svg>b</svg>")}, `image "b.svg" is newly referenced`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			set := FromFiles(cfg, tree(tc.files))
+			if tc.name == "bytes changed" && set.Briefs[0].LockHash != b.LockHash {
+				t.Fatal("an image's bytes must not move the markdown's lock hash")
+			}
+			e := Evaluate(set, nil, store)
+			var got string
+			for _, f := range e.Integrity {
+				if f.Rule == RuleContentDrift {
+					got = f.Message
+				}
+			}
+			if tc.want == "" && got != "" || tc.want != "" && !strings.Contains(got, tc.want) {
+				t.Fatalf("content drift = %q, want it to name %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEvaluate_ChangedAtIsTheCurrentContentsApproval pins F13's changed_at
+// guard: a moved claim that is locked on a standing record signing it as it
+// reads now reports that record's time; the same claim as a draft (its record
+// no longer describes it) reports none.
+func TestEvaluate_ChangedAtIsTheCurrentContentsApproval(t *testing.T) {
+	claims := []model.Claim{claimFor("widget.contract.a", "a"), claimFor("widget.contract.b", "b")}
+	set := lockedSet(t, "locked")
+	store := recordFor(t, set, claims)
+	moved := claimFor("widget.contract.a", "a, rewritten")
+	moved.Status = model.StatusLocked
+	lock.RecordApproval(store, moved, lock.Approval{Actor: "a", Reason: "re-approved"})
+	rec, _ := store.Record(moved.ID)
+
+	c := Evaluate(set, []model.Claim{moved, claims[1]}, store).Review(set.Briefs[0]).ChangedClaims[0]
+	if c.ChangedAt != rec.At || c.ChangedAt == "" {
+		t.Fatalf("changed_at of a re-approved claim = %q, want %q", c.ChangedAt, rec.At)
+	}
+	moved.Status = model.StatusDraft
+	if c := Evaluate(set, []model.Claim{moved, claims[1]}, store).Review(set.Briefs[0]).ChangedClaims[0]; c.ChangedAt != "" {
+		t.Fatalf("changed_at of a draft claim = %q, want none", c.ChangedAt)
 	}
 }

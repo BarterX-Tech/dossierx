@@ -2,6 +2,7 @@ package lock
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -150,5 +151,37 @@ func TestBriefRecordsNeverReachAClaimRule(t *testing.T) {
 	}
 	if got := Audit([]model.Claim{claim}, s, nil); !reflect.DeepEqual(got, auditBefore) {
 		t.Fatalf("a brief record changed the claim audit: %+v, was %+v", got, auditBefore)
+	}
+}
+
+// TestAStoreFromANewerBinaryIsRefusedNotRead pins F5 and F14 on both readers:
+// a store whose version is above every version this binary knows is refused
+// with ErrStoreTooNew — by LoadStore as well as DecodeStore, since reading it
+// leniently and saving is how an older binary drops what it does not know —
+// and a version-3 store carrying a briefs map is refused by both readers alike.
+func TestAStoreFromANewerBinaryIsRefusedNotRead(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name, raw string
+		tooNew    bool
+	}{
+		{"version 9", `{"version":9,"future_key":{}}`, true},
+		{"version 5", `{"version":5}`, true},
+		{"version 3 with briefs", `{"version":3,"briefs":{"a.b":{"hash":"h"}}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(dir, strings.ReplaceAll(tc.name, " ", "-")+".json")
+			if err := os.WriteFile(path, []byte(tc.raw), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, lenient := LoadStore(path)
+			_, strict := DecodeStore([]byte(tc.raw))
+			if lenient == nil || strict == nil {
+				t.Fatalf("both readers must refuse: LoadStore %v, DecodeStore %v", lenient, strict)
+			}
+			if tc.tooNew != errors.Is(lenient, ErrStoreTooNew) || tc.tooNew != errors.Is(strict, ErrStoreTooNew) {
+				t.Fatalf("ErrStoreTooNew = %v / %v, want %v", errors.Is(lenient, ErrStoreTooNew), errors.Is(strict, ErrStoreTooNew), tc.tooNew)
+			}
+		})
 	}
 }

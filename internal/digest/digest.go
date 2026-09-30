@@ -35,6 +35,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,6 +54,11 @@ var nowFunc = time.Now
 // StoreSchemaVersion is the on-disk schema version of the comment digest
 // store. Version 1 is its first shipped shape.
 const StoreSchemaVersion = 1
+
+// ErrStoreTooNew is a comment digest store written by a newer dossierx than
+// this one. It is refused on read, strictly and leniently, so this binary never
+// rewrites it and drops what the newer one recorded.
+var ErrStoreTooNew = errors.New("digest: the comment digest store was written by a newer dossierx")
 
 // digestVersion is the version of the DIGEST ALGORITHM below, mixed in as a
 // domain separator. Bumping it invalidates every recorded digest (every claim
@@ -209,6 +215,9 @@ func DecodeStore(raw []byte) (*Store, error) {
 	if probe.Version == nil {
 		return nil, fmt.Errorf("digest: decode store: no version field")
 	}
+	if *probe.Version > StoreSchemaVersion {
+		return nil, fmt.Errorf("%w: version %d; this dossierx writes version %d — upgrade dossierx", ErrStoreTooNew, *probe.Version, StoreSchemaVersion)
+	}
 	if *probe.Version != StoreSchemaVersion {
 		return nil, fmt.Errorf("digest: decode store: version %d is not one this engine writes", *probe.Version)
 	}
@@ -235,6 +244,11 @@ func decodeInto(s *Store, raw []byte, strict bool) error {
 	}
 	if err := dec.Decode(&onDisk); err != nil {
 		return err
+	}
+	// A store from a newer binary is refused rather than read: the next save
+	// would drop whatever this binary does not know. See ErrStoreTooNew.
+	if onDisk.Version > StoreSchemaVersion {
+		return fmt.Errorf("%w: version %d; this dossierx writes version %d. Upgrade dossierx (every binary that touches the project) — an older binary would drop what it does not know on its next write", ErrStoreTooNew, onDisk.Version, StoreSchemaVersion)
 	}
 	if onDisk.Digests != nil {
 		s.Digests = onDisk.Digests
