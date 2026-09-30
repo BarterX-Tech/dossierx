@@ -113,7 +113,11 @@ change writes a file: no store, no sentinel, no approval.
   the briefs tree, `briefs_dir`'s own included, is isolated to that tree's
   fingerprint, so claim live reload continues
   (`TestSSE_UnreadableBriefFolderKeepsClaimReload`, one row for a folder and
-  one for `briefs_dir`).
+  one for `briefs_dir`). A `briefs_dir` outside the git work tree, which no
+  commit can carry and `--staged` therefore reads as no briefs, is an envelope
+  and text warning under `--staged` rather than a silent empty set
+  (`TestCLI_CheckStaged_WarnsWhenBriefsDirIsOutsideTheWorkTree`), as
+  `claims_dir`'s own out-of-tree case warns.
 - **The payload is charged.** Every payload byte comes off the output budget
   (eager) or the intermediate budget (lazy), once, and a budget one byte short
   refuses the render at the payload
