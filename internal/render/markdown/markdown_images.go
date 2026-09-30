@@ -156,6 +156,11 @@ func ClaimBodyImages(body string) []string {
 type imagePolicy struct {
 	// enabled is the opt-in. Nothing below is consulted when it is false.
 	enabled bool
+	// sibling selects the DOCUMENT gate (DocumentImageSrc) instead of the
+	// claim gate (ImageSrc): a brief's images sit beside it in its own folder,
+	// where a claim's sit under its own assets/ directory. It is a choice
+	// between two whole gates, never a relaxation of one.
+	sibling bool
 	// prefix is the AssetPrefix an accepted path is rewritten onto.
 	prefix string
 	// refs, when non-nil, collects every accepted path in document order.
@@ -171,7 +176,11 @@ func (p imagePolicy) accept(src string) (string, bool) {
 	if !p.enabled {
 		return "", false
 	}
-	rel, ok := ImageSrc(src)
+	gate := ImageSrc
+	if p.sibling {
+		gate = DocumentImageSrc
+	}
+	rel, ok := gate(src)
 	if !ok {
 		return "", false
 	}
