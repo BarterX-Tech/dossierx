@@ -4,7 +4,7 @@ Scope: viewer data. A brief in `briefs/features/` is a feature. This change
 adds, all in `internal/render` and the embedded shell:
 
 - the **Features** sidebar entry, one row per feature
-  (`BriefsView.Features`, now in file-name order with the brief's title);
+  (`BriefsView.Features`, ordered by file name without `.md`, with the brief's title);
 - the **feature page**: the brief page (NIT-197) with a `FeatureDetail`
   (`internal/render/feature_page.go`), whose Made of list groups the brief's
   `rests_on` by module and whose meta line counts how many of them are locked;
@@ -12,9 +12,10 @@ adds, all in `internal/render` and the embedded shell:
 - a rewrite of every brief page's body links that name another brief's file
   to that page's id (`resolveBriefLinks`), for every brief, not only features;
 - client code: `resolve()` maps a hash naming a brief's path to its page, the
-  "On this page" rail gains the Made of row, and the status strip files a
-  brief warning (a finding whose `claim_id` is a path) under Check and shows
-  its message.
+  "On this page" rail gains the Made of row, and the status strip shows a
+  brief's warnings (findings whose `claim_id` is its path) as rows of their
+  own: `brief-dependency-drift` under Needs you, the duplicate under Check,
+  naming and leading to the other brief.
 
 The feature page is a consumer, never a producer. It reads the `briefs.Set`
 NIT-204 discovers; NIT-205's `briefs.Evaluation`, already computed for the
@@ -26,8 +27,8 @@ traversal; it computes no readiness and no brief review; it writes nothing.
 
 - Candidate: the head of
   `work/nit-201-viewer-features-entry-and-the-feature-page-b4`, rebased onto
-  `2bde5e52` (the NIT-178 combo branch after NIT-196, NIT-204, NIT-197,
-  NIT-202 and NIT-205). The benchmark figures were measured on the
+  `41f603be` (the NIT-178 combo branch after NIT-196, NIT-204, NIT-197,
+  NIT-202, NIT-205 and its follow-up #137). The benchmark figures were measured on the
   rebased head with the command shown.
 - Environment: go1.26.5 darwin/arm64, Apple M4 Pro.
 
@@ -35,14 +36,14 @@ traversal; it computes no readiness and no brief review; it writes nothing.
 
 | Element | Source | Rule |
 | --- | --- | --- |
-| Features rows, pages, tile | `briefs.Set`, folder `features` | every brief there, in brief-id (= file-name) order |
+| Features rows, pages, tile | `briefs.Set`, folder `features` | every brief there, in brief-id order, which is file name without `.md` |
 | Row mark, tile state | `briefs.Evaluation` (NIT-205): `LockState`, `ReviewPending`, `OpenThreads` | edited, then review, then thread, then locked or draft; unrecorded is drawn draft. With no evaluation (a render that passes none), the frontmatter `status` |
 | Page pill | the brief's frontmatter `status` | as NIT-197 draws it |
-| Made of groups | the brief's `rests_on`, `cat.Claims[].Module`/`Scope` | one group per module, in the order its first claim appears; rows in `rests_on` order; a project claim under "Project"; an id that names no claim last, under "Not a claim" |
+| Made of groups | the brief's `rests_on`, `cat.Claims[].Module`/`Scope` | one group per module id (the title-cased label is shown, never the key, so `a-b` and `a_b` stay apart; project claims under a sentinel key), in the order its first claim appears; rows in `rests_on` order; a project claim under "Project"; an id that names no claim last, under "Not a claim" |
 | "all locked" / "M of N locked" | `cat.Claims[].Status` | N is `len(rests_on)`; M counts ids naming a claim whose `status` is `locked` |
 | Row badge | `buildTargetStatusLookup(cat)` | the badge NIT-197's Rests on row draws |
 | Body links | other briefs' `Path` and page id | a link naming `briefs/<folder>/<slug>.md`, relative to the brief or from the root, becomes `#<page id>` |
-| Strip finding | `/api/status` `lint_warnings` | a warning whose `claim_id` is the brief's path is a Check, with its message |
+| Strip rows | `/api/status` `lint_warnings` | on a brief's page, each warning whose `claim_id` is its path: `brief-dependency-drift` is Needs you ("N claims this feature rests on have changed since approval"); `brief-rests-on-duplicate` is Check and names the other brief, read from the finding's message |
 
 1. **"Locked" is the claim's `status`, not its readiness.** A locked claim
    that is `review_pending` still counts as locked in "M of N locked", as the
@@ -68,7 +69,7 @@ traversal; it computes no readiness and no brief review; it writes nothing.
 
 - **A claim never learns about briefs.** No claim-side package changed:
 
-      git diff --stat 2bde5e52..HEAD -- internal/lock internal/readiness \
+      git diff --stat 41f603be..HEAD -- internal/lock internal/readiness \
         internal/catalog internal/model internal/lint internal/manifest \
         internal/loader internal/reaudit internal/briefs        # empty
 
@@ -81,7 +82,7 @@ traversal; it computes no readiness and no brief review; it writes nothing.
   `.Briefs.Features` (the entry, the tile) or on `.Feature` (the page's
   kicker, Made of and Comment label), and each comment hugs its action so the
   conditional adds no newline. The rewrite of body links changes nothing for
-  a body with no link to another brief. Measured against `2bde5e52`'s
+  a body with no link to another brief. Measured against `41f603be`'s
   committed viewers with `<style>`/`<script>` bodies and the render stamps
   masked, and nothing else, the four fixtures without a `features/` folder
   (basic, conformance-v1, portability, theme-flat) are byte-identical.
@@ -112,7 +113,10 @@ brief page's. The tile adds one row per feature.
 
 At the default caps the feature pages add about a megabyte even at an
 implausible 200 claims per feature. At a raised 2,000 features they pass the
-64 MiB viewer bound, which refuses the render before memory is a concern.
+64 MiB viewer bound, which refuses the render, but only after the view is
+built in full: the refusal bounds the output, not the memory, and the case
+above allocates about 680 MB on the way. Charging the feature view to the
+render budget as it is built is backlog, not this change.
 
 ## Verdict
 

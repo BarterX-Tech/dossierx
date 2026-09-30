@@ -597,12 +597,14 @@
     var open = parseInt(page.getAttribute('data-open-threads'), 10) || 0;
     var total = parseInt(page.getAttribute('data-threads'), 10) || 0;
     var live = document.body.classList.contains('comments-live');
+    // A feature's page (NIT-201) speaks of a feature.
+    var noun = page.hasAttribute('data-feature') ? 'feature' : 'brief';
     // A static build has nothing to write to, so the note states the count
     // and asks for nothing; the read-only line says why.
     var note = open === 0 ? 'None open.' : open + ' open.';
     if (live) {
       note += open === 0
-        ? ' Comment on the brief to ask the agent for a change.'
+        ? ' Comment on the ' + noun + ' to ask the agent for a change.'
         : ' Reply to or resolve ' + (open === 1 ? 'it' : 'them') + ' in the thread.';
     }
     return {

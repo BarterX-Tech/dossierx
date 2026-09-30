@@ -89,7 +89,7 @@ func TestFeaturePage_FromTheFeaturesEntry(t *testing.T) {
 		 var toc = document.getElementById('systemFacetToc');
 		 var tocRows = Array.prototype.map.call(toc.querySelectorAll('.facet-toc__item strong'), function (s) { return s.textContent; });`,
 		[][2]string{
-			{"the rows are the features in file-name order, by title", `rows.map(function (r) { return r.textContent.trim(); }).join('|') === 'Export to CSV|Split a bill'`},
+			{"the rows are the features by file name without .md, by title", `rows.map(function (r) { return r.textContent.trim(); }).join('|') === 'Export to CSV|Split a bill'`},
 			{"its row is the current one", `row.classList.contains('on')`},
 			{"the Features entry is open and reads as current", `group.open === true && getComputedStyle(group.querySelector(':scope > summary')).fontWeight === '600'`},
 			{"the Briefs group is closed and lists no feature", `nav.querySelector('.brief-nav').open === false && !nav.querySelector('.brief-nav [data-target^="#brief-features-"]')`},
@@ -103,6 +103,9 @@ func TestFeaturePage_FromTheFeaturesEntry(t *testing.T) {
 			{"a row carries its lock badge", `lists[0].querySelector('.claim-relationship-badge--locked').textContent === 'LOCKED' && lists[0].querySelector('.claim-relationship-badge--draft').textContent === 'DRAFT'`},
 			{"there is no Rests on list", `sec.textContent.indexOf('Rests on · ') < 0`},
 			{"On this page ends with Made of", `!toc.hidden && tocRows.join('|') === 'What it is|How it works|Made of · 3 claims'`},
+			// The rail never calls a feature a brief (audit F5); under serve it
+			// names the feature (TestFeatures_ArriveWithALiveReload).
+			{"the static rail's Threads copy names no brief", `toc.querySelector('.facet-toc__threads-note').textContent === 'None open.' && toc.querySelector('.facet-toc__threads-later').textContent === 'Read only: comments are written through dossierx serve.'`},
 		})
 
 	// The rail's Made of row brings the list, below the fold on a short
@@ -223,43 +226,89 @@ func TestFeaturePage_PhoneDrawer(t *testing.T) {
 	}
 }
 
-// brief-rests-on-duplicate is a warning whose claim_id is the brief's path
-// and whose message names the other feature. On a feature page it shows in
-// the status strip, naming both, and adds nothing else to the page. The
-// findings are painted through the strip's own entry point, as the static
-// viewer has no /api/status to poll.
-func TestFeatureFindings_DuplicateWarningShowsInTheStrip(t *testing.T) {
-	p := featureProject(t)
-	url := p.renderStatic()
-	ctx := withInstantScroll(t, browserContext(t))
-	desktopViewport(t, ctx)
-	runCDP(t, ctx, chromedp.Navigate(url+"#"+splitFeature), chromedp.WaitVisible("#"+splitFeature, chromedp.ByQuery))
+// visibleStripText is the text of every element in the status strip a
+// reader can see: rendered (checkVisibility) with a box of its own. Text in
+// #statusStripBody, which the strip keeps hidden for the Issues screen to
+// borrow, is not in it.
+const visibleStripText = `(function(){
+  var strip = document.getElementById('statusStrip');
+  if (!strip || strip.hidden) { return ''; }
+  return Array.prototype.filter.call(strip.querySelectorAll('.status-strip-title, .status-strip-finding-text, .status-strip-action'), function (n) {
+    var r = n.getBoundingClientRect();
+    return n.checkVisibility() && r.width > 0 && r.height > 0;
+  }).map(function (n) { return n.textContent; }).join(' | ');
+})()`
 
-	paint := `window.dossierxRenderStatusStrip({
-		readiness: {},
-		lint_warnings: [
-			{lint: 'brief-rests-on-duplicate', claim_id: 'briefs/features/split-a-bill.md', severity: 'warning', message: 'rests_on is exactly the same set as briefs/features/export-to-csv.md; merge them'},
-			{lint: 'brief-rests-on-duplicate', claim_id: 'briefs/features/export-to-csv.md', severity: 'warning', message: 'rests_on is exactly the same set as briefs/features/split-a-bill.md; merge them'}
-		]
-	})`
-	evalVoid(t, ctx, paint)
-	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
+// Two features resting on exactly the same claims draw
+// brief-rests-on-duplicate, a warning whose claim_id is each brief's path
+// and whose message names the other. Under serve, with the engine's own
+// findings, the strip on each feature's page names the other feature in
+// text a reader can see, at desktop and phone width, and leads to it; the
+// page itself gains nothing. A module page does not show them.
+func TestFeatureFindings_DuplicateWarningNamesTheOtherFeature(t *testing.T) {
+	p := newProject(t)
+	writeBrief(t, p, "features/split-a-bill.md", "---\nsummary: Split.\nrests_on:\n  - "+testClaimID+"\n---\n# Split a bill\n\n## What\n\nx\n")
+	writeBrief(t, p, "features/export-to-csv.md", "---\nsummary: Export.\nrests_on:\n  - "+testClaimID+"\n---\n# Export to CSV\n\n## What\n\ny\n")
+	ctx := newLiveTab(t, p)
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#`+splitFeature+`';`, nil))
+	pollTrue(t, ctx, onlyShown(splitFeature)+` && `+visibleStripText+`.indexOf('Rests on the same claims as Export to CSV') >= 0`)
 	requireAll(t, ctx, "the duplicate warning on the feature's page",
 		`var strip = document.getElementById('statusStrip');
-		 var rows = document.querySelectorAll('#statusStripBody .status-finding');`,
+		 var visible = `+visibleStripText+`;`,
 		[][2]string{
 			{"the strip sits under the feature's header", `document.querySelector('#` + splitFeature + ` > .brief-head').nextElementSibling === strip`},
-			{"one finding, this feature's", `rows.length === 1 && rows[0].querySelector('.status-finding-rule').textContent === 'Brief Rests On Duplicate'`},
-			{"it names this feature", `rows[0].querySelector('.status-finding-claim').textContent === 'briefs/features/split-a-bill.md'`},
-			{"and the other", `rows[0].querySelector('.status-finding-message').textContent.indexOf('briefs/features/export-to-csv.md') >= 0`},
-			{"the page itself is unchanged", `!document.querySelector('#` + splitFeature + ` .feature-made-of [class*="duplicate"]')`},
+			{"its way in names the other feature's page", `visible.indexOf('Open feature') >= 0`},
+			{"it is a Check, not an alarm", `document.getElementById('statusStripToggle').getAttribute('data-severity') === 'check'`},
+			{"the page itself gains nothing", `!document.querySelector('#` + splitFeature + ` [class*="duplicate"]')`},
 		})
+	// The row leads to the other feature, whose strip names this one.
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('statusStripToggle').click();`, nil))
+	pollTrue(t, ctx, onlyShown(exportFeature)+` && `+visibleStripText+`.indexOf('Rests on the same claims as Split a bill') >= 0`)
+
+	// On a phone the strip is a card; its row says the same.
+	runCDP(t, ctx, chromedp.EmulateViewport(390, 844))
+	pollTrue(t, ctx, `(function(){ var n = document.querySelector('#statusStripFindings .status-strip-finding-text'); return !!n && n.checkVisibility() && n.getBoundingClientRect().height > 0 && n.textContent === 'Rests on the same claims as Split a bill'; })()`)
+	desktopViewport(t, ctx)
 
 	// On a module page the same warnings are not the module's.
 	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#widget';`, nil))
 	pollTrue(t, ctx, `!document.getElementById('widget').hidden`)
-	evalVoid(t, ctx, paint)
-	pollTrue(t, ctx, `document.getElementById('statusStrip').hidden`)
+	if got := evalString(t, ctx, visibleStripText); strings.Contains(got, "Rests on the same claims") {
+		t.Fatalf("a module page must not show a feature's duplicate warning: %q", got)
+	}
+}
+
+// A locked feature whose rests_on claim moves since approval draws
+// brief-dependency-drift and is review_pending. Under serve its page's strip
+// says so in visible text, under Needs you and in the draft hue, as a claim's
+// own review cause is shown; the Issues screen files it under Needs you.
+func TestFeatureFindings_DependencyDriftIsNeedsYou(t *testing.T) {
+	p := newProject(t)
+	writeBrief(t, p, "features/split-a-bill.md", "---\nsummary: Split.\nstatus: locked\nrests_on:\n  - "+testClaimID+"\n---\n# Split a bill\n\n## What\n\nx\n")
+	p.run("brief", "lock", "briefs/features/split-a-bill.md", "--reason", "fixture approval")
+	p.writeClaim("overview.yaml", strings.Replace(draftClaimYAML, "a claim under review.", "a claim under review, since reworded.", 1))
+	ctx := newLiveTab(t, p)
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#`+splitFeature+`';`, nil))
+	pollTrue(t, ctx, onlyShown(splitFeature)+` && `+visibleStripText+`.indexOf('1 claim this feature rests on has changed since approval') >= 0`)
+	requireAll(t, ctx, "the drifted feature's strip",
+		`var toggle = document.getElementById('statusStripToggle');`,
+		[][2]string{
+			{"it is Needs you", `toggle.getAttribute('data-severity') === 'needs_you'`},
+			{"in the draft hue", `toggle.getAttribute('data-tone') === 'draft'`},
+			{"the feature's mark reads review", `!!document.querySelector('#nav .feature-nav .sec-tab[data-target="#` + splitFeature + `"] .brief-mark[data-mark="review"]')`},
+		})
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('statusStripToggle').click();`, nil))
+	pollTrue(t, ctx, `!document.getElementById('issuesView').hidden`)
+	requireAll(t, ctx, "the Issues screen on the drifted feature",
+		`var view = document.getElementById('issuesView');
+		 var row = view.querySelector('.status-finding[data-severity="needs_you"]');`,
+		[][2]string{
+			{"the finding is under Needs you", `!!row && row.querySelector('.status-finding-rule').textContent === 'Brief Dependency Drift'`},
+			{"its way in opens the feature, not a claim", `row.querySelector('.status-finding-action').textContent === 'Open feature'`},
+			{"the screen speaks of the feature", `view.querySelector('[data-scope="facet"]').textContent === 'This feature' && /on this feature/.test(document.getElementById('issuesSubtitle').textContent)`},
+		})
 }
 
 // Under serve, the first feature added to a project that had none brings the
@@ -281,4 +330,14 @@ func TestFeatures_ArriveWithALiveReload(t *testing.T) {
 		})
 	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#`+exportFeature+`';`, nil))
 	pollTrue(t, ctx, onlyShown(exportFeature)+` && document.querySelectorAll('#`+exportFeature+` .feature-made-of .claim-ref').length === 1`)
+	// Under serve the brief comment rail (NIT-198) speaks of a feature on a
+	// feature's page (audit F5).
+	pollTrue(t, ctx, `!!document.querySelector('#systemFacetToc .facet-toc__threads-note')`)
+	requireAll(t, ctx, "a feature's Comment row and Threads block under serve",
+		`var sec = document.getElementById('`+exportFeature+`');
+		 var toc = document.getElementById('systemFacetToc');`,
+		[][2]string{
+			{"the page-foot Comment is live and names the feature", `sec.querySelector('.brief-comment').disabled === false && sec.querySelector('.brief-comment').textContent.trim() === 'Comment on this feature'`},
+			{"the Threads note asks for a comment on the feature", `toc.querySelector('.facet-toc__threads-note').textContent === 'None open. Comment on the feature to ask the agent for a change.'`},
+		})
 }

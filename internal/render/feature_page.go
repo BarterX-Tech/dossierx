@@ -45,6 +45,8 @@ type FeatureDetail struct {
 // MadeOfGroup is one module's rows in a feature's Made of list.
 type MadeOfGroup struct {
 	Label string
+	// Unknown marks the group of ids that name no claim; it is not a module.
+	Unknown bool
 	// Rows are relationship rows (components.BriefRelationRowsHTML), the
 	// writer NIT-197's Rests on list uses.
 	Rows template.HTML
@@ -69,6 +71,9 @@ func (f FeatureDetail) Label() string {
 	return s
 }
 
+// Empty is the Made of card's line for a feature that rests on nothing.
+func (f FeatureDetail) Empty() string { return noClaimsYet + "." }
+
 // ShortLabel is the Made of head on a phone and the "On this page" row:
 // "Made of · 6 claims".
 func (f FeatureDetail) ShortLabel() string { return "Made of · " + claimCount(f.Count) }
@@ -82,29 +87,38 @@ func (f FeatureDetail) lockedPhrase() string {
 	return strconv.Itoa(f.Locked) + " of " + strconv.Itoa(f.Count) + " locked"
 }
 
-// madeOfClaim is what the Made of list reads of one claim.
+// madeOfClaim is what the Made of list reads of one claim: the module it
+// groups under (a key, and the label shown for it) and whether it is locked.
 type madeOfClaim struct {
 	module string
+	label  string
 	locked bool
 }
 
-// madeOfIndex maps each claim id to its module label and whether it is
-// locked. A project claim's module is "Project", as the Home draft card
-// names it.
+// projectModuleKey is the Made of group key of a project claim. It holds a
+// NUL, which no module name can, so a module that happens to be called
+// "project" is still a group of its own.
+const projectModuleKey = "\x00project"
+
+// madeOfIndex maps each claim id to its module and whether it is locked.
+// Groups are keyed on the module id, not on its label: two modules whose
+// names title-case alike ("a-b" and "a_b") stay two groups. A project
+// claim's group is labelled "Project", as the Home draft card names it.
 func madeOfIndex(cat *catalog.Catalog) map[string]madeOfClaim {
 	out := map[string]madeOfClaim{}
 	if cat == nil {
 		return out
 	}
 	for _, c := range cat.Claims {
-		label := "Project"
+		key, label := projectModuleKey, "Project"
 		if !c.IsProjectClaim() {
-			label = components.DisplayCase(c.Module)
-			if label == "" {
-				label = components.DisplayCase(ungroupedModuleName)
+			key = c.Module
+			if key == "" {
+				key = ungroupedModuleName
 			}
+			label = components.DisplayCase(key)
 		}
-		out[c.ID] = madeOfClaim{module: label, locked: c.Status == model.StatusLocked}
+		out[c.ID] = madeOfClaim{module: key, label: label, locked: c.Status == model.StatusLocked}
 	}
 	return out
 }
@@ -112,7 +126,8 @@ func madeOfIndex(cat *catalog.Catalog) map[string]madeOfClaim {
 // buildFeatureDetail groups rests_on by module. O(R) for R rests_on ids.
 func buildFeatureDetail(restsOn []string, index map[string]madeOfClaim, statuses map[string]components.TargetStatus) *FeatureDetail {
 	f := &FeatureDetail{Count: len(restsOn)}
-	byLabel := map[string][]string{}
+	byModule := map[string][]string{}
+	labels := map[string]string{}
 	var order []string
 	var unknown []string
 	for _, id := range restsOn {
@@ -124,17 +139,18 @@ func buildFeatureDetail(restsOn []string, index map[string]madeOfClaim, statuses
 		if c.locked {
 			f.Locked++
 		}
-		if _, seen := byLabel[c.module]; !seen {
+		if _, seen := byModule[c.module]; !seen {
 			order = append(order, c.module)
+			labels[c.module] = c.label
 		}
-		byLabel[c.module] = append(byLabel[c.module], id)
+		byModule[c.module] = append(byModule[c.module], id)
 	}
 	f.Modules = len(order)
-	for _, label := range order {
-		f.Groups = append(f.Groups, MadeOfGroup{Label: label, Rows: components.BriefRelationRowsHTML(byLabel[label], statuses)})
+	for _, key := range order {
+		f.Groups = append(f.Groups, MadeOfGroup{Label: labels[key], Rows: components.BriefRelationRowsHTML(byModule[key], statuses)})
 	}
 	if len(unknown) > 0 {
-		f.Groups = append(f.Groups, MadeOfGroup{Label: madeOfUnknownLabel, Rows: components.BriefRelationRowsHTML(unknown, statuses)})
+		f.Groups = append(f.Groups, MadeOfGroup{Label: madeOfUnknownLabel, Rows: components.BriefRelationRowsHTML(unknown, statuses), Unknown: true})
 	}
 	return f
 }
@@ -146,23 +162,27 @@ func buildFeatureDetail(restsOn []string, index map[string]madeOfClaim, statuses
 // until it exists, as the brief page leaves it out; the line starts at
 // "Rests on" instead.
 func featureMeta(f *FeatureDetail, modules []string, tail string) string {
+	if f.Count == 0 {
+		return noClaimsYet + " · " + tail
+	}
 	s := "Rests on " + claimCount(f.Count)
 	if len(modules) > 0 {
 		s += " in " + joinModules(modules)
 	}
-	if f.Count > 0 {
-		s += ", " + f.lockedPhrase()
-	}
-	return s + " · " + tail
+	return s + ", " + f.lockedPhrase() + " · " + tail
 }
 
 // featureMetaShort is the phone's: "6 claims, all locked".
 func featureMetaShort(f *FeatureDetail) string {
 	if f.Count == 0 {
-		return "No claims yet"
+		return noClaimsYet
 	}
 	return claimCount(f.Count) + ", " + f.lockedPhrase()
 }
+
+// noClaimsYet is how a feature whose rests_on is empty reads, the same at
+// every width: the wide meta line, the phone's and the Made of card.
+const noClaimsYet = "Rests on no claims yet"
 
 // joinModules spells module names as a sentence: "A", "A and B", "A, B and
 // C", and past maxMetaModules "A, B, C and 2 more modules".

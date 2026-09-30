@@ -13,7 +13,7 @@ import (
 )
 
 // featureFixture: two modules and a project claim, and three features in
-// features/ written out of file-name order on disk order's behalf. One rests
+// features/ whose names are not in the order they are listed. One rests
 // on claims in two modules and the project, in interleaved order, with one id
 // that names no claim; one rests only on locked claims; one rests on nothing.
 // A decisions/ brief is there to be linked to.
@@ -36,7 +36,7 @@ func featureFixture() (*catalog.Catalog, *config.Config, *briefs.Set) {
 
 // TestRender_FeaturePage is the feature contract (NIT-201) at the renderer,
 // the owner of the markup the browser suite drives: features are listed once,
-// under their own Features entry in file-name order with the brief's own
+// under their own Features entry ordered by file name without .md, with the brief's own
 // state mark; a feature page is the brief page with a Feature kicker, a meta
 // line counting what it rests on, and a Made of list grouped by module in
 // rests_on order; its body links to other briefs open their pages; Home
@@ -64,7 +64,7 @@ func TestRender_FeaturePage(t *testing.T) {
 	// File-name order: export-to-csv, receipt-scanning, split-a-bill.
 	e, r, s := strings.Index(features, "#brief-features-export-to-csv"), strings.Index(features, "#brief-features-receipt-scanning"), strings.Index(features, "#brief-features-split-a-bill")
 	if e >= r || r >= s {
-		t.Errorf("Features rows must be in file-name order: export %d, receipt %d, split %d", e, r, s)
+		t.Errorf("Features rows must be ordered by file name without .md: export %d, receipt %d, split %d", e, r, s)
 	}
 	if _, tree, ok := strings.Cut(nav, `class="system-nav-group brief-nav"`); !ok || strings.Contains(tree, "features") {
 		t.Error("a feature must not be listed again in the Briefs tree")
@@ -136,8 +136,11 @@ func TestRender_FeaturePage(t *testing.T) {
 		t.Errorf("a feature whose every claim is locked says all locked\n%s", allLocked)
 	}
 	empty := sectionHTML(t, out, "brief-features-receipt-scanning")
-	if !strings.Contains(empty, `Rests on 0 claims · `) || !strings.Contains(empty, `Its rests_on names no claim yet.`) || !strings.Contains(empty, `No claims yet`) {
-		t.Errorf("a feature that rests on nothing says so in its meta and its Made of card\n%s", empty)
+	// One wording at every width (audit F8): the wide meta, the phone's,
+	// and the Made of card.
+	if !strings.Contains(empty, `<span class="brief-wide">Rests on no claims yet · `) || !strings.Contains(empty, `<span class="brief-narrow">Rests on no claims yet</span>`) ||
+		!strings.Contains(empty, `<p class="feature-made-of__empty">Rests on no claims yet.</p>`) {
+		t.Errorf("a feature that rests on nothing says so in one wording at every width\n%s", empty)
 	}
 
 	_, home, ok := strings.Cut(out, `id="_home"`)
@@ -238,5 +241,30 @@ func TestRender_BriefMarksReadTheReviewState(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %s", want)
 		}
+	}
+}
+
+// TestRender_MadeOfGroupsKeyOnTheModule: Made of groups by module id, not by
+// the label shown for it (audit F7). Two modules whose names title-case
+// alike are two groups, each under its own label.
+func TestRender_MadeOfGroupsKeyOnTheModule(t *testing.T) {
+	cat := &catalog.Catalog{Claims: []model.Claim{
+		{ID: "a-b.contract.one", Module: "a-b", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusLocked, Body: "x"},
+		{ID: "a_b.contract.two", Module: "a_b", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusLocked, Body: "x"},
+	}}
+	cfg := &config.Config{Modules: []string{"a-b", "a_b"}, Facets: []string{"contract", "internals"}}
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("features/f.md", "---\nsummary: F.\nrests_on:\n  - a-b.contract.one\n  - a_b.contract.two\n---\n# F\n"),
+	})
+	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := sectionHTML(t, out, "brief-features-f")
+	if n := strings.Count(page, `<p class="feature-made-of__module">A B</p>`); n != 2 {
+		t.Errorf("modules a-b and a_b must be two groups, got %d group(s) labelled A B\n%s", n, page)
+	}
+	if !strings.Contains(page, `Made of · 2 claims in 2 modules`) {
+		t.Error("the head must count two modules")
 	}
 }

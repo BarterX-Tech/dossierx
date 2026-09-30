@@ -1758,18 +1758,22 @@ JSON block); a project with no brief has none of this, and its search reads
 
 A brief in `features/` is a **feature**. Features have their own **Features**
 entry in the sidebar, between Modules and Briefs: one row per feature in
-file-name order, labelled with its title, each carrying one state mark in the
+order of file name without `.md` (so `export.md` comes before
+`export-to-csv.md`), labelled with its title, each carrying one state mark in the
 same slot a brief row uses. The mark is the brief's own lock and review state
 (its `lock_state`, `review_pending` and `open_threads`), in the legend's order:
 edited since approval, then review pending, then an open thread, then a
 padlock for locked or a hollow dot for draft. A file that says `status:
-locked` with no approval on record (`brief-unrecorded`) takes the draft mark. A feature's page is the brief page with
-these differences: the kicker is `FEATURE · path`; the meta line reads
+locked` with no approval on record (`brief-unrecorded`) takes the draft mark.
+A feature's page is the brief page with these differences: the kicker is `FEATURE · path`; the meta line reads
 "Rests on N claims in <modules>", then "all locked" when every `rests_on` id
 names a locked claim and "M of N locked" otherwise (a phone shows "N claims,
-all locked"); and a **Made of** list takes the place of Rests on — the
-`rests_on` claims grouped under their module's title-cased name (a project
-claim under "Project"), modules in the order their first claim appears and
+all locked"); a feature that rests on nothing reads "Rests on no claims yet"
+at every width, and so does its Made of card; the page speaks of itself as a
+feature (its status strip, Issues screen and Threads copy); and a **Made of** list takes the place of Rests on — the
+`rests_on` claims grouped by module, each group under its module's
+title-cased name (a project claim under "Project"; two modules whose names
+title-case alike stay two groups), modules in the order their first claim appears and
 rows in the order the file lists them, captioned "rests_on, not an order". An
 id that names no claim sits last, under "Not a claim". "On this page" ends
 with a "Made of" row. Home gains a **Features** tile: each feature and its
@@ -1783,8 +1787,17 @@ own file (`../voice/talking-about-money.md`, `export-to-csv.md`) or from the
 project root (`briefs/voice/talking-about-money.md`, with or without a leading
 `/`), is rewritten to the page's id. A hash naming a brief's path
 (`#briefs/features/split-a-bill.md`) opens the page too. A link that names no
-brief is left as written. A `brief-rests-on-duplicate` warning shows in the
-status strip on each brief it names, with its message naming the other.
+brief is left as written.
+
+A brief's own warnings show in the status strip on its page, each as a row a
+reader sees without opening the Issues screen. `brief-dependency-drift` (a
+claim a locked brief rests on changed since approval, so the brief is
+review-pending) is **Needs you**, in the draft hue, as a claim's review cause
+is: "1 claim this feature rests on has changed since approval".
+`brief-rests-on-duplicate` is a **Check** that names the other brief by its
+title and opens its page: "Rests on the same claims as Export to CSV". Both
+are warnings: `check` still passes, and a claim's own warnings still wait
+under Later.
 
 A claim card does show the briefs around it, derived at render time and never
 stored: a **BRIEFS** group in its relationships panel, after RESTS ON and

@@ -146,7 +146,8 @@ const briefsIndexID = "_briefs"
 type BriefsView struct {
 	// Folders are the tree's folders in name order, features/ excluded.
 	Folders []BriefFolderView
-	// Features are the pages under features/, in file-name order: the
+	// Features are the pages under features/, ordered by file name without
+	// ".md" (the brief id's order, so export sorts before export-to-csv): the
 	// Features entry's rows and pages (NIT-201), never in the tree.
 	Features []BriefPageView
 	// Total is how many briefs the tree lists.
@@ -446,7 +447,7 @@ func featurePage(page BriefPageView, b briefs.Brief, index map[string]madeOfClai
 	f := buildFeatureDetail(b.RestsOn, index, statuses)
 	modules := make([]string, 0, len(f.Groups))
 	for _, g := range f.Groups {
-		if g.Label != madeOfUnknownLabel {
+		if !g.Unknown {
 			modules = append(modules, g.Label)
 		}
 	}
