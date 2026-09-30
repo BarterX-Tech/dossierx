@@ -41,6 +41,13 @@ const (
 	CodeThreadNotFound Code = "thread_not_found"
 	// CodeReplyNotFound is a reply id that does not exist in the named thread.
 	CodeReplyNotFound Code = "reply_not_found"
+	// CodeBriefNotFound is a `brief show` argument that names no brief — neither
+	// a brief's id (<folder>.<slug>) nor its path as `brief list` prints it. It
+	// is its own code rather than claim_not_found because the recovery is a
+	// different listing: claim_not_found sends an agent to `claim list --match`,
+	// which cannot find a brief, and an agent handed that code for a typo'd
+	// brief path would search a registry the brief was never in.
+	CodeBriefNotFound Code = "brief_not_found"
 	// CodeBannerClaim is a comment attempted on a banner claim, which cannot
 	// carry threads.
 	CodeBannerClaim Code = "banner_claim"
@@ -338,6 +345,7 @@ func ExitCode(c Code) int {
 		CodeClaimNotFound,
 		CodeThreadNotFound,
 		CodeReplyNotFound,
+		CodeBriefNotFound,
 		CodeNotLocked,
 		CodeNotReviewPending,
 		CodeReviewPending,

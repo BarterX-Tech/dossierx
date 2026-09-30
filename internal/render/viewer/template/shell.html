@@ -445,7 +445,15 @@
        these bytes exist. Do not add escaping here and do not remove it there. -->
   <script type="application/json" id="dossierx-graph">{{.GraphPayload}}</script>
 
-{{if .ConformanceStatusGuardJS}}  <script>{{.ConformanceStatusGuardJS}}</script>
+<!-- The briefs payload (NIT-204): every brief beside the claims, rendered in
+       document mode, with its counts against the caps. Data only — no pane
+       reads it yet (NIT-197). Emitted only when the project holds a brief, so
+       a project with none renders byte-identically to before briefs existed.
+       Safe by the graph payload's mechanism: encoding/json's default HTML
+       escaping, applied before these bytes exist. The comment is stripped by
+       html/template and the conditional follows it on the same line, so the
+       no-briefs output gains not even a newline. -->{{if .BriefsPayload}}  <script type="application/json" id="dossierx-briefs">{{.BriefsPayload}}</script>
+{{end}}{{if .ConformanceStatusGuardJS}}  <script>{{.ConformanceStatusGuardJS}}</script>
 {{end}}  <script>{{.ViewerRuntimeJS}}</script>
 
 <!-- The graph pane's two client files, in dependency order: graph-core.js

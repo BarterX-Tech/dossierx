@@ -288,7 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyOneLeavesUnderEightNouns pins the headline of the v0.3.0
+// TestSurfaceIsTwentyThreeLeavesUnderNineNouns pins the headline of the v0.3.0
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
@@ -344,8 +344,18 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // track noun and its three leaves with them, from twenty-four-under-nine to
 // twenty-one-under-eight. `dossierx track` is an unknown command, like
 // build-order.
-func TestSurfaceIsTwentyOneLeavesUnderEightNouns(t *testing.T) {
+//
+// THE NINTH MOVE IS THE BRIEF NOUN (NIT-204), twenty-one-under-eight to
+// twenty-three-under-nine: `brief list` and `brief show`, two read-only leaves
+// over the briefs beside the claims. A feature is a brief now (NIT-180), and a
+// brief is a document, not a claim, so it is a noun of its own rather than a
+// claim leaf. Its write side (lock, unlock, reaudit) is NIT-205's, and will be
+// the next move.
+func TestSurfaceIsTwentyThreeLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
+		"brief list": true,
+		"brief show": true,
+
 		"check": true,
 
 		"claim show":                     true,
@@ -417,8 +427,8 @@ func TestSurfaceIsTwentyOneLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 21 {
-		t.Errorf("the surface is 21 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 23 {
+		t.Errorf("the surface is 23 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -515,7 +525,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyOneLeavesUnderEightNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyThreeLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

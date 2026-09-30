@@ -146,7 +146,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The eight nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The nine nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -427,7 +427,7 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 			if resolve(m[1]) {
 				continue
 			}
-			t.Errorf("%s names %q, which is not a command in the current surface — eight nouns, and dossierx lint/stale/coverage/deps/implink/migrate and comment resolve/reopen/edit/delete do not exist. If this is prose, write \"DossierX\" with a capital D.", path, strings.TrimSpace(m[0]))
+			t.Errorf("%s names %q, which is not a command in the current surface — nine nouns, and dossierx lint/stale/coverage/deps/implink/migrate and comment resolve/reopen/edit/delete do not exist. If this is prose, write \"DossierX\" with a capital D.", path, strings.TrimSpace(m[0]))
 		}
 		return nil
 	})

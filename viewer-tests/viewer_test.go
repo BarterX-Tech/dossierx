@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
@@ -27,16 +29,45 @@ func runCDP(t *testing.T, ctx context.Context, actions ...chromedp.Action) {
 
 // pollTrue waits until a JavaScript boolean expression becomes true, failing the
 // test (with the expression) if it does not within the timeout.
+//
+// A poll chromedp addresses to a DESTROYED execution context is re-issued, and
+// nothing else is. chromedp.Poll runs in the execution context its Target has
+// recorded for the top frame, and the Target records contexts on a goroutine
+// of its own that trails the one delivering events and command replies. So
+// right after a navigation — chromedp.Navigate returns on the new document's
+// load event, read on the fast goroutine — the recorded context can still be
+// the previous document's, and the poll fails at once with "Cannot find
+// context with specified id" although the new document is loaded and its
+// context exists. Measured on the manifest-tab test under load: the browser
+// had created the new context and fired load before the poll, which failed
+// against the old one. That error says nothing about the page, only that
+// chromedp's bookkeeping had not caught up, and a poll re-issued once it has
+// is addressed to the current document. The condition is still required in
+// full, within the same 20-second deadline; every other error still fails.
 func pollTrue(t *testing.T, ctx context.Context, expr string) {
 	t.Helper()
-	var ok bool
-	err := chromedp.Run(ctx, chromedp.Poll(expr, &ok,
-		chromedp.WithPollingInterval(40*time.Millisecond),
-		chromedp.WithPollingTimeout(20*time.Second),
-	))
-	if err != nil {
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		var ok bool
+		err := chromedp.Run(ctx, chromedp.Poll(expr, &ok,
+			chromedp.WithPollingInterval(40*time.Millisecond),
+			chromedp.WithPollingTimeout(time.Until(deadline)),
+		))
+		if err == nil {
+			return
+		}
+		if isStaleExecutionContext(err) && time.Now().Before(deadline) {
+			continue
+		}
 		t.Fatalf("condition never became true within timeout:\n  %s\n  err: %v", expr, err)
 	}
+}
+
+// isStaleExecutionContext reports whether err is the protocol's refusal of an
+// execution context the browser has already destroyed (see pollTrue).
+func isStaleExecutionContext(err error) bool {
+	var cdpErr *cdproto.Error
+	return errors.As(err, &cdpErr) && cdpErr.Message == "Cannot find context with specified id"
 }
 
 // requireAll asserts a compound condition and, on failure, names EVERY clause

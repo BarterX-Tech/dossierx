@@ -93,11 +93,14 @@ func removeStaleConformanceStatus(cfg *config.Config) error {
 // step the run stopped before reaching, so a formatter can reproduce the
 // fail-fast CLI output by emitting only the segments that are present.
 type Result struct {
-	// LintFindings is lint.RunAll's output verbatim, in Registry order — the
-	// order the terminal prints them (a mixed error/warning run interleaves by
-	// registry, not by severity, so this full slice, not the split ones below,
-	// is what a byte-identical printer must iterate). LintErrors and
-	// LintWarnings are its severity partition (each preserving Registry order):
+	// LintFindings is every finding the lint step reports, in the order the
+	// terminal prints them (see lintFindings): the constitution's findings
+	// first, then lint.RunAll's claim findings verbatim in Registry order, then
+	// the brief rule set's findings (briefs.Set.Findings: by rule, then by
+	// path). A mixed error/warning run interleaves by that order, not by
+	// severity, so this full slice, not the split ones below, is what a
+	// byte-identical printer must iterate. LintErrors and LintWarnings are
+	// its severity partition (each preserving that order):
 	// LintErrors is every finding that is NOT SeverityWarning — matching the
 	// exit-code count reportLintFindings uses — and its length drives the
 	// fail-fast lint error. Always populated (lint is the first step).
@@ -252,7 +255,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
 	res.Constitution = inputs.constitution
-	res.LintFindings = withConstitutionFindings(inputs.constitution, lint.RunAll(claims, cfg))
+	res.LintFindings = lintFindings(claims, cfg, inputs)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -350,7 +353,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: inputs.briefs})
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
@@ -409,7 +412,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: inputs.briefs})
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
@@ -653,7 +656,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 	}
 
 	res.Constitution = in.constitution
-	res.LintFindings = withConstitutionFindings(in.constitution, lint.RunAll(claims, cfg))
+	res.LintFindings = lintFindings(claims, cfg, in)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -735,7 +738,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		return res
 	}
 
-	_, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+	_, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: in.briefs})
 	if renderErr != nil {
 		res.RenderError = renderErr.Error()
 		res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)

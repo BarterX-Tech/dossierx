@@ -166,6 +166,23 @@ func envFresh(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
+// envBriefs is envFresh plus one brief resting on the fixture claim, so the
+// brief noun's two leaves answer with a populated payload: an empty list pins
+// only that it is empty (see envHumanThreadReplied for the same argument).
+func envBriefs(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	writeFixtureProject(t, dir, "widget")
+	p := filepath.Join(dir, "briefs", "widget", "flow.md")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatalf("mkdir briefs: %v", err)
+	}
+	brief := "---\nsummary: How the widget flow reads end to end.\nrests_on:\n  - widget.contract.overview\n---\n# Widget flow\n\nOne paragraph.\n"
+	if err := os.WriteFile(p, []byte(brief), 0o644); err != nil {
+		t.Fatalf("write brief: %v", err)
+	}
+	return nil
+}
+
 // envRemovedTheme pins migration failures across every check mode.
 func envRemovedTheme(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -395,6 +412,11 @@ func envMustRun(t *testing.T, dir string, args ...string) string {
 // but "serve", so a twentieth leaf cannot arrive with no envelope pinned.
 func envelopeCases() []envelopeCase {
 	return []envelopeCase{
+		{"brief list / one brief", envBriefs, []string{"brief", "list"}},
+		{"brief list / only the briefs awaiting review", envBriefs, []string{"brief", "list", "--review-pending"}},
+		{"brief show / by path", envBriefs, []string{"brief", "show", "briefs/widget/flow.md"}},
+		{"brief show / a path no brief is at", envBriefs, []string{"brief", "show", "briefs/widget/ghost.md"}},
+
 		{"version / the verb", envNoProject, []string{"version"}},
 		{"version / the root flag", envNoProject, []string{"--version"}},
 

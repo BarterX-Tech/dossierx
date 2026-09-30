@@ -8469,7 +8469,9 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1365 -1444)
    // Auto-collapse above AUTO_COLLAPSE_ABOVE claims
 
 testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1562)
-    inputs changed  testdata/fixture-graph-demo/build/ledger/comment-digest.json
+    inputs changed  testdata/fixture-graph-demo/briefs/graph/pane-sketch.svg
+                    testdata/fixture-graph-demo/briefs/graph/reading-the-graph.md
+                    testdata/fixture-graph-demo/build/ledger/comment-digest.json
                     testdata/fixture-graph-demo/build/ledger/flag-store.json
                     testdata/fixture-graph-demo/build/ledger/lock-store.json
                     testdata/fixture-graph-demo/claims/cli-agent-operates-human-reviews.yaml
@@ -11186,7 +11188,9 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+529 -1562)
  }
 
 testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
-    inputs changed  testdata/fixture-graph-demo/build/ledger/comment-digest.json
+    inputs changed  testdata/fixture-graph-demo/briefs/graph/pane-sketch.svg
+                    testdata/fixture-graph-demo/briefs/graph/reading-the-graph.md
+                    testdata/fixture-graph-demo/build/ledger/comment-digest.json
                     testdata/fixture-graph-demo/build/ledger/flag-store.json
                     testdata/fixture-graph-demo/build/ledger/lock-store.json
                     testdata/fixture-graph-demo/claims/cli-agent-operates-human-reviews.yaml
@@ -11254,7 +11258,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
                     testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
-    size            23990 lines / 1496790 bytes -> 23750 lines / 1482228 bytes
+    size            23990 lines / 1496790 bytes -> 23751 lines / 1483305 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it

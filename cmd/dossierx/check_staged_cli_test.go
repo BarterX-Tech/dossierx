@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -209,6 +210,49 @@ func TestCLI_CheckStaged_OutsideAWorkTreeWarnsAndSucceeds(t *testing.T) {
 	}
 	if len(env.Warnings) == 0 || !strings.Contains(strings.Join(env.Warnings, " "), "no git index") {
 		t.Fatalf("expected a warning naming the reason, got %#v", env.Warnings)
+	}
+}
+
+// A briefs_dir outside the git work tree cannot be in any commit, so --staged
+// reads no briefs from it — but --validate reads it off disk, and a --staged
+// that judged zero briefs in silence would pass in the hook a tree the keyboard
+// mode refuses. It must say so: an envelope warning and a text line naming
+// briefs_dir, exit 0 like claims_dir's own out-of-tree case. A regression back
+// to the silent empty set fails the warning assertions; the --validate
+// assertion pins that the two modes really do see different trees here.
+func TestCLI_CheckStaged_WarnsWhenBriefsDirIsOutsideTheWorkTree(t *testing.T) {
+	cfgPath, root, _ := stagedProject(t)
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "loose.md"), []byte("---\nsummary: A loose file.\n---\n# Loose\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, append(raw, []byte("briefs_dir: "+outside+"\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stagedGit(t, root, "add", "project.config.yaml")
+
+	if env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err == nil || !strings.Contains(fmt.Sprint(env.Data), "brief-shape") {
+		t.Fatalf("fixture precondition: --validate must read the outside briefs_dir and refuse loose.md, got err=%v data=%v", err, env.Data)
+	}
+
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--staged")
+	if err != nil {
+		t.Fatalf("check --staged: expected exit 0, got %v", err)
+	}
+	warnings := strings.Join(env.Warnings, "\n")
+	if !env.OK || !strings.Contains(warnings, "briefs_dir ") || !strings.Contains(warnings, "is outside the git work tree") {
+		t.Fatalf("expected ok and a warning that briefs_dir is outside the work tree, got ok=%v warnings=%q", env.OK, env.Warnings)
+	}
+	out, _, err := execReviewedCLI(t, "--config", cfgPath, "check", "--staged")
+	if err != nil {
+		t.Fatalf("check --staged (text): %v", err)
+	}
+	if !strings.Contains(out, "warning: briefs_dir ") || !strings.Contains(out, "--staged judged no briefs") {
+		t.Fatalf("the text output must carry the warning too, got:\n%s", out)
 	}
 }
 

@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
@@ -204,6 +205,14 @@ type ledgerInputs struct {
 	// that nothing it judges comes from the working tree.
 	constitution constitution.Verdict
 
+	// briefs is the project's briefs tree (NIT-204) as the SAME tree holds it —
+	// disk for Run and Status, the index for StatusStaged — for the reason
+	// constitution rides here: a registered lint sees only claims and config,
+	// and --staged must judge nothing from the working tree. It is not ledger
+	// state and no ledger rule reads it; its findings join lint_findings, and
+	// the render beside the catalog draws the viewer's briefs payload from it.
+	briefs *briefs.Set
+
 	// THERE ARE NO HISTORY FIELDS HERE ANY MORE, and that is deliberate. This
 	// struct used to carry scopeFindings, parentFindings and scopeNote — refusals
 	// and one advisory produced by comparing the commit under judgement against
@@ -254,7 +263,19 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 	}
 
 	in.constitution = constitution.EvaluateAt(cfg.ConstitutionPath(), constitutionRecord(in.store))
+	in.briefs = briefs.Load(cfg)
 	return in
+}
+
+// lintFindings is the lint step's whole finding list: the roof's findings, the
+// claim rules' (lint.RunAll), then the brief rules' (briefs.Set.Findings). The
+// brief findings are in the list an agent already branches on, keyed by `lint`,
+// but they are never lint.Registry's and never reach `claim lock`, which runs
+// lint.RunAll alone: brief state does not gate a claim.
+func lintFindings(claims []model.Claim, cfg *config.Config, in ledgerInputs) []lint.Finding {
+	findings := lint.RunAll(claims, cfg)
+	findings = append(findings, in.briefs.Findings(claims)...)
+	return withConstitutionFindings(in.constitution, findings)
 }
 
 // constitutionRecord is the store's roof record, or nil for an unreadable or

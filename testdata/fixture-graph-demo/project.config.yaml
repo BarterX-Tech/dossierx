@@ -38,6 +38,11 @@
 #              claim. Deliberately named after a word the repository's
 #              offline-scan regex matches, so nothing in the engine can get
 #              away with hardcoding it.
+#
+# briefs/ holds one brief (NIT-204), resting on two claims and referencing one
+# image, so a committed viewer carries the briefs payload and the render report
+# shows it. It is the only fixture with briefs; every other fixture's viewer is
+# the no-briefs case, byte-identical to before briefs existed.
 schema_version: 1
 title: Claims Graph Demo
 eyebrow: the corpus the graph pane was designed against
