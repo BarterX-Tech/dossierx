@@ -147,10 +147,14 @@ func TestBriefListAndShowReportWhatTheyCouldNotRead(t *testing.T) {
 	}
 
 	env, _, err = execCLIJSON(t, "--config", cfgPath, "brief", "show", "briefs/secret/plan.md")
-	if env.OK || env.Error == nil || env.Error.Code != cliout.CodeBriefNotFound || !strings.Contains(env.Error.Hint, "finding") {
-		t.Fatalf("a brief behind an unreadable folder must be brief_not_found naming the findings, got %+v", env)
+	if env.OK || env.Error == nil || env.Error.Code != cliout.CodeBriefNotFound || !strings.Contains(env.Error.Hint, "finding") || exitStatusFor(err) != 2 {
+		t.Fatalf("a brief behind an unreadable folder must be brief_not_found (exit 2) naming the findings, got %+v", env)
 	}
-	if raw, _ := json.Marshal(env.Error.Details); !strings.Contains(string(raw), "briefs/secret/") {
+	raw, err := json.Marshal(env.Error.Details)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "briefs/secret/") {
 		t.Fatalf("brief_not_found must carry the tree findings in details, got %s", raw)
 	}
 

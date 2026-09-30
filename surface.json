@@ -518,7 +518,7 @@
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
     "internal/briefs": "sha256:9f7e53fee55c43d5921c6259cc9b72bb299b4898abd39aa3fcb135b7f11f5808",
     "internal/catalog": "sha256:5bc5134d2111471736bb91a16c1641a69d146e09f87070add6770fcc318a6d4b",
-    "internal/check": "sha256:67d860e34fb4d23fc090112f7c3a9f45a09c35e5cdc0df0b21595da26652a093",
+    "internal/check": "sha256:6f7700d28d18f5a2f9a2d4f8aa2ad7dafe1a49f6a2fe77ef2d671a808602ff50",
     "internal/cliout": "sha256:a04e6cafb20a343658b42a09901a50e2d4c40ee218b63fdaf106e34d535f9789",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
     "internal/config": "sha256:bcc44fbad1f62df803e6548ab34fbd9f4448e5a4d9ff41838c895bb567017b41",

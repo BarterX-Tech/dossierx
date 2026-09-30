@@ -1021,32 +1021,6 @@ func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 	return briefs.FromFiles(cfg, files), nil
 }
 
-// nonRegularIndexPaths lists the stage-0 index entries under spec whose mode is
-// a symlink (120000) or a submodule gitlink (160000) — exactly the entries
-// indexEntries filters out — as paths in lsFiles' form. Only stagedBriefs needs
-// them: a brief tree refuses what the claims registry merely does not hold.
-func (g *gitRunner) nonRegularIndexPaths(spec string) ([]string, error) {
-	out, err := g.run("ls-files", "-s", "-z", "--", spec)
-	if err != nil {
-		return nil, err
-	}
-	var paths []string
-	for _, entry := range splitZ(out) {
-		tab := strings.IndexByte(entry, '\t')
-		if tab < 0 {
-			continue
-		}
-		fields := strings.Fields(entry[:tab])
-		if len(fields) < 3 || fields[2] != "0" {
-			continue
-		}
-		if fields[0] == "120000" || fields[0] == "160000" {
-			paths = append(paths, entry[tab+1:])
-		}
-	}
-	return paths, nil
-}
-
 // materializeIndexFile writes the index's copy of src (an absolute path) into
 // dir and returns the written path. When src is not tracked in the index it
 // writes nothing and returns the path anyway — the store loaders read a missing
@@ -1310,6 +1284,32 @@ func (g *gitRunner) indexEntries(specs ...string) ([]indexEntry, error) {
 		entries = append(entries, indexEntry{oid: fields[1], path: entry[tab+1:]})
 	}
 	return entries, nil
+}
+
+// nonRegularIndexPaths lists the stage-0 index entries under spec whose mode is
+// a symlink (120000) or a submodule gitlink (160000) — exactly the entries
+// indexEntries filters out — as paths in lsFiles' form. Only stagedBriefs needs
+// them: a brief tree refuses what the claims registry merely does not hold.
+func (g *gitRunner) nonRegularIndexPaths(spec string) ([]string, error) {
+	out, err := g.run("ls-files", "-s", "-z", "--", spec)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range splitZ(out) {
+		tab := strings.IndexByte(entry, '\t')
+		if tab < 0 {
+			continue
+		}
+		fields := strings.Fields(entry[:tab])
+		if len(fields) < 3 || fields[2] != "0" {
+			continue
+		}
+		if fields[0] == "120000" || fields[0] == "160000" {
+			paths = append(paths, entry[tab+1:])
+		}
+	}
+	return paths, nil
 }
 
 // indexBlobs returns the index's content for every path under spec, keyed by

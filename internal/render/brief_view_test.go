@@ -167,7 +167,7 @@ func TestLazyShell_BriefsPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := briefsBlock.FindStringSubmatch(out); m == nil || m[1] != string(want) || !strings.Contains(out, "twice") {
+	if m := briefsBlock.FindStringSubmatch(out); len(m) < 2 || m[1] != string(want) || !strings.Contains(out, "twice") {
 		t.Fatalf("an override shell must carry the same briefs payload the embedded shell does")
 	}
 
