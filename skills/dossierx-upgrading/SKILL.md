@@ -190,20 +190,34 @@ gate, no marker file — but the pass that re-locks is the pass to sort it, so e
 and re-locked once. Run every claim in a module through the sorting step in
 **[`dossierx-claims`](../dossierx-claims/SKILL.md)** ("Is this worth a claim?") and put it in one of
 three piles: **keep**, **move to a brief** (**[`dossierx-briefs`](../dossierx-briefs/SKILL.md)**
-says how to write one), **delete**.
+says how to write one), **delete** — "this module owns…" is deleted, its useful part going to the
+manifest `summary`. Every `--reason` below is `<thread id>: ` followed by the human's words, or
+`resolved` when their Resolve click was their only word; never invent words.
 
-1. Propose the batch in **one thread on the module**: `dossierx comment add <a claim id in the
-   module> --as agent --body "…"` listing every claim id, its pile, and for a move the brief path it
-   goes to. Nothing moves until the human resolves that thread in the viewer.
-2. On their Resolve: `dossierx claim unlock <id> --reason "<thread id>: <their words>"` for each
-   moved or deleted claim, naming the thread; write the brief as a draft; delete the claim file. A
-   module left with no claims is removed: its `manifest.yaml`, its `modules:` entry and every
+1. Propose the batch in **one thread on the module**, anchored on a claim that **stays**:
+   `dossierx comment add <a keep-pile claim id> --as agent --body "…"` listing every claim id, its
+   pile, for a move the brief path it goes to, and every claim or brief resting on a moved or
+   deleted claim with the `rests_on` edit it needs. If nothing in the module stays, write the brief
+   the claims move to as a draft first and anchor the thread on its path
+   (`dossierx comment add briefs/<folder>/<slug>.md --as agent --body "…"`): its open thread holds
+   `brief lock` at `comment_open` until the human resolves it in the served viewer, which is the
+   order you want. A batch that only deletes anchors on a project claim. Nothing moves until the
+   human resolves the thread in the viewer.
+2. On their Resolve: `dossierx claim unlock <id> --reason "…"` for each moved or deleted claim (in
+   the v0.7.20 pass the claims are already unlocked: record the thread id in the re-lock `--reason`
+   instead); write the brief as a draft (unless it is already the anchor); delete the claim file;
+   edit each dependent's `rests_on` in the same change — a locked dependent needs its own unlock on
+   the same yes, or `check` fails `dangling` on it. Deleting a claim that was **never locked** and carries any thread, open or
+   resolved, is refused `comment-digest-abandoned`: the human deletes those threads in the viewer
+   first (a claim `unlock` released deletes clean with its threads). Never delete the batch thread.
+   A module left with no claims is removed: its `manifest.yaml`, its `modules:` entry and every
    `depends_on` naming it go in the same change.
 3. Notes under the client's `docs/` that are product knowledge — a design note, a decision, a
-   research write-up — become briefs in the same pass. DossierX writes nothing under `docs/`; a claim
-   citing such a note re-pins it through `source-internal-drift` as usual.
-4. `dossierx brief lock <path> --reason "…"` each new brief on the human's yes, in the same pass as
-   the re-lock of the claims that stay.
+   research write-up — become briefs in the same pass. DossierX writes nothing under `docs/` (the
+   export above only removes the guide an older release wrote there); a claim citing such a note
+   re-pins it through `source-internal-drift` as usual.
+4. Each new brief, on the human's yes: `dossierx brief lock <path> --dry-run`, show it, then
+   `--reason "…"` as above — in the same pass as the re-lock of the claims that stay.
 
 ## `tracks` are gone
 
@@ -215,18 +229,20 @@ longer exists. A feature is a brief in `briefs/features/` that lists the claims 
 1. Keep a copy of the config's `tracks:` list and of each claim that owned a track (its body is the
    feature's own prose), then delete `tracks:` from the config and the `tracks:` block from every
    claim file, draft and locked alike, so the corpus loads.
-2. For each track write `briefs/features/<track-id>.md`: the owner claim's `summary` and body (a
-   stub filled from the cited claims when there was no owner) and every cited claim id in
-   `rests_on`. Two tracks with identical membership become one brief (`brief-rests-on-duplicate`
-   says so). More than 12 tracks exceeds `max_briefs_per_folder`: say so; the recovery is the config
+2. For each track write `briefs/features/<slug>.md`, the old track id slugged to `[a-z0-9-]`
+   (`Checkout Flow v2` → `checkout-flow-v2`): the owner claim's `summary` and body — with no owner,
+   the old track's title and summary are the stub's source, filled out from the cited claims — and
+   every cited claim id in `rests_on`. Two tracks with identical membership become one brief
+   (`brief-rests-on-duplicate` says so). The folder cap is 12 **including** the feature briefs
+   already in `briefs/features/`: over it, say so; the recovery is the `max_briefs_per_folder`
    override, on the human's yes.
 3. Run the owner claim through the three questions in `dossierx-claims`. It usually fails and is
    deleted; if it survives it stays a claim and joins the brief's `rests_on`.
-4. Propose the batch in one thread per module, as in the claim-fit triage above. On the human's
-   Resolve, unlock each deleted claim with a `--reason` naming the thread, and `dossierx brief lock
-   briefs/features/<track-id>.md --reason "…"` each feature brief in the same pass as the re-lock.
-   Only a locked claim that carried `tracks:` reports `lock-content-drift`; re-lock it there too, so
-   each claim re-locks once.
+4. Propose the batch in one thread per module, as in the claim-fit triage above (its `--reason`
+   rule and its thread-deletion refusal apply). On the human's Resolve, unlock each deleted claim,
+   then lock each feature brief in the same pass as the re-lock: `dossierx brief lock
+   briefs/features/<slug>.md --dry-run`, show it, then `--reason "…"`. Only a locked claim that
+   carried `tracks:` reports `lock-content-drift`; re-lock it there too, so each claim re-locks once.
 
 ## New requirements a v0.7.20 corpus does not meet
 

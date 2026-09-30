@@ -40,7 +40,7 @@ the five rules are there and are not repeated here.
 **First, what kind of statement is this?** If it says how the product should look, sound or feel,
 why a choice was made, or what was learned — design, voice, rationale, research — it is not a
 claim: write a brief (load **[`dossierx-briefs`](../dossierx-briefs/SKILL.md)**). If it says what
-the product does, apply the three questions.
+the product does — a guarantee about UI behaviour is what the product does — apply the three questions.
 
 Write a claim only when all three are **yes**: (1) would a competent engineer reading the code be
 surprised by it? (2) if it were wrong, would another module or a locked promise break? (3) is it
@@ -154,8 +154,8 @@ you did not see is one you do not have — stop and say what is missing.
 A `project.<slug>` claim (`project-claims/<slug>.yaml`) is an ordinary claim — this skill's rules
 apply — with no module, no facet and no cap. The constitution is not a claim at all; when to use
 which: **[`dossierx-constitution`](../dossierx-constitution/SKILL.md)**. Orient one module at a time
-through `dossierx manifest show <module> --isolation`, never by walking the claims tree; the reading
-order is in **[`dossierx-modules`](../dossierx-modules/SKILL.md)**. Other modules read `contract` only.
+through `dossierx manifest show <module> --isolation`; never walk the claims tree or open claim files
+to orient yourself. The reading order is in **[`dossierx-modules`](../dossierx-modules/SKILL.md)**. Other modules read `contract` only.
 
 ## Citing your evidence — `sources`
 
@@ -205,8 +205,8 @@ A draft claim is yours. A locked claim is the human's. Body-only meaning drift i
 Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects` (locking records a content baseline; unlocking releases it and can flip dependents), get a yes, then run it. `--reason` carries their approval into the record — never fabricate one.
 
 The window between the two ends is not a steady state: a plain `dossierx check` mid-edit fails
-`implink_refused` on any `dossierx-claim:` / `dossierx-step:` tag for that id — the tag is fine, the
-claim is mid-edit. Finish the relock; never touch the tag or leave the claim unlocked to silence it.
+`implink_refused` with `claim is not locked (status "draft")` on any `dossierx-claim:` / `dossierx-step:`
+tag for that id — the tag is fine, the claim is mid-edit. Finish the relock; never touch the tag or leave the claim unlocked to silence it.
 
 `dossierx claim lock` refuses on `lint_failed` (fix the findings), `unresolved_comments` (reply;
 the human clicks Resolve) and `already_locked` — re-locking would sign whatever the file now says and

@@ -86,8 +86,8 @@ you think a raise is right, ask, say what it costs (a bigger module no longer fi
 isolation budget, and every reader pays for the extra context), and **wait for an explicit yes**.
 Never raise a value in the same change that hits the cap, and never pad, merge or cram to fit.
 **The first step for every cap is moving what is not a claim to a brief** — design, voice, rationale,
-research, "this module owns…" (the sorting step in `dossierx-claims`; `dossierx-briefs` writes it) —
-before you split or trim what remains.
+research (the sorting step in `dossierx-claims`; `dossierx-briefs` writes it) — before you split or
+trim what remains. A claim that only says what the module owns is deleted, its useful part going to the manifest `summary`.
 
 | cap | refusal | default recovery | config value |
 |---|---|---|---|
