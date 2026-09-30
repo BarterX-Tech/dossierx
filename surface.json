@@ -512,13 +512,13 @@
   ],
   "render_fingerprint": "sha256:848dd1ff0fdf513c5f465f095567148baf09366105a6f0d4eee43616674b3dda",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:5c7f9b793111652d4a4212472f849a6a46be978aed7afd7f7cf51de09ebdb870",
+    "cmd/dossierx": "sha256:eb1c566ccba2d11e2a973db3eaee9083a1664f7b31565c94bcbaa6b4edd791af",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
     "internal/approvalrecovery": "sha256:0fce8f96eb938459618a818059900dfe93323eb3ed8754065a1342c998ff3daa",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
-    "internal/briefs": "sha256:5c2698da34eba91da466e909ad55a3aea38358e7bc893ccb72f1a5447672ec09",
+    "internal/briefs": "sha256:95bad7f51f35d9516cdb4f64be6175face174162279a509eb3e758b7034ba81c",
     "internal/catalog": "sha256:5bc5134d2111471736bb91a16c1641a69d146e09f87070add6770fcc318a6d4b",
-    "internal/check": "sha256:c3cc5862f904032938a8ce08b54e3ff299887b1447bf2d3ed60a5af004346cb3",
+    "internal/check": "sha256:67d860e34fb4d23fc090112f7c3a9f45a09c35e5cdc0df0b21595da26652a093",
     "internal/cliout": "sha256:a04e6cafb20a343658b42a09901a50e2d4c40ee218b63fdaf106e34d535f9789",
     "internal/comments": "sha256:4ca9391fe4b7e34b78e6ce62cd1b9c0669670d0fc79a3335e1ff25d37999164f",
     "internal/config": "sha256:bcc44fbad1f62df803e6548ab34fbd9f4448e5a4d9ff41838c895bb567017b41",
@@ -615,12 +615,14 @@
       "briefListData": [
         "briefs",
         "count",
+        "findings",
         "review_pending_only",
         "total"
       ],
       "briefShowData": [
         "content",
         "digest",
+        "findings",
         "folder",
         "id",
         "images",

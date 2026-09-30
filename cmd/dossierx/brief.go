@@ -12,6 +12,17 @@
 // the author needs to read the file they wrote beside the rule it broke.
 // `check` is where a brief's findings fail a run.
 //
+// BUT NEITHER LEAF HIDES A FINDING. Both carry `findings` — the tree's own
+// brief findings (shape, frontmatter, caps; the two rests_on rules need the
+// claims, which these leaves do not load) in check's lint_findings shape, with
+// the path as claim_id — beside what they read. It is how manifest show
+// reports a manifest's defects: the answer is still given, ok, and the defect
+// is in it. What matters most is the case where the answer is incomplete: an
+// unreadable folder is a finding and the other folders are still listed, and a
+// tree that could not be read at all is a finding, never "this project holds no
+// briefs". A consumer that sees findings non-empty has not seen every brief,
+// and the text form says so.
+//
 // REVIEW STATE IS IN THE ENVELOPE AND EMPTY. review_pending and
 // review_pending_trigger are on every entry so the shape does not move when
 // NIT-205 gives briefs a lock store, content drift and dependency drift; until
@@ -34,6 +45,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 )
 
 // newBriefCmd is the "dossierx brief" command group: list and show.
@@ -66,10 +78,11 @@ type briefListEntry struct {
 // brief in the project and count is how many this call listed, so a filtered
 // call that listed none is told apart from a project with none.
 type briefListData struct {
-	Count             int              `json:"count"`
-	Total             int              `json:"total"`
-	ReviewPendingOnly bool             `json:"review_pending_only"`
-	Briefs            []briefListEntry `json:"briefs"`
+	Count             int               `json:"count"`
+	Total             int               `json:"total"`
+	ReviewPendingOnly bool              `json:"review_pending_only"`
+	Briefs            []briefListEntry  `json:"briefs"`
+	Findings          []lintFindingData `json:"findings"`
 }
 
 // briefShowData is "dossierx brief show"'s machine payload: the brief's whole
@@ -88,6 +101,39 @@ type briefShowData struct {
 	Images               []briefs.Image `json:"images"`
 	ReviewPending        bool           `json:"review_pending"`
 	ReviewPendingTrigger string         `json:"review_pending_trigger"`
+	// Findings is the tree findings about this brief: on its path, or on its
+	// folder or the tree (a cap, an unreadable entry), whose claim_id is a
+	// directory path ending in "/".
+	Findings []lintFindingData `json:"findings"`
+}
+
+// briefFindingsData projects brief findings into check's lint_findings shape,
+// never null.
+func briefFindingsData(in []lint.Finding) []lintFindingData {
+	out := make([]lintFindingData, 0, len(in))
+	for _, f := range in {
+		out = append(out, lintFindingData{Lint: f.LintName, ClaimID: f.ClaimID, Severity: string(f.Severity), Message: f.Message})
+	}
+	return out
+}
+
+// findingsAbout keeps the findings on path itself or on a directory holding it.
+func findingsAbout(in []lint.Finding, path string) []lint.Finding {
+	var out []lint.Finding
+	for _, f := range in {
+		if f.ClaimID == path || (strings.HasSuffix(f.ClaimID, "/") && strings.HasPrefix(path, f.ClaimID)) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// writeBriefFindingsText prints one line per finding, rule and path first.
+func writeBriefFindingsText(cmd *cobra.Command, fs []lintFindingData) {
+	out := cmd.OutOrStdout()
+	for _, f := range fs {
+		fmt.Fprintf(out, "  %s %s %s: %s\n", f.Severity, f.Lint, f.ClaimID, f.Message)
+	}
 }
 
 // loadBriefs is the shared setup: the config (which refuses a legacy layout
@@ -133,6 +179,7 @@ func newBriefListCmd() *cobra.Command {
 				Total:             len(set.Briefs),
 				ReviewPendingOnly: reviewPending,
 				Briefs:            entries,
+				Findings:          briefFindingsData(set.TreeFindings()),
 			}
 			return cmdResult{
 				Data: data,
@@ -151,7 +198,13 @@ func writeBriefListText(cmd *cobra.Command, d briefListData) {
 	for _, e := range d.Briefs {
 		fmt.Fprintf(out, "%s %s%s — %s\n", e.Path, e.Status, reviewPendingSuffix(e.ReviewPending), e.Summary)
 	}
+	if len(d.Findings) > 0 {
+		fmt.Fprintf(out, "brief list: %d finding(s) in the briefs tree; an entry that could not be read lists no brief:\n", len(d.Findings))
+		writeBriefFindingsText(cmd, d.Findings)
+	}
 	switch {
+	case d.Total == 0 && len(d.Findings) > 0:
+		fmt.Fprintln(out, "brief list: no brief listed, and the tree has findings; that is not a project with no briefs")
 	case d.Total == 0:
 		fmt.Fprintln(out, "brief list: this project holds no briefs")
 	case d.ReviewPendingOnly:
@@ -180,10 +233,18 @@ func newBriefShowCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
+			treeFindings := set.TreeFindings()
 			b, ok := set.Lookup(args[0])
 			if !ok {
-				return cmdResult{}, cliout.Errorf(cliout.CodeBriefNotFound, "brief show: no brief at %q", args[0]).
+				err := cliout.Errorf(cliout.CodeBriefNotFound, "brief show: no brief at %q", args[0]).
 					WithHint("run: dossierx brief list — and pass the path it prints (briefs/<folder>/<slug>.md) or the <folder>.<slug> id")
+				if len(treeFindings) > 0 {
+					// Not found in a tree that has findings is not "absent": the
+					// brief may sit in an entry that could not be read.
+					err = err.WithHint(fmt.Sprintf("the briefs tree has %d finding(s), in details.findings; a brief in an entry that could not be read is not found. run: dossierx brief list — and pass the path it prints (briefs/<folder>/<slug>.md) or the <folder>.<slug> id", len(treeFindings))).
+						WithDetails(map[string]any{"findings": briefFindingsData(treeFindings)})
+				}
+				return cmdResult{}, err
 			}
 			restsOn := b.RestsOn
 			if restsOn == nil {
@@ -194,17 +255,18 @@ func newBriefShowCmd() *cobra.Command {
 				images = []briefs.Image{}
 			}
 			data := briefShowData{
-				ID:      b.ID,
-				Path:    b.Path,
-				Folder:  b.Folder,
-				Title:   b.Title,
-				Summary: b.Summary,
-				Status:  string(b.Status),
-				RestsOn: restsOn,
-				Digest:  b.Digest,
-				Content: b.Content,
-				Words:   b.Words,
-				Images:  images,
+				ID:       b.ID,
+				Path:     b.Path,
+				Folder:   b.Folder,
+				Title:    b.Title,
+				Summary:  b.Summary,
+				Status:   string(b.Status),
+				RestsOn:  restsOn,
+				Digest:   b.Digest,
+				Content:  b.Content,
+				Words:    b.Words,
+				Images:   images,
+				Findings: briefFindingsData(findingsAbout(treeFindings, b.Path)),
 			}
 			return cmdResult{
 				Data: data,
@@ -223,6 +285,10 @@ func writeBriefShowText(cmd *cobra.Command, d briefShowData) {
 	fmt.Fprintf(out, "  digest:   %s\n", d.Digest)
 	fmt.Fprintf(out, "  rests_on: %s\n", joinOrNone(d.RestsOn))
 	fmt.Fprintf(out, "  words:    %d\n", d.Words)
+	if len(d.Findings) > 0 {
+		fmt.Fprintf(out, "  findings: %d\n", len(d.Findings))
+		writeBriefFindingsText(cmd, d.Findings)
+	}
 	fmt.Fprintln(out)
 	fmt.Fprint(out, d.Content)
 	if !strings.HasSuffix(d.Content, "\n") {

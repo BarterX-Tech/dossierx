@@ -147,6 +147,61 @@ func TestLoad_SymlinkedTreeIsRefusedNotEmpty(t *testing.T) {
 	})
 }
 
+// TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree pins that a folder or a
+// brief the engine cannot read is a brief-shape finding on that entry, and that
+// every other folder is still read. The walk used to abort on the first read
+// error and replace the whole set with one tree finding, so one unreadable
+// folder dropped every brief the project held.
+func TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions enforced: an unreadable directory is still readable on Windows and to root")
+	}
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(dir, "briefs", filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("alpha/one.md", okFront+"text\n")
+	write("locked/two.md", okFront+"text\n")
+	write("zeta/three.md", okFront+"text\n")
+	write("zeta/four.md", okFront+"text\n")
+	locked := filepath.Join(dir, "briefs", "locked")
+	unreadableFile := filepath.Join(dir, "briefs", "zeta", "four.md")
+	for _, p := range []string{locked, unreadableFile} {
+		if err := os.Chmod(p, 0o000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		os.Chmod(locked, 0o755)         //nolint:errcheck // best-effort restore for TempDir cleanup
+		os.Chmod(unreadableFile, 0o644) //nolint:errcheck // best-effort restore for TempDir cleanup
+	})
+
+	s := Load(testConfig(t, dir, ""))
+	var ids []string
+	for _, b := range s.Briefs {
+		ids = append(ids, b.ID)
+	}
+	if strings.Join(ids, ",") != "alpha.one,zeta.three" {
+		t.Fatalf("the readable briefs must still be read, got %v", ids)
+	}
+	got := s.TreeFindings()
+	if want := []string{"brief-shape briefs/locked/", "brief-shape briefs/zeta/four.md"}; !reflect.DeepEqual(rulesAndPaths(got), want) {
+		t.Fatalf("findings = %v, want %v", rulesAndPaths(got), want)
+	}
+	for _, f := range got {
+		if !strings.Contains(f.Message, "could not be read") || strings.Contains(f.Message, dir) {
+			t.Fatalf("an unreadable entry's message must say so without the absolute path: %q", f.Message)
+		}
+	}
+}
+
 // TestFromFiles_ShapeRefusals is the brief-shape rule's whole refusal list, one
 // tree per case, each asserting the exact rule and path the finding names.
 func TestFromFiles_ShapeRefusals(t *testing.T) {

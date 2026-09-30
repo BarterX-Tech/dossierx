@@ -208,10 +208,40 @@ func Load(cfg *config.Config) *Set {
 	if !info.IsDir() {
 		return FromFiles(cfg, []File{{Rel: ".", Regular: info.Mode().IsRegular(), Size: info.Size()}})
 	}
+	// An entry that cannot be read below the root is ONE finding on that
+	// entry, and the walk goes on: an unreadable folder must not drop every
+	// other folder's briefs (which made the whole project read as holding
+	// none). Only an unreadable root is the whole-tree finding below.
 	var files []File
+	type unreadable struct {
+		display string
+		err     error
+	}
+	var unread []unreadable
+	skip := func(p string, d fs.DirEntry, err error) error {
+		rel, relErr := filepath.Rel(dir, p)
+		if relErr != nil {
+			return relErr
+		}
+		display := path.Join(displayDir(cfg), filepath.ToSlash(rel))
+		if d != nil && d.IsDir() {
+			display += "/"
+		}
+		unread = append(unread, unreadable{display, err})
+		if d != nil && d.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	}
 	walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			if p == dir {
+				return err
+			}
+			if strings.HasPrefix(filepath.Base(p), ".") {
+				return nil
+			}
+			return skip(p, d, err)
 		}
 		if p == dir {
 			return nil
@@ -236,13 +266,13 @@ func Load(cfg *config.Config) *Set {
 		}
 		fi, statErr := d.Info()
 		if statErr != nil {
-			return statErr
+			return skip(p, d, statErr)
 		}
 		f.Size = fi.Size()
 		if path.Ext(f.Rel) == briefExt {
 			raw, readErr := os.ReadFile(p)
 			if readErr != nil {
-				return readErr
+				return skip(p, d, readErr)
 			}
 			f.Data = raw
 		}
@@ -254,7 +284,22 @@ func Load(cfg *config.Config) *Set {
 		s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir could not be read: %v", walkErr)
 		return s
 	}
-	return FromFiles(cfg, files)
+	s := FromFiles(cfg, files)
+	for _, u := range unread {
+		s.add(RuleShape, u.display, "could not be read (%v); a brief the engine cannot read is not judged, so this is refused rather than skipped", readErrText(u.err))
+	}
+	return s
+}
+
+// readErrText is an I/O error without the absolute path a *fs.PathError
+// carries: the finding already names the path, relative to the config
+// directory, as every brief finding does.
+func readErrText(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err.Error()
+	}
+	return err.Error()
 }
 
 // FromFiles builds a Set from an already-enumerated tree. It is Load's second

@@ -44,6 +44,7 @@ brief list / one brief
     command       brief list
     data          briefs:[{folder:string,id:string,path:string,review_pending:bool,review_pending_trigger:string,status:string,summary:string,title:string}]
                   count:number
+                  findings:[]
                   review_pending_only:bool
                   total:number
 
@@ -55,6 +56,7 @@ brief list / only the briefs awaiting review
     command       brief list
     data          briefs:[]
                   count:number
+                  findings:[]
                   review_pending_only:bool
                   total:number
 
@@ -66,6 +68,7 @@ brief show / by path
     command       brief show
     data          content:string
                   digest:string
+                  findings:[]
                   folder:string
                   id:string
                   images:[]

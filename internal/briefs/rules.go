@@ -134,6 +134,26 @@ func (s *Set) Findings(claims []model.Claim) []lint.Finding {
 	}
 	out := append([]lint.Finding(nil), s.findings...)
 	out = append(out, s.restsOnFindings(claims)...)
+	sortFindings(out)
+	return out
+}
+
+// TreeFindings is every finding the tree raised on its own — shape (an
+// unreadable entry among them), frontmatter and the caps — in Findings' order,
+// without the two rules that need the claims. It is what `brief list` and
+// `brief show` report beside the briefs they read, so neither answers "no
+// briefs" for a tree it could not fully read; those two commands load no
+// claims, so a brief stays readable while a claim file is broken.
+func (s *Set) TreeFindings() []lint.Finding {
+	if s == nil {
+		return nil
+	}
+	out := append([]lint.Finding(nil), s.findings...)
+	sortFindings(out)
+	return out
+}
+
+func sortFindings(out []lint.Finding) {
 	sort.SliceStable(out, func(i, j int) bool {
 		oi, oj := ruleOrder(out[i].LintName), ruleOrder(out[j].LintName)
 		if oi != oj {
@@ -141,7 +161,6 @@ func (s *Set) Findings(claims []model.Claim) []lint.Finding {
 		}
 		return out[i].ClaimID < out[j].ClaimID
 	})
-	return out
 }
 
 // restsOnFindings raises brief-rests-on-unknown for every id a brief rests on
