@@ -87,9 +87,24 @@ func (s *Server) writeBriefOpError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, cliout.CodeBriefNotFound)
 	case errors.Is(err, comments.ErrBriefFileChanged):
 		writeError(w, http.StatusConflict, cliout.CodeClaimFileChanged)
+	case errors.Is(err, briefs.ErrFrontmatterNotRewritable):
+		// The brief's STORED frontmatter is not one the engine can rewrite in
+		// place (no --- block, an unclosed one, YAML that is not a mapping):
+		// the file's fault, not the request's, and nothing was written. The
+		// claim twin is claim_not_serializable's 422, and so is this.
+		writeError(w, http.StatusUnprocessableEntity, cliout.CodeClaimNotSerializable)
 	default:
 		s.writeOpError(w, err)
 	}
+}
+
+// handleBriefRouteNotFound answers every /api/briefs/ request no brief
+// route matched — above all a brief's PATH written into the URL unescaped
+// (/api/briefs/briefs/x/y.md/comments), whose slashes split it across
+// segments so {id} never binds — with the JSON brief_not_found the routes
+// give a path, rather than the mux's plain-text 404.
+func (s *Server) handleBriefRouteNotFound(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, cliout.CodeBriefNotFound)
 }
 
 // handleListBriefComments: GET /api/briefs/{id}/comments[?open=1]. A read, so

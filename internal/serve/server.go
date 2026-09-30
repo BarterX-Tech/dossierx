@@ -425,6 +425,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/reopen", s.handleBriefReopen)
 	mux.HandleFunc("PATCH /api/briefs/{id}/comments/{tid}", s.handleBriefEdit)
 	mux.HandleFunc("DELETE /api/briefs/{id}/comments/{tid}", s.handleBriefDelete)
+	// Anything else under /api/briefs/ — a brief's path written unescaped
+	// among them — is the JSON brief_not_found, not the mux's text 404.
+	mux.HandleFunc("/api/briefs/", s.handleBriefRouteNotFound)
 	return mux
 }
 

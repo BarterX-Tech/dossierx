@@ -174,6 +174,43 @@ func TestBriefComments_AnIDAndOnlyAnID(t *testing.T) {
 		data = briefWrite(t, base, http.MethodPost, "/api/briefs/"+ref+"/comments", `{"body":"x"}`, http.StatusNotFound)
 		assertErrorCode(t, data, "brief_not_found")
 	}
+	// A path written unescaped splits across segments, so no brief route
+	// matches it; the catch-all under /api/briefs/ still answers the JSON
+	// code, for a read and a write alike.
+	for _, ep := range []struct{ method, path, body string }{
+		{http.MethodGet, "/api/briefs/briefs/widget/flow.md/comments", ""},
+		{http.MethodPost, "/api/briefs/briefs/widget/flow.md/comments", `{"body":"x"}`},
+		{http.MethodPost, "/api/briefs/widget.flow/comments/c-aaaaaa/replies/extra", `{"body":"x"}`},
+	} {
+		var data []byte
+		if ep.method == http.MethodGet {
+			var resp *http.Response
+			resp, data = do(t, ep.method, base+ep.path, "")
+			if resp.StatusCode != http.StatusNotFound {
+				t.Fatalf("GET %s: got %d, want 404 (%s)", ep.path, resp.StatusCode, data)
+			}
+		} else {
+			data = briefWrite(t, base, ep.method, ep.path, ep.body, http.StatusNotFound)
+		}
+		assertErrorCode(t, data, "brief_not_found")
+	}
+	assertClaimsUnchanged(t, before, root)
+}
+
+// TestBriefComments_AFrontmatterTheEngineCannotRewriteIs422 (F6): a brief
+// with no --- block is still a brief discovery reads, but its comments block
+// has nowhere to go. The add answers the claim twin's 422
+// claim_not_serializable with only the code, and the file is left as it was.
+func TestBriefComments_AFrontmatterTheEngineCannotRewriteIs422(t *testing.T) {
+	files := admissionFiles()
+	files["briefs/widget/bare.md"] = "# Bare\n\nNo frontmatter.\n"
+	_, base, root := startServer(t, baseConfig, files)
+	before := snapshotClaims(t, root)
+	data := briefWrite(t, base, http.MethodPost, "/api/briefs/widget.bare/comments", `{"body":"x"}`, http.StatusUnprocessableEntity)
+	assertErrorCode(t, data, "claim_not_serializable")
+	if strings.Contains(string(data), "frontmatter") {
+		t.Fatalf("the 422 must carry only its code, got %s", data)
+	}
 	assertClaimsUnchanged(t, before, root)
 }
 
