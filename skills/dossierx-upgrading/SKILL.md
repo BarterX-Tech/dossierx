@@ -10,7 +10,8 @@ description: >-
   or an old corpus lacks summaries, manifests or code links — and whenever
   you run dossierx claim recover-approved-content or re-export the skills.
   Covers the v0.7.20 → v0.7.21 pass in order, the v0.7.22 migrated_from and
-  tracks folds, re-exporting skills (retired
+  tracks folds, the advisory claim-fit triage (keep, move to a brief, delete,
+  approved through one thread per module), re-exporting skills (retired
   bundles are pruned), the layout_legacy moves, the pre-ledger crossing,
   recovering approved wording from git, the lock-store diff when lock policy
   0 is carried over to v1, the hand folds for governed_by, the doctrine hub,
@@ -55,7 +56,8 @@ human before the first unlock, so each locked claim is unlocked and re-locked **
    if the project has none; the human locks the constitution before any claim can lock.
 4. With the human's yes, `claim unlock <id> --reason "…"` each locked claim. It is re-locked once,
    at step 7, whatever else changes.
-5. Give every claim a `summary`, move claims off any other facet, and fit the caps.
+5. Give every claim a `summary`, sort each claim (claim fit, below), move claims off any other
+   facet, and fit the caps.
 6. `dossierx check --validate` until it is clean.
 7. Re-lock what the human still stands behind: `claim lock --dry-run` →
    `claim lock --reason "…" --proposal "<snapshot>"`, their approval claim by claim.
@@ -180,18 +182,51 @@ history; what backs it is `sources`. Fold each note by hand:
    once, on the human's yes: `claim unlock` → `claim lock --dry-run` →
    `claim lock --reason "…" --proposal "<snapshot>"`, folding the note edit into the same re-lock.
 
+## Claim fit — an advisory triage, never a gate
+
+An old corpus was written before briefs existed, so it holds claims that are not claims: design,
+voice, rationale, research, "this module owns…". The upgrade never refuses a corpus for that — no
+gate, no marker file — but the pass that re-locks is the pass to sort it, so each claim is unlocked
+and re-locked once. Run every claim in a module through the sorting step in
+**[`dossierx-claims`](../dossierx-claims/SKILL.md)** ("Is this worth a claim?") and put it in one of
+three piles: **keep**, **move to a brief** (**[`dossierx-briefs`](../dossierx-briefs/SKILL.md)**
+says how to write one), **delete**.
+
+1. Propose the batch in **one thread on the module**: `dossierx comment add <a claim id in the
+   module> --as agent --body "…"` listing every claim id, its pile, and for a move the brief path it
+   goes to. Nothing moves until the human resolves that thread in the viewer.
+2. On their Resolve: `dossierx claim unlock <id> --reason "<thread id>: <their words>"` for each
+   moved or deleted claim, naming the thread; write the brief as a draft; delete the claim file. A
+   module left with no claims is removed: its `manifest.yaml`, its `modules:` entry and every
+   `depends_on` naming it go in the same change.
+3. Notes under the client's `docs/` that are product knowledge — a design note, a decision, a
+   research write-up — become briefs in the same pass. DossierX writes nothing under `docs/`; a claim
+   citing such a note re-pins it through `source-internal-drift` as usual.
+4. `dossierx brief lock <path> --reason "…"` each new brief on the human's yes, in the same pass as
+   the re-lock of the claims that stay.
+
 ## `tracks` are gone
 
 v0.7.22. `tracks-retired` means the corpus predates it: a claim file carrying `tracks:`
 (`invalid_claim`) or a config declaring `tracks:` (`invalid_config`), and the `track` noun no
-longer exists. A feature is now a brief that lists the claims it rests on; each old track folds into
-one once your installed DossierX has briefs. Until then:
+longer exists. A feature is a brief in `briefs/features/` that lists the claims it rests on
+(**[`dossierx-briefs`](../dossierx-briefs/SKILL.md)**). Fold each old track into one:
 
 1. Keep a copy of the config's `tracks:` list and of each claim that owned a track (its body is the
-   feature's own prose) for that later fold. Then delete `tracks:` from the config.
-2. Delete the `tracks:` block from every claim file, draft and locked alike.
-3. Only a locked claim that carried `tracks:` reports `lock-content-drift` for it. Re-lock it on the
-   human's yes in the same pass as the `migrated_from` re-lock, so each claim re-locks once.
+   feature's own prose), then delete `tracks:` from the config and the `tracks:` block from every
+   claim file, draft and locked alike, so the corpus loads.
+2. For each track write `briefs/features/<track-id>.md`: the owner claim's `summary` and body (a
+   stub filled from the cited claims when there was no owner) and every cited claim id in
+   `rests_on`. Two tracks with identical membership become one brief (`brief-rests-on-duplicate`
+   says so). More than 12 tracks exceeds `max_briefs_per_folder`: say so; the recovery is the config
+   override, on the human's yes.
+3. Run the owner claim through the three questions in `dossierx-claims`. It usually fails and is
+   deleted; if it survives it stays a claim and joins the brief's `rests_on`.
+4. Propose the batch in one thread per module, as in the claim-fit triage above. On the human's
+   Resolve, unlock each deleted claim with a `--reason` naming the thread, and `dossierx brief lock
+   briefs/features/<track-id>.md --reason "…"` each feature brief in the same pass as the re-lock.
+   Only a locked claim that carried `tracks:` reports `lock-content-drift`; re-lock it there too, so
+   each claim re-locks once.
 
 ## New requirements a v0.7.20 corpus does not meet
 

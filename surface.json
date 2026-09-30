@@ -593,7 +593,7 @@
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:ab3231484b7c5dad919d1dfe7f85053b559d1263dc542869d014d2c5e91b0b61"
+    "skills": "sha256:89c215d70d91000a98d7e83441bbf6892267377dcf3a7fdea832189c66e1ba40"
   },
   "envelope": {
     "keys": [

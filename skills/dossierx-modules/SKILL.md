@@ -85,12 +85,15 @@ project.config.yaml that can be raised: raising it is **the human's decision, ne
 you think a raise is right, ask, say what it costs (a bigger module no longer fits its 6144-byte
 isolation budget, and every reader pays for the extra context), and **wait for an explicit yes**.
 Never raise a value in the same change that hits the cap, and never pad, merge or cram to fit.
+**The first step for every cap is moving what is not a claim to a brief** — design, voice, rationale,
+research, "this module owns…" (the sorting step in `dossierx-claims`; `dossierx-briefs` writes it) —
+before you split or trim what remains.
 
 | cap | refusal | default recovery | config value |
 |---|---|---|---|
-| 10 claims per module, drafts included | `module-claim-cap` on every claim of the module | retire a claim the rubric in `dossierx-claims` would not keep, or split the module | `max_claims_per_module` |
+| 10 claims per module, drafts included | `module-claim-cap` on every claim of the module | move what is not a claim to a brief, then retire a claim the rubric in `dossierx-claims` would not keep, then split the module | `max_claims_per_module` |
 | summary: one plain line, 200 characters | `summary-required` / `summary-oversize` | rewrite it as one standalone assertion; if it will not fit, it is two claims | `max_claim_summary_chars` |
-| `body` + `steps` + `rows` cells: 2000 characters (`raw_html` exempt) | `body-oversize` | cut the walkthrough, move evidence to `sources`, or split into two facts | `max_claim_body_chars` |
+| `body` + `steps` + `rows` cells: 2000 characters (`raw_html` exempt) | `body-oversize` | move the rationale to a brief and the evidence to `sources`, cut the walkthrough, or split into two facts | `max_claim_body_chars` |
 | manifest: 4096 bytes, summary 280 | `module-manifest` | trim the summary to the why; drop ids nobody pins | none |
 | isolation, module part: 6144 bytes | `view_too_large` from `manifest show --isolation`; plain `check` reports the same overflow | shorten claim summaries or the manifest, or split the module | none |
 | isolation, shared part: 10240 bytes | `shared-context-budget` on the project claim that crosses it (project-wide if the constitution alone does) | shorten project claim summaries, retire project claims, or trim the constitution | none |
