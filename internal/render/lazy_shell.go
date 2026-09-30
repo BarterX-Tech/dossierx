@@ -23,6 +23,12 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	}
 	in.graphPayload = graphPayload
 
+	briefsPayload, err := briefsPayloadJSONWithBudget(in.briefs, budget)
+	if err != nil {
+		return shellData{}, err
+	}
+	in.briefsPayload = briefsPayload
+
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
 	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups)
@@ -57,6 +63,12 @@ func (d *lazyShellData) GraphPayload() (template.JS, error) {
 	return d.projection.graphPayloadJSON()
 }
 
+// BriefsPayload is computed only if a project shell references it, like every
+// other corpus-sized projection here.
+func (d *lazyShellData) BriefsPayload() (template.JS, error) {
+	return d.projection.briefsPayloadJSON()
+}
+
 type lazyShellProjection struct {
 	in       shellInputs
 	partials map[model.Layout]*template.Template
@@ -73,6 +85,10 @@ type lazyShellProjection struct {
 	graphOnce sync.Once
 	graph     template.JS
 	graphErr  error
+
+	briefsOnce sync.Once
+	briefs     template.JS
+	briefsErr  error
 
 	homeOnce sync.Once
 	homeView HomeView
@@ -117,4 +133,11 @@ func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {
 		p.graph, p.graphErr = graphPayloadJSONWithBudget(p.in.cat, p.in.cfg, p.in.generatedAt, p.budget)
 	})
 	return p.graph, p.graphErr
+}
+
+func (p *lazyShellProjection) briefsPayloadJSON() (template.JS, error) {
+	p.briefsOnce.Do(func() {
+		p.briefs, p.briefsErr = briefsPayloadJSONWithBudget(p.in.briefs, p.budget)
+	})
+	return p.briefs, p.briefsErr
 }

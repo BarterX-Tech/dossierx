@@ -30,6 +30,7 @@ import (
 
 	"html"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
@@ -162,6 +163,16 @@ type shellData struct {
 	// it — is the one thing that makes the gate fail. internal/graph's package
 	// doc comment makes the same point at length.)
 	GraphPayload template.JS
+
+	// BriefsPayload is the briefs payload (NIT-204) — every brief, rendered in
+	// document mode, with its counts against the caps — injected into
+	// <script type="application/json" id="dossierx-briefs">. It is safe by the
+	// same mechanism as GraphPayload: encoding/json's default HTML escaping on
+	// the whole document, body HTML included. EMPTY FOR A PROJECT WITH NO
+	// BRIEFS, and shell.html emits the element only when it is not, so such a
+	// project's viewer is byte-identical to one rendered before briefs existed.
+	// Nothing in the viewer reads it yet; NIT-197 builds the UI.
+	BriefsPayload template.JS
 
 	// GraphCoreJS and GraphUIJS are the pane's two script files, injected in
 	// that order (core exports the namespace ui consumes) after the shell's
@@ -397,22 +408,51 @@ const ungroupedModuleName = "ungrouped"
 // final template execution, so a future fourth input or grouping level only
 // has to touch the stage it belongs to.
 func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
-	return renderAt(cat, cfg, time.Now().UTC())
+	return RenderWith(cat, cfg, Extras{})
+}
+
+// Extras is what the viewer renders beside the claim catalog: inputs that are
+// not claims and so have no place on catalog.Catalog. It exists for briefs
+// (NIT-204) and holds nothing else.
+//
+// WHY NOT A CATALOG FIELD, when readiness and conformance are catalog fields.
+// Those are projections OF CLAIMS; a brief is not one, and the coupling rule is
+// that a claim never learns about briefs. There is a dependency reason too:
+// internal/briefs imports internal/render/markdown (a brief's images and title
+// are read by the renderer's own block scan), and internal/catalog is on the
+// list of packages render must never be imported by, directly or through a
+// neighbor. Handing the set to the renderer beside the catalog keeps both true.
+//
+// The zero value renders exactly what Render always rendered.
+type Extras struct {
+	Briefs *briefs.Set
+}
+
+// RenderWith is Render with the non-claim inputs supplied.
+func RenderWith(cat *catalog.Catalog, cfg *config.Config, x Extras) (string, error) {
+	return renderBoundedAt(cat, cfg, x, time.Now().UTC(), 0)
 }
 
 func renderAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time) (string, error) {
-	return renderBoundedAt(cat, cfg, generatedAt, 0)
+	return renderBoundedAt(cat, cfg, Extras{}, generatedAt, 0)
 }
 
 // RenderBounded caps the generated viewer while preserving the shared renderer.
 func RenderBounded(cat *catalog.Catalog, cfg *config.Config, maxBytes int) (string, error) {
+	return RenderBoundedWith(cat, cfg, maxBytes, Extras{})
+}
+
+// RenderBoundedWith is RenderBounded with the non-claim inputs supplied. Every
+// byte they add to the viewer is charged against the same budget the claims'
+// are (see briefsPayloadJSONWithBudget).
+func RenderBoundedWith(cat *catalog.Catalog, cfg *config.Config, maxBytes int, x Extras) (string, error) {
 	if maxBytes <= 0 {
 		return "", fmt.Errorf("render: max bytes must be positive")
 	}
-	return renderBoundedAt(cat, cfg, time.Now().UTC(), maxBytes)
+	return renderBoundedAt(cat, cfg, x, time.Now().UTC(), maxBytes)
 }
 
-func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time, maxBytes int) (string, error) {
+func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generatedAt time.Time, maxBytes int) (string, error) {
 	if cat == nil {
 		cat = &catalog.Catalog{}
 	}
@@ -452,6 +492,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 		systemRecordJS:           tmpl.systemRecord,
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
+		briefs:                   x.Briefs,
 		generatedAt:              generatedAt,
 	}
 
@@ -776,6 +817,12 @@ type shellInputs struct {
 	conformanceStatusGuardJS []byte
 	graphPayload             template.JS
 
+	// briefs is Extras.Briefs; briefsPayload is its viewer payload, encoded and
+	// charged by briefsPayloadJSONWithBudget, empty for a project with no
+	// briefs.
+	briefs        *briefs.Set
+	briefsPayload template.JS
+
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
 }
@@ -812,6 +859,7 @@ func buildShellStaticData(in shellInputs) shellData {
 		GeneratedAt:              in.generatedAt.UTC().Format(time.RFC3339),
 		GraphCSS:                 template.CSS(in.graphCSS),
 		GraphPayload:             in.graphPayload,
+		BriefsPayload:            in.briefsPayload,
 		GraphCoreJS:              template.JS(in.graphCoreJS),
 		GraphUIJS:                template.JS(in.graphUIJS),
 		SystemRecordJS:           template.JS(in.systemRecordJS),
