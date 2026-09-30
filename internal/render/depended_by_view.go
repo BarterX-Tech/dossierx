@@ -19,11 +19,16 @@ package render
 
 import (
 	"html/template"
+	"path"
+	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
@@ -50,6 +55,192 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+// buildBriefsExplainingLookup is buildDependedByLookup's twin for briefs
+// (NIT-202): for every claim id some brief's rests_on names, the rows of
+// those briefs, sorted by brief id. It reverses the briefs' own frontmatter
+// every render and stores nothing — a claim never learns about briefs
+// (internal/briefs' coupling rules), so the only place this relationship can
+// exist on the claim card is here, derived.
+//
+// Only ids the catalog holds get an entry: a rests_on id that names no claim
+// (brief-rests-on-unknown's finding) has no card to draw a row on, and
+// keeping it out bounds the map by the claims rather than by what briefs
+// happen to say. A guidance brief — one that rests on nothing — lands in no
+// entry at all.
+func buildBriefsExplainingLookup(cat *catalog.Catalog, set *briefs.Set, anchors map[string]string) map[string][]components.BriefRow {
+	if cat == nil || set.Empty() {
+		return nil
+	}
+	claims := make(map[string]bool, len(cat.Claims))
+	for _, c := range cat.Claims {
+		claims[c.ID] = true
+	}
+	out := map[string][]components.BriefRow{}
+	for _, b := range set.Briefs {
+		for _, id := range b.RestsOn {
+			if claims[id] {
+				out[id] = append(out[id], briefRow(b, anchors))
+			}
+		}
+	}
+	for id := range out {
+		rows := out[id]
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// buildBriefsCitedLookup returns, for every claim with an internal source
+// whose path names a brief file (briefs_dir/<folder>/<slug>.md), one row per
+// cited brief. The row carries the source's pin and whether
+// source-internal-drift reports that source — the lint's own check, run on
+// that one source, so the card says "pin out of date" exactly when `check`
+// would; nothing here re-implements the hashing rule.
+//
+// A source path is matched as written, after slash-normalising and path.Clean:
+// briefs' names are [a-z0-9-] by rule, so "Briefs/Flow/X.md" is not a brief
+// path and stays in the Sources panel only. A brief path the tree does not
+// hold (a deleted or misspelt brief) still gets a row, with no link and no
+// lock state, because the claim still cites it; its pin is out of date by
+// the lint's verdict (the file cannot be read). Two sources citing one brief
+// make one row, out of date if either source is; its pin is the first
+// drifted source's when one has drifted, and the first source's otherwise.
+// Rows are sorted by brief path.
+//
+// A project holding no brief gets no row at all, even for a source whose
+// path looks like one: FORMAT.md's promise is that a project with no briefs
+// sees no brief-derived byte in its viewer, and such a source is still in the
+// Sources panel with its drift finding in `check`.
+func buildBriefsCitedLookup(cat *catalog.Catalog, cfg *config.Config, set *briefs.Set, anchors map[string]string) map[string][]components.BriefRow {
+	if cat == nil || set.Empty() {
+		return nil
+	}
+	byPath := make(map[string]briefs.Brief, len(set.Briefs))
+	for _, b := range set.Briefs {
+		byPath[b.Path] = b
+	}
+	drift := sourceDriftCheck(cfg)
+	out := map[string][]components.BriefRow{}
+	for _, c := range cat.Claims {
+		var rows []components.BriefRow
+		index := map[string]int{}
+		for _, s := range c.Sources {
+			if !s.IsInternal() {
+				continue
+			}
+			p := path.Clean(filepath.ToSlash(strings.TrimSpace(s.Path)))
+			// A brief file is exactly one folder below briefs_dir.
+			folderDir := path.Dir(p)
+			if path.Dir(folderDir) != set.DisplayDir || path.Ext(p) != ".md" {
+				continue
+			}
+			outOfDate := drift(c.ID, s)
+			if i, seen := index[p]; seen {
+				// The row's pin is the one its hover shows: once any source
+				// has drifted, that is the drifted source's pin, never a
+				// holding one beside "pin out of date".
+				if outOfDate && !rows[i].PinOutOfDate {
+					rows[i].Pin, rows[i].PinOutOfDate = s.SHA256, true
+				}
+				continue
+			}
+			row := components.BriefRow{Path: p, Folder: path.Base(folderDir), Title: s.Title}
+			if b, ok := byPath[p]; ok {
+				row = briefRow(b, anchors)
+			} else if row.Title == "" {
+				row.Title = p
+			}
+			row.Pin, row.PinOutOfDate = s.SHA256, outOfDate
+			index[p] = len(rows)
+			rows = append(rows, row)
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].Path < rows[j].Path })
+		out[c.ID] = rows
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// sourceDriftCheck returns a func reporting whether source-internal-drift
+// finds anything wrong with one internal source of claim id: the registered
+// lint, run over a claim holding that one source. With no such lint
+// registered every pin reads out of date, the direction that never shows an
+// unchecked pin as holding.
+//
+// The verdict depends only on the source's path, record_id and recorded
+// sha256 (the claim id only names the finding), so it is memoised on those
+// three within one render: a brief cited by many claims is read and hashed
+// once per distinct pin, not once per citing source.
+func sourceDriftCheck(cfg *config.Config) func(string, model.Source) bool {
+	type pinKey struct{ path, record, sum string }
+	for _, l := range lint.Registry {
+		if l.Name() == "source-internal-drift" {
+			seen := map[pinKey]bool{}
+			return func(id string, s model.Source) bool {
+				k := pinKey{s.Path, s.RecordID, s.SHA256}
+				if v, ok := seen[k]; ok {
+					return v
+				}
+				v := len(l.Check([]model.Claim{{ID: id, Sources: []model.Source{s}}}, cfg)) > 0
+				seen[k] = v
+				return v
+			}
+		}
+	}
+	return func(string, model.Source) bool { return true }
+}
+
+// briefRow is the row fields a brief itself supplies, and its page id from
+// anchors (briefAnchors' map, the one the brief pages are given).
+func briefRow(b briefs.Brief, anchors map[string]string) components.BriefRow {
+	return components.BriefRow{
+		ID:     b.ID,
+		Anchor: anchors[b.ID],
+		Path:   b.Path,
+		Folder: b.Folder,
+		Slug:   b.Slug,
+		Title:  b.Title,
+		Locked: b.Status == briefs.StatusLocked,
+	}
+}
+
+// buildBriefRelationsLookup joins the two brief lookups into the one value
+// per claim the edges footer takes. Each row's link is the brief page's own
+// id from briefAnchors, computed from the same set, catalog and config the
+// pages are rendered from — so a brief whose plain id another brief or a
+// module already spells links to its own -2 section, not the other one's.
+func buildBriefRelationsLookup(cat *catalog.Catalog, cfg *config.Config, set *briefs.Set) map[string]components.BriefRelations {
+	if set.Empty() {
+		return nil
+	}
+	anchors := briefAnchors(set, cat, cfg)
+	explained := buildBriefsExplainingLookup(cat, set, anchors)
+	cited := buildBriefsCitedLookup(cat, cfg, set, anchors)
+	if len(explained) == 0 && len(cited) == 0 {
+		return nil
+	}
+	out := make(map[string]components.BriefRelations, len(explained)+len(cited))
+	for id, rows := range explained {
+		r := out[id]
+		r.ExplainedBy = rows
+		out[id] = r
+	}
+	for id, rows := range cited {
+		r := out[id]
+		r.CitedAsEvidence = rows
+		out[id] = r
 	}
 	return out
 }
@@ -130,12 +321,15 @@ func buildTargetStatusLookup(cat *catalog.Catalog) map[string]components.TargetS
 // a gated project with no artifact at all is the loudest case of the row
 // this override exists to draw — every locked, code-producing claim is
 // unlinked — and the default binding cannot know that.
-func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, linksGated bool, dependedByLookup map[string][]string, targetStatusLookup map[string]components.TargetStatus) {
-	if len(implinkLookup) == 0 && !linksGated && len(dependedByLookup) == 0 && len(targetStatusLookup) == 0 {
+//
+// briefLookup (NIT-202) is the derived BRIEFS group per claim; a project with
+// no brief row anywhere passes nil and gets the output it had before.
+func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, linksGated bool, dependedByLookup map[string][]string, targetStatusLookup map[string]components.TargetStatus, briefLookup map[string]components.BriefRelations) {
+	if len(implinkLookup) == 0 && !linksGated && len(dependedByLookup) == 0 && len(targetStatusLookup) == 0 && len(briefLookup) == 0 {
 		return
 	}
 	edges := func(c model.Claim) template.HTML {
-		return components.EdgesHTMLWithCodeLinks(c, implinkLookup[c.ID], linksGated, dependedByLookup[c.ID], targetStatusLookup)
+		return components.EdgesHTMLWithCodeLinks(c, implinkLookup[c.ID], linksGated, dependedByLookup[c.ID], targetStatusLookup, briefLookup[c.ID])
 	}
 	for _, tmpl := range partials {
 		tmpl.Funcs(template.FuncMap{"edges": edges})
