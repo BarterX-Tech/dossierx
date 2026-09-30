@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -101,6 +102,9 @@ func TestLoad_ReadsTheWorkingTreeAndSkipsHiddenEntries(t *testing.T) {
 // never judged and `check` passed. A symlinked folder was reported as "a file
 // directly under briefs/", which is not what the author made.
 func TestLoad_SymlinkedTreeIsRefusedNotEmpty(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires Unix symlink semantics; TestFromFiles_ShapeRefusals covers the rule on every platform")
+	}
 	realTree := func(t *testing.T, dir string) string {
 		t.Helper()
 		target := filepath.Join(dir, "elsewhere")
@@ -159,6 +163,9 @@ func TestFromFiles_ShapeRefusals(t *testing.T) {
 		{"folder name outside the set", map[string]File{"Check_Out/x.md": md(okFront)}, []string{"brief-shape briefs/Check_Out/x.md"}},
 		{"file name outside the set", map[string]File{"a/My Brief.md": md(okFront)}, []string{"brief-shape briefs/a/My Brief.md"}},
 		{"non-regular file", map[string]File{"a/x.md": {}}, []string{"brief-shape briefs/a/x.md"}},
+		{"non-regular folder (a symlink or a gitlink)", map[string]File{"a": {}}, []string{"brief-shape briefs/a"}},
+		{"briefs_dir itself a link", map[string]File{".": {}}, []string{"brief-shape briefs/"}},
+		{"briefs_dir itself a file", map[string]File{".": {Regular: true}}, []string{"brief-shape briefs"}},
 		{"image nothing references", map[string]File{"a/x.md": md(okFront + "text\n"), "a/orphan.png": {Regular: true, Size: 10}}, []string{"brief-shape briefs/a/orphan.png"}},
 		{"image referenced from another folder is still unreferenced", map[string]File{"a/x.md": md(okFront + "![f](f.png)\n"), "b/f.png": {Regular: true, Size: 10}}, []string{"brief-shape briefs/a/x.md", "brief-shape briefs/b/f.png"}},
 		{"referenced and present is clean", map[string]File{"a/x.md": md(okFront + "![f](f.png)\n"), "a/f.png": {Regular: true, Size: 10}}, nil},

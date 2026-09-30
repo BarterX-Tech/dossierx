@@ -8,6 +8,7 @@ package check_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -80,6 +81,9 @@ func TestBriefFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 // drop the entries and pass a tree --validate refused. The root case also pins
 // that a linked briefs_dir is refused rather than read as no briefs.
 func TestBriefSymlinksAreRefusedInBothModes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires Unix index semantics")
+	}
 	for _, tc := range []struct {
 		name  string
 		links map[string]string // link path (repo-relative) -> target
