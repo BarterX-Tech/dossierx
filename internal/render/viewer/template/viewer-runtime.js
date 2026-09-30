@@ -375,8 +375,15 @@
         var d = new Date(t.getAttribute('datetime'));
         if (isNaN(d.getTime())) { return; }
         try {
-          t.textContent = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) +
-            ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          var time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          var sameYear = d.getFullYear() === new Date().getFullYear();
+          // The phone board drops the year ("CHECKED 29 SEP, 14:02"); the
+          // desktop one keeps it. One <time>, so the shorter form is used on
+          // both only when the year is the current one.
+          var wide = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+          var narrow = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+          var phone = window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
+          t.textContent = ((phone && sameYear) ? narrow : wide) + ', ' + time;
         } catch (e) {}
       }
 
