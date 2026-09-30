@@ -40,6 +40,18 @@ type watcher struct {
 	debounce   time.Duration
 	onChange   func()
 	extraFiles []string
+	// trees are further directory trees fingerprinted beside root, each with
+	// its own exclusion rule. It holds briefs_dir (NIT-204). Unlike root, a
+	// tree that does not exist is EMPTY rather than a scan error: briefs/ is
+	// optional, and a watcher whose every scan failed would keep its baseline
+	// forever and never see the directory appear.
+	trees []watchTree
+}
+
+// watchTree is one extra tree the watcher fingerprints.
+type watchTree struct {
+	root   string
+	ignore func(name string) bool
 }
 
 func newWatcher(root string, poll, debounce time.Duration, onChange func()) *watcher {
@@ -54,6 +66,18 @@ func (w *watcher) scan() (map[string]fileStamp, error) {
 	fp, err := scanFingerprint(w.root)
 	if err != nil {
 		return nil, err
+	}
+	for _, tree := range w.trees {
+		if _, statErr := os.Stat(tree.root); errors.Is(statErr, fs.ErrNotExist) {
+			continue
+		}
+		sub, treeErr := fingerprintTree(tree.root, true, tree.ignore)
+		if treeErr != nil {
+			return nil, treeErr
+		}
+		for p, stamp := range sub {
+			fp[p] = stamp
+		}
 	}
 	for _, file := range w.extraFiles {
 		info, statErr := os.Stat(file)
@@ -218,6 +242,15 @@ func notAClaimFile(name string) bool {
 // why it belongs to the watcher alone. See scanFingerprint.
 func ignoredClaimFile(name string) bool {
 	return strings.Contains(name, ".tmp-") || notAClaimFile(name)
+}
+
+// ignoredBriefFile is the briefs tree's exclusion: every file counts —
+// internal/briefs refuses anything a brief folder should not hold, so a stray
+// file appearing is a change the status strip must show — except a name that
+// begins with ".", which internal/briefs does not read at all, and the atomic
+// writer's ".tmp-" scratch names.
+func ignoredBriefFile(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.Contains(name, ".tmp-")
 }
 
 // fingerprintsEqual reports whether two tree fingerprints are identical (the

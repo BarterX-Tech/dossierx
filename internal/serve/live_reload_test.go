@@ -181,6 +181,37 @@ func TestSSE_ObservationOnlyWriteRefreshesConformance(t *testing.T) {
 	}
 }
 
+// TestSSE_BriefEditDeliversChangedAndRerenders is live reload for briefs
+// (NIT-204): the watcher fingerprints briefs_dir beside claims_dir, so creating
+// the tree under a running serve, and then editing a brief in it, each deliver a
+// changed and a page carrying the new brief. The project starts with NO briefs/
+// directory, which is the case a watcher that treated a missing tree as a scan
+// error would never recover from.
+func TestSSE_BriefEditDeliversChangedAndRerenders(t *testing.T) {
+	_, base, root := startServerFast(t, standardFiles())
+	resp, before := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || strings.Contains(string(before), "dossierx-briefs") {
+		t.Fatalf("a project with no briefs must carry no briefs payload: %d", resp.StatusCode)
+	}
+	events, cancel := sseClient(t, base)
+	defer cancel()
+
+	brief := filepath.Join(root, "briefs", "widget", "flow.md")
+	writeFile(t, brief, "---\nsummary: First summary.\n---\n# Widget flow\n")
+	waitChanged(t, events, 3*time.Second)
+	resp, after := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), `id="dossierx-briefs"`) || !strings.Contains(string(after), "First summary.") {
+		t.Fatalf("a new brief must reach the page: %d", resp.StatusCode)
+	}
+
+	writeFile(t, brief, "---\nsummary: Second summary, edited.\n---\n# Widget flow\n")
+	waitChanged(t, events, 3*time.Second)
+	resp, after = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), "Second summary, edited.") || strings.Contains(string(after), "First summary.") {
+		t.Fatalf("an edited brief must reach the page: %d", resp.StatusCode)
+	}
+}
+
 // A *.tmp-* file appearing then vanishing (the atomic-writer scratch pattern)
 // delivers no event at all.
 func TestSSE_TmpFileDeliversNoChanged(t *testing.T) {
