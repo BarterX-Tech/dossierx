@@ -167,6 +167,12 @@ type imagePolicy struct {
 	// It is a pointer because the policy is copied by value down the whole
 	// call tree and every copy must append to the same slice.
 	refs *[]string
+	// refused, when non-nil, collects every authored src the gate REFUSED
+	// on a surface where images are enabled, as written, in document order.
+	// Only DocumentRefusedImages sets it: a brief's refused image is a
+	// finding (internal/briefs), where a claim's is the literal text its
+	// author sees in the viewer.
+	refused *[]string
 }
 
 // accept applies the whole gate to one authored src and returns the URL to
@@ -182,6 +188,9 @@ func (p imagePolicy) accept(src string) (string, bool) {
 	}
 	rel, ok := gate(src)
 	if !ok {
+		if p.refused != nil {
+			*p.refused = append(*p.refused, src)
+		}
 		return "", false
 	}
 	if p.refs != nil {

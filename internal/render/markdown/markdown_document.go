@@ -71,6 +71,23 @@ func DocumentImages(body string) []string {
 	return refs
 }
 
+// DocumentRefusedImages returns every image src in body that DocumentImageSrc
+// refuses, as authored, in document order: "PIC.svg", "./pic.svg",
+// "../x.svg", "https://...". RenderDocument writes each as the literal text of
+// its "![alt](src)", so internal/briefs raises it as a finding rather than let
+// an image the author meant to show read as nothing wrong. It runs the same
+// block and inline passes, so an image in a fenced example is absent here as it
+// is absent from the page.
+func DocumentRefusedImages(body string) []string {
+	var refused []string
+	var b strings.Builder
+	renderBlocks(&b, strings.Split(body, "\n"), true, bodyPolicy{
+		img:      imagePolicy{enabled: true, sibling: true, refused: &refused},
+		document: true,
+	})
+	return refused
+}
+
 // DocumentTitle returns the raw text of the first level-1 heading RenderDocument
 // would emit for body, and false when it emits none. "Raw" means as authored,
 // before the inline pass: the title is a label (a list row, a payload field),

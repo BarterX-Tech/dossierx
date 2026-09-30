@@ -491,6 +491,14 @@ func (s *Set) parse(folder string, f File) Brief {
 		seen[name] = true
 		b.Images = append(b.Images, Image{Name: name})
 	}
+	refused := map[string]bool{}
+	for _, src := range markdown.DocumentRefusedImages(body) {
+		if refused[src] {
+			continue
+		}
+		refused[src] = true
+		s.add(RuleShape, b.Path, "image %q is not one a brief can show, so it renders as literal text; a brief references an image by its bare file name in its own folder — [a-z0-9-] and a lowercase .png/.jpg/.jpeg/.gif/.webp/.svg extension, as ![alt](flow-diagram.svg)", src)
+	}
 	return b
 }
 

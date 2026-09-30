@@ -225,6 +225,10 @@ func TestFromFiles_ShapeRefusals(t *testing.T) {
 		{"image nothing references", map[string]File{"a/x.md": md(okFront + "text\n"), "a/orphan.png": {Regular: true, Size: 10}}, []string{"brief-shape briefs/a/orphan.png"}},
 		{"image referenced from another folder is still unreferenced", map[string]File{"a/x.md": md(okFront + "![f](f.png)\n"), "b/f.png": {Regular: true, Size: 10}}, []string{"brief-shape briefs/a/x.md", "brief-shape briefs/b/f.png"}},
 		{"referenced and present is clean", map[string]File{"a/x.md": md(okFront + "![f](f.png)\n"), "a/f.png": {Regular: true, Size: 10}}, nil},
+		{"an uppercase image src the gate refuses", map[string]File{"a/x.md": md(okFront + "![p](PIC.svg)\n")}, []string{"brief-shape briefs/a/x.md"}},
+		{"a ./ image src the gate refuses", map[string]File{"a/x.md": md(okFront + "![p](./pic.svg)\n")}, []string{"brief-shape briefs/a/x.md"}},
+		{"a ../ image src the gate refuses", map[string]File{"a/x.md": md(okFront + "![p](../x.svg)\n")}, []string{"brief-shape briefs/a/x.md"}},
+		{"an image inside a fenced example is not an image", map[string]File{"a/x.md": md(okFront + "```\n![p](PIC.svg)\n```\n")}, nil},
 		{"hidden names are not read", map[string]File{".DS_Store": {Regular: true}, "a/.keep": {Regular: true}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

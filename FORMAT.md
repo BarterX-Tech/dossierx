@@ -1514,7 +1514,10 @@ chrome that owns h1 and h2, so a claim body renders `# x` as literal text (see
 "`body` and the markdown ceiling"); a brief is the whole page it is shown on.
 A brief's title is its first `#` heading, and otherwise its file name
 title-cased (`order-plan.md` → "Order Plan"). An image is referenced by its
-bare file name in the brief's own folder: `![Flow](flow-diagram.svg)`.
+bare file name in the brief's own folder: `![Flow](flow-diagram.svg)`. Any
+other image src — `PIC.svg`, `./pic.svg`, `../x.svg`, a URL — would render as
+the literal text of its `![alt](src)`, and is refused (`brief-shape`) on the
+brief's path.
 Citation markers do not resolve in a brief (it has no `sources`).
 
 ### Caps

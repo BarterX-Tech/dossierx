@@ -53,7 +53,8 @@ section, whose links now point at the exported `SKILL.md` files.
   (`surface.json` lists them as `brief_rules`): `brief-shape` (a file directly
   under `briefs/`, anything deeper, any other file, a name outside the set, a
   non-regular file, an image nothing references, a reference to an image the
-  folder lacks), `brief-frontmatter`, `brief-rests-on-unknown` (an id that is
+  folder lacks, an image src that is not a bare file name in the folder),
+  `brief-frontmatter`, `brief-rests-on-unknown` (an id that is
   not a claim), all errors; `brief-rests-on-duplicate` (two briefs with the same
   `rests_on` set), a warning; and four final caps with config overrides, each
   set only on the human's yes: `brief-word-cap` (2,000 words,
