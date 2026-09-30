@@ -15,9 +15,9 @@ import (
 )
 
 // HomeView is the viewer's landing page (NIT-196): what is waiting on the
-// human, then one tile per section. Every value is read from inputs the
-// render already has — the catalog, the constitution file and the module
-// groups — and nothing on it is written by the project except the title and
+// human, then one tile per section. Every value is read from the catalog,
+// the module groups, constitution.yaml and the lock store's constitution
+// record, and nothing on it is written by the project except the title and
 // eyebrow, which the shell already carries.
 //
 // Briefs (NIT-192) are not in the engine yet, so the brief halves of the
@@ -25,10 +25,12 @@ import (
 // "no briefs/" empty state the design fixes: those parts are hidden, not
 // shown as zero.
 //
-// Cost: one pass over the claims plus one over each claim's comments, and
-// one over the module groups. Output is bounded independently of corpus
-// size: a card names at most homeCardNames claims and a draft card at most
-// homeDraftModules modules, each followed by a count of the rest.
+// Cost: two passes over the claims (the cards, and the project-claim count)
+// plus one over each claim's comments, one over the module groups, and two
+// small file reads for the Constitution tile (constitution.yaml and the lock
+// store). Output is bounded independently of corpus size: a card names at
+// most homeCardNames claims and a draft card at most homeDraftModules
+// modules, each followed by a count of the rest.
 type HomeView struct {
 	// Cards holds only the kinds with something waiting, in the fixed
 	// order edited, re-read, threads, drafts. A kind at zero is absent.
@@ -71,10 +73,15 @@ type HomeCard struct {
 // "status: locked" with no record, or a locked file edited since, is not
 // shown as Locked. Label is the pill's word for it.
 type HomeConstitutionTile struct {
-	Present       bool
-	Locked        bool
-	State         string
+	Present bool
+	Locked  bool
+	State   string
+	// Label is the pill's word for State; ShortLabel is the phone row's,
+	// where the pill shares a line with the counts; MeterLabel is the
+	// Constitution page's meter's, lower case after its word count.
 	Label         string
+	ShortLabel    string
+	MeterLabel    string
 	ProjectClaims int
 	// Stats are the invariants, decisions and glossary counts in that order,
 	// each with its label already made singular or plural; Line is the same
@@ -273,12 +280,16 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 	case constitution.StateDraft:
 		t.Label = "Draft"
 	case constitution.StateEdited:
-		t.Label = "Edited since lock"
+		t.Label, t.ShortLabel = "Edited since lock", "Edited"
 	case constitution.StateUnrecorded:
 		t.Label = "Not locked"
 	default:
 		t.Label = "Unreadable"
 	}
+	if t.ShortLabel == "" {
+		t.ShortLabel = t.Label
+	}
+	t.MeterLabel = strings.ToLower(t.Label)
 	t.Present = true
 	t.State = string(v.State)
 	t.Locked = v.State == constitution.StateLocked
@@ -291,8 +302,10 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 		{d.Decisions, plural(d.Decisions, "decision")},
 		{d.Glossary, plural(d.Glossary, "glossary term")},
 	}
-	t.Line = fmt.Sprintf("%s · %s · %s",
-		countNoun(d.Invariants, "invariant"), countNoun(d.Decisions, "decision"), countNoun(d.Glossary, "term"))
+	// Non-breaking inside each count and before each separator, so a narrow
+	// phone row wraps between counts and never starts a line with "·".
+	nb := func(n int, noun string) string { return strings.ReplaceAll(countNoun(n, noun), " ", "\u00a0") }
+	t.Line = nb(d.Invariants, "invariant") + "\u00a0· " + nb(d.Decisions, "decision") + "\u00a0· " + nb(d.Glossary, "term")
 	return t
 }
 

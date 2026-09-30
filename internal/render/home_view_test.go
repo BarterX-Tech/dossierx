@@ -153,6 +153,11 @@ func TestRender_HomeEmptyStates(t *testing.T) {
 	if strings.Contains(out, `class="dx-icon dx-icon--lock site-nav__lock"`) {
 		t.Errorf("the sidebar shows a lock for a roof with no lock record")
 	}
+	// The Constitution page's own meter reads the same verdict, so the two
+	// pages of one viewer never disagree about the roof.
+	if !strings.Contains(out, "6 of 800 words · not locked</p>") {
+		t.Errorf("the Constitution meter must name the gate's verdict for an unrecorded roof:\n%s", between(t, out, `<p class="constitution-meter">`, `</p>`))
+	}
 
 	// Record the lock the way constitution lock does, then edit the file:
 	// the gate says edited, and so must Home.
@@ -180,7 +185,6 @@ func TestRender_HomeEmptyStates(t *testing.T) {
 	if strings.Contains(edited, `class="dx-icon dx-icon--lock site-nav__lock"`) {
 		t.Errorf("the sidebar shows a lock for a roof edited after its lock")
 	}
-	writeFile(t, cfg.ConstitutionPath(), roof)
 	if !strings.Contains(out, `class="sec-tab site-nav__item constitution-tab"`) {
 		t.Errorf("Constitution sidebar entry missing once constitution.yaml exists")
 	}

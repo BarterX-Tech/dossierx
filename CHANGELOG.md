@@ -40,8 +40,9 @@ section, whose links now point at the exported `SKILL.md` files.
   lock, grouped by module. A card at zero is hidden, and with nothing waiting
   the row is one "Nothing waiting on you" line. The Constitution tile (shown
   when `constitution.yaml` exists) gives the roof gate's own state (Locked,
-  Draft, Not locked, or Edited since lock, judged against the lock store, not
-  the file's status line) and its invariant, decision and glossary counts; the
+  Draft, Not locked, Edited since lock or Unreadable, judged against the lock
+  store, not the file's status line) and its invariant, decision and glossary
+  counts; the Constitution page's word meter now names the same state. The
   Modules tile gives claims locked out of total. Every card and tile links to
   what it counts. Home's address is `#_home`; a hash the viewer does not
   recognise now lands on Home instead of the first module.

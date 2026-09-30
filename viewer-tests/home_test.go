@@ -40,7 +40,6 @@ func TestHomeIsTheLandingPage(t *testing.T) {
 			{"the draft card leads to it", `card.getAttribute('href') === '#` + testClaimID + `'`},
 			{"no card counts what is not there", `home.querySelectorAll('.home-card').length === 1`},
 			{"the header names the project", `home.querySelector('.home-title').textContent.trim() === document.querySelector('.sidebar h1').textContent.trim()`},
-			{"no status strip on Home", `document.getElementById('statusStrip').hidden`},
 		})
 
 	// A search opens the Modules group so its matches show, and clearing it
@@ -124,4 +123,32 @@ claims_dir: claims
 	if evalBool(t, ctx, `document.querySelector('#nav .home-tab').classList.contains('on')`) {
 		t.Fatal("the Home tab is marked current while the home module is shown")
 	}
+}
+
+// Home is not a facet, so the status strip, which counts findings "in this
+// facet", stays off it. Only a project-wide finding (no claim id) can reach
+// the strip while Home is showing: a claim-scoped one is filtered out by the
+// empty facet on its own. The finding is delivered through the same hook the
+// Issues tests use in place of a live /api/status answer.
+func TestStatusStripStaysOffHome(t *testing.T) {
+	p := newProject(t)
+	url := p.renderStatic()
+	ctx := browserContext(t)
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Navigate(url+widgetPage), chromedp.WaitVisible(`[id="`+testClaimID+`"]`, chromedp.ByQuery))
+
+	evalVoid(t, ctx, `window.dossierxRenderStatusStrip({
+		ledger_findings: [{rule: 'lock-tamper', message: 'project-wide finding'}],
+		readiness: {}
+	})`)
+	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
+
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('#nav .home-tab').click();`, nil))
+	pollTrue(t, ctx, homeVisible)
+	if !evalBool(t, ctx, `document.getElementById('statusStrip').hidden`) {
+		t.Fatal("the status strip shows on Home for a project-wide finding")
+	}
+
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('#nav .sec-tab[data-target="#widget"]').click();`, nil))
+	pollTrue(t, ctx, `!document.getElementById('widget').hidden && !document.getElementById('statusStrip').hidden`)
 }

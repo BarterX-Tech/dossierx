@@ -10133,7 +10133,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 @media screen and (min-width: 861px) {
   .site-nav,
   .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
-  .site-nav { padding-bottom: 2px; }
+  .site-nav { margin-top: 16px; padding-bottom: 2px; }
   .site-nav .sec-tab,
   .system-nav-groups .system-nav-group__toggle,
   .nav-utilities #dxgOpen {
@@ -10141,7 +10141,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
     min-height: 34px;
     margin: 0;
   }
-  .nav-utilities { padding-top: 12px; }
+  .nav-utilities { margin-top: 12px; padding-top: 13px; }
 }
 .home-link {
   color: inherit;

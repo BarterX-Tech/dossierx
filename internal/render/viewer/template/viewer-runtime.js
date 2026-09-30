@@ -377,12 +377,17 @@
         });
       }
 
-      // The Home header's "last check" arrives as the RFC3339 instant; show it
-      // as a date and time in the reader's own zone.
+      // The Home header's "last check" is the sidebar's render stamp (the
+      // one the freshness footer reads), shown as a date and time in the
+      // reader's own zone. The stamp stays out of <main> so a live-reload
+      // fragment is a verbatim slice of the page it came from.
       function localizeHomeCheck() {
-        var t = document.querySelector('.home-checked[datetime]');
-        if (!t) { return; }
-        var d = new Date(t.getAttribute('datetime'));
+        var t = document.querySelector('.home-checked');
+        var sidebar = document.getElementById('sidebar');
+        var iso = sidebar && sidebar.dataset.generatedAt;
+        if (!t || !iso) { return; }
+        t.setAttribute('datetime', iso);
+        var d = new Date(iso);
         if (isNaN(d.getTime())) { return; }
         try {
           var time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });

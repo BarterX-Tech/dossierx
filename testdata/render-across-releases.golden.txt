@@ -141,13 +141,13 @@ testdata/fixture-basic/build/catalog/catalog.json  (+3 -61)
    }
  }
 
-testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
+testdata/fixture-basic/build/viewer/index.html  (+1341 -1443)
     inputs changed  testdata/fixture-basic/build/ledger/lock-store.json
                     testdata/fixture-basic/claims/widget-fields.yaml
                     testdata/fixture-basic/claims/widget-overview.yaml
                     testdata/fixture-basic/claims/widget/manifest.yaml
                     testdata/fixture-basic/constitution.yaml
-    size            23276 lines / 1234179 bytes -> 23169 lines / 1222436 bytes
+    size            23276 lines / 1234179 bytes -> 23174 lines / 1222711 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -1670,7 +1670,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 +@media screen and (min-width: 861px) {
 +  .site-nav,
 +  .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
-+  .site-nav { padding-bottom: 2px; }
++  .site-nav { margin-top: 16px; padding-bottom: 2px; }
 +  .site-nav .sec-tab,
 +  .system-nav-groups .system-nav-group__toggle,
 +  .nav-utilities #dxgOpen {
@@ -1678,7 +1678,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 +    min-height: 34px;
 +    margin: 0;
 +  }
-+  .nav-utilities { padding-top: 12px; }
++  .nav-utilities { margin-top: 12px; padding-top: 13px; }
 +}
 +.home-link {
 +  color: inherit;
@@ -2153,7 +2153,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 +
 +        <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
 +          <header class="home-head">
-+            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked" datetime="<GENERATED-AT-RFC3339>"><GENERATED-AT-RFC3339></time></p>
++            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked"></time></p>
 +            <h2 id="homeTitle" class="home-title">dossierx viewer</h2>
 +          </header>
 +          <section class="home-waiting" aria-labelledby="homeWaitingTitle">
@@ -2176,7 +2176,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 +                <span class="home-tile__head"><span class="home-tile__title">Constitution</span><span class="home-pill home-wide" data-state="locked">Locked</span></span>
 +                <span class="home-tile__desc home-wide">From constitution.yaml.</span>
 +                <span class="home-stats home-wide"><span class="home-stat"><span class="home-stat__count">1</span><span class="home-stat__label">invariant</span></span><span class="home-stat"><span class="home-stat__count">0</span><span class="home-stat__label">decisions</span></span><span class="home-stat"><span class="home-stat__count">0</span><span class="home-stat__label">glossary terms</span></span></span>
-+                <span class="home-tile__line home-narrow">1 invariant · 0 decisions · 0 terms</span>
++                <span class="home-tile__line home-narrow">1 invariant · 0 decisions · 0 terms</span>
 +              </span>
 +              <span class="home-pill home-narrow" data-state="locked">Locked</span>
 +              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
@@ -2389,7 +2389,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        // hashId() truncating. And showModuleFacet rewrites the hash on every
        // nav, so a rewrite that dropped the suffix would erase the graph state
        // the pane had just written — hence hashGraphSuffix() being appended.
-@@ -12304,6 +12883,41 @@
+@@ -12304,6 +12883,46 @@
          return decodeURIComponent(raw);
        }
 
@@ -2408,12 +2408,17 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 +        });
 +      }
 +
-+      // The Home header's "last check" arrives as the RFC3339 instant; show it
-+      // as a date and time in the reader's own zone.
++      // The Home header's "last check" is the sidebar's render stamp (the
++      // one the freshness footer reads), shown as a date and time in the
++      // reader's own zone. The stamp stays out of <main> so a live-reload
++      // fragment is a verbatim slice of the page it came from.
 +      function localizeHomeCheck() {
-+        var t = document.querySelector('.home-checked[datetime]');
-+        if (!t) { return; }
-+        var d = new Date(t.getAttribute('datetime'));
++        var t = document.querySelector('.home-checked');
++        var sidebar = document.getElementById('sidebar');
++        var iso = sidebar && sidebar.dataset.generatedAt;
++        if (!t || !iso) { return; }
++        t.setAttribute('datetime', iso);
++        var d = new Date(iso);
 +        if (isNaN(d.getTime())) { return; }
 +        try {
 +          var time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -2431,7 +2436,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        function showFromHash(opts) {
          var target = resolve(hashId());
          var merged = Object.assign({}, opts, { claim: target.claim });
-@@ -13333,9 +13947,7 @@
+@@ -13333,9 +13952,7 @@
 
        function activeFacetClaimIDs() {
          var ids = Object.create(null);
@@ -2442,7 +2447,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
          if (!group) { return ids; }
          var collect = function (root) {
-@@ -13646,9 +14258,7 @@
+@@ -13646,9 +14263,7 @@
  // interval before system-record.js has enhanced a fresh SSE fragment.
        function positionStatusStrip() {
          if (!stripEl) { return; }
@@ -2453,7 +2458,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          if (!section) {
            var content = document.querySelector('.content-area');
            if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
-@@ -13660,7 +14270,7 @@
+@@ -13660,7 +14275,7 @@
            return;
          }
          var subNav = section.querySelector(':scope > .sub-nav');
@@ -2462,7 +2467,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          if (subNav) {
            if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
          } else if (header) {
-@@ -14328,7 +14938,7 @@
+@@ -14328,7 +14943,7 @@
        // Two states look like an edit and have nothing to put behind a
        // "Changes" tab. A record written before the approved wording was kept
        // proves the text moved and does not carry what it moved from. A claim
@@ -2471,7 +2476,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        // approved wording identical to its current one. In both, the panel has
        // one sentence to say and no second version of the claim — so there is
        // no switch, and the claim's own body stays on screen.
-@@ -14686,7 +15296,10 @@
+@@ -14686,7 +15301,10 @@
          var bannerShowing = groups.length > 0 && actionable;
          renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
          renderApprovedEdits();
@@ -2483,7 +2488,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
-@@ -15057,7 +15670,7 @@
+@@ -15057,7 +15675,7 @@
            return all;
          }
          if (scope === 'module') {
@@ -2492,7 +2497,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
            var moduleID = section ? section.id : '';
            var ids = Object.create(null);
            Object.keys(claimToFacet).forEach(function (id) {
-@@ -15243,7 +15856,7 @@
+@@ -15243,7 +15861,7 @@
        // reading view already maintains — read-only, no new state.
        function issuesSyncHeader() {
          var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
@@ -2501,7 +2506,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
          if (issuesBreadcrumbFacetEl) {
            issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';
-@@ -15807,23 +16420,6 @@
+@@ -15807,23 +16425,6 @@
          oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
          oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
@@ -2525,7 +2530,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          // ---- re-point every lookup map at the fresh DOM ----
          initViewer();
 
-@@ -15913,10 +16509,30 @@
+@@ -15913,10 +16514,30 @@
            }
            return;
          }
@@ -2560,7 +2565,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          var noteToggle = e.target.closest('.claim-source-note-toggle');
          if (noteToggle) {
            var noteEl = noteToggle.parentNode;
-@@ -15929,6 +16545,13 @@
+@@ -15929,6 +16550,13 @@
              : ((noteSt && noteSt.expandLabel) || 'show more');
            return;
          }
@@ -2574,7 +2579,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          var secTab = e.target.closest('.sec-tab');
          if (secTab) {
            var moduleID = (secTab.dataset.target || '').replace(/^#/, '');
-@@ -15993,6 +16616,7 @@
+@@ -15993,6 +16621,7 @@
              });
              group.hidden = query !== '' && matches.length === 0;
            });
@@ -2582,7 +2587,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
          });
        }
        if (navOverlay) {
-@@ -16248,7 +16872,7 @@
+@@ -16248,7 +16877,7 @@
 
    // enhanceFooters and enhanceFieldLabels were retired here: both targeted
    // the pre-redesign single-<details> mono digest and flat <li> labels
@@ -2591,7 +2596,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // components.EdgesHTMLWithLinks no longer emits — see that Go function's
    // doc comment and docs/design/screens/05-claim-one-expansion-at-a-time.md
    // R09.1/R-F.1. The new footer strip (.claim-footer, .claim-footer-chip*,
-@@ -16477,11 +17101,10 @@
+@@ -16477,11 +17106,10 @@
      });
    }
 
@@ -2606,7 +2611,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      var module = modules.find(function (section) { return !section.hidden; });
      if (!module) { return null; }
      var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
-@@ -16794,7 +17417,7 @@
+@@ -16794,7 +17422,7 @@
      // directly (see bindFocusControl above).
      var focusState = isFocusOn() ? 'on' : 'off';
      var moduleSections = Array.prototype.slice.call(
@@ -2615,7 +2620,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      );
      var moduleCount = moduleSections.length;
      moduleSections.forEach(function (section, moduleIndex) {
-@@ -16910,12 +17533,12 @@
+@@ -16910,12 +17538,12 @@
 
    // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
    // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
@@ -2631,7 +2636,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // legend group), and this shim was firing on every rebuild and silently
    // reverting all of it back to the pre-13 wording — removed here rather
    // than left to fight graph-ui.js on every interaction. Found via
-@@ -17037,23 +17660,21 @@
+@@ -17037,23 +17665,21 @@
    // suite off these names.
    //
    // Constants (all frozen, all JSON-able):
@@ -2660,7 +2665,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    //   representatives(nodes, granularity, expandedGroups)
    //                                       -> {repByClaim, repNodes}
    //   aggregateEdges(edges, repByClaim, enabledTypes)
-@@ -17065,10 +17686,8 @@
+@@ -17065,10 +17691,8 @@
    //   scc(nodeIds, edges)                 -> [[id, ...]]
    //   selfEdges(nodeIds, edges)           -> [id, ...]
    //
@@ -2672,7 +2677,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    //
    // Verdicts (design section 5):
    //   gapRules(nodes, edges, options)     -> {facts: [...], hints: [...]}
-@@ -17087,18 +17706,21 @@
+@@ -17087,18 +17711,21 @@
    // The array form exists so a one-liner harness can call scc() without
    // building objects. An edge with no type is treated as a DIRECTED edge of
    // unnamed type: it participates in scc(), and it is excluded from the
@@ -2701,7 +2706,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
    // representative. aggregateEdges() emits "ghost:<claim id>" for it rather
-@@ -17125,7 +17747,7 @@
+@@ -17125,7 +17752,7 @@
      'sink_group',
      'orphan_group'
    ]);
@@ -2710,7 +2715,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
    // ------------------------------------------------------------------
    // Internal helpers — none of these cross the exported boundary.
-@@ -17229,8 +17851,8 @@
+@@ -17229,8 +17856,8 @@
      return asString(groupType) + ':' + asString(name);
    }
 
@@ -2721,7 +2726,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // The separator is "|", which no claim id can contain (ids are dotted
    // slugs), so the key is unambiguous.
    function edgeKey(edge) {
-@@ -17245,75 +17867,20 @@
+@@ -17245,75 +17872,20 @@
    // Scope and the representative-node rule (design section 3)
    // ------------------------------------------------------------------
 
@@ -2800,7 +2805,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // THE EMPTY STRING IS THE ONLY "ALL" SENTINEL, and that is what makes this
    // total rather than merely defensive: asString(null), asString(undefined), a
    // missing field and a non-finite number all become "" and all mean "do not
-@@ -17335,12 +17902,11 @@
+@@ -17335,12 +17907,11 @@
    // The returned array holds the SAME node objects, not copies: nothing here
    // mutates a payload node, and the pane's redraw path runs on every control
    // change.
@@ -2815,7 +2820,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        return list.slice();
      }
      var out = [];
-@@ -17352,9 +17918,6 @@
+@@ -17352,9 +17923,6 @@
        if (wantFacet !== '' && asString(n.facet) !== wantFacet) {
          continue;
        }
@@ -2825,7 +2830,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        out.push(list[i]);
      }
      return out;
-@@ -17663,11 +18226,9 @@
+@@ -17663,11 +18231,9 @@
    // ------------------------------------------------------------------
 
    // isDirectedType reports whether an edge type participates in cycle
@@ -2840,7 +2845,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function isDirectedType(type) {
      if (type === '') {
        return true;
-@@ -17825,7 +18386,8 @@
+@@ -17825,7 +18391,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -2850,7 +2855,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -17881,60 +18443,7 @@
+@@ -17881,60 +18448,7 @@
      return -1;
    }
 
@@ -2911,7 +2916,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // ------------------------------------------------------------------
    // Gap rules (design section 5)
    // ------------------------------------------------------------------
-@@ -18029,12 +18538,6 @@
+@@ -18029,12 +18543,6 @@
    // endpoints in scope, which is also why aggregation inside this function
    // can never produce a ghost.
 
@@ -2924,7 +2929,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function finding(rule, nodeIds, kind) {
      return { rule: rule, node_ids: nodeIds, kind: kind };
    }
-@@ -18053,66 +18556,18 @@
+@@ -18053,66 +18561,18 @@
    }
 
    // ------------------------------------------------------------------
@@ -2995,7 +3000,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // densityOutlier: a facet whose claim count in one module sits far below its
    // median across the other modules — the shape of "this module forgot to
    // write its contracts down".
-@@ -18405,14 +18860,12 @@
+@@ -18405,14 +18865,12 @@
      facts.push(finding('sink_group', sinks.sort(cmpStr), 'fact'));
      facts.push(finding('orphan_group', orphans.sort(cmpStr), 'fact'));
 
@@ -3015,7 +3020,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        finding('density_outlier', densityOutlier(scopedNodes), 'hint')
      ];
 
-@@ -18442,8 +18895,6 @@
+@@ -18442,8 +18900,6 @@
    //
    //   md  scope: module   "" for every module, else the module name
    //   fc  scope: facet    "" for every facet, else the facet name
@@ -3024,7 +3029,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    //   gr  granularity     "claims" | "module" | "facet"
    //   ov  overlay         one of OVERLAYS
    //   ty  edge types      a subset of TYPE_LETTERS, positional against EDGE_TYPES
-@@ -18458,35 +18909,26 @@
+@@ -18458,35 +18914,26 @@
    // has never been released, and decodeState ignores unknown keys, so a hash
    // carrying the old key decodes to the default whole-project scope rather
    // than to anything half-understood.
@@ -3070,7 +3075,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -18495,7 +18937,6 @@
+@@ -18495,7 +18942,6 @@
      return {
        scopeModule: '',
        scopeFacet: '',
@@ -3078,7 +3083,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        granularity: 'claims',
        overlay: 'none',
        types: EDGE_TYPES.slice(),
-@@ -18561,8 +19002,6 @@
+@@ -18561,8 +19007,6 @@
          s.scopeModule === undefined || s.scopeModule === null ? d.scopeModule : asString(s.scopeModule),
        scopeFacet:
          s.scopeFacet === undefined || s.scopeFacet === null ? d.scopeFacet : asString(s.scopeFacet),
@@ -3087,7 +3092,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        granularity: normalizeGranularity(s.granularity === undefined ? d.granularity : s.granularity),
        overlay: normalizeOverlay(s.overlay === undefined ? d.overlay : s.overlay),
        types: normalizeTypes(s.types === undefined ? d.types : s.types),
-@@ -18590,7 +19029,6 @@
+@@ -18590,7 +19034,6 @@
      return (
        'md=' + enc(s.scopeModule) +
        '&fc=' + enc(s.scopeFacet) +
@@ -3095,7 +3100,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        '&gr=' + enc(s.granularity) +
        '&ov=' + enc(s.overlay) +
        '&ty=' + letters +
-@@ -18626,8 +19064,6 @@
+@@ -18626,8 +19069,6 @@
          out.scopeModule = dec(val);
        } else if (key === 'fc') {
          out.scopeFacet = dec(val);
@@ -3104,7 +3109,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        } else if (key === 'gr') {
          out.granularity = normalizeGranularity(dec(val));
        } else if (key === 'ov') {
-@@ -18672,13 +19108,11 @@
+@@ -18672,13 +19113,11 @@
      FACT_RULE_IDS: FACT_RULE_IDS,
      HINT_RULE_IDS: HINT_RULE_IDS,
      OVERLAYS: OVERLAYS,
@@ -3118,7 +3123,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      representatives: representatives,
      aggregateEdges: aggregateEdges,
      degrees: degrees,
-@@ -18688,8 +19122,6 @@
+@@ -18688,8 +19127,6 @@
      selfEdges: selfEdges,
 
      facetSlot: facetSlot,
@@ -3127,7 +3132,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
      gapRules: gapRules,
 
-@@ -18743,7 +19175,7 @@
+@@ -18743,7 +19180,7 @@
    //    is a reading-view target id; the graph appends its own state after a
    //    "!" separator and owns nothing before it. replaceState does not fire
    //    hashchange, so changing a filter never re-enters the reading view's
@@ -3136,7 +3141,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    //    location.hash is assigned is the detail panel's "open claim" action,
    //    which WANTS the reading view to move.
    //
-@@ -18817,30 +19249,24 @@
+@@ -18817,30 +19254,24 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -3174,7 +3179,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -18889,13 +19315,12 @@
+@@ -18889,13 +19320,12 @@
    var FALLBACK_COLOR = '#808080';
 
    // The overlay select's contents, in the frozen order: isolated, cycles,
@@ -3190,7 +3195,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      ['review', 'review pending'],
      ['comments', 'open comment threads'],
      ['status', 'draft vs locked']
-@@ -18920,7 +19345,6 @@
+@@ -18920,7 +19350,6 @@
      open_threads: 'open comment threads',
      sink_group: 'group nothing links into',
      orphan_group: 'group with no outside edges',
@@ -3198,7 +3203,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      density_outlier: 'facet thin in one module'
    };
 
-@@ -19040,14 +19464,7 @@
+@@ -19040,14 +19469,7 @@
        edges: Array.isArray(raw.edges) ? raw.edges : [],
        groups: {
          modules: Array.isArray(groups.modules) ? groups.modules : [],
@@ -3214,7 +3219,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        },
        dropped: { unresolved_edges: num(dropped.unresolved_edges) }
      };
-@@ -19263,10 +19680,10 @@
+@@ -19263,10 +19685,10 @@
    }
 
    // ------------------------------------------------------------------
@@ -3227,7 +3232,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    //
    // The prototype froze this order as Scope · Granularity · Highlight overlay
    // · Edge types · View. Scope has since become two independent controls, and
-@@ -19274,26 +19691,13 @@
+@@ -19274,26 +19696,13 @@
    // convenient — the order is what a reader's hand has learnt, and splitting a
    // control is not a licence to rearrange its neighbours.
    //
@@ -3257,7 +3262,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function controlGroup(labelText, key) {
      var group = h('div', 'dxg-ctl');
      if (key) {
-@@ -19361,10 +19765,6 @@
+@@ -19361,10 +19770,6 @@
        onControlChange(true);
      });
      facetGroup.appendChild(el.scopeFacet);
@@ -3268,7 +3273,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
      var granGroup = controlGroup('Granularity', 'granularity');
      el.granularity = selectControl('dxgGranularity', function () {
-@@ -19435,59 +19835,6 @@
+@@ -19435,59 +19840,6 @@
      el.controls.appendChild(viewGroup);
    }
 
@@ -3328,7 +3333,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function toggleType(type) {
      var next = [];
      var had = false;
-@@ -19511,12 +19858,8 @@
+@@ -19511,12 +19863,8 @@
    // pasted hash and one arriving from a click take the same path.
    function refreshControls() {
      var c = core();
@@ -3342,7 +3347,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      clear(el.scopeModule);
      el.scopeModule.appendChild(option('', 'all modules'));
      var i;
-@@ -19530,33 +19873,6 @@
+@@ -19530,33 +19878,6 @@
        el.scopeFacet.appendChild(option(groups.facets[i], groups.facets[i]));
      }
 
@@ -3376,7 +3381,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      // A selection naming a module or facet the payload does not have would
      // leave the select showing something the graph is not doing. Fall back to
      // that axis's "all" rather than filter on a name nothing can match.
-@@ -19577,13 +19893,6 @@
+@@ -19577,13 +19898,6 @@
        state.scopeFacet = '';
        el.scopeFacet.value = '';
      }
@@ -3390,7 +3395,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
      el.granularity.value = state.granularity;
      el.overlay.value = state.overlay;
-@@ -19600,8 +19909,8 @@
+@@ -19600,8 +19914,8 @@
 
    // onControlChange is the single funnel every control passes through:
    // recompute the scene, write the hash, redraw. reheat is true for the
@@ -3401,7 +3406,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function onControlChange(reheat) {
      refreshControls();
      recompute();
-@@ -19631,38 +19940,20 @@
+@@ -19631,38 +19945,20 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -3443,7 +3448,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // strings, no interpolation, so a payload value can never reach one.
    // Colours are var()s rather than currentColor because each mark is
    // genuinely two-tone (a facet fill plus a state-coloured ring) and the two
-@@ -19707,10 +19998,6 @@
+@@ -19707,10 +20003,6 @@
        ['cycle', 'in a dependency cycle'],
        ['dim', 'everything else']
      ],
@@ -3454,7 +3459,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      review: [
        ['halo', 'review pending'],
        ['dim', 'everything else']
-@@ -19725,28 +20012,6 @@
+@@ -19725,28 +20017,6 @@
      ]
    };
 
@@ -3483,7 +3488,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function legendGroupLabel(text) {
      return h('li', 'dxg-legend-group', text);
    }
-@@ -19760,55 +20025,11 @@
+@@ -19760,55 +20030,11 @@
      } else {
        appendFacetRows(list);
      }
@@ -3539,7 +3544,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // The facet rows: every facet the PROJECT declared, by its own name,
    // against its assigned swatch. Hovering one dims every node on the canvas
    // that is not a member — the disambiguator that still works at twenty
-@@ -19888,7 +20109,7 @@
+@@ -19888,7 +20114,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -3548,7 +3553,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -19898,11 +20119,7 @@
+@@ -19898,11 +20124,7 @@
        if (!known[type] || !EDGE_SAMPLES[type]) {
          continue;
        }
@@ -3561,7 +3566,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        item.setAttribute('data-dxg-edge', type);
        var sample = h('span', 'dxg-legend-edge');
        sample.innerHTML = EDGE_SAMPLES[type];
-@@ -20236,8 +20453,8 @@
+@@ -20236,8 +20458,8 @@
    // BLOCKERS IT PUSHES OUTSIDE THE PICTURE — 13 §4.3 / §6 (RETRY fix list
    // item 1).
    //
@@ -3572,7 +3577,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // the empty-intersection case is renderEmptyScopeNotice's own sentence, so
    // the two never fire together (13 §8.9 forbids a second empty-state
    // device; this is the same "one attention band" argument for the
-@@ -20248,7 +20465,7 @@
+@@ -20248,7 +20470,7 @@
    // sentence makes ("and are drawn as outlines") can never drift out of
    // sync with what the canvas actually draws.
    function renderScopeSummaryNotice() {
@@ -3581,7 +3586,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        return;
      }
      if (!scene || scene.scoped.length === 0) {
-@@ -20273,7 +20490,6 @@
+@@ -20273,7 +20495,6 @@
          function () {
            state.scopeModule = '';
            state.scopeFacet = '';
@@ -3589,7 +3594,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
            requestFit();
            onControlChange(true);
          }
-@@ -20306,8 +20522,8 @@
+@@ -20306,8 +20527,8 @@
      if (!scene || scene.scoped.length > 0) {
        return;
      }
@@ -3600,7 +3605,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        // emptiness, not this control's doing. Blaming a filter that is not
        // running would send a reader to fix the wrong thing.
        return;
-@@ -20322,7 +20538,6 @@
+@@ -20322,7 +20543,6 @@
          function () {
            state.scopeModule = '';
            state.scopeFacet = '';
@@ -3608,7 +3613,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
            requestFit();
            onControlChange(true);
          }
-@@ -20331,38 +20546,16 @@
+@@ -20331,38 +20551,16 @@
    }
 
    // scopeSelectionPhrase names whichever axes are actually narrowed, so the
@@ -3655,7 +3660,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    }
 
    // AN OVERLAY THAT MATCHES NOTHING SAYS SO.
-@@ -20558,17 +20751,12 @@
+@@ -20558,17 +20756,12 @@
      }
 
      var i;
@@ -3678,7 +3683,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      var inScopeIds = Object.create(null);
      for (i = 0; i < scoped.length; i++) {
        inScopeIds[str(scoped[i].id)] = true;
-@@ -20597,8 +20785,7 @@
+@@ -20597,8 +20790,7 @@
      var deg = c.degrees(nodeIds, drawEdgesList);
 
      // Claim-level edges with BOTH endpoints in scope. The structural rules
@@ -3688,7 +3693,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      var inScopeEdges = [];
      for (i = 0; i < payload.edges.length; i++) {
        var e = payload.edges[i] || {};
-@@ -20664,30 +20851,6 @@
+@@ -20664,30 +20856,6 @@
        }
      }
 
@@ -3719,7 +3724,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      // Which facets each drawn node stands for. A claim stands for its own; a
      // collapsed group stands for every facet among its members. This is what
      // lets a legend hover dim non-members even at module granularity.
-@@ -20700,27 +20863,6 @@
+@@ -20700,27 +20868,6 @@
        facetsOfNode[rep][str(scoped[i].facet)] = true;
      }
 
@@ -3747,7 +3752,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      scene = {
        scoped: scoped,
        nodes: nodes,
-@@ -20731,11 +20873,7 @@
+@@ -20731,11 +20878,7 @@
        cycleIds: cycleIds,
        selfIds: selfIds,
        redEdgeKeys: redEdgeKeys,
@@ -3759,7 +3764,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        repByClaim: reps.repByClaim,
        qualifier: qualifiers(nodes),
        overlayEmpty: false
-@@ -20866,7 +21004,6 @@
+@@ -20866,7 +21009,6 @@
        other: cssVar(cs, '--dxg-facet-other'),
        cycle: cssVar(cs, '--dxg-cycle'),
        halo: cssVar(cs, '--dxg-halo'),
@@ -3767,7 +3772,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        ink: cssVar(cs, '--ink'),
        muted: cssVar(cs, '--muted'),
        faint: cssVar(cs, '--faint'),
-@@ -20891,8 +21028,6 @@
+@@ -20891,8 +21033,6 @@
    //           because a halo is reserved for engine-managed states that
    //           demand a human and two of them stacked says nothing extra
    //   wedge   this node governs at least one other claim
@@ -3776,7 +3781,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    //   ghost   an endpoint outside the current scope: hollow and unlabeled
 
    function facetSlotOf(node) {
-@@ -21068,48 +21203,10 @@
+@@ -21068,48 +21208,10 @@
          ctx.lineWidth = 1.6;
          ctx.stroke();
        }
@@ -3825,7 +3830,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function haloKind(node) {
      if (node.kind !== 'group' && node.review_pending === true) {
        return 'review';
-@@ -21444,9 +21541,8 @@
+@@ -21444,9 +21546,8 @@
    // The result was a pane that looked broken in dark mode and was not:
    // sampling the integration screenshots, the DOM chrome had correctly
    // switched to the near-black --paper while the canvas still held its
@@ -3837,7 +3842,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // black, which is why overlapping discs merged: their outlines had become
    // invisible against the background.
    //
-@@ -21560,35 +21656,20 @@
+@@ -21560,35 +21661,20 @@
    }
 
    // ------------------------------------------------------------------
@@ -3880,7 +3885,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      return pal.muted;
    }
 
-@@ -21615,81 +21696,31 @@
+@@ -21615,81 +21701,31 @@
        if (!a || !b) {
          continue;
        }
@@ -3971,7 +3976,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function shorten(from, to, by) {
      var dx = to.x - from.x;
      var dy = to.y - from.y;
-@@ -21700,61 +21731,14 @@
+@@ -21700,61 +21736,14 @@
      return { x: to.x - (dx / len) * by, y: to.y - (dy / len) * by };
    }
 
@@ -4037,7 +4042,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
 
    function overlayMatches(node) {
      switch (state.overlay) {
-@@ -21762,8 +21746,6 @@
+@@ -21762,8 +21751,6 @@
          return coversAnyRule(node, 'isolated') || coversAnyRule(node, 'weakly_linked');
        case 'cycles':
          return coversAny(node, scene.cycleIds) || coversAny(node, scene.selfIds);
@@ -4046,7 +4051,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        case 'review':
          return haloKind(node) === 'review';
        case 'comments':
-@@ -21778,9 +21760,6 @@
+@@ -21778,9 +21765,6 @@
    }
 
    function overlayMatchesEdge(edge) {
@@ -4056,7 +4061,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      if (state.overlay === 'cycles') {
        return scene.redEdgeKeys[edgeKeyOf(edge)] === true;
      }
-@@ -21804,8 +21783,6 @@
+@@ -21804,8 +21788,6 @@
          return pal.warn;
        case 'cycles':
          return pal.cycle;
@@ -4065,7 +4070,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        case 'review':
          return pal.halo;
        case 'comments':
-@@ -22535,8 +22512,8 @@
+@@ -22535,8 +22517,8 @@
    // panel showing only one of them would make the other look like a bug.
 
    // mobile is 13 §4.12's own set: only STATUS and IN A CYCLE survive the
@@ -4076,7 +4081,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // filtered out of the row list, so the mobile CSS rule (M9) hides exactly
    // these two and nothing about the row's construction or order has to
    // know which width is looking at it.
-@@ -22636,37 +22613,7 @@
+@@ -22636,37 +22618,7 @@
      });
    }
 
@@ -4114,7 +4119,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // cycleDisplay is the IN A CYCLE row's text and colour together, same
    // reasoning as statusDisplay: 13 §8.2/§8.3 give "Yes" and "Self-edge" the
    // same --color-blocked a positive finding always takes, because muted is
-@@ -22838,12 +22785,9 @@
+@@ -22838,12 +22790,9 @@
      return band;
    }
 
@@ -4130,7 +4135,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -22857,10 +22801,8 @@
+@@ -22857,10 +22806,8 @@
 
      var typesOn = state ? state.types : [];
      var plan = [
@@ -4142,7 +4147,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      ];
      var any = false;
      for (var i = 0; i < plan.length; i++) {
-@@ -22888,7 +22830,7 @@
+@@ -22888,7 +22835,7 @@
      clear(el.detail);
      if (!scene || state.selected === '') {
        el.detail.appendChild(
@@ -4151,7 +4156,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
        );
        return;
      }
-@@ -22958,34 +22900,18 @@
+@@ -22958,34 +22905,18 @@
      }
 
      // 13 §4.7, coordinator RETRY ruling (2): the rail's property rows are
@@ -4188,7 +4193,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
      // 13 §4.13 / M1-M3 — AROUND THIS CLAIM, the mobile substitute for the
      // canvas (R-H.0's argued exception, D12). Always built — R-I.0's "same
      // content, same vocabulary, same order; only the arrangement moves" —
-@@ -23011,27 +22937,6 @@
+@@ -23011,27 +22942,6 @@
      el.detail.appendChild(open);
    }
 
@@ -4216,7 +4221,7 @@ testdata/fixture-basic/build/viewer/index.html  (+1336 -1443)
    // degreeValue renders the scope-relative degree AND NAMES WHOSE IT IS.
    //
    // This row used to look the claim's representative up in the drawn graph's
-@@ -23100,18 +23005,6 @@
+@@ -23100,18 +23010,6 @@
      return out;
    }
 
@@ -4313,7 +4318,7 @@ testdata/fixture-conformance-v1/build/catalog/catalog.json  (+10 -20)
        "readiness": {
          "claim_id": "widget.contract.uncheckable",
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
+testdata/fixture-conformance-v1/build/viewer/index.html  (+1355 -1446)
     inputs changed  testdata/fixture-conformance-v1/build/ledger/lock-store.json
                     testdata/fixture-conformance-v1/claims/declared-none.yaml
                     testdata/fixture-conformance-v1/claims/matched.yaml
@@ -4323,7 +4328,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
                     testdata/fixture-conformance-v1/claims/widget/manifest.yaml
                     testdata/fixture-conformance-v1/constitution.yaml
                     testdata/fixture-conformance-v1/project.config.yaml
-    size            23601 lines / 1288309 bytes -> 23505 lines / 1277731 bytes
+    size            23601 lines / 1288309 bytes -> 23510 lines / 1278006 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -5846,7 +5851,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 +@media screen and (min-width: 861px) {
 +  .site-nav,
 +  .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
-+  .site-nav { padding-bottom: 2px; }
++  .site-nav { margin-top: 16px; padding-bottom: 2px; }
 +  .site-nav .sec-tab,
 +  .system-nav-groups .system-nav-group__toggle,
 +  .nav-utilities #dxgOpen {
@@ -5854,7 +5859,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 +    min-height: 34px;
 +    margin: 0;
 +  }
-+  .nav-utilities { padding-top: 12px; }
++  .nav-utilities { margin-top: 12px; padding-top: 13px; }
 +}
 +.home-link {
 +  color: inherit;
@@ -6359,7 +6364,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 +
 +        <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
 +          <header class="home-head">
-+            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked" datetime="<GENERATED-AT-RFC3339>"><GENERATED-AT-RFC3339></time></p>
++            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked"></time></p>
 +            <h2 id="homeTitle" class="home-title">Structured conformance v1 fixture</h2>
 +          </header>
 +          <section class="home-waiting" aria-labelledby="homeWaitingTitle">
@@ -6382,7 +6387,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 +                <span class="home-tile__head"><span class="home-tile__title">Constitution</span><span class="home-pill home-wide" data-state="locked">Locked</span></span>
 +                <span class="home-tile__desc home-wide">From constitution.yaml.</span>
 +                <span class="home-stats home-wide"><span class="home-stat"><span class="home-stat__count">1</span><span class="home-stat__label">invariant</span></span><span class="home-stat"><span class="home-stat__count">0</span><span class="home-stat__label">decisions</span></span><span class="home-stat"><span class="home-stat__count">0</span><span class="home-stat__label">glossary terms</span></span></span>
-+                <span class="home-tile__line home-narrow">1 invariant · 0 decisions · 0 terms</span>
++                <span class="home-tile__line home-narrow">1 invariant · 0 decisions · 0 terms</span>
 +              </span>
 +              <span class="home-pill home-narrow" data-state="locked">Locked</span>
 +              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
@@ -6595,7 +6600,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        // hashId() truncating. And showModuleFacet rewrites the hash on every
        // nav, so a rewrite that dropped the suffix would erase the graph state
        // the pane had just written — hence hashGraphSuffix() being appended.
-@@ -12629,6 +13219,41 @@
+@@ -12629,6 +13219,46 @@
          return decodeURIComponent(raw);
        }
 
@@ -6614,12 +6619,17 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 +        });
 +      }
 +
-+      // The Home header's "last check" arrives as the RFC3339 instant; show it
-+      // as a date and time in the reader's own zone.
++      // The Home header's "last check" is the sidebar's render stamp (the
++      // one the freshness footer reads), shown as a date and time in the
++      // reader's own zone. The stamp stays out of <main> so a live-reload
++      // fragment is a verbatim slice of the page it came from.
 +      function localizeHomeCheck() {
-+        var t = document.querySelector('.home-checked[datetime]');
-+        if (!t) { return; }
-+        var d = new Date(t.getAttribute('datetime'));
++        var t = document.querySelector('.home-checked');
++        var sidebar = document.getElementById('sidebar');
++        var iso = sidebar && sidebar.dataset.generatedAt;
++        if (!t || !iso) { return; }
++        t.setAttribute('datetime', iso);
++        var d = new Date(iso);
 +        if (isNaN(d.getTime())) { return; }
 +        try {
 +          var time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -6637,7 +6647,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        function showFromHash(opts) {
          var target = resolve(hashId());
          var merged = Object.assign({}, opts, { claim: target.claim });
-@@ -13658,9 +14283,7 @@
+@@ -13658,9 +14288,7 @@
 
        function activeFacetClaimIDs() {
          var ids = Object.create(null);
@@ -6648,7 +6658,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
          if (!group) { return ids; }
          var collect = function (root) {
-@@ -13971,9 +14594,7 @@
+@@ -13971,9 +14599,7 @@
  // interval before system-record.js has enhanced a fresh SSE fragment.
        function positionStatusStrip() {
          if (!stripEl) { return; }
@@ -6659,7 +6669,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          if (!section) {
            var content = document.querySelector('.content-area');
            if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
-@@ -13985,7 +14606,7 @@
+@@ -13985,7 +14611,7 @@
            return;
          }
          var subNav = section.querySelector(':scope > .sub-nav');
@@ -6668,7 +6678,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          if (subNav) {
            if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
          } else if (header) {
-@@ -14653,7 +15274,7 @@
+@@ -14653,7 +15279,7 @@
        // Two states look like an edit and have nothing to put behind a
        // "Changes" tab. A record written before the approved wording was kept
        // proves the text moved and does not carry what it moved from. A claim
@@ -6677,7 +6687,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        // approved wording identical to its current one. In both, the panel has
        // one sentence to say and no second version of the claim — so there is
        // no switch, and the claim's own body stays on screen.
-@@ -15011,7 +15632,10 @@
+@@ -15011,7 +15637,10 @@
          var bannerShowing = groups.length > 0 && actionable;
          renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
          renderApprovedEdits();
@@ -6689,7 +6699,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
-@@ -15382,7 +16006,7 @@
+@@ -15382,7 +16011,7 @@
            return all;
          }
          if (scope === 'module') {
@@ -6698,7 +6708,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
            var moduleID = section ? section.id : '';
            var ids = Object.create(null);
            Object.keys(claimToFacet).forEach(function (id) {
-@@ -15568,7 +16192,7 @@
+@@ -15568,7 +16197,7 @@
        // reading view already maintains — read-only, no new state.
        function issuesSyncHeader() {
          var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
@@ -6707,7 +6717,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
          if (issuesBreadcrumbFacetEl) {
            issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';
-@@ -16132,23 +16756,6 @@
+@@ -16132,23 +16761,6 @@
          oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
          oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
@@ -6731,7 +6741,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          // ---- re-point every lookup map at the fresh DOM ----
          initViewer();
 
-@@ -16238,10 +16845,30 @@
+@@ -16238,10 +16850,30 @@
            }
            return;
          }
@@ -6766,7 +6776,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          var noteToggle = e.target.closest('.claim-source-note-toggle');
          if (noteToggle) {
            var noteEl = noteToggle.parentNode;
-@@ -16254,6 +16881,13 @@
+@@ -16254,6 +16886,13 @@
              : ((noteSt && noteSt.expandLabel) || 'show more');
            return;
          }
@@ -6780,7 +6790,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          var secTab = e.target.closest('.sec-tab');
          if (secTab) {
            var moduleID = (secTab.dataset.target || '').replace(/^#/, '');
-@@ -16318,6 +16952,7 @@
+@@ -16318,6 +16957,7 @@
              });
              group.hidden = query !== '' && matches.length === 0;
            });
@@ -6788,7 +6798,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
          });
        }
        if (navOverlay) {
-@@ -16573,7 +17208,7 @@
+@@ -16573,7 +17213,7 @@
 
    // enhanceFooters and enhanceFieldLabels were retired here: both targeted
    // the pre-redesign single-<details> mono digest and flat <li> labels
@@ -6797,7 +6807,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // components.EdgesHTMLWithLinks no longer emits — see that Go function's
    // doc comment and docs/design/screens/05-claim-one-expansion-at-a-time.md
    // R09.1/R-F.1. The new footer strip (.claim-footer, .claim-footer-chip*,
-@@ -16802,11 +17437,10 @@
+@@ -16802,11 +17442,10 @@
      });
    }
 
@@ -6812,7 +6822,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      var module = modules.find(function (section) { return !section.hidden; });
      if (!module) { return null; }
      var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
-@@ -17119,7 +17753,7 @@
+@@ -17119,7 +17758,7 @@
      // directly (see bindFocusControl above).
      var focusState = isFocusOn() ? 'on' : 'off';
      var moduleSections = Array.prototype.slice.call(
@@ -6821,7 +6831,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      );
      var moduleCount = moduleSections.length;
      moduleSections.forEach(function (section, moduleIndex) {
-@@ -17235,12 +17869,12 @@
+@@ -17235,12 +17874,12 @@
 
    // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
    // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
@@ -6837,7 +6847,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // legend group), and this shim was firing on every rebuild and silently
    // reverting all of it back to the pre-13 wording — removed here rather
    // than left to fight graph-ui.js on every interaction. Found via
-@@ -17362,23 +17996,21 @@
+@@ -17362,23 +18001,21 @@
    // suite off these names.
    //
    // Constants (all frozen, all JSON-able):
@@ -6866,7 +6876,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    //   representatives(nodes, granularity, expandedGroups)
    //                                       -> {repByClaim, repNodes}
    //   aggregateEdges(edges, repByClaim, enabledTypes)
-@@ -17390,10 +18022,8 @@
+@@ -17390,10 +18027,8 @@
    //   scc(nodeIds, edges)                 -> [[id, ...]]
    //   selfEdges(nodeIds, edges)           -> [id, ...]
    //
@@ -6878,7 +6888,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    //
    // Verdicts (design section 5):
    //   gapRules(nodes, edges, options)     -> {facts: [...], hints: [...]}
-@@ -17412,18 +18042,21 @@
+@@ -17412,18 +18047,21 @@
    // The array form exists so a one-liner harness can call scc() without
    // building objects. An edge with no type is treated as a DIRECTED edge of
    // unnamed type: it participates in scc(), and it is excluded from the
@@ -6907,7 +6917,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
    // representative. aggregateEdges() emits "ghost:<claim id>" for it rather
-@@ -17450,7 +18083,7 @@
+@@ -17450,7 +18088,7 @@
      'sink_group',
      'orphan_group'
    ]);
@@ -6916,7 +6926,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
    // ------------------------------------------------------------------
    // Internal helpers — none of these cross the exported boundary.
-@@ -17554,8 +18187,8 @@
+@@ -17554,8 +18192,8 @@
      return asString(groupType) + ':' + asString(name);
    }
 
@@ -6927,7 +6937,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // The separator is "|", which no claim id can contain (ids are dotted
    // slugs), so the key is unambiguous.
    function edgeKey(edge) {
-@@ -17570,75 +18203,20 @@
+@@ -17570,75 +18208,20 @@
    // Scope and the representative-node rule (design section 3)
    // ------------------------------------------------------------------
 
@@ -7006,7 +7016,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // THE EMPTY STRING IS THE ONLY "ALL" SENTINEL, and that is what makes this
    // total rather than merely defensive: asString(null), asString(undefined), a
    // missing field and a non-finite number all become "" and all mean "do not
-@@ -17660,12 +18238,11 @@
+@@ -17660,12 +18243,11 @@
    // The returned array holds the SAME node objects, not copies: nothing here
    // mutates a payload node, and the pane's redraw path runs on every control
    // change.
@@ -7021,7 +7031,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        return list.slice();
      }
      var out = [];
-@@ -17677,9 +18254,6 @@
+@@ -17677,9 +18259,6 @@
        if (wantFacet !== '' && asString(n.facet) !== wantFacet) {
          continue;
        }
@@ -7031,7 +7041,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        out.push(list[i]);
      }
      return out;
-@@ -17988,11 +18562,9 @@
+@@ -17988,11 +18567,9 @@
    // ------------------------------------------------------------------
 
    // isDirectedType reports whether an edge type participates in cycle
@@ -7046,7 +7056,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function isDirectedType(type) {
      if (type === '') {
        return true;
-@@ -18150,7 +18722,8 @@
+@@ -18150,7 +18727,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -7056,7 +7066,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -18206,60 +18779,7 @@
+@@ -18206,60 +18784,7 @@
      return -1;
    }
 
@@ -7117,7 +7127,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // ------------------------------------------------------------------
    // Gap rules (design section 5)
    // ------------------------------------------------------------------
-@@ -18354,12 +18874,6 @@
+@@ -18354,12 +18879,6 @@
    // endpoints in scope, which is also why aggregation inside this function
    // can never produce a ghost.
 
@@ -7130,7 +7140,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function finding(rule, nodeIds, kind) {
      return { rule: rule, node_ids: nodeIds, kind: kind };
    }
-@@ -18378,66 +18892,18 @@
+@@ -18378,66 +18897,18 @@
    }
 
    // ------------------------------------------------------------------
@@ -7201,7 +7211,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // densityOutlier: a facet whose claim count in one module sits far below its
    // median across the other modules — the shape of "this module forgot to
    // write its contracts down".
-@@ -18730,14 +19196,12 @@
+@@ -18730,14 +19201,12 @@
      facts.push(finding('sink_group', sinks.sort(cmpStr), 'fact'));
      facts.push(finding('orphan_group', orphans.sort(cmpStr), 'fact'));
 
@@ -7221,7 +7231,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        finding('density_outlier', densityOutlier(scopedNodes), 'hint')
      ];
 
-@@ -18767,8 +19231,6 @@
+@@ -18767,8 +19236,6 @@
    //
    //   md  scope: module   "" for every module, else the module name
    //   fc  scope: facet    "" for every facet, else the facet name
@@ -7230,7 +7240,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    //   gr  granularity     "claims" | "module" | "facet"
    //   ov  overlay         one of OVERLAYS
    //   ty  edge types      a subset of TYPE_LETTERS, positional against EDGE_TYPES
-@@ -18783,35 +19245,26 @@
+@@ -18783,35 +19250,26 @@
    // has never been released, and decodeState ignores unknown keys, so a hash
    // carrying the old key decodes to the default whole-project scope rather
    // than to anything half-understood.
@@ -7276,7 +7286,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -18820,7 +19273,6 @@
+@@ -18820,7 +19278,6 @@
      return {
        scopeModule: '',
        scopeFacet: '',
@@ -7284,7 +7294,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        granularity: 'claims',
        overlay: 'none',
        types: EDGE_TYPES.slice(),
-@@ -18886,8 +19338,6 @@
+@@ -18886,8 +19343,6 @@
          s.scopeModule === undefined || s.scopeModule === null ? d.scopeModule : asString(s.scopeModule),
        scopeFacet:
          s.scopeFacet === undefined || s.scopeFacet === null ? d.scopeFacet : asString(s.scopeFacet),
@@ -7293,7 +7303,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        granularity: normalizeGranularity(s.granularity === undefined ? d.granularity : s.granularity),
        overlay: normalizeOverlay(s.overlay === undefined ? d.overlay : s.overlay),
        types: normalizeTypes(s.types === undefined ? d.types : s.types),
-@@ -18915,7 +19365,6 @@
+@@ -18915,7 +19370,6 @@
      return (
        'md=' + enc(s.scopeModule) +
        '&fc=' + enc(s.scopeFacet) +
@@ -7301,7 +7311,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        '&gr=' + enc(s.granularity) +
        '&ov=' + enc(s.overlay) +
        '&ty=' + letters +
-@@ -18951,8 +19400,6 @@
+@@ -18951,8 +19405,6 @@
          out.scopeModule = dec(val);
        } else if (key === 'fc') {
          out.scopeFacet = dec(val);
@@ -7310,7 +7320,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        } else if (key === 'gr') {
          out.granularity = normalizeGranularity(dec(val));
        } else if (key === 'ov') {
-@@ -18997,13 +19444,11 @@
+@@ -18997,13 +19449,11 @@
      FACT_RULE_IDS: FACT_RULE_IDS,
      HINT_RULE_IDS: HINT_RULE_IDS,
      OVERLAYS: OVERLAYS,
@@ -7324,7 +7334,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      representatives: representatives,
      aggregateEdges: aggregateEdges,
      degrees: degrees,
-@@ -19013,8 +19458,6 @@
+@@ -19013,8 +19463,6 @@
      selfEdges: selfEdges,
 
      facetSlot: facetSlot,
@@ -7333,7 +7343,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
      gapRules: gapRules,
 
-@@ -19068,7 +19511,7 @@
+@@ -19068,7 +19516,7 @@
    //    is a reading-view target id; the graph appends its own state after a
    //    "!" separator and owns nothing before it. replaceState does not fire
    //    hashchange, so changing a filter never re-enters the reading view's
@@ -7342,7 +7352,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    //    location.hash is assigned is the detail panel's "open claim" action,
    //    which WANTS the reading view to move.
    //
-@@ -19142,30 +19585,24 @@
+@@ -19142,30 +19590,24 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -7380,7 +7390,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -19214,13 +19651,12 @@
+@@ -19214,13 +19656,12 @@
    var FALLBACK_COLOR = '#808080';
 
    // The overlay select's contents, in the frozen order: isolated, cycles,
@@ -7396,7 +7406,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      ['review', 'review pending'],
      ['comments', 'open comment threads'],
      ['status', 'draft vs locked']
-@@ -19245,7 +19681,6 @@
+@@ -19245,7 +19686,6 @@
      open_threads: 'open comment threads',
      sink_group: 'group nothing links into',
      orphan_group: 'group with no outside edges',
@@ -7404,7 +7414,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      density_outlier: 'facet thin in one module'
    };
 
-@@ -19365,14 +19800,7 @@
+@@ -19365,14 +19805,7 @@
        edges: Array.isArray(raw.edges) ? raw.edges : [],
        groups: {
          modules: Array.isArray(groups.modules) ? groups.modules : [],
@@ -7420,7 +7430,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        },
        dropped: { unresolved_edges: num(dropped.unresolved_edges) }
      };
-@@ -19588,10 +20016,10 @@
+@@ -19588,10 +20021,10 @@
    }
 
    // ------------------------------------------------------------------
@@ -7433,7 +7443,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    //
    // The prototype froze this order as Scope · Granularity · Highlight overlay
    // · Edge types · View. Scope has since become two independent controls, and
-@@ -19599,26 +20027,13 @@
+@@ -19599,26 +20032,13 @@
    // convenient — the order is what a reader's hand has learnt, and splitting a
    // control is not a licence to rearrange its neighbours.
    //
@@ -7463,7 +7473,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function controlGroup(labelText, key) {
      var group = h('div', 'dxg-ctl');
      if (key) {
-@@ -19686,10 +20101,6 @@
+@@ -19686,10 +20106,6 @@
        onControlChange(true);
      });
      facetGroup.appendChild(el.scopeFacet);
@@ -7474,7 +7484,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
      var granGroup = controlGroup('Granularity', 'granularity');
      el.granularity = selectControl('dxgGranularity', function () {
-@@ -19760,59 +20171,6 @@
+@@ -19760,59 +20176,6 @@
      el.controls.appendChild(viewGroup);
    }
 
@@ -7534,7 +7544,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function toggleType(type) {
      var next = [];
      var had = false;
-@@ -19836,12 +20194,8 @@
+@@ -19836,12 +20199,8 @@
    // pasted hash and one arriving from a click take the same path.
    function refreshControls() {
      var c = core();
@@ -7548,7 +7558,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      clear(el.scopeModule);
      el.scopeModule.appendChild(option('', 'all modules'));
      var i;
-@@ -19855,33 +20209,6 @@
+@@ -19855,33 +20214,6 @@
        el.scopeFacet.appendChild(option(groups.facets[i], groups.facets[i]));
      }
 
@@ -7582,7 +7592,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      // A selection naming a module or facet the payload does not have would
      // leave the select showing something the graph is not doing. Fall back to
      // that axis's "all" rather than filter on a name nothing can match.
-@@ -19902,13 +20229,6 @@
+@@ -19902,13 +20234,6 @@
        state.scopeFacet = '';
        el.scopeFacet.value = '';
      }
@@ -7596,7 +7606,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
      el.granularity.value = state.granularity;
      el.overlay.value = state.overlay;
-@@ -19925,8 +20245,8 @@
+@@ -19925,8 +20250,8 @@
 
    // onControlChange is the single funnel every control passes through:
    // recompute the scene, write the hash, redraw. reheat is true for the
@@ -7607,7 +7617,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function onControlChange(reheat) {
      refreshControls();
      recompute();
-@@ -19956,38 +20276,20 @@
+@@ -19956,38 +20281,20 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -7649,7 +7659,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // strings, no interpolation, so a payload value can never reach one.
    // Colours are var()s rather than currentColor because each mark is
    // genuinely two-tone (a facet fill plus a state-coloured ring) and the two
-@@ -20032,10 +20334,6 @@
+@@ -20032,10 +20339,6 @@
        ['cycle', 'in a dependency cycle'],
        ['dim', 'everything else']
      ],
@@ -7660,7 +7670,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      review: [
        ['halo', 'review pending'],
        ['dim', 'everything else']
-@@ -20050,28 +20348,6 @@
+@@ -20050,28 +20353,6 @@
      ]
    };
 
@@ -7689,7 +7699,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function legendGroupLabel(text) {
      return h('li', 'dxg-legend-group', text);
    }
-@@ -20085,55 +20361,11 @@
+@@ -20085,55 +20366,11 @@
      } else {
        appendFacetRows(list);
      }
@@ -7745,7 +7755,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // The facet rows: every facet the PROJECT declared, by its own name,
    // against its assigned swatch. Hovering one dims every node on the canvas
    // that is not a member — the disambiguator that still works at twenty
-@@ -20213,7 +20445,7 @@
+@@ -20213,7 +20450,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -7754,7 +7764,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -20223,11 +20455,7 @@
+@@ -20223,11 +20460,7 @@
        if (!known[type] || !EDGE_SAMPLES[type]) {
          continue;
        }
@@ -7767,7 +7777,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        item.setAttribute('data-dxg-edge', type);
        var sample = h('span', 'dxg-legend-edge');
        sample.innerHTML = EDGE_SAMPLES[type];
-@@ -20561,8 +20789,8 @@
+@@ -20561,8 +20794,8 @@
    // BLOCKERS IT PUSHES OUTSIDE THE PICTURE — 13 §4.3 / §6 (RETRY fix list
    // item 1).
    //
@@ -7778,7 +7788,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // the empty-intersection case is renderEmptyScopeNotice's own sentence, so
    // the two never fire together (13 §8.9 forbids a second empty-state
    // device; this is the same "one attention band" argument for the
-@@ -20573,7 +20801,7 @@
+@@ -20573,7 +20806,7 @@
    // sentence makes ("and are drawn as outlines") can never drift out of
    // sync with what the canvas actually draws.
    function renderScopeSummaryNotice() {
@@ -7787,7 +7797,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        return;
      }
      if (!scene || scene.scoped.length === 0) {
-@@ -20598,7 +20826,6 @@
+@@ -20598,7 +20831,6 @@
          function () {
            state.scopeModule = '';
            state.scopeFacet = '';
@@ -7795,7 +7805,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
            requestFit();
            onControlChange(true);
          }
-@@ -20631,8 +20858,8 @@
+@@ -20631,8 +20863,8 @@
      if (!scene || scene.scoped.length > 0) {
        return;
      }
@@ -7806,7 +7816,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        // emptiness, not this control's doing. Blaming a filter that is not
        // running would send a reader to fix the wrong thing.
        return;
-@@ -20647,7 +20874,6 @@
+@@ -20647,7 +20879,6 @@
          function () {
            state.scopeModule = '';
            state.scopeFacet = '';
@@ -7814,7 +7824,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
            requestFit();
            onControlChange(true);
          }
-@@ -20656,38 +20882,16 @@
+@@ -20656,38 +20887,16 @@
    }
 
    // scopeSelectionPhrase names whichever axes are actually narrowed, so the
@@ -7861,7 +7871,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    }
 
    // AN OVERLAY THAT MATCHES NOTHING SAYS SO.
-@@ -20883,17 +21087,12 @@
+@@ -20883,17 +21092,12 @@
      }
 
      var i;
@@ -7884,7 +7894,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      var inScopeIds = Object.create(null);
      for (i = 0; i < scoped.length; i++) {
        inScopeIds[str(scoped[i].id)] = true;
-@@ -20922,8 +21121,7 @@
+@@ -20922,8 +21126,7 @@
      var deg = c.degrees(nodeIds, drawEdgesList);
 
      // Claim-level edges with BOTH endpoints in scope. The structural rules
@@ -7894,7 +7904,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      var inScopeEdges = [];
      for (i = 0; i < payload.edges.length; i++) {
        var e = payload.edges[i] || {};
-@@ -20989,30 +21187,6 @@
+@@ -20989,30 +21192,6 @@
        }
      }
 
@@ -7925,7 +7935,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      // Which facets each drawn node stands for. A claim stands for its own; a
      // collapsed group stands for every facet among its members. This is what
      // lets a legend hover dim non-members even at module granularity.
-@@ -21025,27 +21199,6 @@
+@@ -21025,27 +21204,6 @@
        facetsOfNode[rep][str(scoped[i].facet)] = true;
      }
 
@@ -7953,7 +7963,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      scene = {
        scoped: scoped,
        nodes: nodes,
-@@ -21056,11 +21209,7 @@
+@@ -21056,11 +21214,7 @@
        cycleIds: cycleIds,
        selfIds: selfIds,
        redEdgeKeys: redEdgeKeys,
@@ -7965,7 +7975,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        repByClaim: reps.repByClaim,
        qualifier: qualifiers(nodes),
        overlayEmpty: false
-@@ -21191,7 +21340,6 @@
+@@ -21191,7 +21345,6 @@
        other: cssVar(cs, '--dxg-facet-other'),
        cycle: cssVar(cs, '--dxg-cycle'),
        halo: cssVar(cs, '--dxg-halo'),
@@ -7973,7 +7983,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        ink: cssVar(cs, '--ink'),
        muted: cssVar(cs, '--muted'),
        faint: cssVar(cs, '--faint'),
-@@ -21216,8 +21364,6 @@
+@@ -21216,8 +21369,6 @@
    //           because a halo is reserved for engine-managed states that
    //           demand a human and two of them stacked says nothing extra
    //   wedge   this node governs at least one other claim
@@ -7982,7 +7992,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    //   ghost   an endpoint outside the current scope: hollow and unlabeled
 
    function facetSlotOf(node) {
-@@ -21393,48 +21539,10 @@
+@@ -21393,48 +21544,10 @@
          ctx.lineWidth = 1.6;
          ctx.stroke();
        }
@@ -8031,7 +8041,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function haloKind(node) {
      if (node.kind !== 'group' && node.review_pending === true) {
        return 'review';
-@@ -21769,9 +21877,8 @@
+@@ -21769,9 +21882,8 @@
    // The result was a pane that looked broken in dark mode and was not:
    // sampling the integration screenshots, the DOM chrome had correctly
    // switched to the near-black --paper while the canvas still held its
@@ -8043,7 +8053,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // black, which is why overlapping discs merged: their outlines had become
    // invisible against the background.
    //
-@@ -21885,35 +21992,20 @@
+@@ -21885,35 +21997,20 @@
    }
 
    // ------------------------------------------------------------------
@@ -8086,7 +8096,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      return pal.muted;
    }
 
-@@ -21940,81 +22032,31 @@
+@@ -21940,81 +22037,31 @@
        if (!a || !b) {
          continue;
        }
@@ -8177,7 +8187,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function shorten(from, to, by) {
      var dx = to.x - from.x;
      var dy = to.y - from.y;
-@@ -22025,61 +22067,14 @@
+@@ -22025,61 +22072,14 @@
      return { x: to.x - (dx / len) * by, y: to.y - (dy / len) * by };
    }
 
@@ -8243,7 +8253,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
 
    function overlayMatches(node) {
      switch (state.overlay) {
-@@ -22087,8 +22082,6 @@
+@@ -22087,8 +22087,6 @@
          return coversAnyRule(node, 'isolated') || coversAnyRule(node, 'weakly_linked');
        case 'cycles':
          return coversAny(node, scene.cycleIds) || coversAny(node, scene.selfIds);
@@ -8252,7 +8262,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        case 'review':
          return haloKind(node) === 'review';
        case 'comments':
-@@ -22103,9 +22096,6 @@
+@@ -22103,9 +22101,6 @@
    }
 
    function overlayMatchesEdge(edge) {
@@ -8262,7 +8272,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      if (state.overlay === 'cycles') {
        return scene.redEdgeKeys[edgeKeyOf(edge)] === true;
      }
-@@ -22129,8 +22119,6 @@
+@@ -22129,8 +22124,6 @@
          return pal.warn;
        case 'cycles':
          return pal.cycle;
@@ -8271,7 +8281,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        case 'review':
          return pal.halo;
        case 'comments':
-@@ -22860,8 +22848,8 @@
+@@ -22860,8 +22853,8 @@
    // panel showing only one of them would make the other look like a bug.
 
    // mobile is 13 §4.12's own set: only STATUS and IN A CYCLE survive the
@@ -8282,7 +8292,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // filtered out of the row list, so the mobile CSS rule (M9) hides exactly
    // these two and nothing about the row's construction or order has to
    // know which width is looking at it.
-@@ -22961,37 +22949,7 @@
+@@ -22961,37 +22954,7 @@
      });
    }
 
@@ -8320,7 +8330,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // cycleDisplay is the IN A CYCLE row's text and colour together, same
    // reasoning as statusDisplay: 13 §8.2/§8.3 give "Yes" and "Self-edge" the
    // same --color-blocked a positive finding always takes, because muted is
-@@ -23163,12 +23121,9 @@
+@@ -23163,12 +23126,9 @@
      return band;
    }
 
@@ -8336,7 +8346,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -23182,10 +23137,8 @@
+@@ -23182,10 +23142,8 @@
 
      var typesOn = state ? state.types : [];
      var plan = [
@@ -8348,7 +8358,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      ];
      var any = false;
      for (var i = 0; i < plan.length; i++) {
-@@ -23213,7 +23166,7 @@
+@@ -23213,7 +23171,7 @@
      clear(el.detail);
      if (!scene || state.selected === '') {
        el.detail.appendChild(
@@ -8357,7 +8367,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
        );
        return;
      }
-@@ -23283,34 +23236,18 @@
+@@ -23283,34 +23241,18 @@
      }
 
      // 13 §4.7, coordinator RETRY ruling (2): the rail's property rows are
@@ -8394,7 +8404,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
      // 13 §4.13 / M1-M3 — AROUND THIS CLAIM, the mobile substitute for the
      // canvas (R-H.0's argued exception, D12). Always built — R-I.0's "same
      // content, same vocabulary, same order; only the arrangement moves" —
-@@ -23336,27 +23273,6 @@
+@@ -23336,27 +23278,6 @@
      el.detail.appendChild(open);
    }
 
@@ -8422,7 +8432,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+1350 -1446)
    // degreeValue renders the scope-relative degree AND NAMES WHOSE IT IS.
    //
    // This row used to look the claim's representative up in the drawn graph's
-@@ -23425,18 +23341,6 @@
+@@ -23425,18 +23346,6 @@
      return out;
    }
 
@@ -11228,7 +11238,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
                     testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
-    size            23990 lines / 1496790 bytes -> 23733 lines / 1481233 bytes
+    size            23990 lines / 1496790 bytes -> 23738 lines / 1481508 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
@@ -11401,7 +11411,7 @@ testdata/fixture-portability/build/catalog/catalog.json  (+3 -147)
    }
  }
 
-testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
+testdata/fixture-portability/build/viewer/index.html  (+1355 -1457)
     inputs changed  testdata/fixture-portability/build/ledger/comment-digest.json
                     testdata/fixture-portability/build/ledger/lock-store.json
                     testdata/fixture-portability/claims/beacon-overview.yaml
@@ -11410,7 +11420,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
                     testdata/fixture-portability/claims/beacon/manifest.yaml
                     testdata/fixture-portability/constitution.yaml
                     testdata/fixture-portability/project.config.yaml
-    size            23267 lines / 1238682 bytes -> 23160 lines / 1226676 bytes
+    size            23267 lines / 1238682 bytes -> 23165 lines / 1226951 bytes
 @@ -124,36 +124,11 @@
     collapsed MODULE group node wears — a module has no single facet, and
     borrowing one of its members' colours would assert something false.
@@ -12933,7 +12943,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 +@media screen and (min-width: 861px) {
 +  .site-nav,
 +  .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
-+  .site-nav { padding-bottom: 2px; }
++  .site-nav { margin-top: 16px; padding-bottom: 2px; }
 +  .site-nav .sec-tab,
 +  .system-nav-groups .system-nav-group__toggle,
 +  .nav-utilities #dxgOpen {
@@ -12941,7 +12951,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 +    min-height: 34px;
 +    margin: 0;
 +  }
-+  .nav-utilities { padding-top: 12px; }
++  .nav-utilities { margin-top: 12px; padding-top: 13px; }
 +}
 +.home-link {
 +  color: inherit;
@@ -13443,7 +13453,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 +
 +        <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
 +          <header class="home-head">
-+            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked" datetime="<GENERATED-AT-RFC3339>"><GENERATED-AT-RFC3339></time></p>
++            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked"></time></p>
 +            <h2 id="homeTitle" class="home-title">dossierx viewer</h2>
 +          </header>
 +          <section class="home-waiting" aria-labelledby="homeWaitingTitle">
@@ -13466,7 +13476,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 +                <span class="home-tile__head"><span class="home-tile__title">Constitution</span><span class="home-pill home-wide" data-state="locked">Locked</span></span>
 +                <span class="home-tile__desc home-wide">From constitution.yaml.</span>
 +                <span class="home-stats home-wide"><span class="home-stat"><span class="home-stat__count">1</span><span class="home-stat__label">invariant</span></span><span class="home-stat"><span class="home-stat__count">0</span><span class="home-stat__label">decisions</span></span><span class="home-stat"><span class="home-stat__count">0</span><span class="home-stat__label">glossary terms</span></span></span>
-+                <span class="home-tile__line home-narrow">1 invariant · 0 decisions · 0 terms</span>
++                <span class="home-tile__line home-narrow">1 invariant · 0 decisions · 0 terms</span>
 +              </span>
 +              <span class="home-pill home-narrow" data-state="locked">Locked</span>
 +              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
@@ -13679,7 +13689,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        // hashId() truncating. And showModuleFacet rewrites the hash on every
        // nav, so a rewrite that dropped the suffix would erase the graph state
        // the pane had just written — hence hashGraphSuffix() being appended.
-@@ -12295,6 +12874,41 @@
+@@ -12295,6 +12874,46 @@
          return decodeURIComponent(raw);
        }
 
@@ -13698,12 +13708,17 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 +        });
 +      }
 +
-+      // The Home header's "last check" arrives as the RFC3339 instant; show it
-+      // as a date and time in the reader's own zone.
++      // The Home header's "last check" is the sidebar's render stamp (the
++      // one the freshness footer reads), shown as a date and time in the
++      // reader's own zone. The stamp stays out of <main> so a live-reload
++      // fragment is a verbatim slice of the page it came from.
 +      function localizeHomeCheck() {
-+        var t = document.querySelector('.home-checked[datetime]');
-+        if (!t) { return; }
-+        var d = new Date(t.getAttribute('datetime'));
++        var t = document.querySelector('.home-checked');
++        var sidebar = document.getElementById('sidebar');
++        var iso = sidebar && sidebar.dataset.generatedAt;
++        if (!t || !iso) { return; }
++        t.setAttribute('datetime', iso);
++        var d = new Date(iso);
 +        if (isNaN(d.getTime())) { return; }
 +        try {
 +          var time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -13721,7 +13736,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        function showFromHash(opts) {
          var target = resolve(hashId());
          var merged = Object.assign({}, opts, { claim: target.claim });
-@@ -13324,9 +13938,7 @@
+@@ -13324,9 +13943,7 @@
 
        function activeFacetClaimIDs() {
          var ids = Object.create(null);
@@ -13732,7 +13747,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
          if (!group) { return ids; }
          var collect = function (root) {
-@@ -13637,9 +14249,7 @@
+@@ -13637,9 +14254,7 @@
  // interval before system-record.js has enhanced a fresh SSE fragment.
        function positionStatusStrip() {
          if (!stripEl) { return; }
@@ -13743,7 +13758,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          if (!section) {
            var content = document.querySelector('.content-area');
            if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
-@@ -13651,7 +14261,7 @@
+@@ -13651,7 +14266,7 @@
            return;
          }
          var subNav = section.querySelector(':scope > .sub-nav');
@@ -13752,7 +13767,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          if (subNav) {
            if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
          } else if (header) {
-@@ -14319,7 +14929,7 @@
+@@ -14319,7 +14934,7 @@
        // Two states look like an edit and have nothing to put behind a
        // "Changes" tab. A record written before the approved wording was kept
        // proves the text moved and does not carry what it moved from. A claim
@@ -13761,7 +13776,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        // approved wording identical to its current one. In both, the panel has
        // one sentence to say and no second version of the claim — so there is
        // no switch, and the claim's own body stays on screen.
-@@ -14677,7 +15287,10 @@
+@@ -14677,7 +15292,10 @@
          var bannerShowing = groups.length > 0 && actionable;
          renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
          renderApprovedEdits();
@@ -13773,7 +13788,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
-@@ -15048,7 +15661,7 @@
+@@ -15048,7 +15666,7 @@
            return all;
          }
          if (scope === 'module') {
@@ -13782,7 +13797,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
            var moduleID = section ? section.id : '';
            var ids = Object.create(null);
            Object.keys(claimToFacet).forEach(function (id) {
-@@ -15234,7 +15847,7 @@
+@@ -15234,7 +15852,7 @@
        // reading view already maintains — read-only, no new state.
        function issuesSyncHeader() {
          var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
@@ -13791,7 +13806,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
          if (issuesBreadcrumbFacetEl) {
            issuesBreadcrumbFacetEl.textContent = moduleTab ? moduleTab.textContent.trim() : '';
-@@ -15798,23 +16411,6 @@
+@@ -15798,23 +16416,6 @@
          oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
          oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
@@ -13815,7 +13830,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          // ---- re-point every lookup map at the fresh DOM ----
          initViewer();
 
-@@ -15904,10 +16500,30 @@
+@@ -15904,10 +16505,30 @@
            }
            return;
          }
@@ -13850,7 +13865,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          var noteToggle = e.target.closest('.claim-source-note-toggle');
          if (noteToggle) {
            var noteEl = noteToggle.parentNode;
-@@ -15920,6 +16536,13 @@
+@@ -15920,6 +16541,13 @@
              : ((noteSt && noteSt.expandLabel) || 'show more');
            return;
          }
@@ -13864,7 +13879,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          var secTab = e.target.closest('.sec-tab');
          if (secTab) {
            var moduleID = (secTab.dataset.target || '').replace(/^#/, '');
-@@ -15984,6 +16607,7 @@
+@@ -15984,6 +16612,7 @@
              });
              group.hidden = query !== '' && matches.length === 0;
            });
@@ -13872,7 +13887,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
          });
        }
        if (navOverlay) {
-@@ -16239,7 +16863,7 @@
+@@ -16239,7 +16868,7 @@
 
    // enhanceFooters and enhanceFieldLabels were retired here: both targeted
    // the pre-redesign single-<details> mono digest and flat <li> labels
@@ -13881,7 +13896,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // components.EdgesHTMLWithLinks no longer emits — see that Go function's
    // doc comment and docs/design/screens/05-claim-one-expansion-at-a-time.md
    // R09.1/R-F.1. The new footer strip (.claim-footer, .claim-footer-chip*,
-@@ -16468,11 +17092,10 @@
+@@ -16468,11 +17097,10 @@
      });
    }
 
@@ -13896,7 +13911,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      var module = modules.find(function (section) { return !section.hidden; });
      if (!module) { return null; }
      var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
-@@ -16785,7 +17408,7 @@
+@@ -16785,7 +17413,7 @@
      // directly (see bindFocusControl above).
      var focusState = isFocusOn() ? 'on' : 'off';
      var moduleSections = Array.prototype.slice.call(
@@ -13905,7 +13920,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      );
      var moduleCount = moduleSections.length;
      moduleSections.forEach(function (section, moduleIndex) {
-@@ -16901,12 +17524,12 @@
+@@ -16901,12 +17529,12 @@
 
    // enhanceGraphLabels() used to live here and, on every #dxgPane mutation,
    // forcibly overwrote graph-ui.js's own [data-dxg-type] / [data-dxg-edge]
@@ -13921,7 +13936,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // legend group), and this shim was firing on every rebuild and silently
    // reverting all of it back to the pre-13 wording — removed here rather
    // than left to fight graph-ui.js on every interaction. Found via
-@@ -17028,23 +17651,21 @@
+@@ -17028,23 +17656,21 @@
    // suite off these names.
    //
    // Constants (all frozen, all JSON-able):
@@ -13950,7 +13965,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    //   representatives(nodes, granularity, expandedGroups)
    //                                       -> {repByClaim, repNodes}
    //   aggregateEdges(edges, repByClaim, enabledTypes)
-@@ -17056,10 +17677,8 @@
+@@ -17056,10 +17682,8 @@
    //   scc(nodeIds, edges)                 -> [[id, ...]]
    //   selfEdges(nodeIds, edges)           -> [id, ...]
    //
@@ -13962,7 +13977,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    //
    // Verdicts (design section 5):
    //   gapRules(nodes, edges, options)     -> {facts: [...], hints: [...]}
-@@ -17078,18 +17697,21 @@
+@@ -17078,18 +17702,21 @@
    // The array form exists so a one-liner harness can call scc() without
    // building objects. An edge with no type is treated as a DIRECTED edge of
    // unnamed type: it participates in scc(), and it is excluded from the
@@ -13991,7 +14006,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
    // GHOST_PREFIX marks an edge endpoint that resolved to no in-scope
    // representative. aggregateEdges() emits "ghost:<claim id>" for it rather
-@@ -17116,7 +17738,7 @@
+@@ -17116,7 +17743,7 @@
      'sink_group',
      'orphan_group'
    ]);
@@ -14000,7 +14015,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
    // ------------------------------------------------------------------
    // Internal helpers — none of these cross the exported boundary.
-@@ -17220,8 +17842,8 @@
+@@ -17220,8 +17847,8 @@
      return asString(groupType) + ':' + asString(name);
    }
 
@@ -14011,7 +14026,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // The separator is "|", which no claim id can contain (ids are dotted
    // slugs), so the key is unambiguous.
    function edgeKey(edge) {
-@@ -17236,75 +17858,20 @@
+@@ -17236,75 +17863,20 @@
    // Scope and the representative-node rule (design section 3)
    // ------------------------------------------------------------------
 
@@ -14090,7 +14105,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // THE EMPTY STRING IS THE ONLY "ALL" SENTINEL, and that is what makes this
    // total rather than merely defensive: asString(null), asString(undefined), a
    // missing field and a non-finite number all become "" and all mean "do not
-@@ -17326,12 +17893,11 @@
+@@ -17326,12 +17898,11 @@
    // The returned array holds the SAME node objects, not copies: nothing here
    // mutates a payload node, and the pane's redraw path runs on every control
    // change.
@@ -14105,7 +14120,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        return list.slice();
      }
      var out = [];
-@@ -17343,9 +17909,6 @@
+@@ -17343,9 +17914,6 @@
        if (wantFacet !== '' && asString(n.facet) !== wantFacet) {
          continue;
        }
@@ -14115,7 +14130,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        out.push(list[i]);
      }
      return out;
-@@ -17654,11 +18217,9 @@
+@@ -17654,11 +18222,9 @@
    // ------------------------------------------------------------------
 
    // isDirectedType reports whether an edge type participates in cycle
@@ -14130,7 +14145,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function isDirectedType(type) {
      if (type === '') {
        return true;
-@@ -17816,7 +18377,8 @@
+@@ -17816,7 +18382,8 @@
    }
 
    // selfEdges returns the ids in nodeIds that are their own target under ANY
@@ -14140,7 +14155,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // from scc() and never merged into the cycle list, because the engine
    // already has a dedicated error-severity `self-edge` lint distinct from
    // `cycle`, and a pane that folded the two together would be telling a
-@@ -17872,60 +18434,7 @@
+@@ -17872,60 +18439,7 @@
      return -1;
    }
 
@@ -14201,7 +14216,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // ------------------------------------------------------------------
    // Gap rules (design section 5)
    // ------------------------------------------------------------------
-@@ -18020,12 +18529,6 @@
+@@ -18020,12 +18534,6 @@
    // endpoints in scope, which is also why aggregation inside this function
    // can never produce a ghost.
 
@@ -14214,7 +14229,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function finding(rule, nodeIds, kind) {
      return { rule: rule, node_ids: nodeIds, kind: kind };
    }
-@@ -18044,66 +18547,18 @@
+@@ -18044,66 +18552,18 @@
    }
 
    // ------------------------------------------------------------------
@@ -14285,7 +14300,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // densityOutlier: a facet whose claim count in one module sits far below its
    // median across the other modules — the shape of "this module forgot to
    // write its contracts down".
-@@ -18396,14 +18851,12 @@
+@@ -18396,14 +18856,12 @@
      facts.push(finding('sink_group', sinks.sort(cmpStr), 'fact'));
      facts.push(finding('orphan_group', orphans.sort(cmpStr), 'fact'));
 
@@ -14305,7 +14320,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        finding('density_outlier', densityOutlier(scopedNodes), 'hint')
      ];
 
-@@ -18433,8 +18886,6 @@
+@@ -18433,8 +18891,6 @@
    //
    //   md  scope: module   "" for every module, else the module name
    //   fc  scope: facet    "" for every facet, else the facet name
@@ -14314,7 +14329,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    //   gr  granularity     "claims" | "module" | "facet"
    //   ov  overlay         one of OVERLAYS
    //   ty  edge types      a subset of TYPE_LETTERS, positional against EDGE_TYPES
-@@ -18449,35 +18900,26 @@
+@@ -18449,35 +18905,26 @@
    // has never been released, and decodeState ignores unknown keys, so a hash
    // carrying the old key decodes to the default whole-project scope rather
    // than to anything half-understood.
@@ -14360,7 +14375,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
    // defaultState returns a fresh state object — everything on, nothing
    // filtered, nothing selected. Fresh rather than shared: a caller that
-@@ -18486,7 +18928,6 @@
+@@ -18486,7 +18933,6 @@
      return {
        scopeModule: '',
        scopeFacet: '',
@@ -14368,7 +14383,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        granularity: 'claims',
        overlay: 'none',
        types: EDGE_TYPES.slice(),
-@@ -18552,8 +18993,6 @@
+@@ -18552,8 +18998,6 @@
          s.scopeModule === undefined || s.scopeModule === null ? d.scopeModule : asString(s.scopeModule),
        scopeFacet:
          s.scopeFacet === undefined || s.scopeFacet === null ? d.scopeFacet : asString(s.scopeFacet),
@@ -14377,7 +14392,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        granularity: normalizeGranularity(s.granularity === undefined ? d.granularity : s.granularity),
        overlay: normalizeOverlay(s.overlay === undefined ? d.overlay : s.overlay),
        types: normalizeTypes(s.types === undefined ? d.types : s.types),
-@@ -18581,7 +19020,6 @@
+@@ -18581,7 +19025,6 @@
      return (
        'md=' + enc(s.scopeModule) +
        '&fc=' + enc(s.scopeFacet) +
@@ -14385,7 +14400,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        '&gr=' + enc(s.granularity) +
        '&ov=' + enc(s.overlay) +
        '&ty=' + letters +
-@@ -18617,8 +19055,6 @@
+@@ -18617,8 +19060,6 @@
          out.scopeModule = dec(val);
        } else if (key === 'fc') {
          out.scopeFacet = dec(val);
@@ -14394,7 +14409,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        } else if (key === 'gr') {
          out.granularity = normalizeGranularity(dec(val));
        } else if (key === 'ov') {
-@@ -18663,13 +19099,11 @@
+@@ -18663,13 +19104,11 @@
      FACT_RULE_IDS: FACT_RULE_IDS,
      HINT_RULE_IDS: HINT_RULE_IDS,
      OVERLAYS: OVERLAYS,
@@ -14408,7 +14423,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      representatives: representatives,
      aggregateEdges: aggregateEdges,
      degrees: degrees,
-@@ -18679,8 +19113,6 @@
+@@ -18679,8 +19118,6 @@
      selfEdges: selfEdges,
 
      facetSlot: facetSlot,
@@ -14417,7 +14432,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
      gapRules: gapRules,
 
-@@ -18734,7 +19166,7 @@
+@@ -18734,7 +19171,7 @@
    //    is a reading-view target id; the graph appends its own state after a
    //    "!" separator and owns nothing before it. replaceState does not fire
    //    hashchange, so changing a filter never re-enters the reading view's
@@ -14426,7 +14441,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    //    location.hash is assigned is the detail panel's "open claim" action,
    //    which WANTS the reading view to move.
    //
-@@ -18808,30 +19240,24 @@
+@@ -18808,30 +19245,24 @@
    // overridable from it — a threshold a reader cannot see and cannot cross is
    // a threshold nobody can report as wrong.
    var AUTO_COLLAPSE_ABOVE = 300;
@@ -14464,7 +14479,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
    // ---- Labels ------------------------------------------------------------
    //
-@@ -18880,13 +19306,12 @@
+@@ -18880,13 +19311,12 @@
    var FALLBACK_COLOR = '#808080';
 
    // The overlay select's contents, in the frozen order: isolated, cycles,
@@ -14480,7 +14495,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      ['review', 'review pending'],
      ['comments', 'open comment threads'],
      ['status', 'draft vs locked']
-@@ -18911,7 +19336,6 @@
+@@ -18911,7 +19341,6 @@
      open_threads: 'open comment threads',
      sink_group: 'group nothing links into',
      orphan_group: 'group with no outside edges',
@@ -14488,7 +14503,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      density_outlier: 'facet thin in one module'
    };
 
-@@ -19031,14 +19455,7 @@
+@@ -19031,14 +19460,7 @@
        edges: Array.isArray(raw.edges) ? raw.edges : [],
        groups: {
          modules: Array.isArray(groups.modules) ? groups.modules : [],
@@ -14504,7 +14519,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        },
        dropped: { unresolved_edges: num(dropped.unresolved_edges) }
      };
-@@ -19254,10 +19671,10 @@
+@@ -19254,10 +19676,10 @@
    }
 
    // ------------------------------------------------------------------
@@ -14517,7 +14532,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    //
    // The prototype froze this order as Scope · Granularity · Highlight overlay
    // · Edge types · View. Scope has since become two independent controls, and
-@@ -19265,26 +19682,13 @@
+@@ -19265,26 +19687,13 @@
    // convenient — the order is what a reader's hand has learnt, and splitting a
    // control is not a licence to rearrange its neighbours.
    //
@@ -14547,7 +14562,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function controlGroup(labelText, key) {
      var group = h('div', 'dxg-ctl');
      if (key) {
-@@ -19352,10 +19756,6 @@
+@@ -19352,10 +19761,6 @@
        onControlChange(true);
      });
      facetGroup.appendChild(el.scopeFacet);
@@ -14558,7 +14573,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
      var granGroup = controlGroup('Granularity', 'granularity');
      el.granularity = selectControl('dxgGranularity', function () {
-@@ -19426,59 +19826,6 @@
+@@ -19426,59 +19831,6 @@
      el.controls.appendChild(viewGroup);
    }
 
@@ -14618,7 +14633,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function toggleType(type) {
      var next = [];
      var had = false;
-@@ -19502,12 +19849,8 @@
+@@ -19502,12 +19854,8 @@
    // pasted hash and one arriving from a click take the same path.
    function refreshControls() {
      var c = core();
@@ -14632,7 +14647,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      clear(el.scopeModule);
      el.scopeModule.appendChild(option('', 'all modules'));
      var i;
-@@ -19521,33 +19864,6 @@
+@@ -19521,33 +19869,6 @@
        el.scopeFacet.appendChild(option(groups.facets[i], groups.facets[i]));
      }
 
@@ -14666,7 +14681,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      // A selection naming a module or facet the payload does not have would
      // leave the select showing something the graph is not doing. Fall back to
      // that axis's "all" rather than filter on a name nothing can match.
-@@ -19568,13 +19884,6 @@
+@@ -19568,13 +19889,6 @@
        state.scopeFacet = '';
        el.scopeFacet.value = '';
      }
@@ -14680,7 +14695,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
      el.granularity.value = state.granularity;
      el.overlay.value = state.overlay;
-@@ -19591,8 +19900,8 @@
+@@ -19591,8 +19905,8 @@
 
    // onControlChange is the single funnel every control passes through:
    // recompute the scene, write the hash, redraw. reheat is true for the
@@ -14691,7 +14706,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function onControlChange(reheat) {
      refreshControls();
      recompute();
-@@ -19622,38 +19931,20 @@
+@@ -19622,38 +19936,20 @@
    // carry project data into the document.
    //
    // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
@@ -14733,7 +14748,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // strings, no interpolation, so a payload value can never reach one.
    // Colours are var()s rather than currentColor because each mark is
    // genuinely two-tone (a facet fill plus a state-coloured ring) and the two
-@@ -19698,10 +19989,6 @@
+@@ -19698,10 +19994,6 @@
        ['cycle', 'in a dependency cycle'],
        ['dim', 'everything else']
      ],
@@ -14744,7 +14759,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      review: [
        ['halo', 'review pending'],
        ['dim', 'everything else']
-@@ -19716,28 +20003,6 @@
+@@ -19716,28 +20008,6 @@
      ]
    };
 
@@ -14773,7 +14788,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function legendGroupLabel(text) {
      return h('li', 'dxg-legend-group', text);
    }
-@@ -19751,55 +20016,11 @@
+@@ -19751,55 +20021,11 @@
      } else {
        appendFacetRows(list);
      }
@@ -14829,7 +14844,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // The facet rows: every facet the PROJECT declared, by its own name,
    // against its assigned swatch. Hovering one dims every node on the canvas
    // that is not a member — the disambiguator that still works at twenty
-@@ -19879,7 +20100,7 @@
+@@ -19879,7 +20105,7 @@
    function appendEdgeRows(list) {
      var c = core();
      var known = {};
@@ -14838,7 +14853,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      for (var k = 0; k < engineTypes.length; k++) {
        known[str(engineTypes[k])] = true;
      }
-@@ -19889,11 +20110,7 @@
+@@ -19889,11 +20115,7 @@
        if (!known[type] || !EDGE_SAMPLES[type]) {
          continue;
        }
@@ -14851,7 +14866,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        item.setAttribute('data-dxg-edge', type);
        var sample = h('span', 'dxg-legend-edge');
        sample.innerHTML = EDGE_SAMPLES[type];
-@@ -20227,8 +20444,8 @@
+@@ -20227,8 +20449,8 @@
    // BLOCKERS IT PUSHES OUTSIDE THE PICTURE — 13 §4.3 / §6 (RETRY fix list
    // item 1).
    //
@@ -14862,7 +14877,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // the empty-intersection case is renderEmptyScopeNotice's own sentence, so
    // the two never fire together (13 §8.9 forbids a second empty-state
    // device; this is the same "one attention band" argument for the
-@@ -20239,7 +20456,7 @@
+@@ -20239,7 +20461,7 @@
    // sentence makes ("and are drawn as outlines") can never drift out of
    // sync with what the canvas actually draws.
    function renderScopeSummaryNotice() {
@@ -14871,7 +14886,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        return;
      }
      if (!scene || scene.scoped.length === 0) {
-@@ -20264,7 +20481,6 @@
+@@ -20264,7 +20486,6 @@
          function () {
            state.scopeModule = '';
            state.scopeFacet = '';
@@ -14879,7 +14894,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
            requestFit();
            onControlChange(true);
          }
-@@ -20297,8 +20513,8 @@
+@@ -20297,8 +20518,8 @@
      if (!scene || scene.scoped.length > 0) {
        return;
      }
@@ -14890,7 +14905,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        // emptiness, not this control's doing. Blaming a filter that is not
        // running would send a reader to fix the wrong thing.
        return;
-@@ -20313,7 +20529,6 @@
+@@ -20313,7 +20534,6 @@
          function () {
            state.scopeModule = '';
            state.scopeFacet = '';
@@ -14898,7 +14913,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
            requestFit();
            onControlChange(true);
          }
-@@ -20322,38 +20537,16 @@
+@@ -20322,38 +20542,16 @@
    }
 
    // scopeSelectionPhrase names whichever axes are actually narrowed, so the
@@ -14945,7 +14960,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    }
 
    // AN OVERLAY THAT MATCHES NOTHING SAYS SO.
-@@ -20549,17 +20742,12 @@
+@@ -20549,17 +20747,12 @@
      }
 
      var i;
@@ -14968,7 +14983,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      var inScopeIds = Object.create(null);
      for (i = 0; i < scoped.length; i++) {
        inScopeIds[str(scoped[i].id)] = true;
-@@ -20588,8 +20776,7 @@
+@@ -20588,8 +20781,7 @@
      var deg = c.degrees(nodeIds, drawEdgesList);
 
      // Claim-level edges with BOTH endpoints in scope. The structural rules
@@ -14978,7 +14993,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      var inScopeEdges = [];
      for (i = 0; i < payload.edges.length; i++) {
        var e = payload.edges[i] || {};
-@@ -20655,30 +20842,6 @@
+@@ -20655,30 +20847,6 @@
        }
      }
 
@@ -15009,7 +15024,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      // Which facets each drawn node stands for. A claim stands for its own; a
      // collapsed group stands for every facet among its members. This is what
      // lets a legend hover dim non-members even at module granularity.
-@@ -20691,27 +20854,6 @@
+@@ -20691,27 +20859,6 @@
        facetsOfNode[rep][str(scoped[i].facet)] = true;
      }
 
@@ -15037,7 +15052,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      scene = {
        scoped: scoped,
        nodes: nodes,
-@@ -20722,11 +20864,7 @@
+@@ -20722,11 +20869,7 @@
        cycleIds: cycleIds,
        selfIds: selfIds,
        redEdgeKeys: redEdgeKeys,
@@ -15049,7 +15064,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        repByClaim: reps.repByClaim,
        qualifier: qualifiers(nodes),
        overlayEmpty: false
-@@ -20857,7 +20995,6 @@
+@@ -20857,7 +21000,6 @@
        other: cssVar(cs, '--dxg-facet-other'),
        cycle: cssVar(cs, '--dxg-cycle'),
        halo: cssVar(cs, '--dxg-halo'),
@@ -15057,7 +15072,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        ink: cssVar(cs, '--ink'),
        muted: cssVar(cs, '--muted'),
        faint: cssVar(cs, '--faint'),
-@@ -20882,8 +21019,6 @@
+@@ -20882,8 +21024,6 @@
    //           because a halo is reserved for engine-managed states that
    //           demand a human and two of them stacked says nothing extra
    //   wedge   this node governs at least one other claim
@@ -15066,7 +15081,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    //   ghost   an endpoint outside the current scope: hollow and unlabeled
 
    function facetSlotOf(node) {
-@@ -21059,48 +21194,10 @@
+@@ -21059,48 +21199,10 @@
          ctx.lineWidth = 1.6;
          ctx.stroke();
        }
@@ -15115,7 +15130,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function haloKind(node) {
      if (node.kind !== 'group' && node.review_pending === true) {
        return 'review';
-@@ -21435,9 +21532,8 @@
+@@ -21435,9 +21537,8 @@
    // The result was a pane that looked broken in dark mode and was not:
    // sampling the integration screenshots, the DOM chrome had correctly
    // switched to the near-black --paper while the canvas still held its
@@ -15127,7 +15142,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // black, which is why overlapping discs merged: their outlines had become
    // invisible against the background.
    //
-@@ -21551,35 +21647,20 @@
+@@ -21551,35 +21652,20 @@
    }
 
    // ------------------------------------------------------------------
@@ -15170,7 +15185,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      return pal.muted;
    }
 
-@@ -21606,81 +21687,31 @@
+@@ -21606,81 +21692,31 @@
        if (!a || !b) {
          continue;
        }
@@ -15261,7 +15276,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function shorten(from, to, by) {
      var dx = to.x - from.x;
      var dy = to.y - from.y;
-@@ -21691,61 +21722,14 @@
+@@ -21691,61 +21727,14 @@
      return { x: to.x - (dx / len) * by, y: to.y - (dy / len) * by };
    }
 
@@ -15327,7 +15342,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
 
    function overlayMatches(node) {
      switch (state.overlay) {
-@@ -21753,8 +21737,6 @@
+@@ -21753,8 +21742,6 @@
          return coversAnyRule(node, 'isolated') || coversAnyRule(node, 'weakly_linked');
        case 'cycles':
          return coversAny(node, scene.cycleIds) || coversAny(node, scene.selfIds);
@@ -15336,7 +15351,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        case 'review':
          return haloKind(node) === 'review';
        case 'comments':
-@@ -21769,9 +21751,6 @@
+@@ -21769,9 +21756,6 @@
    }
 
    function overlayMatchesEdge(edge) {
@@ -15346,7 +15361,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      if (state.overlay === 'cycles') {
        return scene.redEdgeKeys[edgeKeyOf(edge)] === true;
      }
-@@ -21795,8 +21774,6 @@
+@@ -21795,8 +21779,6 @@
          return pal.warn;
        case 'cycles':
          return pal.cycle;
@@ -15355,7 +15370,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        case 'review':
          return pal.halo;
        case 'comments':
-@@ -22526,8 +22503,8 @@
+@@ -22526,8 +22508,8 @@
    // panel showing only one of them would make the other look like a bug.
 
    // mobile is 13 §4.12's own set: only STATUS and IN A CYCLE survive the
@@ -15366,7 +15381,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // filtered out of the row list, so the mobile CSS rule (M9) hides exactly
    // these two and nothing about the row's construction or order has to
    // know which width is looking at it.
-@@ -22627,37 +22604,7 @@
+@@ -22627,37 +22609,7 @@
      });
    }
 
@@ -15404,7 +15419,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // cycleDisplay is the IN A CYCLE row's text and colour together, same
    // reasoning as statusDisplay: 13 §8.2/§8.3 give "Yes" and "Self-edge" the
    // same --color-blocked a positive finding always takes, because muted is
-@@ -22829,12 +22776,9 @@
+@@ -22829,12 +22781,9 @@
      return band;
    }
 
@@ -15420,7 +15435,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    function buildNeighborhood(id, claim) {
      var wrap = h('div', 'dxg-neighborhood');
      wrap.appendChild(h('p', 'dxg-neighborhood-eyebrow', 'AROUND THIS CLAIM'));
-@@ -22848,10 +22792,8 @@
+@@ -22848,10 +22797,8 @@
 
      var typesOn = state ? state.types : [];
      var plan = [
@@ -15432,7 +15447,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      ];
      var any = false;
      for (var i = 0; i < plan.length; i++) {
-@@ -22879,7 +22821,7 @@
+@@ -22879,7 +22826,7 @@
      clear(el.detail);
      if (!scene || state.selected === '') {
        el.detail.appendChild(
@@ -15441,7 +15456,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
        );
        return;
      }
-@@ -22949,34 +22891,18 @@
+@@ -22949,34 +22896,18 @@
      }
 
      // 13 §4.7, coordinator RETRY ruling (2): the rail's property rows are
@@ -15478,7 +15493,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
      // 13 §4.13 / M1-M3 — AROUND THIS CLAIM, the mobile substitute for the
      // canvas (R-H.0's argued exception, D12). Always built — R-I.0's "same
      // content, same vocabulary, same order; only the arrangement moves" —
-@@ -23002,27 +22928,6 @@
+@@ -23002,27 +22933,6 @@
      el.detail.appendChild(open);
    }
 
@@ -15506,7 +15521,7 @@ testdata/fixture-portability/build/viewer/index.html  (+1350 -1457)
    // degreeValue renders the scope-relative degree AND NAMES WHOSE IT IS.
    //
    // This row used to look the claim's representative up in the drawn graph's
-@@ -23091,18 +22996,6 @@
+@@ -23091,18 +23001,6 @@
      return out;
    }
 
@@ -15999,7 +16014,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (rewritten)
                     testdata/fixture-theme-flat/claims/widget/manifest.yaml
                     testdata/fixture-theme-flat/constitution.yaml
                     testdata/fixture-theme-flat/project.config.yaml
-    size            27403 lines / 4877586 bytes -> 23298 lines / 1260594 bytes
+    size            27403 lines / 4877586 bytes -> 23303 lines / 1260869 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it

@@ -155,7 +155,7 @@
           <header class="constitution-head">
             <p class="constitution-kicker">PROJECT — NOT A MODULE</p>
             <h2>Constitution</h2>
-            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Constitution.Status}} · {{.Constitution.Status}}{{end}}</p>
+            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Home.Constitution.Label}} · {{.Home.Constitution.MeterLabel}}{{end}}</p>
           </header>
           <div class="sub-nav">
             <button class="subtab" data-target="#constitution-file">The file</button>
@@ -178,12 +178,13 @@
      status strip or module header attaches to it. Every card and tile is a
      link to the page it summarises; the counts come from render/home_view.go.
      A card at 0 is not rendered; with none left the row is one line. The
-     "last check" text is the RFC3339 instant until viewer-runtime.js
-     (localizeHomeCheck) rewrites it in the reader's own time zone; no third
-     timestamp format enters the document. -->
+     "last check" <time> is empty here: viewer-runtime.js (localizeHomeCheck)
+     fills it from the sidebar's data-generated-at, the render stamp the
+     freshness footer already reads. A stamp inside <main> would make every
+     live-reload fragment differ from the page it came from. -->
         <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
           <header class="home-head">
-            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked" datetime="{{.GeneratedAt}}">{{.GeneratedAt}}</time></p>
+            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked"></time></p>
             <h2 id="homeTitle" class="home-title">{{.Title}}</h2>
 {{if .Eyebrow}}            <p class="home-eyebrow">{{.Eyebrow}}</p>
 {{end}}          </header>
@@ -213,7 +214,7 @@
                 <span class="home-stats home-wide">{{range .Constitution.Stats}}<span class="home-stat"><span class="home-stat__count">{{.Count}}</span><span class="home-stat__label">{{.Label}}</span></span>{{end}}</span>
                 <span class="home-tile__line home-narrow">{{.Constitution.Line}}</span>
               </span>
-              <span class="home-pill home-narrow" data-state="{{.Constitution.State}}">{{.Constitution.Label}}</span>
+              <span class="home-pill home-narrow" data-state="{{.Constitution.State}}">{{.Constitution.ShortLabel}}</span>
               <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
             </a>
 {{end}}{{if .Modules.Modules}}            <a class="home-tile" data-tile="modules" href="#{{.Modules.FirstModuleID}}">
