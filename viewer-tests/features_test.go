@@ -307,6 +307,7 @@ func TestFeatureFindings_DependencyDriftIsNeedsYou(t *testing.T) {
 		[][2]string{
 			{"the finding is under Needs you", `!!row && row.querySelector('.status-finding-rule').textContent === 'Brief Dependency Drift'`},
 			{"its way in opens the feature, not a claim", `row.querySelector('.status-finding-action').textContent === 'Open feature'`},
+			{"its message names the claim that moved", `row.querySelector('.status-finding-message').textContent.indexOf('` + testClaimID + `') >= 0 && row.querySelector('.status-finding-message').checkVisibility()`},
 			{"the screen speaks of the feature", `view.querySelector('[data-scope="facet"]').textContent === 'This feature' && /on this feature/.test(document.getElementById('issuesSubtitle').textContent)`},
 		})
 }
