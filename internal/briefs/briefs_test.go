@@ -17,7 +17,7 @@ import (
 
 // testConfig decodes a minimal project config anchored at dir, with extra
 // appended verbatim, through the real strict decoder.
-func testConfig(t *testing.T, dir, extra string) *config.Config {
+func testConfig(t testing.TB, dir, extra string) *config.Config {
 	t.Helper()
 	raw := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n" + extra
 	cfg, err := config.DecodeConfig([]byte(raw), dir, "project.config.yaml")
