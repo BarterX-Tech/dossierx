@@ -193,9 +193,12 @@ type File struct {
 // The root is read with Lstat, not Stat: a briefs_dir that is a SYMLINK is
 // refused (brief-shape on the tree), for the reason a symlinked brief is. Stat
 // followed the link and WalkDir then declined to descend a symlinked root, so a
-// linked tree read as a project with no briefs at all. A directory holding a
-// .git entry — briefs_dir itself or any folder below it — is a submodule
-// checkout and is refused the same way, without being read (see nestedRepo).
+// linked tree read as a project with no briefs at all. A directory git treats
+// as another repository's work tree — briefs_dir itself or any folder below
+// it, holding a .git file that names a git directory or a .git directory that
+// is one — is what `git add` stages as one gitlink, and it is refused the same
+// way, without being read. Any other .git entry is skipped like every dot-name
+// and its folder read normally, as git stages it (see nestedRepo).
 func Load(cfg *config.Config) *Set {
 	dir := cfg.BriefsDirPath()
 	info, err := os.Lstat(dir)
@@ -263,8 +266,9 @@ func Load(cfg *config.Config) *Set {
 		}
 		if d.IsDir() {
 			if nestedRepo(p) {
-				// A checked-out submodule: the non-regular entry the index
-				// holds as a gitlink, refused under the same rule, never read.
+				// A submodule checkout or embedded repository: the entry the
+				// index holds as a gitlink, refused under the same rule, never
+				// read.
 				files = append(files, File{Rel: filepath.ToSlash(rel)})
 				return filepath.SkipDir
 			}
@@ -300,16 +304,6 @@ func Load(cfg *config.Config) *Set {
 		s.add(RuleShape, u.display, "could not be read (%v); a brief the engine cannot read is not judged, so this is refused rather than skipped", readErrText(u.err))
 	}
 	return s
-}
-
-// nestedRepo reports whether dir holds a .git entry, a directory or the file a
-// submodule checkout carries: another repository's work tree, which the index
-// lists as one gitlink. Load hands such a directory to FromFiles as a
-// non-regular File so the working tree refuses exactly the path --staged does,
-// where it used to read the checkout as a plain folder.
-func nestedRepo(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, ".git"))
-	return err == nil
 }
 
 // readErrText is an I/O error without the absolute path a *fs.PathError

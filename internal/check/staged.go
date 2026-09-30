@@ -987,8 +987,12 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 // --validate refuses. Each goes to FromFiles as a non-regular File, so both
 // modes judge it under the same rule — including a briefs_dir that is itself a
 // link, which the index lists as one entry at the spec (Rel "."). A submodule
-// is a gitlink here and a directory holding .git on disk; Load refuses that
-// directory as the same non-regular entry, so the two modes agree on it too.
+// or embedded repository is a gitlink here, and on disk a directory whose .git
+// is a file naming a git directory ("gitdir: <path>") or is a git directory
+// itself (a valid HEAD, objects/ and refs/); Load refuses exactly that
+// directory as the same non-regular entry, by git's own rule, so the two modes
+// agree on it. Any other .git entry git stages past, adding the folder's files
+// as blobs, and Load reads that folder normally too.
 func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 	dir := cfg.BriefsDirPath()
 	spec, err := g.spec(dir)

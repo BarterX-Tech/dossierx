@@ -152,34 +152,175 @@ func TestBriefSymlinksAreRefusedInBothModes(t *testing.T) {
 // TestBriefSubmodulesAreRefusedInBothModes is the submodule half of the parity
 // above: another repository checked out where a brief folder, or briefs_dir
 // itself, should be. The index holds it as one gitlink (mode 160000), which
-// --staged refuses as brief-shape; the working tree holds a directory with a
-// .git entry, which --validate used to read as a plain folder, judging the
-// other repository's files as this project's briefs. Both rows put a brief
-// with no shape fault inside the checkout, so reading it raises no brief-shape
-// finding and only the refusal matches. The folder row is a real `git
-// submodule add`, whose checkout carries a .git FILE (gitdir: <path>); the
-// root row is an embedded repository, whose .git is the directory git init
-// makes. Both are what Load must recognise.
+// --staged refuses as brief-shape; the working tree holds a directory whose
+// .git git recognises, which --validate must refuse as the same entry rather
+// than read the other repository's files as this project's briefs.
+//
+// The rule is git's, not "any .git entry": a .git file that does not name a git
+// directory, or a .git directory that is not one, is skipped by `git add`,
+// which stages the folder's files as blobs (100644). Those rows must read the
+// folder normally in BOTH modes. Every row therefore asserts the index mode git
+// itself produced for the folder (the gitlink) or its brief (the blob), so the
+// test pins the engine against git, not against a guess about git.
+//
+// The brief inside the folder rests on an unknown claim, so READING it raises
+// brief-rests-on-unknown and refusing it raises only brief-shape: a mode that
+// reads a folder the other refuses fails on the difference, in either
+// direction.
 func TestBriefSubmodulesAreRefusedInBothModes(t *testing.T) {
+	readBrief := strings.Replace(cleanBrief, "widget.contract.overview", "widget.contract.ghost", 1)
+	writeIn := func(t *testing.T, dir string, files map[string]string) {
+		t.Helper()
+		for rel, body := range files {
+			abs := filepath.Join(dir, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			writeFixtureFile(t, abs, body)
+		}
+	}
+	folderBrief := map[string]string{"flow.md": readBrief}
+	rootBrief := map[string]string{"widget/flow.md": readBrief}
+	const headRef = "ref: refs/heads/main\n"
 	for _, tc := range []struct {
-		name      string
-		checkout  string            // repo-relative path of the other repository
-		files     map[string]string // its files
-		submodule bool              // git submodule add; otherwise embed it in place
+		name     string
+		checkout string // repo-relative path of the folder under test
+		// setup builds the folder at checkout (repo is already a git repo).
+		setup     func(t *testing.T, repo, checkout string)
+		indexPath string // the path whose index mode git produced
+		indexMode string // 160000: a gitlink; 100644: git staged the files
 		want      []string
 	}{
 		{
-			name:      "a submodule added as a brief folder",
-			checkout:  "briefs/vendored",
-			files:     map[string]string{"flow.md": cleanBrief},
-			submodule: true,
+			name:     "a submodule added as a brief folder",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, repo, checkout string) {
+				other := filepath.Join(t.TempDir(), "other")
+				nestedRepo(t, other, folderBrief)
+				git(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", other, "briefs/vendored")
+				if info, err := os.Lstat(filepath.Join(checkout, ".git")); err != nil || !info.Mode().IsRegular() {
+					t.Fatalf("fixture precondition: a submodule checkout carries a .git file, got %v %v", info, err)
+				}
+			},
+			indexPath: "briefs/vendored",
+			indexMode: "160000",
+			want:      []string{"brief-shape briefs/vendored"},
+		},
+		{
+			name:     "an embedded repository as a brief folder",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				nestedRepo(t, checkout, folderBrief)
+			},
+			indexPath: "briefs/vendored",
+			indexMode: "160000",
 			want:      []string{"brief-shape briefs/vendored"},
 		},
 		{
 			name:     "an embedded repository as briefs_dir itself",
 			checkout: "briefs",
-			files:    map[string]string{"widget/flow.md": cleanBrief},
-			want:     []string{"brief-shape briefs/"},
+			setup: func(t *testing.T, _, checkout string) {
+				nestedRepo(t, checkout, rootBrief)
+			},
+			indexPath: "briefs",
+			indexMode: "160000",
+			want:      []string{"brief-shape briefs/"},
+		},
+		{
+			// A git directory with a detached HEAD and no commit behind it
+			// still passes is_git_directory: git records the gitlink at the
+			// named object. It pins the object-name branch of the HEAD rule.
+			name:     "a git directory with a detached HEAD",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				writeIn(t, checkout, map[string]string{".git/HEAD": strings.Repeat("ab", 20) + "\n", ".git/objects/.keep": "", ".git/refs/.keep": ""})
+			},
+			indexPath: "briefs/vendored",
+			indexMode: "160000",
+			want:      []string{"brief-shape briefs/vendored"},
+		},
+		{
+			name:     "an empty .git file",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				writeIn(t, checkout, map[string]string{".git": ""})
+			},
+			indexPath: "briefs/vendored/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
+		},
+		{
+			name:     "a junk .git file",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				writeIn(t, checkout, map[string]string{".git": "not a gitdir\n"})
+			},
+			indexPath: "briefs/vendored/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
+		},
+		{
+			name:     "a .git file naming a directory that is not a git directory",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, repo, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				writeIn(t, checkout, map[string]string{".git": "gitdir: ../../elsewhere\n"})
+				writeIn(t, repo, map[string]string{"elsewhere/HEAD": headRef})
+			},
+			indexPath: "briefs/vendored/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
+		},
+		{
+			name:     "an empty .git directory",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				if err := os.Mkdir(filepath.Join(checkout, ".git"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			indexPath: "briefs/vendored/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
+		},
+		{
+			name:     "a .git directory holding HEAD and objects but no refs",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				writeIn(t, checkout, map[string]string{".git/HEAD": headRef, ".git/objects/.keep": ""})
+			},
+			indexPath: "briefs/vendored/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
+		},
+		{
+			name:     "a .git directory with objects and refs but a junk HEAD",
+			checkout: "briefs/vendored",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, folderBrief)
+				writeIn(t, checkout, map[string]string{".git/HEAD": "junk\n", ".git/objects/.keep": "", ".git/refs/.keep": ""})
+			},
+			indexPath: "briefs/vendored/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/vendored/flow.md"},
+		},
+		{
+			name:     "an empty .git directory in briefs_dir itself",
+			checkout: "briefs",
+			setup: func(t *testing.T, _, checkout string) {
+				writeIn(t, checkout, rootBrief)
+				if err := os.Mkdir(filepath.Join(checkout, ".git"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			indexPath: "briefs/widget/flow.md",
+			indexMode: "100644",
+			want:      []string{"brief-rests-on-unknown briefs/widget/flow.md"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -189,30 +330,19 @@ func TestBriefSubmodulesAreRefusedInBothModes(t *testing.T) {
 				files["briefs/widget/flow.md"] = cleanBrief
 			}
 			cfg := writeProjectFiles(t, repo, baseConfig, files)
-			checkout := filepath.Join(repo, filepath.FromSlash(tc.checkout))
-			if tc.submodule {
-				other := filepath.Join(t.TempDir(), "other")
-				nestedRepo(t, other, tc.files)
-				gitRepo(t, repo)
-				git(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", other, tc.checkout)
-				if info, err := os.Lstat(filepath.Join(checkout, ".git")); err != nil || !info.Mode().IsRegular() {
-					t.Fatalf("fixture precondition: a submodule checkout carries a .git file, got %v %v", info, err)
-				}
-			} else {
-				nestedRepo(t, checkout, tc.files)
-				gitRepo(t, repo)
-			}
+			gitRepo(t, repo)
+			tc.setup(t, repo, filepath.Join(repo, filepath.FromSlash(tc.checkout)))
 			git(t, repo, "add", "-A")
 			git(t, repo, "commit", "-qm", "fixture")
-			requireMode(t, repo, tc.checkout, "160000")
+			requireMode(t, repo, tc.indexPath, tc.indexMode)
 
 			worktree := briefRulesIn(worktreeVerdict(t, cfg))
 			staged, _ := stagedVerdict(t, cfg)
 			if strings.Join(worktree, ",") != strings.Join(tc.want, ",") {
-				t.Fatalf("--validate must refuse the submodule checkout, not read it: got %v, want %v", worktree, tc.want)
+				t.Fatalf("--validate must judge the folder as git staged it (%s %s): got %v, want %v", tc.indexMode, tc.indexPath, worktree, tc.want)
 			}
 			if got := briefRulesIn(staged); strings.Join(got, ",") != strings.Join(tc.want, ",") {
-				t.Fatalf("--staged must refuse the gitlink --validate refuses: got %v, want %v", got, tc.want)
+				t.Fatalf("--staged must agree with --validate on the index git wrote: got %v, want %v", got, tc.want)
 			}
 		})
 	}
