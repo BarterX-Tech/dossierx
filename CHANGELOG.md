@@ -31,6 +31,35 @@ Re-running `dossierx skills export` also deletes the
 nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
 section, whose links now point at the exported `SKILL.md` files.
 
+### Added
+
+- **Viewer Home page** (NIT-196). The viewer now opens on Home, which shows
+  what is waiting on the human, then one tile per section. "Waiting on you"
+  has up to four cards: claims edited after approval, locked claims to re-read
+  because something they rest on changed, open threads, and draft claims to
+  lock, grouped by module. A card at zero is hidden, and with nothing waiting
+  the row is one "Nothing waiting on you" line. The Constitution tile (shown
+  when `constitution.yaml` exists) gives the roof gate's own state (Locked,
+  Draft, Not locked, Edited since lock or Unreadable, judged against the lock
+  store, not the file's status line) and its invariant, decision and glossary
+  counts; the Constitution page's word meter now names the same state. The
+  Modules tile gives claims locked out of total. Every card and tile links to
+  what it counts. Home's address is `#_home`; a hash the viewer does not
+  recognise now lands on Home instead of the first module.
+
+### Changed
+
+- **Sidebar** (NIT-196). Home, Constitution, Modules and Claims graph are one
+  list with icons. The project name and the new Home item lead to Home. The
+  Modules list opens only while a module is the current page (or while a
+  sidebar search is in progress). The Claims graph moves up from the footer,
+  which keeps only the Light/Dark control. The Constitution entry drops its
+  "PROJECT — NOT A MODULE" label, shows a lock when the roof is locked, and is
+  hidden when there is no `constitution.yaml` and no project claim; its page
+  stays reachable at `#constitution`. Under `dossierx serve`, a live reload now also
+  refreshes Home's "last check" time (`/api/fragment` carries
+  `generated_at`).
+
 ### Removed
 
 - **`migrated_from`** (NIT-191). The free-text provenance note nothing

@@ -127,7 +127,7 @@ func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
 	staticProject.writeClaim("overview.yaml", conformanceClaimYAML)
 	writeConformanceObservation(t, staticProject, `["ready","paused"]`)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.Navigate(staticProject.renderStatic()))
+	runCDP(t, ctx, chromedp.Navigate(staticProject.renderStatic()+widgetPage))
 	openConformancePanel(t, ctx)
 	runCDP(t, ctx,
 		chromedp.WaitVisible(`.claim-conformance-check[data-check-id="public-values"][data-conformance-state="mismatch"]`, chromedp.ByQuery),
@@ -162,7 +162,7 @@ func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
 	liveProject := newProjectRaw(t, conformanceConfigYAML)
 	liveProject.writeClaim("overview.yaml", conformanceClaimYAML)
 	liveCtx := browserContext(t)
-	runCDP(t, liveCtx, chromedp.Navigate(liveProject.ensureServe()+"/"))
+	runCDP(t, liveCtx, chromedp.Navigate(liveProject.ensureServe()+"/"+widgetPage))
 	openConformancePanel(t, liveCtx)
 	runCDP(t, liveCtx,
 		chromedp.WaitVisible(`.claim-conformance[data-implementation-ready="false"] .claim-conformance-check[data-conformance-state="uncheckable"]`, chromedp.ByQuery),

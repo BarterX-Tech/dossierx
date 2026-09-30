@@ -95,7 +95,7 @@ func TestClaimAndFacetCollapseControlsAreRemoved(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 
@@ -112,7 +112,7 @@ func TestLongClaimBodyUsesFourLineMoreLessDisclosure(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(900, 800),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-body-disclosure__toggle:not([hidden])", chromedp.ByQuery),
 	)
 
@@ -151,7 +151,7 @@ func TestFocusModeIsOneReversibleControl(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".focus-toggle", chromedp.ByQuery),
 	)
 

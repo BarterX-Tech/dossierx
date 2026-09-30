@@ -75,7 +75,7 @@ func TestEditedClaimChipSaysItWasApproved(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .k .label .pill[data-dx-edited="1"]')`)
@@ -108,7 +108,7 @@ func TestEditedClaimShowsTheWordingThatMoved(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-diff')`)
@@ -141,7 +141,7 @@ func TestEditedClaimSwitchesBetweenChangesAndCurrent(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-bar')`)
@@ -212,7 +212,7 @@ rests_on:
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(390, 844),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `(function(){ var c = document.getElementById('statusStripCard'); return !!c && c.querySelectorAll('.status-strip-finding').length > 1; })()`)
@@ -268,7 +268,7 @@ func TestPhoneBannerCardIsTintedWhenEveryRowAgrees(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(390, 844),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `(function(){ var c = document.getElementById('statusStripCard'); return !!c && c.querySelectorAll('.status-strip-finding').length === 1; })()`)
@@ -292,7 +292,7 @@ func TestNeverApprovedDraftShowsNoEditSurfaces(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 
@@ -353,7 +353,7 @@ func TestEditedClaimMarksTheWordAndKeepsTheProse(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-diff')`)
@@ -389,7 +389,7 @@ func TestDesktopKeepsTheBandAndPhoneTakesTheCard(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
@@ -462,7 +462,7 @@ func TestDesktopBandStacksOneRowPerFinding(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.querySelectorAll('#statusStrip > .status-strip-head').length > 1`)
@@ -513,7 +513,7 @@ func TestEditedPassagesAreTintedRuledAndUnpainted(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-passage--added')`)
@@ -566,7 +566,7 @@ func TestIssuesRowForEditedClaimNamesItsCauseAndLeadsToTheDiff(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.querySelectorAll('#statusStrip > .status-strip-head').length > 1`)
@@ -645,7 +645,7 @@ func TestEditBarNeverBreaksItsSentence(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-bar')`)
@@ -759,7 +759,7 @@ func TestClaimWithNoRetainedWordingKeepsItsBodyAndOffersNoSwitch(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-bar')`)
@@ -793,7 +793,7 @@ func TestDiffTruncatesLikeAClaimBody(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-body-disclosure--edit')`)
@@ -846,7 +846,7 @@ func TestSwitchRoundTripsWithoutStrandingTheDiff(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `!!document.querySelector('[id="`+testClaimID+`"] .claim-edit-diff')`)
@@ -991,7 +991,7 @@ func editedFieldsOnly(t *testing.T) *project {
 func TestEditedFieldsAreShownAndNotMerelyNamed(t *testing.T) {
 	p := editedFieldsOnly(t)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-edit-bar", chromedp.ByQuery))
 
 	if !evalBool(t, ctx, `(function(){
@@ -1049,7 +1049,7 @@ func TestEditedFieldsAreShownAndNotMerelyNamed(t *testing.T) {
 func TestEditedFieldsOfferNoSwitchAndKeepTheBody(t *testing.T) {
 	p := editedFieldsOnly(t)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-edit-bar", chromedp.ByQuery))
 
 	if evalInt(t, ctx, `document.querySelectorAll('.claim-edit-switch-seg').length`) != 0 {
@@ -1071,7 +1071,7 @@ func TestEditedFieldsOfferNoSwitchAndKeepTheBody(t *testing.T) {
 func TestEditedFieldsOpenByDefaultAndToggleClosed(t *testing.T) {
 	p := editedFieldsOnly(t)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-edit-fields-toggle", chromedp.ByQuery))
 
 	if !evalBool(t, ctx, `(function(){
@@ -1137,7 +1137,7 @@ rests_on:
 	p.writeClaim("overview.yaml", edited)
 
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-edit-field-hunk", chromedp.ByQuery))
 
 	if !evalBool(t, ctx, `(function(){
@@ -1199,7 +1199,7 @@ rests_on:
 	p.writeClaim("overview.yaml", edited)
 
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-edit-diff", chromedp.ByQuery))
 
 	if evalInt(t, ctx, `document.querySelectorAll('.claim-edit-passage--removed').length`) == 0 {

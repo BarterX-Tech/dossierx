@@ -117,7 +117,7 @@ func TestActiveNavigationGroupsCanStayCollapsed(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+"#module-01"),
 		chromedp.WaitVisible(".system-nav-group", chromedp.ByQuery),
 	)
 
@@ -129,7 +129,7 @@ func TestActiveNavigationGroupsCanStayCollapsed(t *testing.T) {
 		t.Fatal("project must render one Modules group holding every module")
 	}
 	if !evalBool(t, ctx, `document.querySelectorAll('.system-nav-group')[0].open`) {
-		t.Fatal("Modules must start expanded")
+		t.Fatal("Modules must start expanded while a module is the current page")
 	}
 
 	// module-01 is initially active, so its row already has .on before any

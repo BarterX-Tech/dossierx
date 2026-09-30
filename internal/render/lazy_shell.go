@@ -25,6 +25,7 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
+	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups)
 	return data, nil
 }
 
@@ -48,6 +49,10 @@ func (d *lazyShellData) ModuleGroups() ([]ModuleGroup, error) {
 	return d.projection.moduleGroups()
 }
 
+func (d *lazyShellData) Home() (HomeView, error) {
+	return d.projection.home()
+}
+
 func (d *lazyShellData) GraphPayload() (template.JS, error) {
 	return d.projection.graphPayloadJSON()
 }
@@ -68,6 +73,24 @@ type lazyShellProjection struct {
 	graphOnce sync.Once
 	graph     template.JS
 	graphErr  error
+
+	homeOnce sync.Once
+	homeView HomeView
+	homeErr  error
+}
+
+// home builds the Home projection once per render: a shell references .Home
+// several times, and each build reads constitution.yaml and the lock store.
+func (p *lazyShellProjection) home() (HomeView, error) {
+	p.homeOnce.Do(func() {
+		groups, err := p.moduleGroups()
+		if err != nil {
+			p.homeErr = err
+			return
+		}
+		p.homeView = buildHomeView(p.in.cat, p.in.cfg, groups)
+	})
+	return p.homeView, p.homeErr
 }
 
 func (p *lazyShellProjection) renderedClaims() (map[string]template.HTML, error) {

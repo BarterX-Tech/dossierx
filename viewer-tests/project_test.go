@@ -113,6 +113,13 @@ rests_on:
 
 const testClaimID = "widget.contract.overview"
 
+// widgetPage is the hash of the "widget" module's reading view. Since NIT-196
+// the viewer opens on Home, not on the first module, so a test about the
+// reading view names the module it reads: renderStatic()+widgetPage. Every
+// config in this package that lists widget lists it first, so this is the
+// page such a test used to land on without a hash.
+const widgetPage = "#widget"
+
 type project struct {
 	t         *testing.T
 	bin       string

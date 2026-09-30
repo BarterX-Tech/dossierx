@@ -122,7 +122,7 @@ func tableFixtureTab(t *testing.T, w, h int64) context.Context {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(w, h),
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible(".claim-table-scroll table", chromedp.ByQuery),
 	)
 	return ctx

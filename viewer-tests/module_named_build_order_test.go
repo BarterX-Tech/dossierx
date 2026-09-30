@@ -16,8 +16,9 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// buildOrderModuleConfig: gamma first, so the fresh load opens gamma and
-// reaching the build-order module takes a real tab click.
+// buildOrderModuleConfig: gamma first; the tests open gamma by hash (the
+// viewer opens on Home without one), so reaching the build-order module
+// takes a real tab click.
 const buildOrderModuleConfig = `schema_version: 1
 facets:
   - contract
@@ -46,7 +47,7 @@ func TestModuleNamedBuildOrderRendersUnderItsOwnTab(t *testing.T) {
 	url := p.renderStatic()
 	ctx := browserContext(t)
 	pe := watchPageErrors(t, ctx)
-	runCDP(t, ctx, chromedp.Navigate(url))
+	runCDP(t, ctx, chromedp.Navigate(url+"#gamma"))
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 
@@ -54,7 +55,7 @@ func TestModuleNamedBuildOrderRendersUnderItsOwnTab(t *testing.T) {
 		t.Fatalf("elements with id=build-order: %d, want exactly 1 (the module's section)", n)
 	}
 	if got := evalString(t, ctx, visibleSectionsExpr); got != "gamma|module-section" {
-		t.Fatalf("visible sections on a fresh load = %q, want gamma's section alone", got)
+		t.Fatalf("visible sections on opening #gamma = %q, want gamma's section alone", got)
 	}
 
 	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#build-order"]`, chromedp.ByQuery))
@@ -73,7 +74,7 @@ func TestModuleNamedBuildOrderRendersUnderItsOwnTab(t *testing.T) {
 // window marker set before the edit is still there after it.
 func TestReloadSwapsInPlaceWithAModuleNamedBuildOrder(t *testing.T) {
 	p := newBuildOrderModuleProject(t)
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, "#gamma")
 	pe := watchPageErrors(t, ctx)
 	desktopViewport(t, ctx)
 	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#build-order"]`, chromedp.ByQuery))

@@ -42,7 +42,7 @@ func TestMobileCardGroundStartsAtTheHeadBand(t *testing.T) {
 				p.writeClaim("internals.yaml", longBodyClaim("widget.internals.detail", "internals", 4))
 			}
 			ctx := browserContext(t)
-			runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()),
+			runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()+widgetPage),
 				chromedp.WaitVisible(".reading-canvas:not([hidden])", chromedp.ByQuery))
 			pollTrue(t, ctx, `!document.getElementById('statusStrip').hidden`)
 

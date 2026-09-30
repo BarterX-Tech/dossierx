@@ -27,7 +27,7 @@ func TestNavRowsShareOneLaneWhenSelected(t *testing.T) {
 		t.Run(tier.name, func(t *testing.T) {
 			p := group02NavigationProject(t)
 			ctx := browserContext(t)
-			runCDP(t, ctx, chromedp.EmulateViewport(tier.w, tier.h), chromedp.Navigate(p.renderStatic()),
+			runCDP(t, ctx, chromedp.EmulateViewport(tier.w, tier.h), chromedp.Navigate(p.renderStatic()+widgetPage),
 				chromedp.WaitVisible(".sec-tab", chromedp.ByQuery))
 			if tier.drawer {
 				runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('navToggle').click()`, nil))

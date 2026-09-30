@@ -10044,6 +10044,421 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 
 
+/* ---- Home and the site nav (NIT-196) -------------------------------------
+   Paper file "DossierX Viewer — Design Exploration", page Release 0.7.22,
+   group B0. Home is a .module-section with no .claim-group: the header, the
+   "Waiting on you" cards and the section tiles. One DOM serves every width;
+   .home-wide and .home-narrow pick the desktop or phone copy at the same
+   860px line the sidebar drawer uses, so neither is measured in JS.
+
+   The card colours are the state colours the rest of the viewer already
+   uses: edited is --warn, review is --status-draft, an open thread is
+   --link, drafts are --muted. No new token. */
+
+.site-nav { margin-top: 10px; }
+.site-nav__item,
+.nav-utilities #dxgOpen {
+  gap: 10px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.site-nav__item.on { font-weight: 600; }
+.site-nav__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--muted);
+}
+.sec-tab.on .site-nav__icon { color: var(--link); }
+.site-nav__lock {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  margin-left: auto;
+  color: var(--locked-confirmation);
+}
+/* The Modules group reads as one more site-nav row: sentence case, the
+   count ranged right, no box. Its module list opens under it on a guide
+   line, and only while a module is the current page (syncNavGroups). */
+.system-nav-groups { margin-top: 0; }
+.system-nav-groups .system-nav-group {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.system-nav-groups .system-nav-group__toggle {
+  gap: 10px;
+  margin: 1px 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font: 500 14px/18px var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.system-nav-groups .system-nav-group__count {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  text-align: right;
+}
+.system-nav-groups .system-nav-group__chevron { display: none; }
+.system-nav-groups .system-nav-group__body {
+  margin: 2px 0 4px 17px;
+  padding: 0 0 0 8px;
+  border-top: 0;
+  border-left: 1px solid var(--border);
+}
+.nav-utilities {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 0;
+  background: linear-gradient(var(--border), var(--border)) 10px 0 / calc(100% - 20px) 1px no-repeat;
+}
+.nav-utilities #dxgOpen {
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+}
+/* Desktop only: B0 draws every site-nav row, the Modules header included,
+   at 34px with a 2px gap, and the Claims graph 12px under its hairline. The
+   phone drawer keeps its own taller touch rows (the <=860px rules). */
+@media screen and (min-width: 861px) {
+  .site-nav,
+  .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
+  .site-nav { margin-top: 16px; padding-bottom: 2px; }
+  .site-nav .sec-tab,
+  .system-nav-groups .system-nav-group__toggle,
+  .nav-utilities #dxgOpen {
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+  }
+  .nav-utilities { margin-top: 12px; padding-top: 13px; }
+}
+.home-link {
+  color: inherit;
+  text-decoration: none;
+}
+.home-link:hover { text-decoration: underline; }
+
+.home-section {
+  max-width: 1028px;
+  padding: 40px 0 48px;
+}
+@media screen and (min-width: 1181px) {
+  /* Home carries no facet TOC, so it does not reserve the TOC rail's 282px:
+     its content runs the design's 1028px between equal gutters. */
+  .content-area:has(> .home-section:not([hidden])) { padding: 0 72px 80px; }
+}
+.home-narrow { display: none; }
+.home-head { margin: 0 0 28px; }
+.home-kicker {
+  margin: 0 0 8px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  letter-spacing: .06em;
+}
+.home-title {
+  margin: 0;
+  color: var(--ink);
+  font: 600 40px/46px var(--font-sans);
+  letter-spacing: -.02em;
+}
+.home-eyebrow {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 19px/30px var(--font-serif);
+}
+
+.home-waiting { margin: 0 0 28px; }
+.home-waiting__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.home-waiting__head h3 {
+  margin: 0;
+  color: var(--ink);
+  font: 600 18px/24px var(--font-sans);
+}
+.home-waiting__meta {
+  color: var(--faint);
+  font: 13px/18px var(--font-sans);
+}
+.home-cards {
+  display: flex;
+  gap: 16px;
+}
+.home-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  text-decoration: none;
+}
+.home-card:hover { border-color: var(--border-strong); }
+.home-card__count {
+  font: 600 32px/38px var(--font-sans);
+  letter-spacing: -.02em;
+  color: var(--muted);
+}
+.home-card[data-kind="edited"] .home-card__count { color: var(--warn); }
+.home-card[data-kind="review"] .home-card__count { color: var(--status-draft); }
+.home-card[data-kind="thread"] .home-card__count { color: var(--link); }
+.home-card__label { font: 600 14px/19px var(--font-sans); }
+.home-card__detail {
+  flex: 1 1 auto;
+  color: var(--faint);
+  font: 12.5px/18px var(--font-sans);
+}
+.home-card__action {
+  padding-top: 10px;
+  color: var(--link);
+  font: 500 13px/16px var(--font-sans);
+}
+
+.home-clear {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 28px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+.home-clear__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--locked-confirmation);
+}
+.home-clear__icon .dx-icon { width: 16px; height: 16px; }
+.home-clear__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+.home-clear__text strong {
+  color: var(--ink);
+  font: 600 18px/24px var(--font-sans);
+}
+
+.home-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+/* Desktop: the icon sits in the title row and everything under it runs the
+   tile's full width, so .home-tile__main dissolves into the tile's grid. The
+   phone rule below turns the tile back into an icon | text | chevron row. */
+.home-tile {
+  flex: 1 1 400px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-content: start;
+  column-gap: 10px;
+  row-gap: 14px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  text-decoration: none;
+}
+.home-tile:hover { border-color: var(--border-strong); }
+.home-tile__icon {
+  display: flex;
+  padding-top: 1px;
+  color: var(--ink);
+}
+.home-tile__icon .dx-icon { width: 18px; height: 18px; }
+.home-tile__main { display: contents; }
+.home-tile__head { grid-column: 2; }
+.home-tile__desc,
+.home-stats,
+.home-progress { grid-column: 1 / -1; }
+.home-tile__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.home-tile__title { font: 600 16px/20px var(--font-sans); }
+.home-tile__count {
+  margin-left: auto;
+  color: var(--faint);
+  font: 12px/16px var(--font-mono);
+}
+.home-pill {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--locked-confirmation);
+  font: 600 10.5px/14px var(--font-sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.home-pill[data-state="draft"],
+.home-pill[data-state="unrecorded"] {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+.home-pill[data-state="edited"],
+.home-pill[data-state="unreadable"] {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+/* The phone row carries its own pill beside the chevron (B0 mobile boards);
+   the title-line one is the desktop copy. */
+.home-tile > .home-pill {
+  flex-shrink: 0;
+  margin-left: 0;
+}
+.home-tile__desc {
+  color: var(--muted);
+  font: 13px/19px var(--font-sans);
+}
+.home-stats {
+  display: flex;
+  gap: 28px;
+}
+.home-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-stat__count { font: 600 24px/28px var(--font-sans); }
+.home-stat__label {
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+.home-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.home-progress__text {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 13px/16px var(--font-sans);
+}
+.home-progress__pct {
+  color: var(--faint);
+  font: 11px/16px var(--font-mono);
+}
+.home-progress__bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.home-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--locked-confirmation);
+}
+
+@media (max-width: 860px) {
+  /* The phone reading ground is the card colour edge to edge; Home's cards
+     and tile list sit on --paper instead, as B0's mobile boards draw them.
+     Every value below is read off the MOBILE LIGHT board. */
+  .content-area:has(> .home-section:not([hidden])) { background: var(--paper); }
+  .home-section { padding-top: 14px; }
+  .home-wide { display: none; }
+  .home-narrow { display: inline; }
+  .home-head {
+    margin: 0 -16px 16px;
+    padding: 0 16px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .home-kicker { margin-bottom: 5px; letter-spacing: .08em; text-transform: uppercase; }
+  .home-title { font-size: 28px; line-height: 34px; }
+  .home-eyebrow { margin-top: 5px; font-size: 16px; line-height: 24px; }
+  .home-waiting { margin-bottom: 14px; }
+  .home-waiting__head { gap: 8px; margin-bottom: 10px; }
+  .home-waiting__head h3 { font-size: 16px; line-height: 20px; }
+  .home-waiting__meta { font-size: 12px; line-height: 16px; }
+  .home-cards { flex-wrap: wrap; gap: 10px; }
+  .home-card { flex: 1 1 calc(50% - 5px); gap: 4px; padding: 14px; }
+  .home-card__count { font-size: 26px; line-height: 30px; }
+  .home-card__label { font-size: 13.5px; line-height: 18px; }
+  .home-card__detail { flex: none; font-size: 12px; line-height: 16px; }
+  .home-tiles {
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-bg);
+  }
+  .home-tile {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .home-tile + .home-tile { border-top: 1px solid var(--code-bg); }
+  .home-tile__main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .home-tile__title { font-size: 15px; line-height: 20px; }
+  .home-pill { padding: 2px 7px; font-size: 10px; }
+  .home-tile__line,
+  .home-progress__text {
+    color: var(--faint);
+    font: 12px/16px var(--font-sans);
+  }
+  .home-progress { gap: 6px; margin-top: 4px; }
+  .home-progress__bar { height: 4px; }
+  .home-tile__chevron {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    color: var(--faint);
+  }
+}
+
+@media (max-width: 520px) {
+  /* .content-area drops its inline gutter at this width for full-bleed
+     claim cards; Home is not one, so it keeps the 16px gutter itself. */
+  .home-section { padding-inline: 16px; }
+}
+
 @media print {
   :root { color-scheme: light; }
 

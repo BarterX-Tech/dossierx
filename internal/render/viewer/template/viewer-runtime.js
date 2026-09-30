@@ -70,7 +70,7 @@
         firstModuleID = '';
         for (var mi = 0; mi < moduleSections.length; mi++) {
           var candidate = moduleSections[mi];
-          if (candidate.classList.contains('constitution-section')) {
+          if (candidate.classList.contains('constitution-section') || candidate.classList.contains('home-section')) {
             continue;
           }
           firstModuleID = candidate.id;
@@ -103,10 +103,9 @@
         // sourceToFacet maps every SOURCE ROW's anchor id
         // ("<claim-id>-source-<n>", components.ClaimSourceAnchorID) to its
         // owning .claim-group. A "[n]" citation marker in a claim body links
-        // straight at one of these, and resolve() falls back to the FIRST
-        // MODULE for any hash it does not recognize — so without this index a
-        // reader clicking a citation would be moved to a different module
-        // entirely, which is both wrong and hard to attribute to the click.
+        // straight at one of these, and resolve() falls back to Home for any
+        // hash it does not recognize — so without this index a reader
+        // clicking a citation would be moved off the module entirely, which is both wrong and hard to attribute to the click.
         // Every claim renders exactly once, so this map is one-to-one for the
         // same reason claimToFacet is.
         sourceToFacet = {};
@@ -136,14 +135,16 @@
         // are released in the same pass that adopts their replacements. The
         // delegated click that works the control is still attached once, below.
         mountSourceNoteClamps();
+        localizeHomeCheck();
       }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
       // triple. Checked in order: a claim id -> its own card's facet + module; a
       // source row's anchor id -> the same, but scrolled to the row rather than
       // to the card; a facet id -> its own module + itself; a bare module id
-      // -> that module + its default facet; anything else -> the first module
-      // + its default facet.
+      // -> that module + its default facet; Home's own id -> Home; anything
+      // else -> Home, or the first module + its default facet when the shell
+      // has no Home section.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -166,6 +167,15 @@
         if (Object.prototype.hasOwnProperty.call(moduleDefaultFacet, id)) {
           return { module: id, facet: moduleDefaultFacet[id] };
         }
+        // Home (NIT-196) is the page the viewer opens on, and where any hash
+        // it does not recognise lands. It holds no facet, so it resolves to
+        // itself alone. Its id, HOME_ID, carries an underscore, which
+        // render.slugify never emits, so no module can share it. A shell
+        // override without a Home section keeps the older landing: the first
+        // module.
+        if (document.getElementById(HOME_ID)) {
+          return { module: HOME_ID };
+        }
         return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
       }
 
@@ -177,6 +187,14 @@
       // theme probes, and live-reload witnesses that call getElementById keep
       // working without visiting every facet first.
       var SOFT_MOUNT_MIN_CLAIMS = 80;
+
+      // HOME_ID is the Home section's element id and hash (shell.html).
+      var HOME_ID = '_home';
+
+      function homeActive() {
+        var home = document.getElementById(HOME_ID);
+        return !!home && !home.hidden;
+      }
 
       function claimCorpusSize() {
         var n = 0;
@@ -256,6 +274,7 @@
         moduleTabs.forEach(function (b) {
           b.classList.toggle('on', b.dataset.target === '#' + moduleID);
         });
+        syncNavGroups();
 
         var activeSection = document.getElementById(moduleID);
         if (activeSection) {
@@ -318,9 +337,9 @@
       // history.replaceState only. A hash with no '!' behaves exactly as it
       // did before the graph pane existed.
       //
-      // The split matters in both directions. resolve() falls back to the
-      // FIRST MODULE for anything it does not recognize, so a bare graph-state
-      // hash reaching it would silently reset the reader's module — hence
+      // The split matters in both directions. resolve() falls back to
+      // Home for anything it does not recognize, so a bare graph-state hash
+      // reaching it would silently move the reader off their module — hence
       // hashId() truncating. And showModuleFacet rewrites the hash on every
       // nav, so a rewrite that dropped the suffix would erase the graph state
       // the pane had just written — hence hashGraphSuffix() being appended.
@@ -341,6 +360,46 @@
         var at = raw.indexOf('!');
         if (at >= 0) { raw = raw.slice(0, at); }
         return decodeURIComponent(raw);
+      }
+
+      // syncNavGroups opens the sidebar's Modules group only while a module is
+      // the current page (NIT-196: only the current section expands). A
+      // search in progress keeps every group open so its matches show.
+      function syncNavGroups() {
+        var search = document.getElementById('navSearch');
+        var searching = !!(search && search.value.trim());
+        var onModule = false;
+        moduleTabs.forEach(function (b) {
+          if (b.classList.contains('on') && b.closest('.system-nav-group')) { onModule = true; }
+        });
+        document.querySelectorAll('.system-nav-group').forEach(function (group) {
+          group.open = searching || onModule;
+        });
+      }
+
+      // The Home header's "last check" is the sidebar's render stamp (the
+      // one the freshness footer reads), shown as a date and time in the
+      // reader's own zone. The stamp stays out of <main> so a live-reload
+      // fragment is a verbatim slice of the page it came from.
+      function localizeHomeCheck() {
+        var t = document.querySelector('.home-checked');
+        var sidebar = document.getElementById('sidebar');
+        var iso = sidebar && sidebar.dataset.generatedAt;
+        if (!t || !iso) { return; }
+        t.setAttribute('datetime', iso);
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) { return; }
+        try {
+          var time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          var sameYear = d.getFullYear() === new Date().getFullYear();
+          // The phone board drops the year ("CHECKED 29 SEP, 14:02"); the
+          // desktop one keeps it. One <time>, so the shorter form is used on
+          // both only when the year is the current one.
+          var wide = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+          var narrow = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+          var phone = window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
+          t.textContent = ((phone && sameYear) ? narrow : wide) + ', ' + time;
+        } catch (e) {}
       }
 
       function showFromHash(opts) {
@@ -2721,7 +2780,10 @@
         var bannerShowing = groups.length > 0 && actionable;
         renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
         renderApprovedEdits();
-        if (!groups.length || !actionable) {
+        // Home is not a facet: its cards already say what is waiting, and a
+        // strip there would count findings "in this facet" for a page that
+        // has none. The strip returns with the next module page.
+        if (!groups.length || !actionable || homeActive()) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
@@ -3842,6 +3904,18 @@
         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
         oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
+        // ---- carry the render stamp across the swap ----
+        // The <aside id="sidebar"> is not swapped, so its data-generated-at
+        // would keep the page-load time. The fragment carries the same
+        // render's stamp beside the two subtrees; initViewer's
+        // localizeHomeCheck reads it from here. (The facet TOC's freshness
+        // footer copies the stamp once when it is built and does not
+        // re-read it; that predates Home and is unchanged.)
+        if (typeof frag.generated_at === 'string' && frag.generated_at) {
+          var sidebarEl = document.getElementById('sidebar');
+          if (sidebarEl) { sidebarEl.setAttribute('data-generated-at', frag.generated_at); }
+        }
+
         // ---- re-point every lookup map at the fresh DOM ----
         initViewer();
 
@@ -3967,6 +4041,13 @@
             : ((noteSt && noteSt.expandLabel) || 'show more');
           return;
         }
+        // The project name is a plain link to Home. The hash change does the
+        // navigation; closing the drawer here covers the case it cannot: a
+        // tap while Home is already showing fires no hashchange.
+        if (e.target.closest('.home-link')) {
+          setDrawer(false);
+          return;
+        }
         var secTab = e.target.closest('.sec-tab');
         if (secTab) {
           var moduleID = (secTab.dataset.target || '').replace(/^#/, '');
@@ -4031,6 +4112,7 @@
             });
             group.hidden = query !== '' && matches.length === 0;
           });
+          syncNavGroups();
         });
       }
       if (navOverlay) {

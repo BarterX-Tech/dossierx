@@ -482,7 +482,7 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:0671dfaa25d6e0cd6174c62907af3a4e69e6aeda97a854bd9a044e4b735c6406",
+  "render_fingerprint": "sha256:a70f798f77a2038c1c331ec732543beb760fe898bbe3375a10f14a3a42e3a957",
   "behaviour_fingerprint": {
     "cmd/dossierx": "sha256:9352860900ae5539a3fb08eec4fc5089fa9c16530c95f11e9a944650e41b75c2",
     "internal/approvaledit": "sha256:a8a43e6546515bdcc7503f17349255c90a1d4edede61515e705f10c539ce67dc",
@@ -511,11 +511,11 @@
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:8f7eac13d6609f38078fd52cba9b9af624afc11f8b98d7cd0e26f2851d877d02",
+    "internal/render": "sha256:22a7b5157ea195866dedf175de74d6005002756c95d8a86e4f293d697bf59e32",
     "internal/render/components": "sha256:32e9f91788052670ec8c1a5f6fe7250e1d1ce1a7bd4f3dd12245a1b5f683f192",
     "internal/render/markdown": "sha256:c6806f985bfe69cc86e9eca8e365435be7a0d16565486ffc9d7a8811719d73e7",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:ceb4c156ec60d24ade931bb8efae5c87abd488cd1651c299ebb79929d15f32da",
+    "internal/serve": "sha256:ee0512704da761423b9adc7b79323cc309907631fa644b7efcaeabf9100cef3b",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",

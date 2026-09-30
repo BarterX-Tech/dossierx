@@ -28,7 +28,7 @@ func issuesLifecycleProject(t *testing.T) *project {
 func TestIssuesViewSurvivesCloseAndReopen(t *testing.T) {
 	p := issuesLifecycleProject(t)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible("#statusStrip", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.querySelectorAll('#statusStripBody .status-group').length > 0`)
 	groups := evalInt(t, ctx, `document.querySelectorAll('#statusStripBody .status-group').length`)
@@ -72,7 +72,7 @@ func TestIssuesViewSurvivesCloseAndReopen(t *testing.T) {
 func TestHashChangeLeavesTheIssuesView(t *testing.T) {
 	p := issuesLifecycleProject(t)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible("#statusStrip", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.querySelectorAll('#statusStripBody .status-group').length > 0`)
 

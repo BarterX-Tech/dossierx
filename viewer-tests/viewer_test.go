@@ -103,9 +103,11 @@ func waitVisible(t *testing.T, ctx context.Context, sel string) {
 	runCDP(t, ctx, chromedp.WaitVisible(sel, chromedp.ByQuery))
 }
 
-// newLiveTab starts serve for p, opens a fresh browser tab pointed at it, and
-// waits until the reachability probe has mounted the write controls
-// (body.comments-live). The chip is present and visible on return.
+// newLiveTab starts serve for p, opens a fresh browser tab on the widget
+// module's reading view (every caller's project holds widget, and the viewer
+// opens on Home without a hash), and waits until the reachability probe has
+// mounted the write controls (body.comments-live). The chip is present and
+// visible on return.
 func newLiveTab(t *testing.T, p *project) context.Context {
 	t.Helper()
 	// ensureServe, not serve: a test may already have started the server to
@@ -114,7 +116,7 @@ func newLiveTab(t *testing.T, p *project) context.Context {
 	base := p.ensureServe()
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live')`)
@@ -190,7 +192,7 @@ func newLiveTabWithStatus(t *testing.T, p *project) context.Context {
 		return err
 	}))
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live') && window.__dxStatusApplied >= 1`)
@@ -238,7 +240,7 @@ func TestFileURLStaysReadOnly(t *testing.T) {
 
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	// Open the panel; on file:// the probe cannot reach a server, so the panel is
@@ -463,16 +465,16 @@ func TestDelegatedTabNavigationSwitchesModules(t *testing.T) {
 	base, _ := p.serve()
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
 	)
-	// On load the first module is shown, the second hidden.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section)')[1].hidden`)
+	// Opened on the first module: it is shown, the second hidden.
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 
 	// Click the SECOND sidebar tab. Its handler is bound by delegation on
 	// document (not on the button), so this exercises the delegated path.
-	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab:not(.constitution-tab)')[1].click();`, nil))
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section)')[1].hidden`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.system-nav-group .sec-tab')[1].click();`, nil))
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 }
 
 // ---------------------------------------------------------------------

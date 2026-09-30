@@ -55,12 +55,15 @@
     <symbol id="dx-icon-list-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/></symbol>
     <symbol id="dx-icon-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
     <symbol id="dx-icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="dx-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="dx-icon-landmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18v-7"/><path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M3 22h18"/><path d="M6 18v-7"/></symbol>
+    <symbol id="dx-icon-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
     <symbol id="dx-icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   </svg>
   <div class="layout">
     <header class="mobile-app-bar" aria-label="Viewer controls">
       <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg></button>
-      <span class="mobile-app-bar__wordmark">{{.Title}}</span>
+      <a class="mobile-app-bar__wordmark home-link" href="#_home">{{.Title}}</a>
       <button id="mobileSearchToggle" class="mobile-app-bar__search" type="button" aria-controls="navSearch" aria-label="Search modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg></button>
       <button id="mobileThemeToggle" class="mobile-theme-toggle" type="button" data-theme-toggle aria-label="Use dark theme" title="Use dark theme"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg></button>
     </header>
@@ -69,7 +72,7 @@
       <div class="sidebar-header">
         <div class="top">
           <div class="logo"><span></span></div>
-          <h1>{{.Title}}</h1>
+          <h1><a class="home-link" href="#_home">{{.Title}}</a></h1>
           <button id="navDrawerClose" class="nav-drawer-close" type="button" aria-label="Close modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
         </div>
 {{if .Eyebrow}}        <div class="eyebrow">{{.Eyebrow}}</div>{{end}}
@@ -77,15 +80,23 @@
       <nav id="nav">
         <div class="sidebar-nav-scroll">
           <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg><input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules"></div>
-<!-- The Constitution pin (NIT-27): the project roof, above every module and
-             outside the module group on purpose — it is not a module, so it
-             is not a group member, and .system-nav-group:first-child stays Modules. -->
-          <div class="constitution-pin">
-            <button class="sec-tab constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><span class="sec-tab__label">Constitution</span><span class="sec-tab__meta">PROJECT — NOT A MODULE</span></button>
+<!-- The site nav (NIT-196): Home, then the Constitution pin (NIT-27), then
+             the Modules group, then the Claims graph below a hairline. Home and
+             Constitution sit outside .system-nav-groups on purpose: neither is
+             a module, so .system-nav-group:first-child stays Modules and the
+             module search never hides them. The Modules group is open only
+             while a module is the current page (viewer-runtime.js
+             syncNavGroups). The Constitution entry is hidden only when there is
+             nothing under it: no constitution.yaml and no project claims.
+             Features and Briefs join this list with briefs (NIT-192/NIT-194);
+             until then the viewer has no page for them. -->
+          <div class="site-nav">
+            <button class="sec-tab site-nav__item home-tab" data-target="#_home"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-home"/></svg><span class="sec-tab__label">Home</span></button>
+{{if or .Home.Constitution.Present .Home.Constitution.ProjectClaims}}            <button class="sec-tab site-nav__item constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-landmark"/></svg><span class="sec-tab__label">Constitution</span>{{if .Home.Constitution.Locked}}<svg class="dx-icon dx-icon--lock site-nav__lock" aria-label="Locked" role="img"><use href="#dx-icon-lock"/></svg>{{end}}</button>{{end}}
           </div>
           <div class="system-nav-groups">
           <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
+            <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-layout-grid"/></svg><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .ModuleGroups}}
                 <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
@@ -93,14 +104,14 @@
             </div>
           </details>
           </div>
-        </div>
-        <div class="sidebar-footer">
-          <div class="nav-utilities" aria-label="Viewer tools">
 <!-- The graph trigger deliberately does NOT carry class sec-tab: graph-ui.js
                owns it, while viewer-runtime.js owns reading-view selection. It
                remains inside #nav so live fragment swaps replace it safely. -->
-            <button id="dxgOpen" class="nav-utility" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
+          <div class="nav-utilities" aria-label="Viewer tools">
+            <button id="dxgOpen" class="nav-utility site-nav__item" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
           </div>
+        </div>
+        <div class="sidebar-footer">
           <div class="theme-control desktop-theme-control" role="group" aria-label="Color theme">
           <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
           <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
@@ -144,7 +155,7 @@
           <header class="constitution-head">
             <p class="constitution-kicker">PROJECT — NOT A MODULE</p>
             <h2>Constitution</h2>
-            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Constitution.Status}} · {{.Constitution.Status}}{{end}}</p>
+            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Home.Constitution.Label}} · {{.Home.Constitution.MeterLabel}}{{end}}</p>
           </header>
           <div class="sub-nav">
             <button class="subtab" data-target="#constitution-file">The file</button>
@@ -158,6 +169,68 @@
 {{end}}{{else}}<p class="claims-empty">No project claims.</p>{{end}}
           </section>
         </section>
+<!-- Home (NIT-196): what is waiting on the human, then one tile per
+     section. Its id is _home: render.slugify never emits an underscore, so
+     no module section can share it. It sits after the Constitution for the same reason the
+     Constitution sits after the modules — the first .module-section stays the
+     first module — and it is the page the viewer opens on
+     (viewer-runtime.js resolve). It holds no .claim-group, so no facet TOC,
+     status strip or module header attaches to it. Every card and tile is a
+     link to the page it summarises; the counts come from render/home_view.go.
+     A card at 0 is not rendered; with none left the row is one line. The
+     "last check" <time> is empty here: viewer-runtime.js (localizeHomeCheck)
+     fills it from the sidebar's data-generated-at, the render stamp the
+     freshness footer already reads. A stamp inside <main> would make every
+     live-reload fragment differ from the page it came from. -->
+        <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
+          <header class="home-head">
+            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked"></time></p>
+            <h2 id="homeTitle" class="home-title">{{.Title}}</h2>
+{{if .Eyebrow}}            <p class="home-eyebrow">{{.Eyebrow}}</p>
+{{end}}          </header>
+{{with .Home}}{{if .Cards}}          <section class="home-waiting" aria-labelledby="homeWaitingTitle">
+            <div class="home-waiting__head"><h3 id="homeWaitingTitle">Waiting on you</h3><span class="home-waiting__meta"><span class="home-wide">{{.Summary}}</span><span class="home-narrow">{{.SummaryShort}}</span></span></div>
+            <div class="home-cards">
+{{range .Cards}}              <a class="home-card" data-kind="{{.Kind}}" href="#{{.Target}}">
+                <span class="home-card__count">{{.Count}}</span>
+                <span class="home-card__label home-wide">{{.Label}}</span>
+                <span class="home-card__label home-narrow">{{.ShortLabel}}</span>
+                <span class="home-card__detail home-wide">{{.Detail}}</span>
+                <span class="home-card__detail home-narrow">{{.Short}}</span>
+                <span class="home-card__action home-wide">{{.Action}} →</span>
+              </a>
+{{end}}            </div>
+          </section>
+{{else}}          <div class="home-clear">
+            <span class="home-clear__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-check"/></svg></span>
+            <span class="home-clear__text"><strong>Nothing waiting on you</strong><span>No edits since approval, nothing to re-read, no open threads and no draft claims.</span></span>
+          </div>
+{{end}}          <div class="home-tiles">
+{{if .Constitution.Present}}            <a class="home-tile" data-tile="constitution" href="#constitution">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-landmark"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><span class="home-tile__title">Constitution</span><span class="home-pill home-wide" data-state="{{.Constitution.State}}">{{.Constitution.Label}}</span></span>
+                <span class="home-tile__desc home-wide">From constitution.yaml.{{if .Constitution.ProjectClaims}} {{.Constitution.ProjectClaims}} project {{if eq .Constitution.ProjectClaims 1}}claim rests{{else}}claims rest{{end}} on it.{{end}}</span>
+                <span class="home-stats home-wide">{{range .Constitution.Stats}}<span class="home-stat"><span class="home-stat__count">{{.Count}}</span><span class="home-stat__label">{{.Label}}</span></span>{{end}}</span>
+                <span class="home-tile__line home-narrow">{{.Constitution.Line}}</span>
+              </span>
+              <span class="home-pill home-narrow" data-state="{{.Constitution.State}}">{{.Constitution.ShortLabel}}</span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </a>
+{{end}}{{if .Modules.Modules}}            <a class="home-tile" data-tile="modules" href="#{{.Modules.FirstModuleID}}">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-layout-grid"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><span class="home-tile__title">Modules</span><span class="home-tile__count home-wide">{{.Modules.Modules}}</span></span>
+                <span class="home-tile__desc home-wide">Who owns what. Every claim lives in exactly one.</span>
+                <span class="home-progress">
+                  <span class="home-progress__text"><span>{{.Modules.Line}}</span><span class="home-progress__pct home-wide">{{.Modules.Percent}}%</span></span>
+                  <span class="home-progress__bar"><span class="home-progress__fill" style="width: {{.Modules.Percent}}%"></span></span>
+                </span>
+              </span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </a>
+{{end}}          </div>
+{{end}}        </section>
     </main>
 
 <!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own

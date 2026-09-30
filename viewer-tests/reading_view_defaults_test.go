@@ -24,7 +24,7 @@ func TestReadingCanvasCentresInTheColumn(t *testing.T) {
 	p := newProject(t)
 	p.writeClaim("long.yaml", longClaimYAML)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".reading-canvas .claim", chromedp.ByQuery))
 
 	if !evalBool(t, ctx, `(function(){
@@ -102,7 +102,7 @@ func TestFacetBannerSuppressesReadinessAutoOpen(t *testing.T) {
 	// facet-level strip the gate keys off.
 	p.writeClaim("issue.yaml", strings.ReplaceAll(contractIssueClaimYAML, "widget.contract.missing", "widget.contract.alpha"))
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible("#statusStrip", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.querySelectorAll('.claim[id]').length > 0`)
 
@@ -151,7 +151,7 @@ func TestFreshnessReportsMinutesNotAnHour(t *testing.T) {
 	p := newProject(t)
 	p.writeClaim("long.yaml", longClaimYAML)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".freshness-footer__phrase", chromedp.ByQuery))
 	pollTrue(t, ctx, `!/Updated recently/.test(document.querySelector('.freshness-footer__phrase').textContent)`)
 
@@ -211,7 +211,7 @@ func TestMobileFacetSheetRowNavigatesToItsClaim(t *testing.T) {
 	// facet, so a single-facet project would never surface the sheet at all.
 	p := group02NavigationProject(t)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()))
+	runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()+widgetPage))
 	pollTrue(t, ctx, `!!document.querySelector('.facet-toc-trigger')`)
 
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.facet-toc-trigger').click()`, nil))
@@ -289,7 +289,7 @@ func TestFocusModeGivesTheFreedWidthToTheEvidence(t *testing.T) {
 	p := newProject(t)
 	p.writeClaim("long.yaml", longClaimYAML)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()),
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".focus-toggle", chromedp.ByQuery),
 		chromedp.WaitVisible(".reading-canvas .claim", chromedp.ByQuery))
 
