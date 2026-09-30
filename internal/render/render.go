@@ -499,7 +499,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 	// comments for why this is a no-op for a project that has never
 	// called "dossierx implink set" and has no claim any other claim rests
 	// on.
-	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), codeLinksGated(cfg), buildDependedByLookup(cat), buildTargetStatusLookup(cat))
+	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), codeLinksGated(cfg), buildDependedByLookup(cat), buildTargetStatusLookup(cat), buildBriefRelationsLookup(cat, cfg, x.Briefs))
 	// Rebind mockup.html's "mockupHTML" func with the project's
 	// mockup_modules allowlist so its defense-in-depth gate (DX-AUD-08) can
 	// verify module membership; the default binding always escapes.

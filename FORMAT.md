@@ -1620,6 +1620,18 @@ carries the briefs as data (a `dossierx-briefs` JSON block); a project with no
 brief has none of this, and its search reads "Search modules" while still
 matching claims.
 
+A claim card does show the briefs around it, derived at render time and never
+stored: a **BRIEFS** group in its relationships panel, after the fixed
+directions, marked "derived" and counted in the relationships chip. "Explained
+by" lists every brief whose `rests_on` names the claim; "Cited as evidence"
+lists every `internal` source of the claim whose `path` is a brief file
+(`briefs/<folder>/<slug>.md`, matched as written), with its pinned hash, or
+"pin out of date" when `source-internal-drift` reports that source. Each row
+gives the brief's folder, its title (linking to the brief), its review state
+when pending, and its `status`. A brief that rests on nothing and that no
+claim cites appears on no card; a project with no brief shows no group. The
+claim's Sources panel is unchanged.
+
 ## Project config (`project.config.yaml`)
 
 ```yaml
