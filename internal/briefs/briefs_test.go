@@ -1,6 +1,7 @@
 package briefs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -362,6 +363,47 @@ func TestFromFiles_CapsFollowTheirOverrides(t *testing.T) {
 	if got := defaults.Findings(nil); len(got) != 0 {
 		t.Fatalf("the defaults must not fire on a small brief: %v", rulesAndPaths(got))
 	}
+}
+
+// TestFindings_DuplicateMessageIsBoundedInGroupSize pins that a
+// brief-rests-on-duplicate finding names ONE other brief and counts the rest,
+// so each message is bounded by two paths whatever the group size. Naming
+// every other member made a group of k briefs O(k²) bytes of findings: at
+// k = 2,000 (reachable under raised caps) about 88 MB.
+func TestFindings_DuplicateMessageIsBoundedInGroupSize(t *testing.T) {
+	cfg := testConfig(t, t.TempDir(), "")
+	const k = 2000
+	files := make([]File, 0, k)
+	for i := 0; i < k; i++ {
+		f := md("---\nsummary: s\nrests_on: [widget.contract.a]\n---\n")
+		f.Rel = fmt.Sprintf("f%04d/b.md", i)
+		files = append(files, f)
+	}
+	s := FromFiles(cfg, files)
+	var dup []lint.Finding
+	for _, f := range s.Findings([]model.Claim{{ID: "widget.contract.a"}}) {
+		if f.LintName == RuleRestsOnDuplicate {
+			dup = append(dup, f)
+		}
+	}
+	if len(dup) != k {
+		t.Fatalf("every member of the group is a finding: got %d, want %d", len(dup), k)
+	}
+	const maxMessage = 256
+	total, longest := 0, 0
+	for _, f := range dup {
+		total += len(f.Message)
+		longest = max(longest, len(f.Message))
+		if len(f.Message) > maxMessage {
+			t.Fatalf("a duplicate message must be bounded (≤%d bytes) whatever the group size; got %d bytes", maxMessage, len(f.Message))
+		}
+	}
+	first, second := dup[0], dup[1]
+	if !strings.Contains(first.Message, "briefs/f0001/b.md and 1998 other brief(s)") ||
+		!strings.Contains(second.Message, "briefs/f0000/b.md and 1998 other brief(s)") {
+		t.Fatalf("a finding names one other member and counts the rest, never itself:\n%s\n%s", first.Message, second.Message)
+	}
+	t.Logf("k=%d duplicate findings: %d message bytes in total, longest %d (bound %d)", k, total, longest, maxMessage)
 }
 
 // TestFindings_RestsOnRules pins the two claim-aware rules: an id no claim

@@ -203,18 +203,24 @@ func (s *Set) restsOnFindings(claims []model.Claim) []lint.Finding {
 		if len(paths) < 2 {
 			continue
 		}
-		for _, p := range paths {
-			var others []string
-			for _, q := range paths {
-				if q != p {
-					others = append(others, q)
-				}
+		for i, p := range paths {
+			// ONE other path, and a count of the rest: naming every other
+			// member made each of the k findings O(k) bytes, O(k²) for the
+			// group (88 MB at k = 2,000 under raised caps). Each finding is
+			// now bounded by the length of two paths, whatever the group size.
+			other := paths[0]
+			if i == 0 {
+				other = paths[1]
+			}
+			also := ""
+			if rest := len(paths) - 2; rest > 0 {
+				also = fmt.Sprintf(" and %d other brief(s)", rest)
 			}
 			out = append(out, lint.Finding{
 				LintName: RuleRestsOnDuplicate,
 				ClaimID:  p,
 				Severity: severityOf(RuleRestsOnDuplicate),
-				Message:  fmt.Sprintf("rests_on is exactly the same set as %s; two briefs about the same claims may be one brief — merge them, or give each the claims it is actually about", strings.Join(others, ", ")),
+				Message:  fmt.Sprintf("rests_on is exactly the same set as %s%s; two briefs about the same claims may be one brief — merge them, or give each the claims it is actually about", other, also),
 			})
 		}
 	}
