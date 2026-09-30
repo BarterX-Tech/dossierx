@@ -90,9 +90,12 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   every brief — id, path, folder, title (its first `#` heading, else the file
   name title-cased), summary, status, `rests_on`, the body rendered in document
   mode, its word and image counts, per-folder and total counts, and the caps —
-  charged to the same bounded render budget as the claims. It is emitted only
-  when the project holds a brief; no pane draws it yet. `dossierx serve`
-  watches `briefs_dir` too, so a brief edit reloads the page.
+  charged to the same bounded render budget as the claims, and in `serve`
+  without a conformance report, whose claims have no budget, to a 64 MiB
+  budget of its own; a payload past its budget fails the render (`check`:
+  `conformance_capacity_exceeded`; `serve`: the render-error page). It is
+  emitted only when the project holds a brief; no pane draws it yet.
+  `dossierx serve` watches `briefs_dir` too, so a brief edit reloads the page.
 - **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
   `briefs_dir` that is the config directory, sits inside a `.git` directory,
   or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at

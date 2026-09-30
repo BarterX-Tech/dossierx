@@ -428,7 +428,10 @@ type Extras struct {
 	Briefs *briefs.Set
 }
 
-// RenderWith is Render with the non-claim inputs supplied.
+// RenderWith is Render with the non-claim inputs supplied. Like Render it puts
+// no budget on the claims; the briefs payload alone is charged to a budget of
+// its own (unboundedBriefsPayloadBytes), so an oversized one is refused with
+// the capacity error rather than served whole.
 func RenderWith(cat *catalog.Catalog, cfg *config.Config, x Extras) (string, error) {
 	return renderBoundedAt(cat, cfg, x, time.Now().UTC(), 0)
 }
@@ -493,6 +496,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
 		briefs:                   x.Briefs,
+		briefsBudget:             unboundedBriefsBudget(maxBytes),
 		generatedAt:              generatedAt,
 	}
 
@@ -516,7 +520,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 		eager, err := buildEagerShellData(inputs, tmpl.partials, outputBudget)
 		if err != nil {
 			if errors.Is(err, conformance.ErrCapacityExceeded) {
-				return "", viewerCapacityError(maxBytes)
+				return "", capacityError(maxBytes)
 			}
 			return "", err
 		}
@@ -530,7 +534,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 	}
 	if err := tmpl.shell.Execute(dst, data); err != nil {
 		if errors.Is(err, conformance.ErrCapacityExceeded) {
-			return "", viewerCapacityError(maxBytes)
+			return "", capacityError(maxBytes)
 		}
 		if errors.Is(err, ErrIntermediateCapacityExceeded) {
 			return "", renderIntermediateCapacityError()
@@ -543,6 +547,32 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 
 func viewerCapacityError(maxBytes int) error {
 	return fmt.Errorf("%w: viewer requires more than %d bytes", conformance.ErrCapacityExceeded, maxBytes)
+}
+
+// unboundedBriefsPayloadBytes is the ceiling on the briefs payload in a render
+// that has no budget (maxBytes 0). It is the output cap a bounded render
+// (check, serve with a conformance report) holds the WHOLE viewer to, so a
+// briefs payload that path would refuse for its size alone is refused here
+// too. Claims in that render stay unbudgeted, exactly as before briefs existed.
+const unboundedBriefsPayloadBytes = conformance.MaxOutputBytes
+
+// unboundedBriefsBudget is the briefs-only budget for a render without one,
+// and nil for a bounded render, whose shared budget charges the briefs.
+func unboundedBriefsBudget(maxBytes int) *renderByteBudget {
+	if maxBytes > 0 {
+		return nil
+	}
+	return &renderByteBudget{remaining: unboundedBriefsPayloadBytes, exceeded: conformance.ErrCapacityExceeded}
+}
+
+// capacityError names the budget a render ran out of. In a bounded render it
+// is the viewer's output cap; in an unbounded one the only budget is the
+// briefs payload's own, so that is the one that ran out.
+func capacityError(maxBytes int) error {
+	if maxBytes > 0 {
+		return viewerCapacityError(maxBytes)
+	}
+	return fmt.Errorf("%w: briefs payload requires more than %d bytes", conformance.ErrCapacityExceeded, unboundedBriefsPayloadBytes)
 }
 
 const maxBoundedRenderIntermediateBytes = 128 << 20
@@ -822,6 +852,13 @@ type shellInputs struct {
 	// briefs.
 	briefs        *briefs.Set
 	briefsPayload template.JS
+
+	// briefsBudget, when set, is the budget the briefs payload alone is
+	// charged to instead of the shared one: an unbounded render (RenderWith,
+	// serve without a conformance report) charges nothing for its claims,
+	// and still refuses a briefs payload past unboundedBriefsPayloadBytes.
+	// Nil on a bounded render, whose shared budget already covers briefs.
+	briefsBudget *renderByteBudget
 
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time

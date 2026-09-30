@@ -217,3 +217,37 @@ func TestRenderBoundedWith_BriefsAreChargedToTheBudget(t *testing.T) {
 		t.Fatalf("expected the capacity refusal once the briefs are charged, got %v", err)
 	}
 }
+
+// TestRenderWith_RefusesABriefsPayloadPastTheOutputCap is the unbounded path —
+// RenderWith, which is what serve renders through when no claim declares an
+// embodiment and there is no conformance report. Its claims are charged to no
+// budget, as they never were; its briefs payload is charged to one of its own,
+// conformance.MaxOutputBytes, the cap a bounded render holds the whole viewer
+// to. A payload past it is refused with the capacity error on both shell
+// paths, where it used to be served whole. Removing the briefs budget from the
+// unbounded render fails both assertions.
+//
+// Each "<" in a body renders as "&lt;" and reaches the JSON payload as
+// "&lt;", nine bytes, so a 7.5 MB body makes a payload past 64 MiB
+// without a 64 MiB input.
+func TestRenderWith_RefusesABriefsPayloadPastTheOutputCap(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("widget/big.md", "---\nsummary: Big.\n---\n"+strings.Repeat("<", conformance.MaxOutputBytes/9+1024)+"\n"),
+	})
+	want := "briefs payload requires more than 67108864 bytes"
+
+	_, err := RenderWith(cat, cfg, Extras{Briefs: set})
+	if !errors.Is(err, conformance.ErrCapacityExceeded) || !strings.Contains(err.Error(), want) {
+		t.Fatalf("embedded shell: expected the briefs-payload capacity refusal, got %v", err)
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir+"/shell.html", `<!doctype html><script type="application/json" id="dossierx-briefs">{{.BriefsPayload}}</script>`)
+	override := *cfg
+	override.Viewer.TemplateOverrides = dir
+	_, err = RenderWith(cat, &override, Extras{Briefs: set})
+	if !errors.Is(err, conformance.ErrCapacityExceeded) || !strings.Contains(err.Error(), want) {
+		t.Fatalf("override shell: expected the briefs-payload capacity refusal, got %v", err)
+	}
+}

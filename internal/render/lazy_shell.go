@@ -23,7 +23,7 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	}
 	in.graphPayload = graphPayload
 
-	briefsPayload, err := briefsPayloadJSONWithBudget(in.briefs, budget)
+	briefsPayload, err := briefsPayloadJSONWithBudget(in.briefs, in.briefsBudgetOr(budget))
 	if err != nil {
 		return shellData{}, err
 	}
@@ -137,7 +137,17 @@ func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {
 
 func (p *lazyShellProjection) briefsPayloadJSON() (template.JS, error) {
 	p.briefsOnce.Do(func() {
-		p.briefs, p.briefsErr = briefsPayloadJSONWithBudget(p.in.briefs, p.budget)
+		p.briefs, p.briefsErr = briefsPayloadJSONWithBudget(p.in.briefs, p.in.briefsBudgetOr(p.budget))
 	})
 	return p.briefs, p.briefsErr
+}
+
+// briefsBudgetOr is the budget the briefs payload is charged to: its own when
+// the render set one (an unbounded render; see shellInputs.briefsBudget),
+// otherwise the shared budget every other projection is charged to.
+func (in *shellInputs) briefsBudgetOr(shared *renderByteBudget) *renderByteBudget {
+	if in.briefsBudget != nil {
+		return in.briefsBudget
+	}
+	return shared
 }

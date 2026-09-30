@@ -8,7 +8,9 @@ Scope: a second authored tree beside the claims and everything that reads it.
 - `internal/render`: `Extras`, `RenderWith` and `RenderBoundedWith`, and the
   `dossierx-briefs` payload on both shell paths — eager (the embedded shell,
   charged to the output budget) and lazy (a project shell override's
-  `{{.BriefsPayload}}`, charged to the intermediate budget).
+  `{{.BriefsPayload}}`, charged to the intermediate budget); on the unbounded
+  render (`RenderWith`, `maxBytes` 0) the payload alone is charged to a budget
+  of its own, `conformance.MaxOutputBytes`, and the claims to none.
 - `internal/serve`: the watcher's second tree (`briefs_dir`) and the re-read
   of the briefs on every render.
 - `internal/check`: `lintFindings` (brief findings join `lint_findings`) and
@@ -26,7 +28,9 @@ change writes a file: no store, no sentinel, no approval.
   `work/nit-204-engine-192a-briefs-read-side-discovery-caps-listshow-render`
   carrying this note; the figures below were measured on the commit that adds
   it, with the commands shown, and the byte-bound measurements and the
-  differential were rerun after the NIT-204 round-3 fixes.
+  differential were rerun after the NIT-204 round-3 fixes; the `serve` row
+  and the `serve` byte-identity were rerun on the final pass that gave the
+  unbounded render its briefs budget.
 - Environment: go1.26.5 darwin/arm64 (Apple M4 Pro).
 
 ## Preserved invariants
@@ -114,7 +118,12 @@ change writes a file: no store, no sentinel, no approval.
   (eager) or the intermediate budget (lazy), once, and a budget one byte short
   refuses the render at the payload
   (`TestBuildEagerShellData_ChargesTheBriefsPayloadToTheOutputBudget`,
-  `TestLazyShell_BriefsPayload`; removing the charge fails both).
+  `TestLazyShell_BriefsPayload`; removing the charge fails both). A render
+  with no budget still charges the payload to one of its own: past
+  `conformance.MaxOutputBytes` it is refused on both shell paths
+  (`TestRenderWith_RefusesABriefsPayloadPastTheOutputCap`; giving the
+  unbounded render no briefs budget fails the embedded-shell assertion, and
+  charging the lazy payload to the shared nil budget fails the override one).
 
 ## Complexity and output size
 
@@ -129,7 +138,7 @@ to a sort; none enumerates paths or pairs.
 | `brief-rests-on-unknown` | a claim-id set, O(C), and one lookup per `rests_on` entry, O(N·R) |
 | `brief-rests-on-duplicate` | one sorted key per brief, O(N·R log R); one finding per member of a group, each naming **one** other path and a count of the rest, so a group of k is O(k·P) bytes (it was O(k²·P) before REG-4) |
 | Findings order | one sort, O(K log K) for K findings |
-| Payload | one document-mode render per brief and one JSON encode, O(B); charged to the render budget before the shell executes, where the render has one (`check` always; `serve` only with a conformance report — see below) |
+| Payload | one document-mode render per brief and one JSON encode, O(B); charged before the shell executes to the render budget where the render has one (`check`; `serve` with a conformance report), and otherwise to a briefs-only budget of 64 MiB (`serve` without one) — see below |
 | `check --staged` | two `git ls-files -s` over the briefs pathspec and one `cat-file --batch`, O(index entries under `briefs_dir`) |
 | `serve` watcher | one stat-walk of the briefs tree per poll, O(F) |
 | `brief list` / `brief show` | discovery plus one pass over the findings, O(F log F + B) |
@@ -140,8 +149,8 @@ link target, an image reference and punctuation are not words, and one word
 can be any length. A brief inside every default cap (60 briefs, 2,000 words,
 3 images of 1 MiB) can therefore be any size, so per-brief memory and time
 are O(B) with B unbounded — as for a claim file, which has no byte cap
-either. The serialized output is bounded only by the render budget the
-payload is charged to, and only where a render HAS a budget:
+either. The serialized payload is bounded by the budget it is charged to,
+on every render path:
 
 - **`check`** (every mode that renders) and **`serve` with a conformance
   report** render through `RenderBoundedWith(…, conformance.MaxOutputBytes,
@@ -150,12 +159,19 @@ payload is charged to, and only where a render HAS a budget:
   pinned by `TestLazyShell_BriefsPayload`, not measured here).
 - **`serve` without a conformance report** — no claim declares `embodiment`
   (`conformance.Evaluate` returns nil), fixture-graph-demo included — renders
-  through `RenderWith`
-  (`internal/serve/server.go`, the `report == nil` branch): `maxBytes` 0 and
-  no budget, so briefs are rendered exactly as that path has rendered claims
-  since the baseline (`render.Render` there): unbounded, O(B) memory and
-  O(B) output per request. This change adds no bound to that path and takes
-  none away; a brief is one more input to it, as a claim body is.
+  through `RenderWith` (`internal/serve/server.go`, the `report == nil`
+  branch) with `maxBytes` 0. Its claims are charged to nothing, exactly as
+  that path has rendered them since the baseline (`render.Render` there):
+  unbounded, O(C) memory and output per request. The briefs payload is
+  charged to a budget of its own (`unboundedBriefsPayloadBytes` =
+  `conformance.MaxOutputBytes`, 64 MiB) on both shell paths, and a payload
+  past it fails the render with `conformance capacity exceeded: briefs payload
+  requires more than 67108864 bytes`, which `serve` answers with its 500
+  render-error page. The claims' bytes on this path are unchanged: `GET /`
+  is byte-identical between the round-4 binary (`152a335a`) and this one on
+  all five fixtures (timestamps and version normalised). The payload is
+  encoded before it is charged, so the memory spent reaching the refusal is
+  still O(B) in the input, as on the bounded paths.
 
 Measured with the candidate binary on scratch copies of fixture-graph-demo,
 each adding one two-word brief `briefs/graph/huge.md` (`alpha` and one word of
@@ -166,7 +182,7 @@ N MiB of `a`) under default caps, with the commands below (byte counts are
 | --- | --- | --- | --- | --- | --- |
 | 20 MiB (20,971,563 bytes) | 2 | `check` | exit 0, no brief finding; `index.html` 22,455,056 bytes | 0.62 s | 246 MB |
 | 70 MiB (73,400,363 bytes) | 2 | `check` | exit 1, `conformance_capacity_exceeded` ("viewer requires more than 67108864 bytes"), no artifact replaced | 1.29 s | 732 MB |
-| 70 MiB (73,400,363 bytes) | 2 | `serve`, no conformance report | `GET /` 200, 74,883,856 bytes — past the 64 MiB `check` refuses | — | 829 MB (RSS after the request) |
+| 70 MiB (73,400,363 bytes) | 2 | `serve`, no conformance report | `GET /` 500, 623 bytes, "briefs payload requires more than 67108864 bytes" (the round-4 binary served it 200, 74,883,856 bytes) | 1.10 s (request) | 714 MB (RSS after the request) |
 
     printf -- '---\nsummary: One word of 20 MiB.\n---\nalpha ' > briefs/graph/huge.md
     head -c $((20 * 1048576)) /dev/zero | tr '\0' 'a' >> briefs/graph/huge.md
@@ -196,8 +212,7 @@ if any one exceeds 256 bytes at k = 2,000. The payload at the word cap:
 
 About 0.6 MB for 60 briefs is the payload of word-cap-shaped content only; it
 is not a bound on a default project, whose payload can reach the budget, and a
-payload over it is refused at the payload where there is a budget (the 70 MiB
-`check` row above) and served whole where there is none (the `serve` row).
+payload over it is refused at the payload (the two 70 MiB rows above).
 
     go test ./internal/briefs -run '^$' -bench BriefsAtScale -benchmem
     go test ./internal/render -run '^$' -bench BriefsPayload -benchmem
