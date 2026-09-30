@@ -118,6 +118,7 @@ func TestExitCodesStayInTheDocumentedThreeFamilies(t *testing.T) {
 func TestExitCodeFamilyMembership(t *testing.T) {
 	notFoundOrWrongState := []Code{
 		CodeConfigNotFound, CodeClaimNotFound, CodeThreadNotFound, CodeReplyNotFound,
+		CodeBriefNotFound,
 		CodeNotLocked, CodeNotReviewPending, CodeReviewPending, CodeWrongState,
 	}
 	for _, c := range notFoundOrWrongState {

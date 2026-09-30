@@ -36,6 +36,62 @@
 # documents. It is not automatically wrong — it is automatically something a
 # client's agent has to be told about.
 
+brief list / one brief
+    argv          brief list
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief list
+    data          briefs:[{folder:string,id:string,path:string,review_pending:bool,review_pending_trigger:string,status:string,summary:string,title:string}]
+                  count:number
+                  findings:[]
+                  review_pending_only:bool
+                  total:number
+
+brief list / only the briefs awaiting review
+    argv          brief list --review-pending
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief list
+    data          briefs:[]
+                  count:number
+                  findings:[]
+                  review_pending_only:bool
+                  total:number
+
+brief show / by path
+    argv          brief show briefs/widget/flow.md
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief show
+    data          content:string
+                  digest:string
+                  findings:[]
+                  folder:string
+                  id:string
+                  images:[]
+                  path:string
+                  rests_on:[string]
+                  review_pending:bool
+                  review_pending_trigger:string
+                  status:string
+                  summary:string
+                  title:string
+                  words:number
+
+brief show / a path no brief is at
+    argv          brief show briefs/widget/ghost.md
+    exit          2
+    ok            false
+    envelope      command error ok
+    command       brief show
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    brief_not_found
+
 version / the verb
     argv          version
     exit          0
@@ -639,8 +695,9 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (13 of 49)
+    pinned by an invocation above (14 of 50)
         already_locked            exit 1
+        brief_not_found           exit 2
         claim_not_found           exit 2
         config_not_found          exit 2
         git_unavailable           exit 1

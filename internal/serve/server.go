@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
@@ -276,6 +277,11 @@ func (s *Server) Serve(ctx context.Context) error {
 		extraFiles = append(extraFiles, s.cfg.Conformance.Observations)
 	}
 	w := newWatcherWithFiles(s.cfg.ClaimsDir, extraFiles, s.pollInterval, s.debounceInterval, s.onChange)
+	// briefs_dir is a second authored tree (NIT-204): an edit to a brief must
+	// reload the page as an edit to a claim does. It may not exist yet, and the
+	// watcher reads an absent tree as empty, so creating briefs/ under a
+	// running serve is itself a change.
+	w.trees = []watchTree{{root: s.cfg.BriefsDirPath(), ignore: ignoredBriefFile}}
 	baseline, err := w.scan()
 	if err != nil {
 		baseline = map[string]fileStamp{}
@@ -437,11 +443,16 @@ func (s *Server) renderViewer() ([]byte, error) {
 		return nil, fmt.Errorf("serve: conformance: %w", err)
 	}
 	cat.SetConformance(report)
+	// The briefs tree is re-read on every render, exactly as the claims are:
+	// the watcher fingerprints briefs_dir too, so a brief edit reaches the page
+	// the same way a claim edit does. A brief with a finding still renders; the
+	// status strip (check.Status) is where its findings are shown.
+	extras := render.Extras{Briefs: briefs.Load(s.cfg)}
 	var html string
 	if report != nil {
-		html, err = render.RenderBounded(cat, s.cfg, conformance.MaxOutputBytes)
+		html, err = render.RenderBoundedWith(cat, s.cfg, conformance.MaxOutputBytes, extras)
 	} else {
-		html, err = render.Render(cat, s.cfg)
+		html, err = render.RenderWith(cat, s.cfg, extras)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("serve: render: %w", err)

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Surface** (net, against v0.7.21): 23 leaves under 9 nouns (was 24 under
+9: `track` and its three leaves out, `brief` and its two in), 30 lint rules
+(was 36) plus the 8 brief rules, a set of their own, 50 error codes (was 50:
+`unknown_track` out, `brief_not_found` in).
+
 ### Upgrading from v0.7.21
 
 A claim file that still carries `migrated_from:` no longer loads
@@ -30,6 +35,74 @@ Re-running `dossierx skills export` also deletes the
 `docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
 nothing else is there. Commit the deletion and the refreshed `AGENTS.md`
 section, whose links now point at the exported `SKILL.md` files.
+
+A `briefs/` directory beside `project.config.yaml` is now read as the briefs
+tree. If the project already keeps something unrelated there, `check` fails on
+it with `lint_failed`: a stray file draws `brief-shape`, and a lowercase `.md`
+file one folder down (`briefs/<folder>/<name>.md`) is parsed as a brief and,
+without a brief's frontmatter, draws `brief-frontmatter`. The recovery is the
+same for both: move it, or set `briefs_dir` to a directory that does not exist
+yet. And a `claims_dir`,
+`project_claims_dir` or `build_dir` that is `briefs`, lies inside it or
+contains it now fails config load (`invalid_config`, naming the overlap): set
+`briefs_dir` to another name.
+
+### Added — briefs, the read side (NIT-204)
+
+- **Briefs.** A brief is a markdown document beside the claims —
+  `briefs/<folder>/<slug>.md`, one folder level, the `.md` files plus the
+  images they reference, every name in `[a-z0-9-]`, so a brief's id is
+  `<folder>.<slug>`. Frontmatter carries `summary` (required, at most 200
+  characters), `status` (`draft` or `locked`, default `draft`) and an optional
+  `rests_on` list of claim ids. A project with no `briefs/` sees no change
+  anywhere. FORMAT.md gains a "Briefs" section, and the directory-layout rule
+  its second exception: the briefs tree is load-bearing beside `claims/`.
+- **`dossierx brief list` and `dossierx brief show`**, the ninth noun. `list`
+  gives each brief's path, id, title, summary, status and review state
+  (`review_pending`, `review_pending_trigger`: present and empty until briefs
+  have a lock store; `--review-pending` therefore lists none today). `show
+  <path|id>` gives the content, its SHA-256 digest and the status, and derives
+  nothing from the claims a brief rests on. Both carry `findings` beside what
+  they read — `list` the tree's own brief findings, `show` the findings on its
+  own path or a folder above it: an unreadable folder is a finding
+  while the other folders are still listed, never "no briefs". A path or id
+  that names no brief is the new `brief_not_found` (exit 2).
+- **Eight brief rules**, a rule set of their own beside the claim lints
+  (`surface.json` lists them as `brief_rules`): `brief-shape` (a file directly
+  under `briefs/`, anything deeper, any other file, a name outside the set, a
+  non-regular file, an image nothing references, a reference to an image the
+  folder lacks, an image src that is not a bare file name in the folder),
+  `brief-frontmatter`, `brief-rests-on-unknown` (an id that is
+  not a claim), all errors; `brief-rests-on-duplicate` (two briefs with the same
+  `rests_on` set), a warning; and four final caps with config overrides, each
+  set only on the human's yes: `brief-word-cap` (2,000 words,
+  `max_brief_words`), `brief-image-cap` (3 images at 1 MiB each,
+  `max_brief_images`, `max_brief_image_bytes`), `brief-folder-cap` (12 per
+  folder, `max_briefs_per_folder`) and `brief-total-cap` (60,
+  `max_briefs`); images count toward neither of the last two. Findings ride in
+  `check`'s `lint_findings` with the brief's path as `claim_id`; `check
+  --staged` reads briefs from the index. `claim lock` never sees them, and the
+  claim `Lint` interface is unchanged.
+- **Document mode** in the markdown renderer: a brief's body renders `#` and
+  `##` as headings, where every claim body keeps rendering them as literal
+  text. A brief's image references resolve to its own folder, which is what
+  the image checks and the image cap count; no route serves a brief's image
+  yet, so the payload's body renders each reference as literal text until the
+  briefs UI brings one (NIT-197).
+- **Briefs in the viewer payload.** A `dossierx-briefs` JSON block carries
+  every brief — id, path, folder, title (its first `#` heading, else the file
+  name title-cased), summary, status, `rests_on`, the body rendered in document
+  mode, its word and image counts, per-folder and total counts, and the caps —
+  charged to the same bounded render budget as the claims, and in `serve`
+  without a conformance report, whose claims have no budget, to a 64 MiB
+  budget of its own; a payload past its budget fails the render (`check`:
+  `conformance_capacity_exceeded`; `serve`: the render-error page). It is
+  emitted only when the project holds a brief; no pane draws it yet.
+  `dossierx serve` watches `briefs_dir` too, so a brief edit reloads the page.
+- **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
+  `briefs_dir` that is the config directory, sits inside a `.git` directory,
+  or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at
+  load.
 
 ### Added
 
@@ -69,7 +142,7 @@ section, whose links now point at the exported `SKILL.md` files.
   `claim show`, and the viewer's `migrated_from:` row. `sources` records what
   backs a claim; git records what it replaced. The retired `coverage` verb's
   hint now points at plain `claim list`. `LockedClaimHash` loses its
-  `migrated_from` line, so every lock hash moves once. 35 lint rules (was 36).
+  `migrated_from` line, so every lock hash moves once.
 - **Tracks** (NIT-184). A feature is a brief now (NIT-180), so the second
   ownership axis is gone: `tracks` on claims and in `project.config.yaml`, the
   `owns` / `cites` roles, the five lints `track-shape`, `track-unknown`,
@@ -81,8 +154,6 @@ section, whose links now point at the exported `SKILL.md` files.
   graph pane's track filter, legend rows and owner ruling. Either `tracks` key
   is refused at load with a `tracks-retired` hint. `LockedClaimHash` signed
   `tracks` only when present, so only a claim that carried it moves.
-  **Surface:** 21 leaves under 8 nouns (was 24 under 9), 30 lint rules (was
-  35), 49 error codes (was 50).
 - **`docs/dossierx-agent-guide.md`** (NIT-195). `dossierx skills export` no
   longer writes the concatenated guide, so DossierX creates nothing under a
   project's `docs/`. The `AGENTS.md` section links each companion skill to the

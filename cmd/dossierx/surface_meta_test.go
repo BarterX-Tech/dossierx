@@ -208,16 +208,17 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsTwentyOneLeavesUnderEightNouns treats the leaf count.
+// TestSurfaceIsTwentyThreeLeavesUnderNineNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
 		// 9 -> 8 and 24 -> 21 when tracks were retired and the track noun
-		// went with them (NIT-184).
-		"nouns":    8,
-		"commands": 21,
+		// went with them (NIT-184). 8 -> 9 and 21 -> 23 with the brief noun
+		// and its two read-only leaves, list and show (NIT-204).
+		"nouns":    9,
+		"commands": 23,
 		// 36 -> 37 with NIT-10's shared-context-budget (the shared half of
 		// the manifest show --isolation view). 37 -> 36 when lock policy 0
 		// was retired and rest-on-locked went with it. 36 -> 35 when
@@ -234,8 +235,14 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		// `dependency_not_locked` is deleted (NIT-23) and `view_too_large`
 		// is added (`manifest show --isolation` over the 16384-byte view
 		// cap), landing at 50. 50 -> 49 when tracks were retired and
-		// `unknown_track` went with them (NIT-184).
-		"error_codes": 49,
+		// `unknown_track` went with them (NIT-184). 49 -> 50 with
+		// `brief_not_found`, `brief show`'s refusal for a path or id that
+		// names no brief (NIT-204).
+		"error_codes": 50,
+		// The brief rule set (NIT-204), a registry of its own beside
+		// lint.Registry: brief-shape, brief-frontmatter, the four caps, and
+		// the two rests_on rules.
+		"brief_rules": 8,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

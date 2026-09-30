@@ -40,6 +40,18 @@ type watcher struct {
 	debounce   time.Duration
 	onChange   func()
 	extraFiles []string
+	// trees are further directory trees fingerprinted beside root, each with
+	// its own exclusion rule. It holds briefs_dir (NIT-204). Unlike root, a
+	// tree that does not exist is EMPTY rather than a scan error: briefs/ is
+	// optional, and a watcher whose every scan failed would keep its baseline
+	// forever and never see the directory appear.
+	trees []watchTree
+}
+
+// watchTree is one extra tree the watcher fingerprints.
+type watchTree struct {
+	root   string
+	ignore func(name string) bool
 }
 
 func newWatcher(root string, poll, debounce time.Duration, onChange func()) *watcher {
@@ -54,6 +66,26 @@ func (w *watcher) scan() (map[string]fileStamp, error) {
 	fp, err := scanFingerprint(w.root)
 	if err != nil {
 		return nil, err
+	}
+	for _, tree := range w.trees {
+		if _, statErr := os.Lstat(tree.root); errors.Is(statErr, fs.ErrNotExist) {
+			continue
+		}
+		// A read error inside an extra tree, its root included, is ISOLATED:
+		// it becomes a stamp on the entry that could not be read, never a scan
+		// error. A scan error keeps the whole previous fingerprint, so an
+		// unreadable brief folder (or briefs_dir itself) used to stop live
+		// reload for the CLAIMS as well. As a stamp, entering and leaving the
+		// unreadable state is itself a change, and the render it triggers
+		// re-reads the tree and reports the entry (briefs.Load's brief-shape
+		// "could not be read" finding, in check.Status).
+		sub, treeErr := fingerprintTreeWith(tree.root, true, tree.ignore, unreadableStamp)
+		if treeErr != nil {
+			return nil, treeErr
+		}
+		for p, stamp := range sub {
+			fp[p] = stamp
+		}
 	}
 	for _, file := range w.extraFiles {
 		info, statErr := os.Stat(file)
@@ -171,10 +203,32 @@ func scanLoadedClaimFingerprint(root string) (map[string]fileStamp, error) {
 // so the ONLY difference between them is the two exclusion knobs and a reader
 // can see the whole difference in one place.
 func fingerprintTree(root string, skipDotDirs bool, ignore func(name string) bool) (map[string]fileStamp, error) {
+	return fingerprintTreeWith(root, skipDotDirs, ignore, nil)
+}
+
+// unreadableStamp is the stamp an extra tree's unreadable entry gets: no real
+// file has a negative modification time and size, so it can equal nothing but
+// itself.
+var unreadableStamp = &fileStamp{modNano: -1, size: -1}
+
+// fingerprintTreeWith is fingerprintTree with a third knob, onErr: nil aborts
+// the walk on a read error (both claim fingerprints, whose callers keep their
+// previous state on an error); non-nil records onErr as the stamp of the entry
+// that could not be read and walks on — the root's own error included, so an
+// unreadable briefs_dir is one stamp on its path and not a scan error that
+// would stop claim live reload with it.
+func fingerprintTreeWith(root string, skipDotDirs bool, ignore func(name string) bool, onErr *fileStamp) (map[string]fileStamp, error) {
 	fp := make(map[string]fileStamp)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			if onErr == nil {
+				return err
+			}
+			fp[path] = *onErr
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() {
 			// Skip dot-directories wholesale, but never the root itself.
@@ -191,6 +245,10 @@ func fingerprintTree(root string, skipDotDirs bool, ignore func(name string) boo
 			// The file vanished between enumeration and stat (e.g. a temp file
 			// mid-rename); treat it as absent rather than failing the whole scan.
 			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			if onErr != nil {
+				fp[path] = *onErr
 				return nil
 			}
 			return err
@@ -218,6 +276,15 @@ func notAClaimFile(name string) bool {
 // why it belongs to the watcher alone. See scanFingerprint.
 func ignoredClaimFile(name string) bool {
 	return strings.Contains(name, ".tmp-") || notAClaimFile(name)
+}
+
+// ignoredBriefFile is the briefs tree's exclusion: every file counts —
+// internal/briefs refuses anything a brief folder should not hold, so a stray
+// file appearing is a change the status strip must show — except a name that
+// begins with ".", which internal/briefs does not read at all, and the atomic
+// writer's ".tmp-" scratch names.
+func ignoredBriefFile(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.Contains(name, ".tmp-")
 }
 
 // fingerprintsEqual reports whether two tree fingerprints are identical (the

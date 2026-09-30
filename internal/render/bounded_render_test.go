@@ -121,7 +121,7 @@ func TestRenderBounded_UnderLimitMatchesLegacyRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	bounded, err := renderBoundedAt(cat, cfg, generatedAt, 8<<20)
+	bounded, err := renderBoundedAt(cat, cfg, Extras{}, generatedAt, 8<<20)
 	if err != nil {
 		t.Fatalf("RenderBounded: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestRenderBounded_CustomShellChargesOnlyExecutedOutput(t *testing.T) {
 			if err != nil {
 				t.Fatalf("legacy render: %v", err)
 			}
-			bounded, err := renderBoundedAt(cat, cfg, generatedAt, 1<<20)
+			bounded, err := renderBoundedAt(cat, cfg, Extras{}, generatedAt, 1<<20)
 			if err != nil {
 				t.Fatalf("bounded render: %v", err)
 			}

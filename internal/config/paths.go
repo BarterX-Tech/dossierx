@@ -53,6 +53,10 @@ const (
 	DefaultConstitution = "constitution.yaml"
 	// DefaultProjectClaimsDir is the store for scope: project claims.
 	DefaultProjectClaimsDir = "project-claims"
+	// DefaultBriefsDir is the briefs tree beside project.config.yaml
+	// (NIT-204). It is authored input, never engine output, so it is not
+	// under the build directory and nothing here writes to it.
+	DefaultBriefsDir = "briefs"
 
 	// CodeLinksDirName is the per-module artifact subdirectory;
 	// CatalogDirName, ConformanceDirName and ViewerDirName hold regenerated

@@ -157,6 +157,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
@@ -272,6 +273,12 @@ type StagedProject struct {
 	// decide where content is read from.
 	FromIndex []string
 
+	// Warnings name what this run could not judge from the index and did not
+	// refuse, so the envelope says so rather than passing in silence. Today it
+	// carries one: a briefs_dir outside the git work tree, which no commit can
+	// carry — see stagedBriefs.
+	Warnings []string
+
 	// ledger is the gate's input state, built from the index. Unexported: a
 	// caller's only legitimate use for it is handing this whole value back to
 	// StatusStaged, and exporting the stores would invite someone to Save() one
@@ -353,6 +360,9 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	}
 	cfg = sp.Config
 	sp.readConformanceIndex = stagedConformanceReader(g, cfg.BuildDirPath())
+	if warning := briefsOutsideWorkTree(g, cfg); warning != "" {
+		sp.Warnings = append(sp.Warnings, warning)
+	}
 
 	// claims_dir as a git pathspec, anchored at the REPOSITORY TOP LEVEL rather
 	// than at the config file's own directory — see gitRunner.spec. It fails
@@ -962,7 +972,92 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	}
 	cfg.ConstitutionIndex = indexed
 
+	// The briefs tree, from the index like the roof: a brief edited but not
+	// staged is not what the commit carries.
+	in.briefs, err = stagedBriefs(g, cfg)
+	if err != nil {
+		return ledgerInputs{}, err
+	}
+
 	return in, nil
+}
+
+// stagedBriefs reads briefs_dir as the INDEX holds it and judges it under
+// exactly the rules the working tree gets — briefs.FromFiles is Load's own
+// second half. A tree absent from the index, or outside the work tree, is an
+// empty set, which is how briefs.Load reads a directory that does not exist:
+// no commit can carry a brief git cannot name.
+//
+// The out-of-work-tree case is empty but NOT silent: --validate reads that
+// directory off disk, so a --staged that judged zero briefs without a word
+// would pass, in the hook, a tree the keyboard mode refuses. Staged adds an
+// envelope warning for it (briefsOutsideWorkTree), mirroring claims_dir's own
+// out-of-tree case, which warns (ErrNoIndex) rather than refusing. It is a
+// warning and not a refusal because the tree really is outside what any commit
+// of this repository can carry; the warning names the one mode that reads it.
+//
+// The index lists files, never directories. indexBlobs holds the regular
+// files with their bytes. Symlinks and gitlinks are NOT dropped here the way
+// indexEntries drops them from the claims registry: their oids are not content
+// (see indexEntries), but the working tree refuses a symlink under briefs_dir as
+// brief-shape, and dropping one from the index would let the hook pass a tree
+// --validate refuses. Each goes to FromFiles as a non-regular File, so both
+// modes judge it under the same rule — including a briefs_dir that is itself a
+// link, which the index lists as one entry at the spec (Rel ".").
+//
+// A submodule or embedded repository is a gitlink (160000) here, and it is
+// refused the same way, and it is where the two modes differ by design. On
+// disk it is a directory holding a .git entry, and Load reads it as an
+// ordinary folder (the .git entry is a dot-name, not read); Load does not
+// emulate git's rule for what it would stage as a gitlink. The difference runs
+// in the safe direction: the hook is the stricter mode, so a submodule or
+// embedded repository can never be committed as a brief folder, while
+// --validate at the keyboard may read that folder's files clean. A folder
+// whose .git git does not take for a repository has its files staged as
+// blobs, and both modes read them the same way.
+func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
+	dir := cfg.BriefsDirPath()
+	spec, err := g.spec(dir)
+	if err != nil {
+		return briefs.FromFiles(cfg, nil), nil
+	}
+	blobs, err := g.indexBlobs(spec)
+	if err != nil {
+		return nil, err
+	}
+	links, err := g.nonRegularIndexPaths(spec)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]briefs.File, 0, len(blobs)+len(links))
+	for repoRel, raw := range blobs {
+		files = append(files, briefs.File{
+			Rel:     relToClaimsDir(spec, repoRel),
+			Size:    int64(len(raw)),
+			Regular: true,
+			Data:    raw,
+		})
+	}
+	for _, repoRel := range links {
+		files = append(files, briefs.File{Rel: relToClaimsDir(spec, repoRel)})
+	}
+	return briefs.FromFiles(cfg, files), nil
+}
+
+// briefsOutsideWorkTree returns the --staged warning for a briefs_dir git
+// cannot name — outside the work tree, so the index can hold none of it — and
+// "" for every briefs_dir inside it. The path is spelled relative to the
+// config file's directory, as the config names it.
+func briefsOutsideWorkTree(g *gitRunner, cfg *config.Config) string {
+	dir := cfg.BriefsDirPath()
+	if _, err := g.spec(dir); err == nil {
+		return ""
+	}
+	shown := dir
+	if rel, err := filepath.Rel(cfg.Dir(), dir); err == nil {
+		shown = filepath.ToSlash(rel)
+	}
+	return fmt.Sprintf("briefs_dir %s is outside the git work tree at %s, so no commit can carry it and --staged judged no briefs; check --validate reads them from disk", shown, g.Dir())
 }
 
 // materializeIndexFile writes the index's copy of src (an absolute path) into
@@ -1228,6 +1323,32 @@ func (g *gitRunner) indexEntries(specs ...string) ([]indexEntry, error) {
 		entries = append(entries, indexEntry{oid: fields[1], path: entry[tab+1:]})
 	}
 	return entries, nil
+}
+
+// nonRegularIndexPaths lists the stage-0 index entries under spec whose mode is
+// a symlink (120000) or a submodule gitlink (160000) — exactly the entries
+// indexEntries filters out — as paths in lsFiles' form. Only stagedBriefs needs
+// them: a brief tree refuses what the claims registry merely does not hold.
+func (g *gitRunner) nonRegularIndexPaths(spec string) ([]string, error) {
+	out, err := g.run("ls-files", "-s", "-z", "--", spec)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range splitZ(out) {
+		tab := strings.IndexByte(entry, '\t')
+		if tab < 0 {
+			continue
+		}
+		fields := strings.Fields(entry[:tab])
+		if len(fields) < 3 || fields[2] != "0" {
+			continue
+		}
+		if fields[0] == "120000" || fields[0] == "160000" {
+			paths = append(paths, entry[tab+1:])
+		}
+	}
+	return paths, nil
 }
 
 // indexBlobs returns the index's content for every path under spec, keyed by
