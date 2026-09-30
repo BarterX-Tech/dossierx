@@ -43,15 +43,20 @@ import (
 
 // briefLockData is `brief lock`'s payload: the record just written.
 type briefLockData struct {
-	ID        string            `json:"id"`
-	Path      string            `json:"path"`
+	ID   string `json:"id"`
+	Path string `json:"path"`
+	// Relocked is true when this lock replaces an earlier approval record of
+	// the brief — a standing one (re-locking an edited brief) or one released
+	// by brief unlock (unlock, edit, lock) — and false on a brief's first
+	// lock. It is exactly when Carried can be non-empty.
 	Relocked  bool              `json:"relocked"`
 	Hash      string            `json:"hash"`
 	LockedAt  string            `json:"locked_at"`
 	Reason    string            `json:"reason"`
 	Baselines map[string]string `json:"baselines"`
 	// Carried is the rests_on ids whose baselines a re-lock kept from the
-	// standing record rather than re-reading (always empty on a first lock).
+	// earlier record, standing or released, rather than re-reading (always
+	// empty on a first lock).
 	Carried []string `json:"carried_baselines"`
 }
 
@@ -160,9 +165,12 @@ func newBriefLockCmd() *cobra.Command {
 		Long: "Lock a brief. Its status becomes locked and the lock store records the brief's\n" +
 			"hash (summary, rests_on and body), the human's --reason, the approved text and,\n" +
 			"for every claim it rests on, that claim's content hash as a baseline: when one\n" +
-			"of those claims later changes, the brief is review_pending. A brief that is\n" +
-			"locked and unchanged is refused already_locked; an open comment thread on it\n" +
-			"is refused comment_open. Locking a brief gates no claim.",
+			"of those claims later changes, the brief is review_pending. A lock over an\n" +
+			"earlier approval (an edited brief re-locked, or a lock after brief unlock)\n" +
+			"keeps that approval's baselines for every rests_on claim still listed, so a\n" +
+			"claim that moved stays review_pending until brief reaudit --confirm. A brief\n" +
+			"that is locked and unchanged is refused already_locked; an open comment\n" +
+			"thread on it is refused comment_open. Locking a brief gates no claim.",
 		Args: cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			cfg, err := loadConfig()
@@ -238,11 +246,15 @@ func newBriefLockCmd() *cobra.Command {
 			// The store is saved below whatever the on-load migrations did.
 			_, adopted := prepareStore(cfg, store, claims)
 
-			// A re-lock over a standing record carries its baselines forward:
-			// it approves the brief's own edit, and a claim that moved under
-			// the brief stays review_pending until brief reaudit shows it.
+			// A lock over an earlier record carries its baselines forward,
+			// whether that record stands (a re-lock of an edited brief) or an
+			// unlock released it (unlock, edit, lock): the lock approves the
+			// brief's own words, and a claim that moved under the brief stays
+			// review_pending until brief reaudit shows it. Releasing a record
+			// ends the approval, not the reading the brief still owes a moved
+			// claim — otherwise unlock then lock would accept it unseen.
 			var prev *lock.BriefRecord
-			if standing {
+			if has {
 				prev = &rec
 			}
 			hashes, receipts, carried, unknown := briefs.RelockBaselines(b, claims, prev)
@@ -280,7 +292,7 @@ func newBriefLockCmd() *cobra.Command {
 			if carried == nil {
 				carried = []string{}
 			}
-			data := briefLockData{ID: b.ID, Path: b.Path, Relocked: standing, Hash: b.LockHash, LockedAt: at, Reason: reason, Baselines: hashes, Carried: carried}
+			data := briefLockData{ID: b.ID, Path: b.Path, Relocked: has, Hash: b.LockHash, LockedAt: at, Reason: reason, Baselines: hashes, Carried: carried}
 			return cmdResult{
 				Warnings: append(gitignoreWarnings, adoptionWarnings(adopted)...),
 				Data:     data,
@@ -330,7 +342,7 @@ func briefLockDryRun(cfg *config.Config, set *briefs.Set, b briefs.Brief, claims
 		dr.Require("not_already_locked", !already, boolDetail(!already,
 			"the brief is not locked-and-unchanged",
 			"already locked and unchanged since "+rec.At))
-		if has && !rec.Released() {
+		if has {
 			prev = &rec
 		}
 	}
@@ -339,7 +351,7 @@ func briefLockDryRun(cfg *config.Config, set *briefs.Set, b briefs.Brief, claims
 	dr.Effect(fmt.Sprintf("%s's status is set to locked; every other byte stays as written", b.Path))
 	dr.Effect(fmt.Sprintf("the lock store records the brief's hash, the sha256 of each image it references, your --reason, its approved text and %d rests_on baseline(s); a later change to one of those claims makes the brief review_pending", len(hashes)))
 	if len(carried) > 0 {
-		dr.Effect(fmt.Sprintf("a re-lock: %d baseline(s) are kept from the standing approval (%s), so a claim that moved under the brief stays review_pending until brief reaudit --confirm", len(carried), strings.Join(carried, ", ")))
+		dr.Effect(fmt.Sprintf("a re-lock: %d baseline(s) are kept from the earlier approval, standing or released by brief unlock (%s), so a claim that moved under the brief stays review_pending until brief reaudit --confirm", len(carried), strings.Join(carried, ", ")))
 	}
 	dr.Effect("no claim is touched: a brief gates no claim and sets review_pending on none")
 	if carried == nil {
@@ -537,7 +549,7 @@ func newBriefReauditCmd() *cobra.Command {
 				return cmdResult{}, briefNotLocked("brief reaudit", b, r)
 			case r.LockState == briefs.LockEdited:
 				return cmdResult{}, cliout.Errorf(cliout.CodeIntegrityFailed, "brief reaudit: refused, %s has been edited since it was approved (brief-content-drift)", b.Path).
-					WithHint("a reaudit accepts moved claims, it does not approve the brief's own edit: the human re-locks it (dossierx brief lock " + b.Path + " --reason \"…\") or the file is restored from version control")
+					WithHint("a reaudit accepts moved claims, it does not approve the brief's own edit. Restore the file from version control; or, only on the human's yes to the edit, dossierx brief unlock " + b.Path + " --reason \"…\", fix the brief, and dossierx brief lock " + b.Path + " --reason \"…\" — that lock keeps the baselines, so this reaudit is still there to run")
 			case b.OpenThreads() > 0:
 				return cmdResult{}, briefCommentOpen("brief reaudit", b, b.OpenThreads())
 			case !r.ReviewPending:
@@ -591,7 +603,7 @@ func briefReauditDryRun(cfg *config.Config, b briefs.Brief, r briefs.Review, cla
 	locked := r.LockState == briefs.LockLocked || r.LockState == briefs.LockEdited
 	dr.Require("brief_is_locked", locked, boolDetail(locked, "the brief is locked with a standing approval", fmt.Sprintf("the brief is %s (not_locked)", r.LockState)))
 	dr.Require("brief_unchanged_since_approval", r.LockState != briefs.LockEdited, boolDetail(r.LockState != briefs.LockEdited,
-		"the brief's own text is as approved", "the brief was edited since approval (brief-content-drift): re-lock or restore it first"))
+		"the brief's own text is as approved", "the brief was edited since approval (brief-content-drift): restore it from version control, or unlock, fix and lock it on the human's yes, first"))
 	open := b.OpenThreads()
 	dr.Require("no_open_comment_threads", open == 0, boolDetail(open == 0, "no open comment thread on the brief",
 		fmt.Sprintf("%d open comment thread(s) (comment_open)", open)))

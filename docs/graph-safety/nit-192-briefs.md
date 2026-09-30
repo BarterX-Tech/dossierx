@@ -51,9 +51,23 @@ way.
   --confirm`, which it now allows. (The first candidate re-recorded every
   baseline on a re-lock and so cleared dependency drift unseen — audit finding
   F1; `TestARelockKeepsAReviewPendingBriefPending` and
-  `TestBriefLockAndReauditRefuseWhatTheyCannotSign` pin the fix.) An unlock
-  releases the record, and a later lock is a fresh approval that baselines
-  every claim, as a claim's unlock then lock is.
+  `TestBriefLockAndReauditRefuseWhatTheyCannotSign` pin the fix.) The same
+  holds across an unlock: `brief unlock` releases the record, and the lock
+  after it carries the released record's baselines and receipts exactly as a
+  re-lock over a standing record does (`relocked: true`, the carried ids in
+  `carried_baselines`, in the dry run too), so unlock → edit → lock keeps the
+  brief review-pending until `brief reaudit --confirm`. Releasing ends the
+  approval, not the reading the brief owes a claim that moved under it. (The
+  F1 fix first carried over a standing record only, so unlock → edit → lock
+  baselined every claim fresh and cleared the review unseen, and the reaudit
+  after it was refused `not_review_pending` — the NIT-193 audit's finding;
+  `TestUnlockEditLockKeepsAReviewPendingBriefPending` pins it, including
+  `check --staged` agreeing with `--validate` on the carried review.) Only a
+  brief never locked before — no record under its id — is baselined fresh.
+  This is where a brief departs from a claim, whose unlock then lock is a
+  fresh approval: a brief's baselines are its only review boundary, and the
+  `brief-content-drift` / `brief-unrecorded` messages route through restore
+  or unlock → fix → lock, so that path must not be the one that clears it.
 - **Identity**: a record is keyed by brief id (`<folder>.<slug>`); a baseline
   by claim id within its record, exactly as `Store.Hashes[dependent][dep]`. A
   changed claim is reported once per (brief, claim).

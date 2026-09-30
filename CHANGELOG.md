@@ -171,18 +171,24 @@ binary predates that guard.
   it read. It refuses `already_locked` (locked and unchanged), `comment_open`
   (an open thread on the brief; the new error code, exit 1), `lint_failed` (an
   error finding on the brief) and `write_conflict` (the file changed while it
-  was being locked). Re-locking an edited brief approves its edit and keeps
-  the standing baselines (`carried_baselines`), so a claim that moved under it
-  stays review-pending for `brief reaudit`. `brief unlock` releases the kept
-  record, as `claim unlock` does, and then sets `status: draft`. `brief
-  reaudit` shows each changed claim's wording at the baseline and now (the
-  text form as a line diff); `--confirm` refreshes the baselines.
+  was being locked). A lock over an earlier approval — re-locking an edited
+  brief, or locking after `brief unlock` — approves the brief's edit and keeps
+  that record's baselines (`carried_baselines`, `relocked: true`), so a claim
+  that moved under it stays review-pending for `brief reaudit` through either
+  path; only a brief's first lock baselines every claim fresh. `brief unlock`
+  releases the kept record, as `claim unlock` does, and then sets `status:
+  draft`. `brief reaudit` shows each changed claim's wording at the baseline
+  and now (the text form as a line diff); `--confirm` refreshes the baselines.
 - **Six findings.** `brief-content-drift` (a locked brief edited since its
   approval, an image included), `brief-unrecorded` (`status: locked` with no
   standing record; when an older binary dropped the store's `briefs` map it
   says to restore, not re-lock), `brief-orphan` (a draft on a standing record)
   and `brief-abandoned` (a standing record whose brief is gone) ride in
-  `ledger_findings` and fail `check` with `integrity_failed`;
+  `ledger_findings` and fail `check` with `integrity_failed`. The
+  `brief-content-drift` and `brief-unrecorded` messages, and `brief
+  reaudit`'s refusal of an edited brief, send the recovery through restoring
+  the file or `brief unlock` → fix → `brief lock` on the human's yes, never a
+  lock to make the finding go away;
   `brief-dependency-drift` (a baselined claim moved: the brief is
   `review_pending`, a warning) and `brief-rests-on-missing` (a baselined claim
   is gone, an error) join the brief rules, now ten. `check --validate` and
