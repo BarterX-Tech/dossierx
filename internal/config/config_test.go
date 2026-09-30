@@ -296,7 +296,8 @@ func TestLoadConfig_ClaimCharCapsRejectZeroAndNegative(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"max_claim_body_chars", "max_claim_summary_chars", "max_claims_per_module"} {
+	for _, field := range []string{"max_claim_body_chars", "max_claim_summary_chars", "max_claims_per_module",
+		"max_brief_words", "max_brief_images", "max_brief_image_bytes", "max_briefs_per_folder", "max_briefs"} {
 		for _, n := range []int{0, -3} {
 			p := writeConfig(t, dir, "bad.yaml", `
 schema_version: 1
@@ -763,6 +764,47 @@ func TestLoadConfig_ProjectClaimsDirInsideClaimsDirIsRefused(t *testing.T) {
 			_, err := LoadConfig(p)
 			if err == nil || !strings.Contains(err.Error(), "project_claims_dir") || !strings.Contains(err.Error(), "must sit outside claims_dir") {
 				t.Fatalf("expected the containment refusal, got %v", err)
+			}
+		})
+	}
+}
+
+// TestLoadConfig_BriefsDirDefaultsBesideTheConfigAndRefusesOverlap: briefs_dir
+// (NIT-204) defaults to briefs/ beside project.config.yaml, a relative value
+// resolves against the config file rather than the cwd, and a briefs tree that
+// is the config directory or overlaps claims_dir, project_claims_dir or
+// build_dir is refused at load — a file there would have two readers.
+func TestLoadConfig_BriefsDirDefaultsBesideTheConfigAndRefusesOverlap(t *testing.T) {
+	base := "schema_version: 1\nfacets: [contract, internals]\nmodules: [widget]\nclaims_dir: claims\n"
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.BriefsDirPath(), filepath.Join(dir, "briefs"); got != want {
+		t.Fatalf("default briefs_dir = %q, want %q", got, want)
+	}
+	cfg, err = LoadConfig(writeConfig(t, dir, "project.config.yaml", base+"briefs_dir: docs/briefs\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.BriefsDirPath(), filepath.Join(dir, "docs", "briefs"); got != want {
+		t.Fatalf("briefs_dir = %q, want %q", got, want)
+	}
+
+	for _, tc := range []struct{ name, briefsDir, names string }{
+		{"the config directory", ".", "config file's own directory"},
+		{"inside claims_dir", "claims/briefs", "claims_dir"},
+		{"equal to project_claims_dir", "project-claims", "project_claims_dir"},
+		{"inside build_dir", "build/briefs", "build_dir"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", base+"briefs_dir: "+tc.briefsDir+"\n"))
+			if err == nil || !strings.Contains(err.Error(), "briefs_dir") || !strings.Contains(err.Error(), tc.names) {
+				t.Fatalf("expected a briefs_dir refusal naming %q, got %v", tc.names, err)
 			}
 		})
 	}

@@ -40,6 +40,28 @@ const DefaultMaxClaimSummaryChars = 200
 // larger modules sets max_claims_per_module in project.config.yaml.
 const DefaultMaxClaimsPerModule = 10
 
+// The brief caps (NIT-204). A brief is a prose document beside the claims —
+// briefs/<folder>/<slug>.md — and these are its size ceilings, each an ERROR
+// that `check` enforces through internal/briefs. They are defaults with a
+// config override apiece, exactly like the claim caps above, and like those
+// the override is the human's call: an agent that meets a cap splits or trims
+// the brief and never raises the number unasked.
+//
+// 2,000 words per brief is the claim body budget restated in words: one brief
+// is meant to be read in one sitting, the way one module is. Three images of
+// at most 1 MiB each keeps a brief a document with figures rather than a
+// gallery. Twelve briefs per folder and sixty in total keep the set small
+// enough that `brief list` is a table of contents a human reads, not a search
+// result. Images count toward neither the folder nor the total cap: those two
+// count documents.
+const (
+	DefaultMaxBriefWords      = 2000
+	DefaultMaxBriefImages     = 3
+	DefaultMaxBriefImageBytes = 1 << 20
+	DefaultMaxBriefsPerFolder = 12
+	DefaultMaxBriefs          = 60
+)
+
 // removedOverviewFacet is the retired reserved facet name. Listing it in
 // facets[] is refused; leftover claims with facet: overview fail id-shape
 // like any other undeclared facet.
@@ -248,6 +270,32 @@ type Config struct {
 	// refused at load time — they are not a "no cap" sentinel.
 	MaxClaimsPerModule *int `yaml:"max_claims_per_module,omitempty"`
 
+	// BriefsDir is the directory holding the project's briefs (NIT-204):
+	// briefs/<folder>/<slug>.md, one folder level, beside claims_dir rather
+	// than inside it. Optional; it defaults to "briefs" and is resolved against
+	// the config file's own directory like every other path here. A directory
+	// that does not exist is an empty set of briefs, not an error — most
+	// projects never write one, and a project with no briefs must see no
+	// change at all. Read it through BriefsDirPath().
+	//
+	// It is a separate tree and never an overlap: DecodeConfig refuses a
+	// briefs_dir that is the config directory itself, or that sits inside or
+	// contains claims_dir, project_claims_dir or build_dir. A brief is not a
+	// claim (the claims loader would otherwise have to learn to skip it), and
+	// the build directory is engine output.
+	BriefsDir string `yaml:"briefs_dir,omitempty"`
+
+	// The five brief cap overrides (see DefaultMaxBriefWords and its
+	// siblings). Omit a field to take its default. Zero and negatives are
+	// refused at load time — they are not a "no cap" sentinel. Every one of
+	// them is set only on the human's explicit yes; the finding each cap
+	// raises says so.
+	MaxBriefWords      *int `yaml:"max_brief_words,omitempty"`
+	MaxBriefImages     *int `yaml:"max_brief_images,omitempty"`
+	MaxBriefImageBytes *int `yaml:"max_brief_image_bytes,omitempty"`
+	MaxBriefsPerFolder *int `yaml:"max_briefs_per_folder,omitempty"`
+	MaxBriefs          *int `yaml:"max_briefs,omitempty"`
+
 	// dir is the absolute directory containing the config file itself;
 	// ClaimsDir and Viewer.TemplateOverrides are resolved against it, never
 	// against the process's current working directory. Unexported so it
@@ -346,6 +394,13 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	if !filepath.IsAbs(cfg.ProjectClaimsDir) {
 		cfg.ProjectClaimsDir = filepath.Join(dir, cfg.ProjectClaimsDir)
 	}
+	if strings.TrimSpace(cfg.BriefsDir) == "" {
+		cfg.BriefsDir = DefaultBriefsDir
+	}
+	if !filepath.IsAbs(cfg.BriefsDir) {
+		cfg.BriefsDir = filepath.Join(dir, cfg.BriefsDir)
+	}
+	cfg.BriefsDir = filepath.Clean(cfg.BriefsDir)
 	if strings.TrimSpace(cfg.BuildDir) == "" {
 		cfg.BuildDir = DefaultBuildDir
 	}
@@ -383,6 +438,9 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	}
 	if pathContains(cfg.ClaimsDir, filepath.Clean(cfg.ProjectClaimsDir)) || pathContains(cfg.ProjectClaimsDir, cfg.ClaimsDir) {
 		return nil, fmt.Errorf("config: %s: project_claims_dir (%s) must sit outside claims_dir (%s)", path, cfg.ProjectClaimsDir, cfg.ClaimsDir)
+	}
+	if err := checkBriefsDirContainment(&cfg, dir); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
 	if cfg.Conformance.Observations != "" {
 		if pathContains(cfg.BuildDir, filepath.Clean(cfg.Conformance.Observations)) {
@@ -482,8 +540,98 @@ func (c *Config) validate() error {
 	if c.MaxClaimsPerModule != nil && *c.MaxClaimsPerModule < 1 {
 		return fmt.Errorf("max_claims_per_module must be >= 1 (got %d); omit the field for the default of %d", *c.MaxClaimsPerModule, DefaultMaxClaimsPerModule)
 	}
+	for _, limit := range []struct {
+		key string
+		v   *int
+		def int
+	}{
+		{"max_brief_words", c.MaxBriefWords, DefaultMaxBriefWords},
+		{"max_brief_images", c.MaxBriefImages, DefaultMaxBriefImages},
+		{"max_brief_image_bytes", c.MaxBriefImageBytes, DefaultMaxBriefImageBytes},
+		{"max_briefs_per_folder", c.MaxBriefsPerFolder, DefaultMaxBriefsPerFolder},
+		{"max_briefs", c.MaxBriefs, DefaultMaxBriefs},
+	} {
+		if limit.v != nil && *limit.v < 1 {
+			return fmt.Errorf("%s must be >= 1 (got %d); omit the field for the default of %d", limit.key, *limit.v, limit.def)
+		}
+	}
 
 	return nil
+}
+
+// BriefCaps is the five effective brief ceilings, each the configured value
+// when set and the default otherwise. It is one value rather than five
+// accessors because every consumer — internal/briefs' cap rules, the render
+// payload that shows each count against its cap — needs all five together,
+// and a struct cannot be read with one of them forgotten.
+type BriefCaps struct {
+	Words      int `json:"words_per_brief"`
+	Images     int `json:"images_per_brief"`
+	ImageBytes int `json:"bytes_per_image"`
+	PerFolder  int `json:"briefs_per_folder"`
+	Total      int `json:"briefs_total"`
+}
+
+// BriefCapLimits returns the effective brief caps. A nil Config still returns
+// every default, so a caller without a config does not silently drop a
+// ceiling.
+func (c *Config) BriefCapLimits() BriefCaps {
+	pick := func(v *int, def int) int {
+		if v == nil {
+			return def
+		}
+		return *v
+	}
+	if c == nil {
+		c = &Config{}
+	}
+	return BriefCaps{
+		Words:      pick(c.MaxBriefWords, DefaultMaxBriefWords),
+		Images:     pick(c.MaxBriefImages, DefaultMaxBriefImages),
+		ImageBytes: pick(c.MaxBriefImageBytes, DefaultMaxBriefImageBytes),
+		PerFolder:  pick(c.MaxBriefsPerFolder, DefaultMaxBriefsPerFolder),
+		Total:      pick(c.MaxBriefs, DefaultMaxBriefs),
+	}
+}
+
+// checkBriefsDirContainment is briefs_dir's resolved-path rule, evaluated with
+// every path absolute and cleaned (see validate for why path relationships are
+// never judged there). briefs_dir is a tree of its own: it may not be the
+// config directory — every file in the project would then be a brief-shape
+// refusal — and it may not sit inside, or contain, claims_dir,
+// project_claims_dir or build_dir. Each of those is walked by something else
+// (the claims loader, the project-claims loader, nothing at all because it is
+// engine output), and a brief that also lived in one of them would have two
+// readers with two different ideas of what the file is.
+func checkBriefsDirContainment(cfg *Config, configDir string) error {
+	briefs := filepath.Clean(cfg.BriefsDir)
+	if briefs == filepath.Clean(configDir) {
+		return fmt.Errorf("briefs_dir (%s) is the config file's own directory; briefs need a directory of their own — leave briefs_dir unset (it defaults to briefs) or set it to a subdirectory", briefs)
+	}
+	for _, other := range []struct {
+		key string
+		dir string
+	}{
+		{"claims_dir", cfg.ClaimsDir},
+		{"project_claims_dir", cfg.ProjectClaimsDir},
+		{"build_dir", cfg.BuildDir},
+	} {
+		dir := filepath.Clean(other.dir)
+		if pathContains(dir, briefs) || pathContains(briefs, dir) {
+			return fmt.Errorf("briefs_dir (%s) and %s (%s) overlap; briefs sit beside the claims, never inside or around another tree the engine reads or writes", briefs, other.key, dir)
+		}
+	}
+	return nil
+}
+
+// BriefsDirPath is the resolved, absolute briefs directory (default
+// <config dir>/briefs). It may not exist; internal/briefs reads an absent
+// directory as a project with no briefs.
+func (c *Config) BriefsDirPath() string {
+	if c == nil {
+		return ""
+	}
+	return c.BriefsDir
 }
 
 // ClaimBodyCharLimit is the effective body+steps+rows cap: the configured
