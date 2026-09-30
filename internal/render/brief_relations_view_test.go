@@ -70,6 +70,8 @@ var briefRowRE = regexp.MustCompile(`<li class="claim-brief claim-relationship[^
 func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 	rounding := "---\nsummary: How other apps round.\n---\n# Rounding in other apps\n"
 	stale := "---\nsummary: Stale evidence.\nstatus: locked\n---\n# Old research\n"
+	twice := "---\nsummary: Cited by two sources.\n---\n# Cited twice\n"
+	drifted := sha("twice, as it read when the second source pinned it")
 	cfg, set := briefRelationsProject(t, map[string]string{
 		// Explaining briefs, written so the tree's walk order (decisions,
 		// features) differs from nothing; the ghost id names no claim.
@@ -78,6 +80,7 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 		"briefs/guidance/voice.md":        "---\nsummary: How we write.\nstatus: locked\n---\n# Voice\n",
 		"briefs/research/rounding.md":     rounding,
 		"briefs/research/stale.md":        stale,
+		"briefs/research/twice.md":        twice,
 		"briefs/research/pane-sketch.svg": "<svg/>",
 		"briefs/research/uses-sketch.md":  "---\nsummary: Uses the sketch.\n---\n![s](pane-sketch.svg)\n",
 		"notes/elsewhere.md":              "outside briefs",
@@ -88,7 +91,10 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 	cat := &catalog.Catalog{Claims: []model.Claim{
 		{
 			ID: "widget.contract.a", Module: "widget", Facet: "contract", Layout: model.LayoutCard,
-			Status: model.StatusLocked, Body: "[1] [2] [3] [4] [5] [6] [7]",
+			Status: model.StatusLocked, Body: "[1] [2] [3] [4] [5] [6] [7] [8] [9]",
+			// A rests_on target and (claim c) a dependent, so the BRIEFS
+			// group has both fixed directions to come after.
+			RestsOn: model.RestsOn{IDs: []string{"widget.contract.b"}},
 			Sources: []model.Source{
 				internal(1, "briefs/research/stale.md", sha("what the brief said at pin time")),
 				internal(2, "./briefs/research/rounding.md", sha(rounding)),
@@ -97,9 +103,15 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 				internal(5, "notes/elsewhere.md", sha("outside briefs")),
 				internal(6, "briefs/research/pane-sketch.svg", sha("<svg/>")),
 				{Ref: 7, Kind: model.SourceKindExternal, Title: "ext", URL: "https://example.test/briefs/research/rounding.md", AccessedOn: "2026-01-02"},
+				// One brief, two sources: the first pin holds, the second
+				// has drifted. One row, out of date, hovering the drifted pin.
+				internal(8, "briefs/research/twice.md", sha(twice)),
+				internal(9, "briefs/research/twice.md", drifted),
 			},
 		},
 		{ID: "widget.contract.b", Module: "widget", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusDraft, Body: "plain"},
+		{ID: "widget.contract.c", Module: "widget", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusDraft, Body: "plain",
+			RestsOn: model.RestsOn{IDs: []string{"widget.contract.a"}}},
 	}}
 	at := time.Unix(1_700_000_000, 0).UTC()
 	page, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, at, 0)
@@ -115,11 +127,15 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 	if strings.Count(a, "claim-relationship-direction--briefs") != 1 {
 		t.Fatalf("claim a must carry exactly one BRIEFS group:\n%s", a)
 	}
-	// 2 explaining + 3 cited (stale, rounding, gone) rows are the whole count:
-	// claim a has no rests_on and no dependents.
-	if !strings.Contains(a, `<span class="claim-footer-chip-label">5 relationships</span>`) ||
-		!strings.Contains(a, `<span class="claim-relationship-direction-label">BRIEFS</span><span class="claim-relationship-direction-count">5</span>`) {
+	// 1 rests_on + 1 dependent + 2 explaining + 4 cited (gone, rounding,
+	// stale, twice) rows: the count includes the six brief rows.
+	if !strings.Contains(a, `<span class="claim-footer-chip-label">8 relationships</span>`) ||
+		!strings.Contains(a, `<span class="claim-relationship-direction-label">BRIEFS</span><span class="claim-relationship-direction-count">6</span>`) {
 		t.Fatalf("the relationships count must include the brief rows:\n%s", a)
+	}
+	restsOn, dependedBy, briefsAt := strings.Index(a, ">RESTS ON<"), strings.Index(a, ">DEPENDED ON BY<"), strings.Index(a, "claim-relationship-direction--briefs")
+	if restsOn < 0 || dependedBy < 0 || !(restsOn < dependedBy && dependedBy < briefsAt) {
+		t.Fatalf("BRIEFS must come after RESTS ON and DEPENDED ON BY (at %d, %d, %d)", restsOn, dependedBy, briefsAt)
 	}
 	if strings.Index(a, "claim-brief-subgroup--explained") > strings.Index(a, "claim-brief-subgroup--cited") {
 		t.Fatal("Explained by comes before Cited as evidence")
@@ -137,6 +153,8 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 			`>pinned ` + sha(rounding)[:12] + `</span>`, `claim-relationship-badge--draft">DRAFT<`}, lacks: []string{"pin-out-of-date"}},
 		{contains: []string{`data-brief-id="research.stale"`, `claim-brief--pin-out-of-date`, `>pin out of date</span>`,
 			`claim-relationship-badge--locked">LOCKED<`}},
+		{contains: []string{`data-brief-id="research.twice"`, `claim-brief--pin-out-of-date`,
+			`<span class="claim-brief-state claim-brief-state--drift" title="` + drifted + `">`}, lacks: []string{"pinned "}},
 	}
 	if len(rows) != len(want) {
 		t.Fatalf("got %d brief rows, want %d:\n%s", len(rows), len(want), strings.Join(rows, "\n"))
@@ -159,14 +177,14 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 		}
 	}
 	// The Sources panel keeps listing every source as it did.
-	if strings.Count(a, `<li class="claim-source"`) != 7 {
-		t.Errorf("the Sources panel must still list all seven sources")
+	if strings.Count(a, `<li class="claim-source"`) != 9 {
+		t.Errorf("the Sources panel must still list all nine sources")
 	}
 
 	if b := claimSection(t, page, "widget.contract.b"); strings.Contains(b, "claim-brief") {
 		t.Fatalf("a claim no brief names or is cited by renders no BRIEFS group:\n%s", b)
 	}
-	if strings.Contains(page, `id="widget.contract.ghost"`) {
+	if strings.Contains(page, `<section class="claim claim-card card" id="widget.contract.ghost"`) {
 		t.Fatal("a rests_on id naming no claim must not conjure a card")
 	}
 
@@ -178,5 +196,26 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 	}
 	if strings.Contains(claimSection(t, none, "widget.contract.a"), "claim-brief") {
 		t.Fatal("with no brief in the project, no card may draw a BRIEFS group")
+	}
+}
+
+// TestSourceDriftCheck_MemoKeysOnRecordID guards the drift memo's key
+// (NIT-202 F10): the verdict depends on the path, the record_id and the
+// recorded sha256, so two sources sharing a path and a pin but naming
+// different records must each get their own verdict. A key without record_id
+// would hand the second source the first one's cached "holds".
+func TestSourceDriftCheck_MemoKeysOnRecordID(t *testing.T) {
+	lineA := `{"id":"a","text":"first"}`
+	cfg, _ := briefRelationsProject(t, map[string]string{
+		"evidence/records.jsonl": lineA + "\n" + `{"id":"b","text":"second"}` + "\n",
+	})
+	drift := sourceDriftCheck(cfg)
+	src := model.Source{Ref: 1, Kind: model.SourceKindInternal, Title: "r", Path: "evidence/records.jsonl", RecordID: "a", SHA256: sha(lineA)}
+	if drift("widget.contract.a", src) {
+		t.Fatal("record a's pin holds")
+	}
+	src.RecordID = "b"
+	if !drift("widget.contract.a", src) {
+		t.Fatal("record b does not hash to record a's pin, so its pin is out of date")
 	}
 }

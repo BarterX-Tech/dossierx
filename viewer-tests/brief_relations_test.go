@@ -78,10 +78,13 @@ const briefRowGeometryJS = `(function () {
 	probe.style.color = 'var(--status-draft)';
 	document.body.appendChild(probe);
 	var draft = getComputedStyle(probe).color;
+	probe.style.color = 'var(--faint)';
+	var faint = getComputedStyle(probe).color;
 	probe.remove();
 	function box(el) { if (!el) return null; var r = el.getBoundingClientRect(); return {l: r.left, r: r.right, t: r.top, b: r.bottom, cy: r.top + r.height / 2}; }
 	var rows = Array.prototype.map.call(card.querySelectorAll('li.claim-brief'), function (li) {
 		var state = li.querySelector('.claim-brief-state');
+		var sep = li.querySelector('.claim-brief-sep');
 		return {
 			id: li.getAttribute('data-brief-id') || '',
 			href: (li.querySelector('a.claim-brief-ref') || {getAttribute: function () { return ''; }}).getAttribute('href'),
@@ -92,12 +95,20 @@ const briefRowGeometryJS = `(function () {
 			state: box(state),
 			stateText: state.textContent,
 			stateColor: getComputedStyle(state).color,
+			sepColor: sep ? getComputedStyle(sep).color : '',
+			sepDisplay: sep ? getComputedStyle(sep).display : '',
 			badge: box(li.querySelector('.claim-relationship-badge'))
 		};
 	});
 	var group = card.querySelector('.claim-relationship-direction--briefs');
+	// Each sub-head and the first row under it: the board's gap between them.
+	var subgroups = Array.prototype.map.call(card.querySelectorAll('.claim-brief-subgroup'), function (g) {
+		return {head: box(g.querySelector('.claim-brief-subhead')), first: box(g.querySelector('li.claim-brief'))};
+	});
 	return {
 		draft: draft,
+		faint: faint,
+		subgroups: subgroups,
 		groupVisible: !!group && group.getBoundingClientRect().height > 0,
 		chip: card.querySelector('details.claim-links .claim-footer-chip-label').textContent,
 		derivedNote: getComputedStyle(card.querySelector('.claim-brief-derived-note')).display,
@@ -108,7 +119,12 @@ const briefRowGeometryJS = `(function () {
 type briefBox struct{ L, R, T, B, Cy float64 }
 
 type briefRowGeometry struct {
-	Draft        string `json:"draft"`
+	Draft     string `json:"draft"`
+	Faint     string `json:"faint"`
+	Subgroups []struct {
+		Head  *briefBox `json:"head"`
+		First *briefBox `json:"first"`
+	} `json:"subgroups"`
 	GroupVisible bool   `json:"groupVisible"`
 	Chip         string `json:"chip"`
 	DerivedNote  string `json:"derivedNote"`
@@ -122,6 +138,8 @@ type briefRowGeometry struct {
 		State      *briefBox `json:"state"`
 		StateText  string    `json:"stateText"`
 		StateColor string    `json:"stateColor"`
+		SepColor   string    `json:"sepColor"`
+		SepDisplay string    `json:"sepDisplay"`
 		Badge      *briefBox `json:"badge"`
 	} `json:"rows"`
 }
@@ -153,26 +171,46 @@ func readBriefRows(t *testing.T, ctx context.Context) briefRowGeometry {
 	return g
 }
 
-// TestBriefRowsLayOutAsTheBoardDrawsThem opens the served viewer at desktop
-// and phone widths, in light and dark, and holds each brief row to its board
-// shape; then proves the claim file was never written.
+// TestBriefRowsLayOutAsTheBoardDrawsThem opens the served viewer at the
+// boards' desktop and phone widths (1440, 390) and at 540px, in light and
+// dark, and holds each brief row to its board shape; then proves the claim
+// file was never written.
+//
+// 540px is the width the four desktop lanes squeezed a title to a few words
+// a line (NIT-202 audit F4): past the phone tier, but with a panel too narrow
+// for ~314px of fixed lanes beside the title. There the row must already be
+// the two-line mobile row, whose title takes the whole line.
 func TestBriefRowsLayOutAsTheBoardDrawsThem(t *testing.T) {
 	p := newBriefRelationsProject(t)
 	before := p.claimBytes()
 	base := p.ensureServe()
 	ctx := browserContext(t)
 	for _, theme := range []string{"light", "dark"} {
-		for _, width := range []int64{1280, 375} {
+		for _, width := range []int64{1440, 540, 390} {
 			runCDP(t, ctx, chromedp.EmulateViewport(width, 900), chromedp.Navigate(base+"/"+widgetPage))
 			pollTrue(t, ctx, `document.readyState === 'complete' && !!document.getElementById('widget.contract.overview')`)
 			runCDP(t, ctx, chromedp.Evaluate(`document.documentElement.setAttribute('data-theme', '`+theme+`')`, nil))
 			settleLayoutTransitions(t, ctx)
 			g := readBriefRows(t, ctx)
+			// Sub-head to first row: 8px on the board's desktop, 7px on its
+			// phone (the phone tier is <=520px).
+			wantGap := 8.0
+			if width <= 520 {
+				wantGap = 7
+			}
+			if len(g.Subgroups) != 2 {
+				t.Fatalf("%s %dpx: want the two sub-groups, got %d", theme, width, len(g.Subgroups))
+			}
+			for i, sg := range g.Subgroups {
+				if gap := sg.First.T - sg.Head.B; gap < wantGap-0.5 || gap > wantGap+0.5 {
+					t.Errorf("%s %dpx: sub-group %d has %.2fpx from its sub-head to its first row, want %.0fpx", theme, width, i, gap, wantGap)
+				}
+			}
 			for _, r := range g.Rows {
 				if r.Title == nil || r.Folder == nil || r.State == nil || r.Badge == nil {
 					t.Fatalf("%s %dpx: row %s is missing a part: %+v", theme, width, r.ID, r)
 				}
-				if width > 520 {
+				if width > 540 {
 					// One line, four lanes: folder, title, state, badge; no dot.
 					if r.Dot != "none" {
 						t.Errorf("%s desktop: row %s draws a dot; the board's desktop brief row has none", theme, r.ID)
@@ -185,24 +223,31 @@ func TestBriefRowsLayOutAsTheBoardDrawsThem(t *testing.T) {
 							t.Errorf("%s desktop: row %s is not one line: %+v", theme, r.ID, r)
 						}
 					}
-				} else {
-					// Two lines: dot + title, then folder · state and the badge.
-					if r.Dot == "none" {
-						t.Errorf("%s mobile: row %s lost its status dot", theme, r.ID)
-					}
-					if r.Folder.T < r.Title.B-1 || r.Badge.T < r.Title.B-1 {
-						t.Errorf("%s mobile: row %s line two is not below the title: %+v", theme, r.ID, r)
-					}
-					if !(r.Folder.R <= r.State.L+1 && r.State.R <= r.Badge.L+1) {
-						t.Errorf("%s mobile: row %s line two out of order: %+v", theme, r.ID, r)
-					}
-					if r.Row.R-r.Badge.R > 1 {
-						t.Errorf("%s mobile: row %s badge is not at the row's right edge: %+v", theme, r.ID, r)
-					}
-					if g.DerivedNote != "none" {
-						t.Errorf("%s mobile: the head's long note must drop to the bare word \"derived\"", theme)
-					}
+					continue
 				}
+				// Two lines: dot + title, then folder · state and the badge.
+				if r.Dot == "none" {
+					t.Errorf("%s %dpx: row %s lost its status dot", theme, width, r.ID)
+				}
+				if r.Folder.T < r.Title.B-1 || r.Badge.T < r.Title.B-1 {
+					t.Errorf("%s %dpx: row %s line two is not below the title: %+v", theme, width, r.ID, r)
+				}
+				if !(r.Folder.R <= r.State.L+1 && r.State.R <= r.Badge.L+1) {
+					t.Errorf("%s %dpx: row %s line two out of order: %+v", theme, width, r.ID, r)
+				}
+				if r.Row.R-r.Badge.R > 1 {
+					t.Errorf("%s %dpx: row %s badge is not at the row's right edge: %+v", theme, width, r.ID, r)
+				}
+				// The title has line one to itself, less the dot and its gap.
+				if rowW, titleW := r.Row.R-r.Row.L, r.Title.R-r.Title.L; titleW < rowW-20 {
+					t.Errorf("%s %dpx: row %s title is squeezed to %.0fpx of a %.0fpx row", theme, width, r.ID, titleW, rowW)
+				}
+				if r.StateText != "" && (r.SepDisplay == "none" || r.SepColor != g.Faint) {
+					t.Errorf("%s %dpx: row %s separator must show in --faint %s, got display %s colour %s", theme, width, r.ID, g.Faint, r.SepDisplay, r.SepColor)
+				}
+			}
+			if width <= 520 && g.DerivedNote != "none" {
+				t.Errorf("%s %dpx: the head's long note must drop to the bare word \"derived\"", theme, width)
 			}
 		}
 	}

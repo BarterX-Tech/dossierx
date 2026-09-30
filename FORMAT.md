@@ -1621,15 +1621,25 @@ brief has none of this, and its search reads "Search modules" while still
 matching claims.
 
 A claim card does show the briefs around it, derived at render time and never
-stored: a **BRIEFS** group in its relationships panel, after the fixed
-directions, marked "derived" and counted in the relationships chip. "Explained
-by" lists every brief whose `rests_on` names the claim; "Cited as evidence"
-lists every `internal` source of the claim whose `path` is a brief file
-(`briefs/<folder>/<slug>.md`, matched as written), with its pinned hash, or
-"pin out of date" when `source-internal-drift` reports that source. Each row
-gives the brief's folder, its title (linking to the brief), its review state
-when pending, and its `status`. A brief that rests on nothing and that no
-claim cites appears on no card; a project with no brief shows no group. The
+stored: a **BRIEFS** group in its relationships panel, after RESTS ON and
+DEPENDED ON BY, marked "derived" and counted in the relationships chip.
+
+- **Explained by** lists every brief whose `rests_on` names the claim.
+- **Cited as evidence** lists every brief an `internal` source of the claim
+  points at: a source whose `path`, once `./` and `..` segments are resolved,
+  is `<briefs_dir>/<folder>/<slug>.md`. The row shows the pinned hash (its
+  first 12 hex characters), or "pin out of date" when `source-internal-drift`
+  reports that source. That lint is an error, so `check` stops before it
+  renders and the out-of-date row is seen under `dossierx serve`. Two sources
+  citing one brief make one row, out of date if either is.
+- A cited path that names no brief in the tree (a deleted or misspelt brief)
+  still gets a row: the source's title, no link and no status, and "pin out of
+  date", since the file cannot be read.
+
+Each row gives the brief's folder, its title (linking to the brief) and its
+`status`. A brief's review state joins the row when briefs gain their lock
+lifecycle (NIT-205, NIT-200). A brief that rests on nothing and that no claim
+cites appears on no card; a project with no brief shows no group. The
 claim's Sources panel is unchanged.
 
 ## Project config (`project.config.yaml`)

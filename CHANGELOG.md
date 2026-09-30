@@ -140,14 +140,18 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
 ### Added
 
 - **Briefs on a claim card** (NIT-202). A claim's relationships panel gains a
-  BRIEFS group, derived at render time and marked "derived": "Explained by"
-  lists the briefs whose `rests_on` names the claim, and "Cited as evidence"
-  the briefs its `internal` sources pin, with the pinned hash, or "pin out of
-  date" in amber when `source-internal-drift` reports the source. Each row
-  gives the folder, the brief's title (linking to `#brief-<folder>-<slug>`)
-  and its `status`; the relationships count includes the rows. On a phone a
-  row is the ordinary two-line relationship row. Nothing is written to a claim
-  file, and a project with no brief shows no group.
+  BRIEFS group after RESTS ON and DEPENDED ON BY, derived at render time and
+  marked "derived": "Explained by" lists the briefs whose `rests_on` names the
+  claim, and "Cited as evidence" the briefs its `internal` sources point at
+  (`<briefs_dir>/<folder>/<slug>.md`, after resolving `./` and `..`), with the
+  pinned hash. Under `dossierx serve` a row reads "pin out of date" in amber
+  when `source-internal-drift` reports the source (`check` stops on that error
+  before rendering), and a cited path that names no brief keeps an unlinked
+  row. Each row gives the folder, the brief's title (linking to
+  `#brief-<folder>-<slug>`) and its `status`; the relationships count
+  includes the rows. On a phone, and in any panel too narrow for the four
+  desktop columns, a row is the ordinary two-line relationship row. Nothing
+  is written to a claim file, and a project with no brief shows no group.
 - **Viewer Home page** (NIT-196). The viewer now opens on Home, which shows
   what is waiting on the human, then one tile per section. "Waiting on you"
   has up to four cards: claims edited after approval, locked claims to re-read

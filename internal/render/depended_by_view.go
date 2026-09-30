@@ -110,8 +110,9 @@ func buildBriefsExplainingLookup(cat *catalog.Catalog, set *briefs.Set) map[stri
 // hold (a deleted or misspelt brief) still gets a row, with no link and no
 // lock state, because the claim still cites it; its pin is out of date by
 // the lint's verdict (the file cannot be read). Two sources citing one brief
-// make one row, whose pin is the first source's and which is out of date if
-// either source is. Rows are sorted by brief path.
+// make one row, out of date if either source is; its pin is the first
+// drifted source's when one has drifted, and the first source's otherwise.
+// Rows are sorted by brief path.
 //
 // A project holding no brief gets no row at all, even for a source whose
 // path looks like one: FORMAT.md's promise is that a project with no briefs
@@ -142,7 +143,12 @@ func buildBriefsCitedLookup(cat *catalog.Catalog, cfg *config.Config, set *brief
 			}
 			outOfDate := drift(c.ID, s)
 			if i, seen := index[p]; seen {
-				rows[i].PinOutOfDate = rows[i].PinOutOfDate || outOfDate
+				// The row's pin is the one its hover shows: once any source
+				// has drifted, that is the drifted source's pin, never a
+				// holding one beside "pin out of date".
+				if outOfDate && !rows[i].PinOutOfDate {
+					rows[i].Pin, rows[i].PinOutOfDate = s.SHA256, true
+				}
 				continue
 			}
 			row := components.BriefRow{Path: p, Folder: path.Base(folderDir), Title: s.Title}
