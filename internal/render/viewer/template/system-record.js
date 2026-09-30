@@ -429,7 +429,7 @@
   // activeFacet returns null while no plain module section is visible (the
   // constitution section is active), so renderToc hides the TOC there.
   function activeFacet() {
-    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)'));
+    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section):not(.brief-section):not(.briefs-index-section)'));
     var module = modules.find(function (section) { return !section.hidden; });
     if (!module) { return null; }
     var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
@@ -437,6 +437,35 @@
     if (!group) { return null; }
     var tab = module.querySelector(':scope > .sub-nav .subtab[data-target="#' + group.id + '"]');
     return { module: module, view: group, label: tabLabel(tab) };
+  }
+
+  // activeBrief is the brief page on screen (NIT-197), or null. A brief has
+  // no facet and no claims; its "On this page" rail is this same panel,
+  // listing the body's ## headings instead of claims.
+  function activeBrief() {
+    return document.querySelector('.brief-section:not([hidden])');
+  }
+
+  function briefHeadings(section) {
+    // The body's section headings: "##" (and a stray "#") render as h3
+    // under the page's h2 title (render.briefBodyOutline). A heading inside a
+    // quote or a list is not a section, so only the body's own children count.
+    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3')) : [];
+  }
+
+  // tocTarget is the element a TOC row stands for: a claim card, or on a
+  // brief page one of its headings.
+  function tocTarget(link) {
+    if (link.dataset.headingIndex !== undefined) {
+      return briefHeadings(activeBrief())[parseInt(link.dataset.headingIndex, 10)] || null;
+    }
+    return document.getElementById(link.dataset.claimTarget);
+  }
+
+  function landOnHeading(index) {
+    var heading = briefHeadings(activeBrief())[index];
+    if (heading) { heading.scrollIntoView({ block: 'start', behavior: 'instant' }); }
+    closeFacetToc();
   }
 
   function updateTocActive() {
@@ -450,12 +479,12 @@
     if (!links.length) { return; }
     var current = links[0];
     links.forEach(function (link) {
-      var claim = document.getElementById(link.dataset.claimTarget);
-      if (claim && claim.getBoundingClientRect().top <= 190) { current = link; }
+      var target = tocTarget(link);
+      if (target && target.getBoundingClientRect().top <= 190) { current = link; }
     });
     links.forEach(function (link) { link.classList.toggle('on', link === current); });
     var select = toc.querySelector('.facet-toc__select');
-    if (select) { select.value = current.dataset.claimTarget; }
+    if (select) { select.value = current.dataset.headingIndex !== undefined ? 'h:' + current.dataset.headingIndex : current.dataset.claimTarget; }
   }
 
   function renderToc() {
@@ -487,11 +516,21 @@
         : '';
       toc.innerHTML = '<div class="facet-toc__grabber" aria-hidden="true"></div><div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><span class="facet-toc__mobile-identity"><strong class="facet-toc__name">Claims</strong><span class="facet-toc__total"></span></span></span><button class="facet-toc__close" type="button" aria-label="Close facet panel"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
-        navigateToClaim(event.target.value);
+        var value = event.target.value;
+        if (value.indexOf('h:') === 0) { landOnHeading(parseInt(value.slice(2), 10)); return; }
+        navigateToClaim(value);
       });
       toc.querySelector('.facet-toc__close').addEventListener('click', closeFacetToc);
       document.body.appendChild(toc);
     }
+    var kicker = toc.querySelector('.facet-toc__identity > small');
+    var brief = activeBrief();
+    if (brief) { renderBriefToc(toc, brief, kicker); return; }
+    delete toc.dataset.kind;
+    toc.setAttribute('aria-label', 'Claims in this facet');
+    if (kicker) { kicker.textContent = 'On this facet'; }
+    var threads = toc.querySelector('.facet-toc__threads');
+    if (threads) { threads.remove(); }
     var active = activeFacet();
     if (!active) { toc.hidden = true; return; }
     toc.hidden = false;
@@ -535,6 +574,64 @@
     });
     updateTocActive();
     ensureFacetTocTrigger(active, claims.length);
+  }
+
+  // renderBriefToc fills the panel for a brief page (Paper B1, "On this
+  // page"): one row per ## heading in the body, then the Threads block.
+  // Threads on a brief are NIT-198's; until they exist the block states that
+  // none is open, its Comment button is disabled and drawn so, and a visible
+  // line says threads arrive later (a title would be hover-only).
+  function renderBriefToc(toc, brief, kicker) {
+    var headings = briefHeadings(brief);
+    // A brief with no section heading has nothing to put on this page's
+    // rail: no rail on a wide screen, no trigger and no sheet on a phone.
+    // The section says so, so the stylesheet can bring the page-foot Comment
+    // row forward in the rail's place.
+    brief.toggleAttribute('data-no-sections', headings.length === 0);
+    if (!headings.length) {
+      toc.hidden = true;
+      closeFacetToc(false);
+      var stale = brief.querySelector('.brief-toc-slot .facet-toc-trigger');
+      if (stale) { stale.remove(); }
+      return;
+    }
+    toc.hidden = false;
+    toc.dataset.kind = 'brief';
+    toc.setAttribute('aria-label', 'On this page');
+    if (kicker) { kicker.textContent = 'On this page'; }
+    toc.querySelector('.facet-toc__name').textContent = 'On this page';
+    toc.querySelector('.facet-toc__total').textContent = '';
+    var list = toc.querySelector('.facet-toc__list');
+    var select = toc.querySelector('.facet-toc__select');
+    list.replaceChildren();
+    select.replaceChildren();
+    headings.forEach(function (heading, index) {
+      var label = heading.textContent.replace(/\s+/g, ' ').trim();
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'facet-toc__item';
+      button.dataset.headingIndex = String(index);
+      var strong = document.createElement('strong');
+      strong.textContent = label;
+      var count = document.createElement('span');
+      count.className = 'facet-toc__blocker-count';
+      count.setAttribute('aria-hidden', 'true');
+      button.append(strong, count);
+      button.addEventListener('click', function () { landOnHeading(index); });
+      list.appendChild(button);
+      var option = document.createElement('option');
+      option.value = 'h:' + index;
+      option.textContent = label;
+      select.appendChild(option);
+    });
+    if (!toc.querySelector('.facet-toc__threads')) {
+      var threads = document.createElement('div');
+      threads.className = 'facet-toc__threads';
+      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note">None open. Comment on the brief or on any paragraph to ask the agent for a change.</p><button type="button" class="facet-toc__comment" disabled><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg>Comment</button><p class="facet-toc__threads-later">Threads on briefs arrive in a later release.</p>';
+      list.insertAdjacentElement('afterend', threads);
+    }
+    updateTocActive();
+    ensureFacetTocTrigger({ module: brief, triggerHost: brief.querySelector('.brief-toc-slot'), triggerLabel: 'On this page' }, headings.length);
   }
 
   // ---------------------------------------------------------------------
@@ -701,8 +798,10 @@
     });
   }
 
+  // A brief page (NIT-197) passes its own host, the header's
+  // .brief-toc-slot, and its own label; a facet's host is its .sub-nav.
   function ensureFacetTocTrigger(active, count) {
-    var subNav = active.module.querySelector(':scope > .sub-nav');
+    var subNav = active.triggerHost || active.module.querySelector(':scope > .sub-nav');
     if (!subNav) { return; }
     var trigger = subNav.querySelector(':scope > .facet-toc-trigger');
     if (!trigger) {
@@ -715,7 +814,7 @@
       // is the closest sprite (its third stroke is full-width where Paper's is
       // short); an exact #dx-icon-list symbol would be the faithful
       // alternative if one is ever added to the sprite sheet.
-      trigger.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"></use></svg><span>On this facet</span><span class="facet-toc-trigger__count"></span>';
+      trigger.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"></use></svg><span>' + (active.triggerLabel || 'On this facet') + '</span><span class="facet-toc-trigger__count"></span>';
       trigger.addEventListener('click', function () {
         if (document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
         else { openFacetToc(trigger); }
@@ -742,7 +841,7 @@
     // directly (see bindFocusControl above).
     var focusState = isFocusOn() ? 'on' : 'off';
     var moduleSections = Array.prototype.slice.call(
-      document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')
+      document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section):not(.brief-section):not(.briefs-index-section)')
     );
     var moduleCount = moduleSections.length;
     moduleSections.forEach(function (section, moduleIndex) {

@@ -154,7 +154,7 @@ func TestLazyShell_BriefsPayload(t *testing.T) {
 	cat, cfg := briefViewFixture()
 	at := time.Unix(1_700_000_000, 0).UTC()
 	set := briefViewSet(cfg)
-	want, err := briefsPayloadJSONWithBudget(set, nil)
+	want, err := briefsPayloadJSONWithBudget(set, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

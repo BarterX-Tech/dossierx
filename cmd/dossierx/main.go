@@ -1879,6 +1879,9 @@ func projectionRecoveryHint(res check.Result) string {
 			action = "reduce projected catalog, readiness, or conformance volume"
 		case "render":
 			action = "reduce projected viewer content or facet duplication"
+			if res.BriefImagesOverBound {
+				action = "shrink or remove brief images: every image a brief references is copied beside the viewer and counts toward its bound, together with the page"
+			}
 		default:
 			action = "reduce declared conformance result multiplicity or member size"
 		}

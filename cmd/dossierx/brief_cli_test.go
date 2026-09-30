@@ -258,3 +258,54 @@ func TestBriefFindingsFailCheckAndNeverGateAClaim(t *testing.T) {
 		t.Fatalf("no brief rule may reach any claim lock preview field, got %s", raw)
 	}
 }
+
+// TestCheck_BriefImagesOverTheViewerBoundAreNamed is NIT-197's F2 at the CLI
+// boundary. The default caps allow more image bytes than the 64 MiB viewer
+// holds, so a lint-clean project can reach the bound through its brief images
+// alone. The refusal must say so — the images, their total and the bound in
+// the message, and shrinking them in the hint — instead of the generic "reduce
+// projected viewer content", and nothing is written. The image is a sparse
+// file: its size is what discovery reads and the render charges, so the test
+// needs no 65 MB of disk.
+func TestCheck_BriefImagesOverTheViewerBoundAreNamed(t *testing.T) {
+	root := t.TempDir()
+	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
+	f, err := os.OpenFile(cfgPath, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("max_brief_image_bytes: 70000000\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	writeBriefFile(t, root, "widget/flow.md", "---\nsummary: The flow.\n---\n# Flow\n\n![Flow](flow.png)\n")
+	img := filepath.Join(root, "briefs", "widget", "flow.png")
+	if err := os.WriteFile(img, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const size = 65 << 20
+	if err := os.Truncate(img, size); err != nil {
+		t.Fatal(err)
+	}
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
+	if err == nil {
+		t.Fatal("check must fail when brief images exceed the viewer bound")
+	}
+	if env.OK || env.Error == nil || env.Error.Code != cliout.CodeConformanceCapacityExceeded {
+		t.Fatalf("expected conformance_capacity_exceeded, got %+v", env.Error)
+	}
+	for _, want := range []string{"brief image", "68157440", "67108864", "briefs/widget/flow.png", "shrink or remove brief images"} {
+		if !strings.Contains(env.Error.Message, want) {
+			t.Errorf("message %q does not name %q", env.Error.Message, want)
+		}
+	}
+	if !strings.Contains(env.Error.Hint, "shrink or remove brief images") || strings.Contains(env.Error.Hint, "facet duplication") {
+		t.Errorf("hint must name the images as the recovery: %q", env.Error.Hint)
+	}
+	if _, err := os.Stat(filepath.Join(root, "build", "viewer", "index.html")); err == nil {
+		t.Error("a refused render must write no viewer")
+	}
+}

@@ -86,9 +86,7 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
 - **Document mode** in the markdown renderer: a brief's body renders `#` and
   `##` as headings, where every claim body keeps rendering them as literal
   text. A brief's image references resolve to its own folder, which is what
-  the image checks and the image cap count; no route serves a brief's image
-  yet, so the payload's body renders each reference as literal text until the
-  briefs UI brings one (NIT-197).
+  the image checks and the image cap count.
 - **Briefs in the viewer payload.** A `dossierx-briefs` JSON block carries
   every brief — id, path, folder, title (its first `#` heading, else the file
   name title-cased), summary, status, `rests_on`, the body rendered in document
@@ -97,12 +95,47 @@ contains it now fails config load (`invalid_config`, naming the overlap): set
   without a conformance report, whose claims have no budget, to a 64 MiB
   budget of its own; a payload past its budget fails the render (`check`:
   `conformance_capacity_exceeded`; `serve`: the render-error page). It is
-  emitted only when the project holds a brief; no pane draws it yet.
+  emitted only when the project holds a brief.
   `dossierx serve` watches `briefs_dir` too, so a brief edit reloads the page.
 - **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
   `briefs_dir` that is the config directory, sits inside a `.git` directory,
   or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at
   load.
+
+### Added — briefs in the viewer (NIT-197)
+
+- **The Briefs sidebar tree and the brief page.** A project with briefs gets a
+  Briefs group after Modules: "All briefs" (a plain index for now), then one
+  row per folder, title-cased, each opening to its briefs, with one state mark
+  per brief (a padlock for `locked`, a hollow dot for `draft`) and a mark
+  legend above the theme control. `features/` is left out of the tree. Each
+  brief opens at `#brief-<folder>-<slug>`: kicker, title, summary, the words
+  and images against their caps, the body in document mode, and the claims it
+  rests on and is cited by (claims whose `internal` source is the brief's
+  path). The right rail lists its `##` headings ("On this page"; a sheet on a
+  phone), beside a Threads block whose Comment button is inert until brief
+  threads exist (drawn disabled, with a line saying threads on briefs arrive
+  later). A brief with no `##` gets no rail. The brief's title is the page's
+  top heading and its body's headings sit below it. The sidebar heading of
+  the group that holds the current page (Modules or Briefs) is drawn in the
+  accent. Light, dark and the phone drawer all carry it, and the tree works
+  from the keyboard.
+- **Brief images render.** An image a brief references is served by `dossierx
+  serve` at `GET /brief-assets/{folder}/{name}` (an allowlist of what the page
+  references, never the path as spelled — the fifteenth HTTP route), and
+  `dossierx check` copies it to `build/viewer/brief-assets/` beside the static
+  viewer, charging its bytes to the viewer's 64 MiB bound. The default brief
+  caps allow more image bytes than that bound (about 180 MiB), so a project
+  inside every cap can exceed it: `check` then refuses with
+  `conformance_capacity_exceeded`, naming the largest images, their total and
+  the bound, with a hint to shrink or remove brief images. The payload's
+  `body_html` now carries the same `<img>` tags, and each brief gains an
+  `anchor`, its page id.
+- **Search covers claims and briefs** ("Search claims and briefs"): a module
+  row now matches its claims' titles, summaries and ids (in every project,
+  briefs or not), and a brief row its title, file name, summary and folder. A `check` finding about a brief, its
+  folder or the tree shows in the status strip on that brief's page, with a
+  way to the brief from the Issues screen.
 
 ### Added
 

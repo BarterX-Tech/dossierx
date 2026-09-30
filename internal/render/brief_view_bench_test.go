@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
+	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
 // BenchmarkBriefsPayload is the payload half of the scale evidence in
@@ -27,13 +29,51 @@ func BenchmarkBriefsPayload(b *testing.B) {
 			b.ReportAllocs()
 			var size int
 			for i := 0; i < b.N; i++ {
-				out, err := briefsPayloadJSONWithBudget(set, &renderByteBudget{remaining: 1 << 30})
+				out, err := briefsPayloadJSONWithBudget(set, nil, &renderByteBudget{remaining: 1 << 30})
 				if err != nil {
 					b.Fatal(err)
 				}
 				size = len(out)
 			}
 			b.ReportMetric(float64(size), "payload-bytes")
+		})
+	}
+}
+
+// BenchmarkBriefsView is the page half (NIT-197): every body rendered once
+// (renderBriefs) and the tree and pages assembled against a catalog in which
+// every claim carries an internal source naming one brief, the worst case for
+// the cited-by index. It reports the bytes of the rendered brief sections, the
+// part of the page that grows with the briefs.
+func BenchmarkBriefsView(b *testing.B) {
+	_, cfg := briefViewFixture()
+	body := "# Title\n\n## Why\n\n" + strings.Repeat("word ", 2000) + "\n"
+	for _, tc := range []struct{ briefs, claims int }{{60, 1000}, {2000, 10000}} {
+		files := make([]briefs.File, 0, tc.briefs)
+		for i := 0; i < tc.briefs; i++ {
+			files = append(files, briefFile(fmt.Sprintf("f%04d/b%04d.md", i/12, i), "---\nsummary: s\n---\n"+body))
+		}
+		set := briefs.FromFiles(cfg, files)
+		cat := &catalog.Catalog{}
+		for i := 0; i < tc.claims; i++ {
+			cat.Claims = append(cat.Claims, model.Claim{
+				ID: fmt.Sprintf("widget.contract.c%05d", i), Module: "widget", Facet: "contract", Status: model.StatusDraft,
+				Sources: []model.Source{{Ref: 1, Kind: model.SourceKindInternal, Path: set.Briefs[i%len(set.Briefs)].Path}},
+			})
+		}
+		b.Run(fmt.Sprintf("briefs=%d/claims=%d", tc.briefs, tc.claims), func(b *testing.B) {
+			b.ReportAllocs()
+			var size int
+			for i := 0; i < b.N; i++ {
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat)
+				size = 0
+				for _, f := range view.Folders {
+					for _, p := range f.Pages {
+						size += len(p.Body) + len(p.RestsOn) + len(p.CitedBy)
+					}
+				}
+			}
+			b.ReportMetric(float64(size), "page-bytes")
 		})
 	}
 }

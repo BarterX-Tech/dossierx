@@ -215,6 +215,12 @@ type shellData struct {
 	// filled wherever ModuleGroups is (buildEagerShellData, and lazily for a
 	// project shell).
 	Home HomeView
+
+	// Briefs is the Briefs sidebar tree and one page per brief (NIT-197),
+	// built beside ModuleGroups. Empty for a project with no briefs, and
+	// shell.html emits every brief element only when it is not, so such a
+	// project's viewer is byte-identical to one rendered before briefs.
+	Briefs BriefsView
 }
 
 // ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.
@@ -255,6 +261,9 @@ type Group struct {
 	// viewer header reads the module-level sums, not live DOM cards.
 	ClaimCount  int
 	LockedCount int
+	// search is this facet's claims as the sidebar search reads them (see
+	// ModuleGroup.Search). Unexported: only buildModuleGroups reads it.
+	search string
 	// ModuleLabel is a display-cased version of Module, used for the
 	// sec-label heading shown once per module run.
 	ModuleLabel string
@@ -327,6 +336,14 @@ type ModuleGroup struct {
 	ClaimCount  int
 	LockedCount int
 	FacetCount  int
+	// Search is what the sidebar search matches this module's row against
+	// (NIT-197): its label, then every claim's title, summary and id,
+	// lowercased. The row's own text is only the label, so without this the
+	// search box's "claims" would find no claim. It is emitted once per module
+	// as a data-search attribute, so the page carries each claim's summary a
+	// second time; that is the cost of searching claims without a script
+	// walking every (possibly soft-mounted) card.
+	Search string
 }
 
 // buildModuleGroups folds buildGroups' flat, facet-level Groups into the
@@ -369,6 +386,13 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 		out[i].ClaimCount = claimCount
 		out[i].LockedCount = lockedCount
 		out[i].FacetCount = len(out[i].Facets)
+		parts := []string{strings.ToLower(out[i].ModuleLabel)}
+		for _, f := range out[i].Facets {
+			if f.search != "" {
+				parts = append(parts, f.search)
+			}
+		}
+		out[i].Search = strings.Join(parts, " ")
 	}
 
 	return out
@@ -482,8 +506,31 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 	attachMockupOverride(tmpl.partials, cfg)
 
 	header := generatedHeader(generatedAt)
-	if maxBytes > 0 && len(header) >= maxBytes {
-		return "", viewerCapacityError(maxBytes)
+	// A bounded render's budget is the whole static viewer, and the viewer is
+	// index.html plus the brief images copied beside it (BriefAssets, written
+	// by check): the images are charged first, so the page itself gets what
+	// they leave. An unbounded render is serve's, which copies nothing.
+	reserved := len(header)
+	var images []BriefAsset
+	var imageBytes int64
+	if maxBytes > 0 {
+		images = BriefAssets(cfg, x.Briefs)
+		for _, a := range images {
+			imageBytes += a.Bytes
+		}
+		if int64(reserved)+imageBytes >= int64(maxBytes) {
+			return "", briefImagesOverBound(images, imageBytes, maxBytes, true)
+		}
+		reserved += int(imageBytes)
+	}
+	// capacity is the refusal for a bounded render that ran out: when brief
+	// images took part of the bound, the refusal names them, since shrinking
+	// them is a recovery the page's own content does not offer.
+	capacity := func() error {
+		if imageBytes > 0 {
+			return briefImagesOverBound(images, imageBytes, maxBytes, false)
+		}
+		return capacityError(maxBytes)
 	}
 	inputs := shellInputs{
 		cat:                      cat,
@@ -515,12 +562,12 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 		if maxBytes > 0 {
 			// The embedded shell emits every dynamic projection. Charging them
 			// against the output budget is therefore exact lower-bound containment.
-			outputBudget = &renderByteBudget{remaining: maxBytes - len(header), exceeded: conformance.ErrCapacityExceeded}
+			outputBudget = &renderByteBudget{remaining: maxBytes - reserved, exceeded: conformance.ErrCapacityExceeded}
 		}
 		eager, err := buildEagerShellData(inputs, tmpl.partials, outputBudget)
 		if err != nil {
 			if errors.Is(err, conformance.ErrCapacityExceeded) {
-				return "", capacityError(maxBytes)
+				return "", capacity()
 			}
 			return "", err
 		}
@@ -530,11 +577,11 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 	var out bytes.Buffer
 	var dst io.Writer = &out
 	if maxBytes > 0 {
-		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - len(header)}
+		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - reserved}
 	}
 	if err := tmpl.shell.Execute(dst, data); err != nil {
 		if errors.Is(err, conformance.ErrCapacityExceeded) {
-			return "", capacityError(maxBytes)
+			return "", capacity()
 		}
 		if errors.Is(err, ErrIntermediateCapacityExceeded) {
 			return "", renderIntermediateCapacityError()
@@ -1184,7 +1231,9 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 	}
 	allLocked := len(claims) > 0
 	lockedCount := 0
+	search := make([]string, 0, len(claims))
 	for _, c := range claims {
+		search = append(search, strings.ToLower(strings.Join([]string{components.ClaimLabel(c.ID), strings.TrimSpace(c.Summary), c.ID}, " ")))
 		if c.Status == model.StatusLocked {
 			lockedCount++
 		} else {
@@ -1211,6 +1260,7 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 		AllLocked:   allLocked,
 		ClaimCount:  len(claims),
 		LockedCount: lockedCount,
+		search:      strings.Join(search, " "),
 		ModuleLabel: displayCase(module),
 		TabLabel:    displayCase(tabSource),
 	}

@@ -79,7 +79,7 @@
       </div>
       <nav id="nav">
         <div class="sidebar-nav-scroll">
-          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg><input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules"></div>
+          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg>{{if .Briefs.Folders}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search claims and briefs" aria-label="Search claims and briefs">{{else}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules">{{end}}</div>
 <!-- The site nav (NIT-196): Home, then the Constitution pin (NIT-27), then
              the Modules group, then the Claims graph below a hairline. Home and
              Constitution sit outside .system-nav-groups on purpose: neither is
@@ -99,10 +99,33 @@
             <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-layout-grid"/></svg><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .ModuleGroups}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}" data-search="{{.Search}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
 {{- end}}
             </div>
-          </details>
+          </details><!-- The Briefs group (NIT-197): a disclosure like Modules, so clicking it
+     only opens it. "All briefs" first, then one row per folder (features/ is
+     left out: those briefs are features), each opening to its briefs. Only
+     the current route's group is open, and only the current brief's folder
+     (viewer-runtime.js syncNavGroups). Each brief carries one state mark in a
+     fixed slot; the legend sits above the theme control. The comment hugs
+     the closing tag so a project with no briefs gains not even a newline.
+     Its icon is drawn inline, not from the sprite: the sprite sits outside the
+     two subtrees a live reload swaps, so a symbol added with the first brief
+     would stay missing until a full reload. -->{{with .Briefs}}{{if .Folders}}
+          <details class="system-nav-group brief-nav">
+            <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7"/><path d="M9 16h5"/></svg><span>Briefs</span><span class="system-nav-group__count">{{.Total}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
+            <div class="system-nav-group__body brief-nav__body">
+                <button class="sec-tab brief-nav__all" data-target="#{{.IndexID}}"><span class="brief-nav__label">All briefs</span></button>
+{{- range .Folders}}
+                <details class="brief-folder" data-folder="{{.Name}}">
+                  <summary class="brief-folder__toggle"><svg class="dx-icon brief-folder__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg><span class="brief-folder__label">{{.Label}}</span><span class="brief-folder__count">{{.Count}}</span></summary>
+{{- range .Pages}}
+                  <button class="sec-tab brief-nav__row" data-target="#{{.ID}}" data-search="{{.Search}}"><span class="brief-nav__label" title="{{.Title}}">{{.NavLabel}}</span><span class="brief-mark" data-mark="{{.Mark}}" role="img" aria-label="{{.MarkLabel}}" title="{{.MarkLabel}}">{{if eq .Mark "locked"}}<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</span></button>
+{{- end}}
+                </details>
+{{- end}}
+            </div>
+          </details>{{end}}{{end}}
           </div>
 <!-- The graph trigger deliberately does NOT carry class sec-tab: graph-ui.js
                owns it, while viewer-runtime.js owns reading-view selection. It
@@ -111,7 +134,13 @@
             <button id="dxgOpen" class="nav-utility site-nav__item" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
           </div>
         </div>
-        <div class="sidebar-footer">
+        <div class="sidebar-footer">{{if .Briefs.Folders}}
+          <ul class="brief-legend" aria-label="Brief marks">
+            <li><span class="brief-mark" data-mark="edited" aria-hidden="true"></span>edited</li>
+            <li><span class="brief-mark" data-mark="review" aria-hidden="true"></span>review</li>
+            <li><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>open thread</li>
+            <li><span class="brief-mark" data-mark="draft" aria-hidden="true"></span>draft</li>
+          </ul>{{end}}
           <div class="theme-control desktop-theme-control" role="group" aria-label="Color theme">
           <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
           <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
@@ -231,7 +260,28 @@
             </a>
 {{end}}          </div>
 {{end}}        </section>
-    </main>
+<!-- Briefs (NIT-197): the "All briefs" index, then one page per brief,
+     features/ included (its briefs are not in the Briefs tree, but a link to
+     one resolves). Each page is a .module-section with no .claim-group, as
+     Home is, so no module header or claim TOC attaches to it; system-record.js
+     builds its "On this page" rail from the body's section headings. The
+     title is the page's h2 and the body's headings sit below it
+     (render.briefBodyOutline). The index renders only with a tree to index;
+     a features/-only project gets its pages and nothing else. The comment hugs the
+     preceding action so a project with no briefs gains not even a newline. -->{{with .Briefs}}{{if .Folders}}
+        <section class="module-section briefs-index-section" id="{{.IndexID}}" hidden aria-labelledby="briefsIndexTitle">
+          <header class="brief-head">
+            <p class="brief-kicker"><span class="brief-kicker__word">Briefs</span></p>
+            <h2 id="briefsIndexTitle" class="brief-title">All briefs</h2>
+          </header>
+{{range .Folders}}          <section class="briefs-index-folder">
+            <h3>{{.Label}} <span class="briefs-index-folder__count">{{.Count}}</span></h3>
+            <ul>
+{{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{if .Summary}}<span>{{.Summary}}</span>{{end}}</li>
+{{end}}            </ul>
+          </section>
+{{end}}        </section>
+{{end}}{{range .Folders}}{{range .Pages}}{{template "briefPage" .}}{{end}}{{end}}{{range .Features}}{{template "briefPage" .}}{{end}}{{end}}    </main>
 
 <!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own
        chrome: breadcrumb, title/subtitle, scope segmented control, the
@@ -468,3 +518,20 @@
   <script>{{.GraphUIJS}}</script>
 </body>
 </html>
+{{define "briefPage"}}        <section class="module-section brief-section" id="{{.ID}}" hidden data-brief-path="{{.Path}}" aria-labelledby="{{.ID}}_title">
+          <header class="brief-head">
+            <p class="brief-kicker"><span class="brief-kicker__word">Brief</span> · <span class="brief-kicker__word">{{.FolderLabel}}</span><span class="brief-kicker__path"> · {{.Path}}</span></p>
+            <div class="brief-title-row"><h2 class="brief-title" id="{{.ID}}_title">{{.Title}}</h2><span class="brief-wide">{{.Pill}}</span></div>
+{{if .Summary}}            <p class="brief-lede">{{.Summary}}</p>
+{{end}}            <div class="brief-meta-row"><span class="brief-narrow">{{.Pill}}</span><p class="brief-meta"><span class="brief-wide">{{.Meta}}</span><span class="brief-narrow">{{.MetaShort}}</span></p><span class="brief-toc-slot"></span></div>
+          </header>
+          <article class="brief-body">{{.Body}}</article>
+{{if or .RestsOnCount .CitedByCount}}          <section class="brief-relations" aria-label="Claims this brief rests on and is cited by">
+{{if .RestsOnCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.RestsOnLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">this brief explains them</span></div>
+            <ul class="brief-relations__list">{{.RestsOn}}</ul>
+{{end}}{{if .CitedByCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.CitedByLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">uses it as evidence</span></div>
+            <ul class="brief-relations__list">{{.CitedBy}}</ul>
+{{end}}          </section>
+{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" disabled><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this brief</button><p class="brief-comment-note">Threads on briefs arrive in a later release.</p></div>
+        </section>
+{{end}}
