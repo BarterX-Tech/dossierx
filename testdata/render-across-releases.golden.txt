@@ -3038,7 +3038,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
                     testdata/fixture-graph-demo/claims/viewer/manifest.yaml
                     testdata/fixture-graph-demo/constitution.yaml
                     testdata/fixture-graph-demo/project.config.yaml
-    size            23990 lines / 1496790 bytes -> 24863 lines / 1535447 bytes
+    size            23990 lines / 1496790 bytes -> 24863 lines / 1535643 bytes
     more than 3000 lines differ, so these two are not variants of one
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it

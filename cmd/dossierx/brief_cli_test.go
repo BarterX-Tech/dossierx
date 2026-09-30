@@ -48,9 +48,9 @@ func decodeData(t *testing.T, env cliout.Envelope, into any) {
 const widgetFlowBrief = "---\nsummary: How the widget flow reads end to end.\nstatus: locked\nrests_on:\n  - widget.contract.overview\n---\n# Widget flow\n\nOne paragraph.\n"
 
 // TestBriefListAndShow is the noun's envelope contract at the CLI boundary:
-// list names every brief with its path, summary, status and (empty) review
-// state; --review-pending lists none today while total still counts every
-// brief; show answers by path or by id with the content and its digest; and an
+// list names every brief with its path, summary, status and review state;
+// --review-pending lists none here (no brief has a record to drift from) while
+// total still counts every brief; show answers by path or by id with the content and its digest; and an
 // argument that names no brief is brief_not_found at exit 2.
 func TestBriefListAndShow(t *testing.T) {
 	root := t.TempDir()
@@ -82,7 +82,7 @@ func TestBriefListAndShow(t *testing.T) {
 	}
 	decodeData(t, env, &list)
 	if list.Count != 0 || list.Total != 2 || !list.ReviewPendingOnly || len(list.Briefs) != 0 {
-		t.Fatalf("nothing can be review-pending before briefs have a lock store; got %+v", list)
+		t.Fatalf("a brief typed status: locked with no record is unrecorded, never review-pending; got %+v", list)
 	}
 
 	var byPath, byID briefShowData

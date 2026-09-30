@@ -1,0 +1,11 @@
+id: briefmod.contract.anchor
+summary: The claim the fixture's briefs rest on.
+facet: contract
+module: briefmod
+status: draft
+layout: card
+body: |
+  The claim the fixture's briefs rest on, rewritten after the brief was locked.
+rests_on:
+  none: true
+  reason: fixture claim, not backed by any real doctrine

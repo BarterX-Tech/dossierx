@@ -42,7 +42,7 @@ brief list / one brief
     ok            true
     envelope      command data ok
     command       brief list
-    data          briefs:[{folder:string,id:string,path:string,review_pending:bool,review_pending_trigger:string,status:string,summary:string,title:string}]
+    data          briefs:[{folder:string,id:string,lock_state:string,open_threads:number,path:string,review_pending:bool,review_pending_trigger:string,status:string,summary:string,title:string}]
                   count:number
                   findings:[]
                   review_pending_only:bool
@@ -66,14 +66,21 @@ brief show / by path
     ok            true
     envelope      command data ok
     command       brief show
-    data          content:string
+    data          changed_claims:[]
+                  content:string
+                  content_hash:string
                   digest:string
                   findings:[]
                   folder:string
                   id:string
                   images:[]
+                  lock_reason:string
+                  lock_state:string
+                  locked_at:string
+                  open_threads:number
                   path:string
                   rests_on:[string]
+                  rests_on_claims:[{exists:bool,id:string,review_pending:bool,status:string}]
                   review_pending:bool
                   review_pending_trigger:string
                   status:string
@@ -91,6 +98,156 @@ brief show / a path no brief is at
                   hint:string
                   message:string
     error.code    brief_not_found
+
+brief show / review_pending, one rests_on claim changed
+    argv          brief show briefs/widget/flow.md
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief show
+    data          changed_claims:[{baseline:{body:string,steps:[],summary:string},baseline_hash:string,changed_at:string,current:{body:string,steps:[],summary:string},current_hash:string,id:string,missing:bool}]
+                  content:string
+                  content_hash:string
+                  digest:string
+                  findings:[]
+                  folder:string
+                  id:string
+                  images:[]
+                  lock_reason:string
+                  lock_state:string
+                  locked_at:string
+                  open_threads:number
+                  path:string
+                  rests_on:[string]
+                  rests_on_claims:[{exists:bool,id:string,review_pending:bool,status:string}]
+                  review_pending:bool
+                  review_pending_trigger:string
+                  status:string
+                  summary:string
+                  title:string
+                  words:number
+
+brief lock / preview
+    argv          brief lock briefs/widget/flow.md --dry-run --reason approved
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief lock
+    data          blocked:bool
+                  from:string
+                  missing:[]
+                  preconditions:[{detail:string,name:string,ok:bool}]
+                  proposed:{baselines:{widget.contract.overview:string},reason:string}
+                  side_effects:[string]
+                  to:string
+                  would:string
+
+brief lock / a draft brief
+    argv          brief lock briefs/widget/flow.md --reason approved
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief lock
+    data          baselines:{widget.contract.overview:string}
+                  hash:string
+                  id:string
+                  locked_at:string
+                  path:string
+                  reason:string
+                  relocked:bool
+
+brief lock / locked and unchanged
+    argv          brief lock briefs/widget/flow.md --reason again
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       brief lock
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    already_locked
+
+brief lock / an open thread on the brief
+    argv          brief lock briefs/widget/flow.md --reason approved
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       brief lock
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    comment_open
+
+brief unlock / a locked brief
+    argv          brief unlock briefs/widget/flow.md --reason rework
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief unlock
+    data          id:string
+                  path:string
+                  reason:string
+                  released:bool
+
+brief unlock / a draft brief
+    argv          brief unlock briefs/widget/flow.md --reason rework
+    exit          2
+    ok            false
+    envelope      command error ok
+    command       brief unlock
+    error         code:string
+                  message:string
+    error.code    not_locked
+
+brief reaudit / preview of a changed claim
+    argv          brief reaudit briefs/widget/flow.md
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief reaudit
+    data          changed_claims:[{baseline:{body:string,steps:[],summary:string},baseline_hash:string,changed_at:string,current:{body:string,steps:[],summary:string},current_hash:string,id:string,missing:bool}]
+                  confirmed:bool
+                  id:string
+                  lock_state:string
+                  path:string
+                  review_pending:bool
+                  review_pending_trigger:string
+
+brief reaudit / confirmed
+    argv          brief reaudit briefs/widget/flow.md --confirm --reason the rewrite is fine
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       brief reaudit
+    data          changed_claims:[{baseline:{body:string,steps:[],summary:string},baseline_hash:string,changed_at:string,current:{body:string,steps:[],summary:string},current_hash:string,id:string,missing:bool}]
+                  confirmed:bool
+                  id:string
+                  lock_state:string
+                  path:string
+                  reason:string
+                  review_pending:bool
+                  review_pending_trigger:string
+
+brief reaudit / not review_pending
+    argv          brief reaudit briefs/widget/flow.md --confirm --reason nothing moved
+    exit          2
+    ok            false
+    envelope      command error ok
+    command       brief reaudit
+    error         code:string
+                  message:string
+    error.code    not_review_pending
+
+comment inbox / a thread on a brief
+    argv          comment inbox
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       comment inbox
+    data          claims:number
+                  count:number
+                  cursor:string
+                  threads:[{agent_can_resolve:bool,agent_has_replied:bool,author:string,body:string,claim_id:string,claim_status:string,claim_title:string,created:string,facet:string,kind:string,last_activity:string,last_author:string,module:string,replies:number,thread_id:string}]
 
 version / the verb
     argv          version
@@ -695,10 +852,11 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 50)
+    pinned by an invocation above (15 of 51)
         already_locked            exit 1
         brief_not_found           exit 2
         claim_not_found           exit 2
+        comment_open              exit 1
         config_not_found          exit 2
         git_unavailable           exit 1
         invalid_actor             exit 1

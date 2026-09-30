@@ -511,7 +511,8 @@ func exitStatusFor(err error) int {
 // before --reason is looked at.
 //
 // The keys are cmd/dossierx/main.go's claim lock, claim unlock and claim
-// reaudit, and cmd/dossierx/claim_recover.go's claim recover-approved-content.
+// reaudit, cmd/dossierx/claim_recover.go's claim recover-approved-content, and
+// cmd/dossierx/brief_lock.go's brief lock, brief unlock and brief reaudit.
 // constitution.go's constitution lock is the fifth caller and has no entry, so
 // it gets no hint; a caller without an entry is handled below rather than left
 // to print the old wrong shape.
@@ -520,6 +521,9 @@ var reasonInvocations = map[string]string{
 	"claim recover-approved-content": "dossierx claim recover-approved-content",
 	"claim unlock":                   "dossierx claim unlock <id>",
 	"claim reaudit":                  "dossierx claim reaudit <id> --confirm",
+	"brief lock":                     "dossierx brief lock <path>",
+	"brief unlock":                   "dossierx brief unlock <path>",
+	"brief reaudit":                  "dossierx brief reaudit <path> --confirm",
 }
 
 func requireReason(verb, reason string) error {

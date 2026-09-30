@@ -30,6 +30,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -321,11 +322,14 @@ func newCommentAddCmd() *cobra.Command {
 	var as, body string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "add <claim-id>",
-		Short: "Open a new comment thread on a claim",
+		Use:   "add <claim-id|brief-path>",
+		Short: "Open a new comment thread on a claim, or on a brief by its path",
 		Args:  cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			claimID := args[0]
+			if isBriefRef(claimID) {
+				return briefCommentWrite(cmd, "comment add", claimID, "", as, body, dryRun)
+			}
 
 			if dryRun {
 				cfg, claims, err := loadConfigAndClaims()
@@ -374,11 +378,14 @@ func newCommentReplyCmd() *cobra.Command {
 	var as, body string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "reply <claim-id> <thread-id>",
+		Use:   "reply <claim-id|brief-path> <thread-id>",
 		Short: "Add a reply to an open comment thread",
 		Args:  cobra.ExactArgs(2),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			claimID, threadID := args[0], args[1]
+			if isBriefRef(claimID) {
+				return briefCommentWrite(cmd, "comment reply", claimID, threadID, as, body, dryRun)
+			}
 
 			if dryRun {
 				cfg, claims, err := loadConfigAndClaims()
@@ -517,19 +524,31 @@ type commentListData struct {
 func newCommentListCmd() *cobra.Command {
 	var openOnly bool
 	cmd := &cobra.Command{
-		Use:   "list <claim-id>",
-		Short: "List the comment threads on a claim (--open for unresolved only)",
+		Use:   "list <claim-id|brief-path>",
+		Short: "List the comment threads on a claim or a brief (--open for unresolved only)",
 		Args:  cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			claimID := args[0]
-			cfg, claims, err := loadConfigAndClaims()
-			if err != nil {
-				return cmdResult{}, err
-			}
-			deps := &comments.Deps{Cfg: cfg, Claims: claims}
-			threads, err := deps.List(claimID, openOnly)
-			if err != nil {
-				return cmdResult{}, err
+			var threads []model.Comment
+			if isBriefRef(claimID) {
+				cfg, err := loadConfig()
+				if err != nil {
+					return cmdResult{}, err
+				}
+				_, threads, err = (&comments.Deps{Cfg: cfg}).BriefList(claimID, openOnly)
+				if err != nil {
+					return cmdResult{}, briefCommentError(cfg, claimID, err)
+				}
+			} else {
+				cfg, claims, err := loadConfigAndClaims()
+				if err != nil {
+					return cmdResult{}, err
+				}
+				deps := &comments.Deps{Cfg: cfg, Claims: claims}
+				threads, err = deps.List(claimID, openOnly)
+				if err != nil {
+					return cmdResult{}, err
+				}
 			}
 			// commentThreadViews always returns a slice, so a claim with no
 			// threads encodes as "[]" rather than "null" and a machine consumer
@@ -616,6 +635,10 @@ type inboxThread struct {
 	LastAuthor      string `json:"last_author"`
 	AgentCanResolve bool   `json:"agent_can_resolve"`
 	AgentHasReplied bool   `json:"agent_has_replied"`
+	// Kind is "brief" for a thread on a brief (NIT-205), whose claim_id is the
+	// brief's path, claim_title its title and claim_status its status; absent
+	// for a claim's thread, so a claim-only inbox is byte-for-byte unchanged.
+	Kind string `json:"kind,omitempty"`
 }
 
 // commentInboxData is "dossierx comment inbox"'s machine payload.
@@ -721,7 +744,8 @@ func newCommentInboxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inbox",
 		Short: "Every open comment thread in the project, in one call — what the human left for you",
-		Long: "List every unresolved comment thread across every claim, oldest activity first.\n\n" +
+		Long: "List every unresolved comment thread across every claim and every brief, oldest\n" +
+			"activity first (a brief's thread carries kind \"brief\" and the brief's path as claim_id).\n\n" +
 			"This is the agent's half of the review loop: the human comments in the viewer and\n" +
 			"says \"I left comments\"; one inbox call finds all of them, wherever they are. Use\n" +
 			"--since <RFC3339> with the cursor from the previous call to see only what is new.\n\n" +
@@ -737,7 +761,7 @@ func newCommentInboxCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
-			_, claims, err := loadConfigAndClaims()
+			cfg, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return cmdResult{}, err
 			}
@@ -745,7 +769,19 @@ func newCommentInboxCmd() *cobra.Command {
 			threads := make([]inboxThread, 0)
 			cursor := since
 			claimsWithThreads := map[string]bool{}
-			for _, c := range claims {
+			// A brief's threads join the same queue (NIT-205), each on a
+			// carrier claim whose id is the brief's path, so the filtering,
+			// the cursor and the ordering below are the claims' own.
+			subjects := append([]model.Claim{}, claims...)
+			briefByPath := map[string]briefs.Brief{}
+			for _, b := range briefs.Load(cfg).Briefs {
+				if len(b.Comments) == 0 {
+					continue
+				}
+				briefByPath[b.Path] = b
+				subjects = append(subjects, model.Claim{ID: b.Path, Status: model.Status(b.Status), Comments: b.Comments})
+			}
+			for _, c := range subjects {
 				for _, th := range c.Comments {
 					if th.Status == model.CommentStatusResolved {
 						continue
@@ -792,6 +828,10 @@ func newCommentInboxCmd() *cobra.Command {
 						AgentCanResolve: th.Author == model.CommentRoleAgent,
 						AgentHasReplied: agentReplied,
 					})
+					if b, isBrief := briefByPath[c.ID]; isBrief {
+						last := &threads[len(threads)-1]
+						last.ClaimTitle, last.Kind = b.Title, "brief"
+					}
 				}
 			}
 

@@ -1,10 +1,12 @@
-// brief.go is the "dossierx brief" noun (NIT-204): the read side of briefs.
+// brief.go is the "dossierx brief" noun's read side (NIT-204, NIT-205):
+// brief list and brief show. The write side — lock, unlock, reaudit — is
+// brief_lock.go.
 //
 // A brief is a markdown document beside the claims — briefs/<folder>/<slug>.md
 // — for the prose a project needs that is not a claim. internal/briefs owns the
-// shape, the frontmatter and the caps; this file only answers two questions
-// about the tree as it stands: which briefs are there (list), and what does
-// one say (show).
+// shape, the frontmatter, the caps and the lock lifecycle; this file answers two
+// questions about the tree as it stands: which briefs are there, in which
+// lock and review state (list), and what does one say (show).
 //
 // BOTH LEAVES ARE QUERIES. Nothing here writes a file, takes a sentinel or
 // records anything, and neither leaf refuses a brief for breaking a rule — a
@@ -24,12 +26,15 @@
 // briefs". A consumer that sees findings non-empty has not seen every brief,
 // and the text form says so.
 //
-// REVIEW STATE IS IN THE ENVELOPE AND EMPTY. review_pending and
-// review_pending_trigger are on every entry so the shape does not move when
-// NIT-205 gives briefs a lock store, content drift and dependency drift; until
-// then nothing can be pending, review_pending is false everywhere and `brief
-// list --review-pending` returns no brief. A consumer can branch on the field
-// today and be right on the day it fills.
+// REVIEW STATE (NIT-205) is read against the lock store and the claims:
+// lock_state (draft / locked / edited / unrecorded), review_pending and its
+// trigger, and — on show — the changed rests_on claims and one line per
+// rests_on claim with its status. The claims are needed for review state
+// alone: when they do not load, list and show still answer, with the review
+// state they could not compute left false and an envelope warning saying so,
+// because a brief must stay readable while a claim file is broken. `brief list
+// --review-pending` is the one call that cannot answer without them, and
+// refuses with the claims' own load error.
 //
 // WHAT show DOES NOT DERIVE. No specified/built status, no conformance, no
 // readiness: a brief rests on claims, and whether those claims are implemented
@@ -46,18 +51,25 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
 // newBriefCmd is the "dossierx brief" command group: list and show.
 func newBriefCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "brief",
-		Short: "Read the project's briefs — markdown documents beside the claims: list them, or show one",
+		Short: "The project's briefs — markdown documents beside the claims: list, show, lock, unlock, reaudit",
 	}
 	cmd.AddCommand(
 		newBriefListCmd(),
 		newBriefShowCmd(),
+		newBriefLockCmd(),
+		newBriefUnlockCmd(),
+		newBriefReauditCmd(),
 	)
 	return commandGroup(cmd)
 }
@@ -71,8 +83,10 @@ type briefListEntry struct {
 	Title                string `json:"title"`
 	Summary              string `json:"summary"`
 	Status               string `json:"status"`
+	LockState            string `json:"lock_state"`
 	ReviewPending        bool   `json:"review_pending"`
 	ReviewPendingTrigger string `json:"review_pending_trigger"`
+	OpenThreads          int    `json:"open_threads"`
 }
 
 // briefListData is "dossierx brief list"'s machine payload. total is every
@@ -102,10 +116,48 @@ type briefShowData struct {
 	Images               []briefs.Image `json:"images"`
 	ReviewPending        bool           `json:"review_pending"`
 	ReviewPendingTrigger string         `json:"review_pending_trigger"`
+	// ContentHash is the brief's lock hash (summary, rests_on, body) — what
+	// `brief lock` signs; Digest is the whole file's. Review is the lock and
+	// review state (NIT-205), flattened; RestsOnClaims is one entry per
+	// rests_on claim with its status.
+	ContentHash   string                `json:"content_hash"`
+	LockState     string                `json:"lock_state"`
+	LockedAt      string                `json:"locked_at"`
+	LockReason    string                `json:"lock_reason"`
+	OpenThreads   int                   `json:"open_threads"`
+	ChangedClaims []briefs.ChangedClaim `json:"changed_claims"`
+	RestsOnClaims []briefRestsOnClaim   `json:"rests_on_claims"`
 	// Findings is the tree findings about this brief: on its path, or on its
 	// folder or the tree (a cap, an unreadable entry), whose claim_id is a
 	// directory path ending in "/".
 	Findings []lintFindingData `json:"findings"`
+}
+
+// briefRestsOnClaim is one rests_on claim as `brief show` reports it: whether
+// it exists, and its lock state. Nothing is derived from it for the brief.
+type briefRestsOnClaim struct {
+	ID            string `json:"id"`
+	Exists        bool   `json:"exists"`
+	Status        string `json:"status"`
+	ReviewPending bool   `json:"review_pending"`
+}
+
+// briefReviewInputs loads what review state needs — the claims and the lock
+// store — without refusing when either cannot be read: the brief is still
+// listed and shown, and the returned warning says what was not computed.
+func briefReviewInputs(cfg *config.Config, set *briefs.Set) (*briefs.Evaluation, []model.Claim, []string, error) {
+	var warnings []string
+	claims, claimsErr := loadClaims(cfg)
+	store, storeErr := lock.LoadStore(storePath(cfg))
+	if storeErr != nil {
+		warnings = append(warnings, fmt.Sprintf("the lock store could not be read (%v); every locked brief reads as unrecorded until it is restored", storeErr))
+		store = nil
+	}
+	if claimsErr != nil {
+		warnings = append(warnings, fmt.Sprintf("review state was not computed: the claims did not load (%v)", claimsErr))
+		return briefs.EvaluateLocks(set, store), nil, warnings, claimsErr
+	}
+	return briefs.Evaluate(set, claims, store), claims, warnings, nil
 }
 
 // briefFindingsData projects brief findings into check's lint_findings shape,
@@ -137,18 +189,6 @@ func writeBriefFindingsText(cmd *cobra.Command, fs []lintFindingData) {
 	}
 }
 
-// loadBriefs is the shared setup: the config (which refuses a legacy layout
-// like every verb) and the briefs tree. The claims are not loaded: neither leaf
-// reports a finding, and a brief must stay readable while a claim file is
-// broken.
-func loadBriefs() (*briefs.Set, error) {
-	cfg, err := loadConfig()
-	if err != nil {
-		return nil, err
-	}
-	return briefs.Load(cfg), nil
-}
-
 func newBriefListCmd() *cobra.Command {
 	var reviewPending bool
 	cmd := &cobra.Command{
@@ -156,19 +196,31 @@ func newBriefListCmd() *cobra.Command {
 		Short: "List every brief with its path, summary, status and review state; --review-pending lists only the briefs awaiting review",
 		Args:  cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
-			set, err := loadBriefs()
+			cfg, err := loadConfig()
 			if err != nil {
 				return cmdResult{}, err
 			}
+			set := briefs.Load(cfg)
+			eval, _, warnings, claimsErr := briefReviewInputs(cfg, set)
+			if reviewPending && claimsErr != nil {
+				// "none is review_pending" is not an answer this call can give
+				// without the claims the baselines are compared against.
+				return cmdResult{}, claimsErr
+			}
 			entries := make([]briefListEntry, 0, len(set.Briefs))
 			for _, b := range set.Briefs {
+				r := eval.Review(b)
 				e := briefListEntry{
-					ID:      b.ID,
-					Path:    b.Path,
-					Folder:  b.Folder,
-					Title:   b.Title,
-					Summary: b.Summary,
-					Status:  string(b.Status),
+					ID:                   b.ID,
+					Path:                 b.Path,
+					Folder:               b.Folder,
+					Title:                b.Title,
+					Summary:              b.Summary,
+					Status:               string(b.Status),
+					LockState:            string(r.LockState),
+					ReviewPending:        r.ReviewPending,
+					ReviewPendingTrigger: r.ReviewPendingTrigger,
+					OpenThreads:          r.OpenThreads,
 				}
 				if reviewPending && !e.ReviewPending {
 					continue
@@ -183,12 +235,13 @@ func newBriefListCmd() *cobra.Command {
 				Findings:          briefFindingsData(set.TreeFindings()),
 			}
 			return cmdResult{
-				Data: data,
-				Text: func() { writeBriefListText(cmd, data) },
+				Warnings: warnings,
+				Data:     data,
+				Text:     func() { writeBriefListText(cmd, data) },
 			}, nil
 		}),
 	}
-	cmd.Flags().BoolVar(&reviewPending, "review-pending", false, "list only briefs awaiting review (none can be until briefs have a lock store)")
+	cmd.Flags().BoolVar(&reviewPending, "review-pending", false, "list only locked briefs whose rests_on claims moved since their baseline")
 	return cmd
 }
 
@@ -197,7 +250,7 @@ func newBriefListCmd() *cobra.Command {
 func writeBriefListText(cmd *cobra.Command, d briefListData) {
 	out := cmd.OutOrStdout()
 	for _, e := range d.Briefs {
-		fmt.Fprintf(out, "%s %s%s — %s\n", e.Path, e.Status, reviewPendingSuffix(e.ReviewPending), e.Summary)
+		fmt.Fprintf(out, "%s %s%s — %s\n", e.Path, e.LockState, reviewPendingSuffix(e.ReviewPending), e.Summary)
 	}
 	if len(d.Findings) > 0 {
 		fmt.Fprintf(out, "brief list: %d finding(s) in the briefs tree; an entry that could not be read lists no brief:\n", len(d.Findings))
@@ -230,10 +283,11 @@ func newBriefShowCmd() *cobra.Command {
 		Short: "Show one brief — its content, digest and status — by the path brief list prints or by its <folder>.<slug> id",
 		Args:  cobra.ExactArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
-			set, err := loadBriefs()
+			cfg, err := loadConfig()
 			if err != nil {
 				return cmdResult{}, err
 			}
+			set := briefs.Load(cfg)
 			treeFindings := set.TreeFindings()
 			b, ok := set.Lookup(args[0])
 			if !ok {
@@ -258,6 +312,16 @@ func newBriefShowCmd() *cobra.Command {
 			if images == nil {
 				images = []briefs.Image{}
 			}
+			eval, claims, warnings, _ := briefReviewInputs(cfg, set)
+			r := eval.Review(b)
+			restsOnClaims := make([]briefRestsOnClaim, 0, len(b.RestsOn))
+			for _, id := range b.RestsOn {
+				entry := briefRestsOnClaim{ID: id}
+				if c, ok := loader.FindByID(claims, id); ok {
+					entry.Exists, entry.Status, entry.ReviewPending = true, string(c.Status), c.ReviewPending
+				}
+				restsOnClaims = append(restsOnClaims, entry)
+			}
 			data := briefShowData{
 				ID:       b.ID,
 				Path:     b.Path,
@@ -271,10 +335,21 @@ func newBriefShowCmd() *cobra.Command {
 				Words:    b.Words,
 				Images:   images,
 				Findings: briefFindingsData(findingsAbout(treeFindings, b.Path)),
+
+				ReviewPending:        r.ReviewPending,
+				ReviewPendingTrigger: r.ReviewPendingTrigger,
+				ContentHash:          b.LockHash,
+				LockState:            string(r.LockState),
+				LockedAt:             r.LockedAt,
+				LockReason:           r.LockReason,
+				OpenThreads:          r.OpenThreads,
+				ChangedClaims:        r.ChangedClaims,
+				RestsOnClaims:        restsOnClaims,
 			}
 			return cmdResult{
-				Data: data,
-				Text: func() { writeBriefShowText(cmd, data) },
+				Warnings: warnings,
+				Data:     data,
+				Text:     func() { writeBriefShowText(cmd, data) },
 			}, nil
 		}),
 	}
@@ -285,9 +360,25 @@ func newBriefShowCmd() *cobra.Command {
 func writeBriefShowText(cmd *cobra.Command, d briefShowData) {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "brief show: %s (%s)\n", d.Path, d.Title)
-	fmt.Fprintf(out, "  status:   %s%s\n", d.Status, reviewPendingSuffix(d.ReviewPending))
+	fmt.Fprintf(out, "  status:   %s (%s)%s\n", d.Status, d.LockState, reviewPendingSuffix(d.ReviewPending))
+	if d.LockedAt != "" {
+		fmt.Fprintf(out, "  locked:   %s (%q)\n", d.LockedAt, d.LockReason)
+	}
 	fmt.Fprintf(out, "  digest:   %s\n", d.Digest)
 	fmt.Fprintf(out, "  rests_on: %s\n", joinOrNone(d.RestsOn))
+	for _, c := range d.RestsOnClaims {
+		state := "not a claim"
+		if c.Exists {
+			state = c.Status + reviewPendingSuffix(c.ReviewPending)
+		}
+		fmt.Fprintf(out, "    %s: %s\n", c.ID, state)
+	}
+	for _, c := range d.ChangedClaims {
+		fmt.Fprintf(out, "  changed:  %s\n", c.ID)
+	}
+	if d.OpenThreads > 0 {
+		fmt.Fprintf(out, "  threads:  %d open\n", d.OpenThreads)
+	}
 	fmt.Fprintf(out, "  words:    %d\n", d.Words)
 	if len(d.Findings) > 0 {
 		fmt.Fprintf(out, "  findings: %d\n", len(d.Findings))
