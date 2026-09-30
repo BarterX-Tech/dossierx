@@ -94,6 +94,55 @@ func TestLoad_ReadsTheWorkingTreeAndSkipsHiddenEntries(t *testing.T) {
 	}
 }
 
+// TestLoad_SymlinkedTreeIsRefusedNotEmpty pins that a link where the tree or a
+// folder should be is a brief-shape finding with a message that says what it
+// is. A symlinked briefs_dir used to read as a project with no briefs (Stat
+// followed the link, WalkDir would not descend it): the briefs behind it were
+// never judged and `check` passed. A symlinked folder was reported as "a file
+// directly under briefs/", which is not what the author made.
+func TestLoad_SymlinkedTreeIsRefusedNotEmpty(t *testing.T) {
+	realTree := func(t *testing.T, dir string) string {
+		t.Helper()
+		target := filepath.Join(dir, "elsewhere")
+		if err := os.MkdirAll(filepath.Join(target, "checkout"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(target, "checkout", "flow.md"), []byte(okFront+"text\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return target
+	}
+
+	t.Run("briefs_dir", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.Symlink(realTree(t, dir), filepath.Join(dir, "briefs")); err != nil {
+			t.Fatal(err)
+		}
+		got := Load(testConfig(t, dir, "")).Findings(nil)
+		if len(got) != 1 || got[0].LintName != RuleShape || got[0].ClaimID != "briefs/" || !strings.Contains(got[0].Message, "symlink") {
+			t.Fatalf("a symlinked briefs_dir must be one brief-shape finding on briefs/ naming the link, got %+v", got)
+		}
+	})
+
+	t.Run("folder", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(realTree(t, dir), "checkout")
+		if err := os.MkdirAll(filepath.Join(dir, "briefs"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "briefs", "checkout")); err != nil {
+			t.Fatal(err)
+		}
+		got := Load(testConfig(t, dir, "")).Findings(nil)
+		if len(got) != 1 || got[0].LintName != RuleShape || got[0].ClaimID != "briefs/checkout" {
+			t.Fatalf("a symlinked folder must be one brief-shape finding on its path, got %+v", got)
+		}
+		if strings.Contains(got[0].Message, "a file directly under") || !strings.Contains(got[0].Message, "symlink") {
+			t.Fatalf("the message must say the folder is a link, not a loose file: %q", got[0].Message)
+		}
+	})
+}
+
 // TestFromFiles_ShapeRefusals is the brief-shape rule's whole refusal list, one
 // tree per case, each asserting the exact rule and path the finding names.
 func TestFromFiles_ShapeRefusals(t *testing.T) {

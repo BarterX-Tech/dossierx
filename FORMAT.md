@@ -1452,9 +1452,12 @@ briefs/                       # briefs_dir; absent means no briefs
   `briefs/<folder>/<file>`, is refused (`brief-shape`).
 - A folder holds `<slug>.md` briefs and the `.png` `.jpg` `.jpeg` `.gif`
   `.webp` `.svg` images its briefs reference, and nothing else. Any other file,
-  a non-regular file (a symlink), and an image no brief in the folder
-  references are refused (`brief-shape`), as is a reference to an image the
-  folder does not hold.
+  a non-regular file (a symlink or a submodule), and an image no brief in the
+  folder references are refused (`brief-shape`), as is a reference to an image
+  the folder does not hold.
+- The tree is plain directories and plain files. A symlinked or submodule
+  folder is refused on its path, and a `briefs_dir` that is itself a symlink
+  is refused on `briefs/` — never followed, and never read as no briefs.
 - Folder names, brief names and image names are drawn from `[a-z0-9-]`, and
   every extension is lowercase. That is what makes a brief's id
   `<folder>.<slug>` slash-free, so it can be one route segment and one store
@@ -1533,7 +1536,8 @@ never among them: `brief-shape`, `brief-frontmatter`, `brief-word-cap`,
 brief finding's `claim_id` is the **path** it is about — the brief
 (`briefs/checkout/flow.md`), the folder (`briefs/checkout/`) or the tree
 (`briefs/`). `check --staged` reads the briefs from the index, like the
-claims.
+claims, and refuses a symlink or a submodule entry there exactly as the
+working tree refuses the link.
 
 ### What a brief never touches
 

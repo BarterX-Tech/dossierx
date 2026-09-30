@@ -979,9 +979,19 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 // empty set, which is how briefs.Load reads a directory that does not exist:
 // no commit can carry a brief git cannot name.
 //
-// The index lists files, never directories, and indexEntries has already
-// dropped symlinks and gitlinks (see there for why their oids are not content),
-// so every File here is a regular file with its bytes in hand.
+// The index lists files, never directories. indexBlobs holds the regular
+// files with their bytes. Symlinks and gitlinks are NOT dropped here the way
+// indexEntries drops them from the claims registry: their oids are not content
+// (see indexEntries), but the working tree refuses a symlink under briefs_dir as
+// brief-shape, and dropping one from the index would let the hook pass a tree
+// --validate refuses. Each goes to FromFiles as a non-regular File, so both
+// modes judge it under the same rule — including a briefs_dir that is itself a
+// link, which the index lists as one entry at the spec (Rel ".").
+//
+// The one residual difference is the safe direction: a submodule checked out as
+// a brief FOLDER is a directory on disk, which Load reads, while --staged
+// refuses the gitlink. A refusal at the keyboard, never a false clean in the
+// mode the hook runs.
 func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 	dir := cfg.BriefsDirPath()
 	spec, err := g.spec(dir)
@@ -992,7 +1002,11 @@ func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 	if err != nil {
 		return nil, err
 	}
-	files := make([]briefs.File, 0, len(blobs))
+	links, err := g.nonRegularIndexPaths(spec)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]briefs.File, 0, len(blobs)+len(links))
 	for repoRel, raw := range blobs {
 		files = append(files, briefs.File{
 			Rel:     relToClaimsDir(spec, repoRel),
@@ -1001,7 +1015,36 @@ func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 			Data:    raw,
 		})
 	}
+	for _, repoRel := range links {
+		files = append(files, briefs.File{Rel: relToClaimsDir(spec, repoRel)})
+	}
 	return briefs.FromFiles(cfg, files), nil
+}
+
+// nonRegularIndexPaths lists the stage-0 index entries under spec whose mode is
+// a symlink (120000) or a submodule gitlink (160000) — exactly the entries
+// indexEntries filters out — as paths in lsFiles' form. Only stagedBriefs needs
+// them: a brief tree refuses what the claims registry merely does not hold.
+func (g *gitRunner) nonRegularIndexPaths(spec string) ([]string, error) {
+	out, err := g.run("ls-files", "-s", "-z", "--", spec)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range splitZ(out) {
+		tab := strings.IndexByte(entry, '\t')
+		if tab < 0 {
+			continue
+		}
+		fields := strings.Fields(entry[:tab])
+		if len(fields) < 3 || fields[2] != "0" {
+			continue
+		}
+		if fields[0] == "120000" || fields[0] == "160000" {
+			paths = append(paths, entry[tab+1:])
+		}
+	}
+	return paths, nil
 }
 
 // materializeIndexFile writes the index's copy of src (an absolute path) into

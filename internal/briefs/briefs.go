@@ -171,6 +171,13 @@ func (s *Set) Lookup(arg string) (Brief, bool) {
 // the working tree (Load) or the git index (FromFiles, for check --staged).
 // Rel is slash-separated and relative to briefs_dir. Data is the file's bytes
 // for a .md and may be nil for anything else; Size is always the file's size.
+//
+// Regular is false for anything that is not a plain file: a symlink, a git
+// submodule (a gitlink in the index, a checkout in the working tree) or a
+// device. Such an entry is still handed to FromFiles, so that it is REFUSED
+// under the same rule in both sources rather than silently absent from one.
+// Rel "." names briefs_dir itself, for the one case where the tree's root is
+// not a directory: a symlink, a submodule or a file where the folder should be.
 type File struct {
 	Rel     string
 	Size    int64
@@ -182,9 +189,14 @@ type File struct {
 // that does not exist is an empty Set. A tree that cannot be read is reported
 // as a brief-shape finding naming the error rather than returned: a caller's
 // verdict must not be "no briefs" when the truth is "could not look".
+//
+// The root is read with Lstat, not Stat: a briefs_dir that is a SYMLINK is
+// refused (brief-shape on the tree), for the reason a symlinked brief is. Stat
+// followed the link and WalkDir then declined to descend a symlinked root, so a
+// linked tree read as a project with no briefs at all.
 func Load(cfg *config.Config) *Set {
 	dir := cfg.BriefsDirPath()
-	info, err := os.Stat(dir)
+	info, err := os.Lstat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return newSet(cfg)
 	}
@@ -194,9 +206,7 @@ func Load(cfg *config.Config) *Set {
 		return s
 	}
 	if !info.IsDir() {
-		s := newSet(cfg)
-		s.add(RuleShape, s.DisplayDir, "briefs_dir is a file, not a directory; briefs live in %s/<folder>/<slug>.md", s.DisplayDir)
-		return s
+		return FromFiles(cfg, []File{{Rel: ".", Regular: info.Mode().IsRegular(), Size: info.Size()}})
 	}
 	var files []File
 	walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
@@ -271,12 +281,24 @@ func FromFiles(cfg *config.Config, files []File) *Set {
 	}
 
 	for _, f := range files {
+		if f.Rel == "." {
+			// briefs_dir itself is not a directory (see File).
+			if f.Regular {
+				s.add(RuleShape, s.DisplayDir, "briefs_dir is a file, not a directory; briefs live in %s/<folder>/<slug>.md", s.DisplayDir)
+			} else {
+				s.add(RuleShape, dirPath(s.DisplayDir), "briefs_dir is a symlink or a submodule, not a directory; briefs are read from a plain directory only, so a linked tree is refused rather than read as no briefs")
+			}
+			continue
+		}
 		segs := strings.Split(f.Rel, "/")
 		if hiddenPath(segs) {
 			continue
 		}
 		display := path.Join(s.DisplayDir, f.Rel)
 		switch {
+		case len(segs) == 1 && !f.Regular:
+			s.add(RuleShape, display, "%s is a symlink or a submodule; directly under %s/ the briefs tree holds plain folders only, and a brief folder is a plain directory holding plain files", display, s.DisplayDir)
+			continue
 		case len(segs) == 1:
 			s.add(RuleShape, display, "a file directly under %s/ is not a brief; briefs live one folder down, as %s/<folder>/<slug>.md", s.DisplayDir, s.DisplayDir)
 			continue
@@ -290,7 +312,7 @@ func FromFiles(cfg *config.Config, files []File) *Set {
 			continue
 		}
 		if !f.Regular {
-			s.add(RuleShape, display, "%s is not a regular file (a symlink or a device); a brief folder holds plain files only", display)
+			s.add(RuleShape, display, "%s is not a regular file (a symlink, a submodule or a device); a brief folder holds plain files only", display)
 			continue
 		}
 		ext := path.Ext(name)

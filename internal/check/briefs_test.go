@@ -72,6 +72,79 @@ func TestBriefFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 	}
 }
 
+// TestBriefSymlinksAreRefusedInBothModes pins --staged's parity with
+// --validate on the entries the claims registry drops from the index: a
+// symlink (mode 120000) under briefs_dir. The working tree refuses a symlinked
+// brief, a symlinked image, a symlinked folder and a symlinked briefs_dir as
+// brief-shape; the index must refuse exactly the same paths, where it used to
+// drop the entries and pass a tree --validate refused. The root case also pins
+// that a linked briefs_dir is refused rather than read as no briefs.
+func TestBriefSymlinksAreRefusedInBothModes(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		links map[string]string // link path (repo-relative) -> target
+		want  []string
+	}{
+		{
+			name: "brief, image and folder",
+			links: map[string]string{
+				"briefs/widget/linked.md": "../../elsewhere/real.md",
+				"briefs/widget/pic.svg":   "../../elsewhere/pic.svg",
+				"briefs/other":            "../elsewhere",
+			},
+			want: []string{
+				"brief-shape briefs/other",
+				"brief-shape briefs/widget/flow.md",
+				"brief-shape briefs/widget/linked.md",
+				"brief-shape briefs/widget/pic.svg",
+			},
+		},
+		{
+			name:  "briefs_dir itself",
+			links: map[string]string{"briefs": "elsewhere"},
+			want:  []string{"brief-shape briefs/"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := filepath.Join(t.TempDir(), "repo")
+			files := map[string]string{
+				"claims/overview.yaml":  draftClaim("widget.contract.overview"),
+				"elsewhere/real.md":     cleanBrief,
+				"elsewhere/pic.svg":     "<svg/>",
+				"elsewhere/widget/x.md": cleanBrief,
+			}
+			if _, isRoot := tc.links["briefs"]; !isRoot {
+				// flow.md references the symlinked image, so it is refused
+				// too: a link is not an image its folder holds.
+				files["briefs/widget/flow.md"] = cleanBrief + "\n![Pic](pic.svg)\n"
+			}
+			cfg := writeProjectFiles(t, repo, baseConfig, files)
+			for link, target := range tc.links {
+				if err := os.Symlink(target, filepath.Join(repo, filepath.FromSlash(link))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			gitRepo(t, repo)
+			git(t, repo, "add", "-A")
+			git(t, repo, "commit", "-qm", "fixture")
+			for link := range tc.links {
+				if mode := strings.Fields(git(t, repo, "ls-files", "-s", "--", link)); len(mode) == 0 || mode[0] != "120000" {
+					t.Fatalf("fixture precondition: %s must be a symlink in the index, got %v", link, mode)
+				}
+			}
+
+			worktree := briefRulesIn(worktreeVerdict(t, cfg))
+			staged, _ := stagedVerdict(t, cfg)
+			if strings.Join(worktree, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("--validate: got %v, want %v", worktree, tc.want)
+			}
+			if got := briefRulesIn(staged); strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("--staged must refuse the same links --validate refuses: got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestRunStopsAtLintOnABriefError pins that a brief ERROR is a lint error of
 // the writing run: it stops before the catalog and the viewer, exactly as a
 // claim's would — the caps are final, not advisory.
