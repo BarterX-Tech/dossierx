@@ -1537,7 +1537,11 @@ title-cased (`order-plan.md` → "Order Plan"). An image is referenced by its
 bare file name in the brief's own folder: `![Flow](flow-diagram.svg)`. Any
 other image src — `PIC.svg`, `./pic.svg`, `../x.svg`, a URL — would render as
 the literal text of its `![alt](src)`, and is refused (`brief-shape`) on the
-brief's path.
+brief's path. No route serves a brief's image yet, so for now the viewer
+payload renders **every** image reference as the literal text of its
+`![alt](src)`, the accepted bare-name ones included, until the briefs UI adds
+an image route (NIT-197). The bare-name rule is what the image checks and the
+image cap count today.
 Citation markers do not resolve in a brief (it has no `sources`).
 
 ### Caps

@@ -93,11 +93,14 @@ func removeStaleConformanceStatus(cfg *config.Config) error {
 // step the run stopped before reaching, so a formatter can reproduce the
 // fail-fast CLI output by emitting only the segments that are present.
 type Result struct {
-	// LintFindings is lint.RunAll's output verbatim, in Registry order — the
-	// order the terminal prints them (a mixed error/warning run interleaves by
-	// registry, not by severity, so this full slice, not the split ones below,
-	// is what a byte-identical printer must iterate). LintErrors and
-	// LintWarnings are its severity partition (each preserving Registry order):
+	// LintFindings is every finding the lint step reports, in the order the
+	// terminal prints them (see lintFindings): the constitution's findings
+	// first, then lint.RunAll's claim findings verbatim in Registry order, then
+	// the brief rule set's findings (briefs.Set.Findings: by rule, then by
+	// path). A mixed error/warning run interleaves by that order, not by
+	// severity, so this full slice, not the split ones below, is what a
+	// byte-identical printer must iterate. LintErrors and LintWarnings are
+	// its severity partition (each preserving that order):
 	// LintErrors is every finding that is NOT SeverityWarning — matching the
 	// exit-code count reportLintFindings uses — and its length drives the
 	// fail-fast lint error. Always populated (lint is the first step).

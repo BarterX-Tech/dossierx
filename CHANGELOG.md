@@ -38,8 +38,11 @@ section, whose links now point at the exported `SKILL.md` files.
 
 A `briefs/` directory beside `project.config.yaml` is now read as the briefs
 tree. If the project already keeps something unrelated there, `check` fails on
-it (`lint_failed`, `brief-shape` on each file that is not a brief): move it, or
-set `briefs_dir` to a directory that does not exist yet. And a `claims_dir`,
+it with `lint_failed`: a stray file draws `brief-shape`, and a lowercase `.md`
+file one folder down (`briefs/<folder>/<name>.md`) is parsed as a brief and,
+without a brief's frontmatter, draws `brief-frontmatter`. The recovery is the
+same for both: move it, or set `briefs_dir` to a directory that does not exist
+yet. And a `claims_dir`,
 `project_claims_dir` or `build_dir` that is `briefs`, lies inside it or
 contains it now fails config load (`invalid_config`, naming the overlap): set
 `briefs_dir` to another name.
