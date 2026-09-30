@@ -150,6 +150,41 @@ func settleSourceNoteProbe(t *testing.T, ctx context.Context) {
 	))
 }
 
+// settleLayoutTransitions returns once no CSS transition is running or pending
+// anywhere in the document, then lets two frames paint.
+//
+// The note's control moves while one is running. Opening the widget page from
+// Home changes .content-area's padding (Home's 72px gutter to the reading
+// view's 282px rail reservation), and that padding eases over 180ms: measured
+// on this fixture, the control travels about 35px left and 38px up across the
+// 130ms after the page reports ready. chromedp.Click reads the control's
+// position in one round trip and presses and releases the mouse in the next
+// two; under load that spans the move, the release lands off the button, no
+// click event fires, and the note is still collapsed after a "click" — the
+// stale state the flake reported (with the control focused by the press).
+// Waiting on the page's own transitions, not a behavioural condition (which is
+// already true on the transition's first frame) and not a sleep, makes the
+// click land where the control is. A transition cancelled and replaced by a
+// newer one is waited on too: the loop re-reads the running set each time.
+func settleLayoutTransitions(t *testing.T, ctx context.Context) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.Evaluate(`new Promise(function (resolve) {
+		function running() {
+			return document.getAnimations().filter(function (a) {
+				return a instanceof CSSTransition && (a.pending || a.playState === 'running');
+			});
+		}
+		(function step() {
+			var r = running();
+			if (r.length === 0) {
+				requestAnimationFrame(function () { requestAnimationFrame(resolve); });
+				return;
+			}
+			Promise.all(r.map(function (a) { return a.finished.catch(function () {}); })).then(step);
+		})();
+	})`, nil, func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) }))
+}
+
 func sourceNoteStateAt(t *testing.T, ctx context.Context, note, stage string) sourceNoteState {
 	t.Helper()
 	var state sourceNoteState
@@ -253,6 +288,7 @@ func clampTabWithProbe(t *testing.T, p *project, noObserver bool) context.Contex
 		settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
 	}
 	settleSourceNoteProbe(t, ctx)
+	settleLayoutTransitions(t, ctx)
 	return ctx
 }
 
@@ -486,6 +522,7 @@ func TestSourceNoteControlWorksOverHTTPAndRefresh(t *testing.T) {
 	settleFor(t, ctx, noteDecidedExpr)
 	settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
 	settleSourceNoteProbe(t, ctx)
+	settleLayoutTransitions(t, ctx)
 	long := noteAt("document", 0)
 	initial := sourceNoteStateAt(t, ctx, long, "http initial after observer")
 	assertSourceNoteCollapsed(t, initial, initial.BodyClient)
