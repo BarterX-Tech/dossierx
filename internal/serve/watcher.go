@@ -68,10 +68,17 @@ func (w *watcher) scan() (map[string]fileStamp, error) {
 		return nil, err
 	}
 	for _, tree := range w.trees {
-		if _, statErr := os.Stat(tree.root); errors.Is(statErr, fs.ErrNotExist) {
+		if _, statErr := os.Lstat(tree.root); errors.Is(statErr, fs.ErrNotExist) {
 			continue
 		}
-		sub, treeErr := fingerprintTree(tree.root, true, tree.ignore)
+		// A read error inside an extra tree is ISOLATED: it becomes a stamp on
+		// the entry that could not be read, never a scan error. A scan error
+		// keeps the whole previous fingerprint, so an unreadable brief folder
+		// used to stop live reload for the CLAIMS as well. As a stamp, entering
+		// and leaving the unreadable state is itself a change, and the render
+		// it triggers re-reads the tree and reports the entry (briefs.Load's
+		// brief-shape "could not be read" finding, in check.Status).
+		sub, treeErr := fingerprintTreeWith(tree.root, true, tree.ignore, unreadableStamp)
 		if treeErr != nil {
 			return nil, treeErr
 		}
@@ -195,10 +202,30 @@ func scanLoadedClaimFingerprint(root string) (map[string]fileStamp, error) {
 // so the ONLY difference between them is the two exclusion knobs and a reader
 // can see the whole difference in one place.
 func fingerprintTree(root string, skipDotDirs bool, ignore func(name string) bool) (map[string]fileStamp, error) {
+	return fingerprintTreeWith(root, skipDotDirs, ignore, nil)
+}
+
+// unreadableStamp is the stamp an extra tree's unreadable entry gets: no real
+// file has a negative modification time and size, so it can equal nothing but
+// itself.
+var unreadableStamp = &fileStamp{modNano: -1, size: -1}
+
+// fingerprintTreeWith is fingerprintTree with a third knob, onErr: nil aborts
+// the walk on a read error (both claim fingerprints, whose callers keep their
+// previous state on an error); non-nil records onErr as the stamp of the entry
+// that could not be read and walks on. The root's own error always aborts.
+func fingerprintTreeWith(root string, skipDotDirs bool, ignore func(name string) bool, onErr *fileStamp) (map[string]fileStamp, error) {
 	fp := make(map[string]fileStamp)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			if onErr == nil || path == root {
+				return err
+			}
+			fp[path] = *onErr
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() {
 			// Skip dot-directories wholesale, but never the root itself.
@@ -215,6 +242,10 @@ func fingerprintTree(root string, skipDotDirs bool, ignore func(name string) boo
 			// The file vanished between enumeration and stat (e.g. a temp file
 			// mid-rename); treat it as absent rather than failing the whole scan.
 			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			if onErr != nil {
+				fp[path] = *onErr
 				return nil
 			}
 			return err
