@@ -85,6 +85,15 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 		"briefs/research/uses-sketch.md":  "---\nsummary: Uses the sketch.\n---\n![s](pane-sketch.svg)\n",
 		"notes/elsewhere.md":              "outside briefs",
 	})
+	// A brief's pin is its content hash, the one brief lock signs (NIT-198),
+	// not the file's sha256.
+	pin := func(id string) string {
+		b, ok := set.Lookup(id)
+		if !ok {
+			t.Fatalf("no brief %s", id)
+		}
+		return b.LockHash
+	}
 	internal := func(ref int, path, sum string) model.Source {
 		return model.Source{Ref: ref, Kind: model.SourceKindInternal, Title: "src " + path, Path: path, SHA256: sum}
 	}
@@ -97,7 +106,7 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 			RestsOn: model.RestsOn{IDs: []string{"widget.contract.b"}},
 			Sources: []model.Source{
 				internal(1, "briefs/research/stale.md", sha("what the brief said at pin time")),
-				internal(2, "./briefs/research/rounding.md", sha(rounding)),
+				internal(2, "./briefs/research/rounding.md", pin("research.rounding")),
 				internal(3, "briefs/research/gone.md", sha("x")),
 				internal(4, "Briefs/Research/Rounding.md", sha(rounding)),
 				internal(5, "notes/elsewhere.md", sha("outside briefs")),
@@ -105,7 +114,7 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 				{Ref: 7, Kind: model.SourceKindExternal, Title: "ext", URL: "https://example.test/briefs/research/rounding.md", AccessedOn: "2026-01-02"},
 				// One brief, two sources: the first pin holds, the second
 				// has drifted. One row, out of date, hovering the drifted pin.
-				internal(8, "briefs/research/twice.md", sha(twice)),
+				internal(8, "briefs/research/twice.md", pin("research.twice")),
 				internal(9, "briefs/research/twice.md", drifted),
 			},
 		},
@@ -150,7 +159,7 @@ func TestRenderWith_BriefsInAClaimsRelationships(t *testing.T) {
 		{contains: []string{`title="no brief at this path">src briefs/research/gone.md</span>`, `claim-brief--pin-out-of-date`,
 			`claim-brief-state--drift`, `>pin out of date</span>`}, lacks: []string{"href=", "claim-relationship-badge"}},
 		{contains: []string{`data-brief-id="research.rounding"`, `href="#brief-research-rounding"`, `claim-brief-state--pin`,
-			`>pinned ` + sha(rounding)[:12] + `</span>`, `claim-relationship-badge--draft">DRAFT<`}, lacks: []string{"pin-out-of-date"}},
+			`>pinned ` + pin("research.rounding")[:12] + `</span>`, `claim-relationship-badge--draft">DRAFT<`}, lacks: []string{"pin-out-of-date"}},
 		{contains: []string{`data-brief-id="research.stale"`, `claim-brief--pin-out-of-date`, `>pin out of date</span>`,
 			`claim-relationship-badge--locked">LOCKED<`}},
 		{contains: []string{`data-brief-id="research.twice"`, `claim-brief--pin-out-of-date`,

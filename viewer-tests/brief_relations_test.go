@@ -15,10 +15,9 @@ package viewertests
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chromedp/chromedp"
@@ -42,7 +41,17 @@ func newBriefRelationsProject(t *testing.T) *project {
 	write("briefs/research/rounding.md", briefRelationsRounding)
 	write("briefs/research/conversion.md", "---\nsummary: Older notes.\nstatus: locked\n---\n# Currency conversion notes\n\nBody.\n")
 	write("briefs/guidance/voice.md", "---\nsummary: How we write.\nstatus: locked\n---\n# Voice\n\nBody.\n")
-	sum := sha256.Sum256([]byte(briefRelationsRounding))
+	// A brief's pin is its content hash, as `brief show` prints it
+	// (NIT-198), not the file's sha256.
+	pin := ""
+	for _, line := range strings.Split(p.run("brief", "show", "briefs/research/rounding.md"), "\n") {
+		if f := strings.Fields(line); len(f) >= 2 && f[0] == "content:" {
+			pin = f[1]
+		}
+	}
+	if len(pin) != 64 {
+		t.Fatalf("brief show printed no content hash to pin")
+	}
 	p.writeClaim("overview.yaml", `id: `+testClaimID+`
 facet: contract
 module: widget
@@ -55,7 +64,7 @@ sources:
     kind: internal
     title: Rounding research
     path: briefs/research/rounding.md
-    sha256: `+hex.EncodeToString(sum[:])+`
+    sha256: `+pin+`
   - ref: 2
     kind: internal
     title: Conversion notes
