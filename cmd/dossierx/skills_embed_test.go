@@ -31,7 +31,7 @@ import (
 	dxskills "github.com/BarterX-Tech/dossierx/skills"
 )
 
-// The seven bundles and the order the router presents them in. Spelled out
+// The eight bundles and the order the router presents them in. Spelled out
 // rather than derived so that adding or removing a skill is a deliberate edit
 // to a test, the same way cmd/dossierx/main_test.go pins the leaf surface.
 var wantSkillNames = []string{
@@ -39,6 +39,7 @@ var wantSkillNames = []string{
 	"dossierx-claims",
 	"dossierx-modules",
 	"dossierx-constitution",
+	"dossierx-briefs",
 	"dossierx-comments",
 	"dossierx-code-links",
 	"dossierx-upgrading",
@@ -617,6 +618,9 @@ func TestSkills_StateTheRulesThatNeverBend(t *testing.T) {
 		{"dossierx", "never a certificate", "an agent's 'it is synced' closes no loop"},
 		{"dossierx-code-links", "not a certificate and closes nothing", "linked is not followed, and saying so is not evidence"},
 		{"dossierx-claims", "an exit code\nyou did not see is one you do not have", "report the envelope, never a belief"},
+		// NIT-193: a feature is a brief, and nothing reports it as built.
+		{"dossierx-briefs", "say a feature is built", "rests_on is composition; no command and no agent reports a feature as specified or built"},
+		{"dossierx-briefs", "Never re-lock to make the\nfinding go away", "brief-content-drift and brief-unrecorded are restore or unlock, fix, lock"},
 	} {
 		raw, err := fs.ReadFile(dxskills.FS, tc.skill+"/SKILL.md")
 		if err != nil {
@@ -769,7 +773,7 @@ func TestCLI_SkillsExportCheck_TellsHandEditedFromStaleFromMissing(t *testing.T)
 	if checkErr == nil {
 		t.Fatalf("text-mode --check must also refuse")
 	}
-	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 7 file(s) differ"} {
+	for _, want := range []string{"hand-edited", "stale", "missing", "3 of 8 file(s) differ"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in text output, got:\n%s", want, out)
 		}
