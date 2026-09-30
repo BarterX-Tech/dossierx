@@ -65,6 +65,11 @@ rests_on:
   none: true
   reason: viewer-test fixture, not backed by any doctrine claim
 `)
+	// The locked briefs are approved through brief lock (NIT-205); a status
+	// line alone would be brief-unrecorded and fail check.
+	for _, b := range []string{"briefs/decisions/round-once.md", "briefs/research/conversion.md", "briefs/guidance/voice.md"} {
+		p.run("brief", "lock", b, "--reason", "fixture approval")
+	}
 	return p
 }
 

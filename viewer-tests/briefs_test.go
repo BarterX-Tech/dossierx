@@ -58,6 +58,9 @@ func briefProject(t *testing.T) *project {
 		t.Fatal(err)
 	}
 	write("decisions/split.png", buf.Bytes())
+	// A brief that says locked is approved through brief lock (NIT-205);
+	// the status line alone would be brief-unrecorded and fail check.
+	p.run("brief", "lock", "briefs/decisions/round-to-the-cent.md", "--reason", "fixture approval")
 	return p
 }
 
