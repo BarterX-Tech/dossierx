@@ -33,7 +33,9 @@ import (
 const (
 	// RuleContentDrift: a brief with status locked and a standing record
 	// whose LockHash no longer matches the record. The recovery is the
-	// human's: re-lock it (`brief lock` signs the edit) or restore the file.
+	// router's for every integrity finding: restore the file, or, on the
+	// human's yes to the edit, unlock -> fix -> lock. Never a re-lock to make
+	// the finding go away.
 	RuleContentDrift = "brief-content-drift"
 	// RuleUnrecorded: a brief with status locked and no standing record — no
 	// record at all, or one an unlock released. `status: locked` typed by
@@ -234,7 +236,7 @@ func evaluate(set *Set, claims []model.Claim, store *lock.Store, compare bool) *
 			e.Integrity = append(e.Integrity, lock.Finding{
 				Rule:    RuleContentDrift,
 				ClaimID: b.Path,
-				Message: fmt.Sprintf("%s is locked, and %s since it was approved on %s (%q). Its approved text is kept in %s. Either the human re-approves the edit — dossierx brief lock %s --reason \"<their words>\" signs the brief as it reads now, and keeps the rests_on baselines, so a claim change stays for brief reaudit — or restore the file from version control. Do not re-lock to make this go away without the human's yes: re-locking records whatever the file says now as approved.", b.Path, moved, rec.At, rec.Reason, config.LockStoreDisplayPath, b.Path),
+				Message: fmt.Sprintf("%s is locked, and %s since it was approved on %s (%q). Its approved text is kept in %s. Do not re-lock to make this go away: a lock records whatever the file says now as approved. Restore the file from version control; or, only on the human's yes to the edit, dossierx brief unlock %s --reason \"<their words>\", fix the brief, and dossierx brief lock %s --reason \"<their words>\" — that lock keeps the rests_on baselines, so a claim that moved under the brief stays review_pending for brief reaudit.", b.Path, moved, rec.At, rec.Reason, config.LockStoreDisplayPath, b.Path, b.Path),
 			})
 		}
 		if !compare {
@@ -322,7 +324,7 @@ func unrecordedFinding(b Brief, store *lock.Store, rec lock.BriefRecord, has boo
 	return lock.Finding{
 		Rule:    RuleUnrecorded,
 		ClaimID: b.Path,
-		Message: fmt.Sprintf("%s says status: locked, but %s. A status typed by hand approves nothing. If the human approves the brief as it reads, dossierx brief lock %s --reason \"<their words>\" records it; otherwise set status back to draft (or restore %s from version control).", b.Path, why, b.Path, config.LockStoreDisplayPath),
+		Message: fmt.Sprintf("%s says status: locked, but %s. A status typed by hand approves nothing, and locking the brief as it stands would record whatever it says now as approved: do not lock to make this go away. Restore the brief (or %s) from version control; or, only on the human's yes, dossierx brief unlock %s --reason \"<their words>\" sets it back to draft, fix it, and dossierx brief lock %s --reason \"<their words>\" records the approval.", b.Path, why, config.LockStoreDisplayPath, b.Path, b.Path),
 	}
 }
 
@@ -425,15 +427,18 @@ func baselineWording(store *lock.Store, rec lock.BriefRecord, id, hash string) (
 	return nil, UnavailableWording
 }
 
-// RelockBaselines is what `brief lock` records over a STANDING record prev (a
-// re-lock of an edited brief): the baselines and receipts prev holds for every
-// rests_on id still listed are carried forward unchanged, a newly listed claim
-// is baselined as it reads now, and an id no longer listed is dropped. A
+// RelockBaselines is what `brief lock` records over an earlier record prev —
+// a standing one (a re-lock of an edited brief) or one `brief unlock`
+// released (unlock, edit, lock): the baselines and receipts prev holds for
+// every rests_on id still listed are carried forward unchanged, a newly listed
+// claim is baselined as it reads now, and an id no longer listed is dropped. A
 // re-lock approves the brief's own words; it must not also accept, unseen, a
 // claim that moved under the brief — that stays review-pending until `brief
-// reaudit --confirm`, the command that shows the change. carried is the ids
-// whose baselines came from prev. prev nil (no record, or a released one) is
-// Baselines: a fresh approval baselines every claim.
+// reaudit --confirm`, the command that shows the change. An unlock ends the
+// approval, not that pending reading, so a released record carries exactly as
+// a standing one does. carried is the ids whose baselines came from prev. prev
+// nil (the brief was never locked) is Baselines: a first approval baselines
+// every claim.
 func RelockBaselines(b Brief, claims []model.Claim, prev *lock.BriefRecord) (hashes map[string]string, receipts map[string]model.Claim, carried, unknown []string) {
 	hashes, receipts, unknown = Baselines(b, claims)
 	if prev == nil {

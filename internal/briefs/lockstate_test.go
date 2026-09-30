@@ -213,7 +213,7 @@ func TestLockHash_SignsWhatAReaderReadsAndNothingElse(t *testing.T) {
 // binary's write, and brief-unrecorded then says to restore the store from
 // before that write and NOT to re-lock (which would discard the baselines and
 // any review pending). A store that never held a record keeps the ordinary
-// message, which offers the lock.
+// message, which routes through restore or unlock, fix and lock.
 func TestEvaluate_ADroppedBriefsMapSaysRestoreNotRelock(t *testing.T) {
 	claims := []model.Claim{claimFor("widget.contract.a", "a"), claimFor("widget.contract.b", "b")}
 	set := lockedSet(t, "locked")
@@ -240,6 +240,63 @@ func TestEvaluate_ADroppedBriefsMapSaysRestoreNotRelock(t *testing.T) {
 		if says := strings.Contains(msg, "Do NOT re-lock") && strings.Contains(msg, "older dossierx"); says != tc.dropped {
 			t.Fatalf("%s: dropped-map wording = %v, want %v:\n%s", tc.raw, says, tc.dropped, msg)
 		}
+	}
+}
+
+// TestEvaluate_IntegrityMessagesRouteThroughUnlockNotALock pins the router's
+// rule for a locked brief moved outside the approval path (skills/dossierx
+// SKILL.md, integrity_failed): the recovery a brief-content-drift or an
+// ordinary brief-unrecorded message offers is restoring from version control,
+// or brief unlock -> fix -> brief lock on the human's yes, and it warns against
+// locking to make the finding go away. A message that offered a bare lock as
+// the fix would send an agent to sign an edit nobody approved.
+func TestEvaluate_IntegrityMessagesRouteThroughUnlockNotALock(t *testing.T) {
+	claims := []model.Claim{claimFor("widget.contract.a", "a"), claimFor("widget.contract.b", "b")}
+	for _, tc := range []struct {
+		name    string
+		release bool
+		record  bool
+		edit    bool
+		rule    string
+	}{
+		{name: "content drift", record: true, edit: true, rule: RuleContentDrift},
+		{name: "unrecorded, no record", rule: RuleUnrecorded},
+		{name: "unrecorded, released record", record: true, release: true, rule: RuleUnrecorded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			set := lockedSet(t, "locked")
+			store, err := lock.LoadStore(filepath.Join(t.TempDir(), "s.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.record {
+				store = recordFor(t, set, claims)
+				if tc.release {
+					lock.ReleaseBriefApproval(store, set.Briefs[0].ID, lock.Approval{Actor: "a", Reason: "rework"})
+				}
+			}
+			if tc.edit {
+				set.Briefs[0].Body += "More.\n"
+				set.Briefs[0].LockHash = LockHash(set.Briefs[0].Summary, set.Briefs[0].RestsOn, set.Briefs[0].Body)
+			}
+			e := Evaluate(set, claims, store)
+			if len(e.Integrity) != 1 || e.Integrity[0].Rule != tc.rule {
+				t.Fatalf("want one %s, got %+v", tc.rule, e.Integrity)
+			}
+			msg := e.Integrity[0].Message
+			p := set.Briefs[0].Path
+			for _, want := range []string{"version control", "dossierx brief unlock " + p, "dossierx brief lock " + p, "human's yes"} {
+				if !strings.Contains(msg, want) {
+					t.Errorf("message lacks %q:\n%s", want, msg)
+				}
+			}
+			if !strings.Contains(msg, "Do not re-lock to make this go away") && !strings.Contains(msg, "do not lock to make this go away") {
+				t.Errorf("message must warn against locking to clear the finding:\n%s", msg)
+			}
+			if strings.Index(msg, "dossierx brief unlock") > strings.Index(msg, "dossierx brief lock") {
+				t.Errorf("the lock must come after the unlock, never offered on its own:\n%s", msg)
+			}
+		})
 	}
 }
 

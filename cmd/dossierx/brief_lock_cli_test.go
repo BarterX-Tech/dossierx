@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -76,7 +77,10 @@ func TestBriefLockLifecycle(t *testing.T) {
 	env := mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "the human approved the flow")
 	var locked briefLockData
 	decodeData(t, env, &locked)
-	if locked.Relocked || len(locked.Baselines) != 1 || locked.Baselines["widget.contract.overview"] == "" {
+	// A brief's first lock has no earlier record: every baseline is read
+	// fresh, nothing is carried (an empty list, never null), and it is not a
+	// re-lock.
+	if locked.Relocked || locked.Carried == nil || len(locked.Carried) != 0 || len(locked.Baselines) != 1 || locked.Baselines["widget.contract.overview"] == "" {
 		t.Fatalf("brief lock payload = %+v", locked)
 	}
 	raw := mustRead(t, briefPath)
@@ -405,6 +409,103 @@ func TestARelockKeepsAReviewPendingBriefPending(t *testing.T) {
 	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "list", "--review-pending"), &list)
 	if list.Count != 1 || list.Briefs[0].ReviewPendingTrigger != briefs.TriggerDependencyDrift {
 		t.Fatalf("the re-locked brief must stay review_pending on the moved claim, got %+v", list)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "reaudit", flow, "--confirm", "--reason", "the claim change is fine")
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "list", "--review-pending"), &list)
+	if list.Count != 0 {
+		t.Fatalf("brief reaudit --confirm must clear it, got %+v", list)
+	}
+}
+
+// TestUnlockEditLockKeepsAReviewPendingBriefPending pins the NIT-193 audit's
+// follow-up to F1: a brief review-pending on a moved claim that is unlocked,
+// edited and locked again is STILL review_pending. brief unlock releases the
+// approval, but the lock after it carries the released record's baseline and
+// receipt for every rests_on claim still listed (the dry run and the payload
+// name it in carried_baselines, and the lock reads as relocked), baselines a
+// claim newly listed as it reads now, and drops one no longer listed. The
+// moved claim's diff is then shown by brief reaudit, whose --confirm clears it;
+// check --staged, judging the committed index, agrees with --validate.
+func TestUnlockEditLockKeepsAReviewPendingBriefPending(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Fatalf("git not on PATH: the --staged half of this test cannot run (a skip is a failure): %v", err)
+	}
+	cfgPath, claimPath, briefPath, storeFile := briefLockProject(t)
+	root := filepath.Dir(cfgPath)
+	const flow = "briefs/widget/flow.md"
+	const overview, extra, third = "widget.contract.overview", "widget.contract.extra", "widget.contract.third"
+	for name, id := range map[string]string{"extra.yaml": extra, "third.yaml": third} {
+		src := "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nsummary: Another claim.\nbody: |\n  " + name + "\nrests_on:\n  - " + overview + "\n"
+		if err := os.WriteFile(filepath.Join(root, "claims", name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(briefPath, []byte(strings.Replace(draftWidgetFlow, "  - "+overview+"\n", "  - "+overview+"\n  - "+extra+"\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var first briefLockData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved"), &first)
+
+	claim := mustRead(t, claimPath)
+	if err := os.WriteFile(claimPath, []byte(strings.Replace(string(claim), "body: |\n", "body: |\n  rewritten.\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "unlock", flow, "--reason", "rework")
+	edited := strings.Replace(string(mustRead(t, briefPath)), "  - "+extra+"\n", "  - "+third+"\n", 1)
+	edited = strings.Replace(edited, "One paragraph.", "One paragraph, reworked.", 1)
+	if err := os.WriteFile(briefPath, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var dr cliout.DryRun
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--dry-run", "--reason", "x"), &dr)
+	got, err := json.Marshal(dr.Proposed["carried_baselines"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `["`+overview+`"]` {
+		t.Fatalf("the dry run must name the baseline carried over the released record, got %s", got)
+	}
+	var relock briefLockData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "the rework is approved"), &relock)
+	if !relock.Relocked || strings.Join(relock.Carried, ",") != overview || len(relock.Baselines) != 2 ||
+		relock.Baselines[overview] != first.Baselines[overview] || relock.Baselines[third] == "" {
+		t.Fatalf("a lock after unlock must carry the released baseline, baseline the new claim and drop the removed one: %+v (first %+v)", relock, first)
+	}
+	store, err := lock.LoadStore(storeFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := store.BriefRecordFor("widget.flow")
+	if _, ok := rec.Receipts[extra]; ok || rec.Receipts[third].ID != third || rec.Receipts[overview].Body == "" || rec.Released() {
+		t.Fatalf("the new record's receipts: %+v", rec)
+	}
+
+	var list briefListData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "list", "--review-pending"), &list)
+	if list.Count != 1 || list.Briefs[0].ReviewPendingTrigger != briefs.TriggerDependencyDrift || list.Briefs[0].LockState != "locked" {
+		t.Fatalf("the brief must stay review_pending on the moved claim after unlock, edit and lock, got %+v", list)
+	}
+	stagedGit(t, root, "init", "-q", "-b", "main")
+	stagedGit(t, root, "add", "-A")
+	for _, mode := range []string{"--validate", "--staged"} {
+		env, stderr, err := execCLIJSON(t, "--config", cfgPath, "check", mode)
+		if err != nil || !env.OK {
+			t.Fatalf("check %s: a warning must not fail it: %v %+v\n%s", mode, err, env.Error, stderr)
+		}
+		var data checkData
+		decodeData(t, env, &data)
+		if len(data.LedgerFindings) != 0 || !hasFinding(data.LintFindings, briefs.RuleDependencyDrift, flow, "warning") {
+			t.Fatalf("check %s must report the carried review as brief-dependency-drift and nothing in the ledger: lint %+v ledger %+v", mode, data.LintFindings, data.LedgerFindings)
+		}
+	}
+
+	var preview briefReauditData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "reaudit", flow), &preview)
+	if !preview.ReviewPending || len(preview.ChangedClaims) != 1 || preview.ChangedClaims[0].ID != overview ||
+		preview.ChangedClaims[0].Baseline == nil || preview.ChangedClaims[0].Current == nil ||
+		preview.ChangedClaims[0].Baseline.Body == preview.ChangedClaims[0].Current.Body {
+		t.Fatalf("the reaudit preview must show the moved claim's wording then and now: %+v", preview)
 	}
 	mustOK(t, "--config", cfgPath, "brief", "reaudit", flow, "--confirm", "--reason", "the claim change is fine")
 	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "list", "--review-pending"), &list)
