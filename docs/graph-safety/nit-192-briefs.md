@@ -125,8 +125,10 @@ way.
   lock store and the comment digest from the index.
   `TestBriefLockFindingsFollowTheTreeEachModeJudges` (`internal/check`) runs
   five rows — content drift, unrecorded, dependency drift, a gone claim, a
-  hand-edited brief comment block — each unstaged (reported by `--validate`,
-  not by `--staged`) and then staged (both agree).
+  forged brief comment block with no digest entry — each unstaged (reported by
+  `--validate`, not by `--staged`) and then staged (both agree);
+  `TestABriefCommentBlockEditedAfterItsDigestIsDrift` does the same for
+  `comment-ledger-drift` on a brief whose threads were recorded.
   `TestAStagedBriefLockTravelsWithItsRecord` stages a brief's `status:
   locked` without the store (`brief-unrecorded` at commit) and then with it
   (clean).

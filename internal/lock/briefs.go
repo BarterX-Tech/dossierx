@@ -1,7 +1,6 @@
 package lock
 
 import (
-	"sort"
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -176,30 +175,23 @@ func (s *Store) earnBriefsSchema() {
 // the brief records' receipts, the claim dependency receipts, and the claim
 // ledger's approved content. It is how a brief's baseline hash is turned back
 // into wording when the brief's own receipt is missing; it never reads git.
-// The search is one pass over what the store holds, and every candidate is
-// re-hashed, so a snapshot is returned only when it IS that content.
+// Every candidate is re-hashed, so a snapshot is returned only when it IS that
+// content — and since ContentHash signs the summary, body and steps, any two
+// matches carry the same wording, which is why the maps are walked in no
+// particular order. The cost is one pass over what the store holds, hashing
+// only snapshots of this claim id.
 func (s *Store) RetainedClaimContent(claimID, hash string) (model.Claim, bool) {
 	if s == nil || hash == "" {
 		return model.Claim{}, false
 	}
 	match := func(c model.Claim) bool { return c.ID == claimID && ContentHash(c) == hash }
-	ids := make([]string, 0, len(s.Briefs))
-	for id := range s.Briefs {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		if c, ok := s.Briefs[id].Receipts[claimID]; ok && match(c) {
+	for _, r := range s.Briefs {
+		if c, ok := r.Receipts[claimID]; ok && match(c) {
 			return c, true
 		}
 	}
-	deps := make([]string, 0, len(s.Receipts))
-	for id := range s.Receipts {
-		deps = append(deps, id)
-	}
-	sort.Strings(deps)
-	for _, id := range deps {
-		if r, ok := s.Receipts[id][claimID]; ok && match(r.Content) {
+	for _, deps := range s.Receipts {
+		if r, ok := deps[claimID]; ok && match(r.Content) {
 			return r.Content, true
 		}
 	}

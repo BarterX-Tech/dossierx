@@ -143,6 +143,16 @@ func TestEvaluate_AChangedClaimCarriesItsWordingThenAndNow(t *testing.T) {
 	if c.Baseline != nil || c.BaselineNote != UnavailableWording {
 		t.Fatalf("with nothing retained the wording must be reported unavailable, got %+v", c)
 	}
+
+	// Any other snapshot the store retains with that hash — here a claim's
+	// dependency receipt — stands in for the brief's own.
+	store.Receipts = map[string]map[string]lock.DependencyReceipt{
+		"widget.contract.other": {"widget.contract.a": {Hash: lock.ContentHash(claims[0]), Content: claims[0]}},
+	}
+	c = Evaluate(set, moved, store).Review(set.Briefs[0]).ChangedClaims[0]
+	if c.Baseline == nil || c.Baseline.Body != "a" || c.BaselineNote != "" {
+		t.Fatalf("a snapshot retained elsewhere in the store must supply the wording, got %+v", c)
+	}
 }
 
 // TestFindingsWith_AGoneBaselinedClaimIsOneFinding pins the hand-off between

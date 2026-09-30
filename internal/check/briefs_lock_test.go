@@ -13,6 +13,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 )
 
@@ -195,5 +196,48 @@ func TestRunRefusesABriefIntegrityFindingAfterTheProjections(t *testing.T) {
 	res, err = check.Run(loadAllFixtureClaims(t, cfg), cfg)
 	if err == nil || !strings.Contains(err.Error(), "ledger") || res.RenderPath == "" {
 		t.Fatalf("brief-content-drift must fail check at the ledger step, after the viewer is written: err=%v render=%q", err, res.RenderPath)
+	}
+}
+
+// TestABriefCommentBlockEditedAfterItsDigestIsDrift pins comment-ledger-drift
+// on a brief in both modes: once the digest store has recorded a brief's
+// threads, a hand edit of the block is the finding on the brief's path —
+// under --validate at once, and under --staged when the edit is staged.
+func TestABriefCommentBlockEditedAfterItsDigestIsDrift(t *testing.T) {
+	const thread = "comments:\n  - id: c-1\n    status: open\n    author: human\n    created: 2026-09-30T00:00:00Z\n    body: is this right?\n    edited: false\n"
+	withThread := strings.Replace(lockedBrief, "---\n# Widget", thread+"---\n# Widget", 1)
+	repo := filepath.Join(t.TempDir(), "repo")
+	cfg := writeProjectFiles(t, repo, baseConfig, map[string]string{
+		"claims/overview.yaml":  draftClaim("widget.contract.overview"),
+		"briefs/widget/flow.md": withThread,
+	})
+	armBrief(t, cfg)
+	digests, err := digest.LoadStore(cfg.CommentDigestPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := briefs.Load(cfg).Briefs[0]
+	digests.RecordBrief(b.ID, b.Comments)
+	if err := digests.Save(); err != nil {
+		t.Fatal(err)
+	}
+	gitRepo(t, repo)
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "fixture")
+	if got := lifecycleIn(worktreeVerdict(t, cfg)); len(got) != 0 {
+		t.Fatalf("precondition: a recorded thread must be silent, got %v", got)
+	}
+
+	writeFixtureFile(t, filepath.Join(repo, "briefs", "widget", "flow.md"), strings.Replace(withThread, "status: open", "status: resolved", 1))
+	want := "ledger|comment-ledger-drift|briefs/widget/flow.md"
+	if got := strings.Join(lifecycleIn(worktreeVerdict(t, cfg)), ","); got != want {
+		t.Fatalf("--validate: got %v, want %s", got, want)
+	}
+	if got, _ := stagedVerdict(t, cfg); len(lifecycleIn(got)) != 0 {
+		t.Fatalf("--staged must judge the still-clean index, got %v", lifecycleIn(got))
+	}
+	git(t, repo, "add", "-A")
+	if got, _ := stagedVerdict(t, cfg); strings.Join(lifecycleIn(got), ",") != want {
+		t.Fatalf("--staged once staged: got %v, want %s", lifecycleIn(got), want)
 	}
 }

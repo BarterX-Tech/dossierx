@@ -567,7 +567,7 @@
     "internal/layout": "sha256:6f2f699218c8402eccffef20eb46c7e30b08a39529381ff68bdc8b70e42ad07d",
     "internal/lint": "sha256:cbcffc134fb2f0929a8eba862defac2f7b1ca86bad52e70cca09991e769ae1c7",
     "internal/loader": "sha256:3a5245f97631a746ef373d8d02551383bc8d1b8f164f72437da6a3d9b04b10d5",
-    "internal/lock": "sha256:cb657674f6502ca77a8bcfc9902e386e02e4a9da3485a0cbe89374654e6f4e7b",
+    "internal/lock": "sha256:858741f0b574f93498f5df9ab54655d9a70521a9c926765ed0bf70d497930e1c",
     "internal/manifest": "sha256:b38a67f193608f0f3e16da7f5270da47640870f25f0b30d098aee89d12b4cd25",
     "internal/manifest/manifesttest": "sha256:9923dd2e327d0d8238fe3ec4b2de74e8ae0fd7a1d7efc8eb6cc638a19f990f94",
     "internal/model": "sha256:732aacf4060444d91efcf4fdcfe0bb4fb81750f0b3e68304e5607df28d97ef8e",

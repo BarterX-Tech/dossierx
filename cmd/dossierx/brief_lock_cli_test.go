@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -251,5 +252,93 @@ func TestBriefStateNeverGatesAClaim(t *testing.T) {
 	claim, _ := os.ReadFile(claimPath)
 	if strings.Contains(string(claim), "review_pending") {
 		t.Fatalf("a brief must never set review_pending on a claim:\n%s", claim)
+	}
+}
+
+// TestBriefLockRefusesALinkedBriefAndWritesNothing: a brief file that is a
+// symlink is refused by discovery (brief-shape), so brief lock cannot find it
+// (brief_not_found) and neither the link's target nor the lock store is
+// written.
+func TestBriefLockRefusesALinkedBriefAndWritesNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires POSIX symlinks")
+	}
+	cfgPath, _, _, storeFile := briefLockProject(t)
+	root := filepath.Dir(cfgPath)
+	target := filepath.Join(root, "outside.md")
+	if err := os.WriteFile(target, []byte(draftWidgetFlow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "briefs", "widget", "linked.md")); err != nil {
+		t.Fatal(err)
+	}
+	storeBefore, _ := os.ReadFile(storeFile)
+	mustCode(t, cliout.CodeBriefNotFound, "--config", cfgPath, "brief", "lock", "briefs/widget/linked.md", "--reason", "approved")
+	if got, _ := os.ReadFile(target); string(got) != draftWidgetFlow {
+		t.Fatal("the link's target was written")
+	}
+	if got, _ := os.ReadFile(storeFile); string(got) != string(storeBefore) {
+		t.Fatal("the lock store was written for a refused lock")
+	}
+}
+
+// TestBriefListAnswersWhenTheStoreCannotBeRead: an unreadable lock store does
+// not take brief list down — it answers, says in a warning that the store
+// could not be read, and reports a locked brief as unrecorded (no evidence it
+// was approved), the same fail-closed reading check gives.
+func TestBriefListAnswersWhenTheStoreCannotBeRead(t *testing.T) {
+	cfgPath, _, _, storeFile := briefLockProject(t)
+	mustOK(t, "--config", cfgPath, "brief", "lock", "briefs/widget/flow.md", "--reason", "approved")
+	if err := os.WriteFile(storeFile, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := mustOK(t, "--config", cfgPath, "brief", "list")
+	var list briefListData
+	decodeData(t, env, &list)
+	if len(env.Warnings) == 0 || !strings.Contains(strings.Join(env.Warnings, " "), "lock store could not be read") || list.Briefs[0].LockState != "unrecorded" {
+		t.Fatalf("an unreadable store must be a warning and the locked brief unrecorded, got warnings %v entries %+v", env.Warnings, list.Briefs)
+	}
+}
+
+// TestBriefLockAndReauditRefuseWhatTheyCannotSign pins the refusals FORMAT.md
+// names beyond comment_open: brief lock refuses a brief with an error finding
+// (lint_failed: an unknown rests_on id, and a frontmatter defect); brief
+// reaudit --confirm refuses a
+// brief edited since its approval (integrity_failed), because a reaudit
+// accepts moved claims and does not approve the brief's own edit; and locking
+// that edited brief again is how its edit is approved (relocked).
+func TestBriefLockAndReauditRefuseWhatTheyCannotSign(t *testing.T) {
+	cfgPath, claimPath, briefPath, _ := briefLockProject(t)
+	const flow = "briefs/widget/flow.md"
+	if err := os.WriteFile(briefPath, []byte(strings.Replace(draftWidgetFlow, "widget.contract.overview", "widget.contract.ghost", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustCode(t, cliout.CodeLintFailed, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+	if err := os.WriteFile(briefPath, []byte(strings.Replace(draftWidgetFlow, "---\n# Widget", "owner: me\n---\n# Widget", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustCode(t, cliout.CodeLintFailed, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+
+	if err := os.WriteFile(briefPath, []byte(draftWidgetFlow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "approved")
+	raw, _ := os.ReadFile(briefPath)
+	if err := os.WriteFile(briefPath, []byte(strings.Replace(string(raw), "One paragraph.", "One paragraph, edited.", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	claim, _ := os.ReadFile(claimPath)
+	if err := os.WriteFile(claimPath, []byte(strings.Replace(string(claim), "body: |\n", "body: |\n  rewritten.\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustCode(t, cliout.CodeIntegrityFailed, "--config", cfgPath, "brief", "reaudit", flow, "--confirm", "--reason", "fine")
+
+	var relock briefLockData
+	decodeData(t, mustOK(t, "--config", cfgPath, "brief", "lock", flow, "--reason", "the edit is approved"), &relock)
+	if !relock.Relocked {
+		t.Fatalf("locking an edited brief is a re-lock, got %+v", relock)
+	}
+	if lint, ledger := validateFindings(t, cfgPath); len(ledger) != 0 || hasBriefRule(lint) {
+		t.Fatalf("a re-lock signs the edit and re-baselines the claims: lint %+v ledger %+v", lint, ledger)
 	}
 }
