@@ -71,13 +71,14 @@ func (w *watcher) scan() (map[string]fileStamp, error) {
 		if _, statErr := os.Lstat(tree.root); errors.Is(statErr, fs.ErrNotExist) {
 			continue
 		}
-		// A read error inside an extra tree is ISOLATED: it becomes a stamp on
-		// the entry that could not be read, never a scan error. A scan error
-		// keeps the whole previous fingerprint, so an unreadable brief folder
-		// used to stop live reload for the CLAIMS as well. As a stamp, entering
-		// and leaving the unreadable state is itself a change, and the render
-		// it triggers re-reads the tree and reports the entry (briefs.Load's
-		// brief-shape "could not be read" finding, in check.Status).
+		// A read error inside an extra tree, its root included, is ISOLATED:
+		// it becomes a stamp on the entry that could not be read, never a scan
+		// error. A scan error keeps the whole previous fingerprint, so an
+		// unreadable brief folder (or briefs_dir itself) used to stop live
+		// reload for the CLAIMS as well. As a stamp, entering and leaving the
+		// unreadable state is itself a change, and the render it triggers
+		// re-reads the tree and reports the entry (briefs.Load's brief-shape
+		// "could not be read" finding, in check.Status).
 		sub, treeErr := fingerprintTreeWith(tree.root, true, tree.ignore, unreadableStamp)
 		if treeErr != nil {
 			return nil, treeErr
@@ -213,12 +214,14 @@ var unreadableStamp = &fileStamp{modNano: -1, size: -1}
 // fingerprintTreeWith is fingerprintTree with a third knob, onErr: nil aborts
 // the walk on a read error (both claim fingerprints, whose callers keep their
 // previous state on an error); non-nil records onErr as the stamp of the entry
-// that could not be read and walks on. The root's own error always aborts.
+// that could not be read and walks on — the root's own error included, so an
+// unreadable briefs_dir is one stamp on its path and not a scan error that
+// would stop claim live reload with it.
 func fingerprintTreeWith(root string, skipDotDirs bool, ignore func(name string) bool, onErr *fileStamp) (map[string]fileStamp, error) {
 	fp := make(map[string]fileStamp)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if onErr == nil || path == root {
+			if onErr == nil {
 				return err
 			}
 			fp[path] = *onErr

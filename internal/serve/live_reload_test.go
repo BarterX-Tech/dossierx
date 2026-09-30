@@ -214,54 +214,66 @@ func TestSSE_BriefEditDeliversChangedAndRerenders(t *testing.T) {
 }
 
 // TestSSE_UnreadableBriefFolderKeepsClaimReload pins that a read error inside
-// briefs_dir is isolated to the briefs tree: with a brief folder unreadable, a
-// claim edit still delivers a changed and a page carrying the edit. The
-// watcher used to fail its whole scan on the brief tree's error and keep its
-// previous fingerprint forever, so no claim edit reloaded the page until the
-// folder became readable again.
+// briefs_dir is isolated to the briefs tree: with a brief folder, or briefs_dir
+// itself, unreadable, a claim edit still delivers a changed and a page carrying
+// the edit. The watcher used to fail its whole scan on the brief tree's error
+// and keep its previous fingerprint forever, so no claim edit reloaded the page
+// until the tree became readable again.
 func TestSSE_UnreadableBriefFolderKeepsClaimReload(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("needs POSIX permissions enforced: an unreadable directory is still readable on Windows and to root")
 	}
-	files := standardFiles()
-	files["briefs/widget/flow.md"] = "---\nsummary: A brief.\n---\n# Widget flow\n"
-	files["briefs/secret/plan.md"] = "---\nsummary: Behind a locked door.\n---\nText.\n"
-	_, base, root := startServerFast(t, files)
-	events, cancel := sseClient(t, base)
-	defer cancel()
+	for _, tc := range []struct {
+		name       string
+		unreadable string // slash path under the project root made mode 000
+		reported   string // what the status verdict must carry about it
+	}{
+		{name: "a brief folder", unreadable: "briefs/secret", reported: `briefs/secret/`},
+		{name: "briefs_dir itself", unreadable: "briefs", reported: `briefs_dir could not be read`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := standardFiles()
+			files["briefs/widget/flow.md"] = "---\nsummary: A brief.\n---\n# Widget flow\n"
+			files["briefs/secret/plan.md"] = "---\nsummary: Behind a locked door.\n---\nText.\n"
+			_, base, root := startServerFast(t, files)
+			events, cancel := sseClient(t, base)
+			defer cancel()
 
-	secret := filepath.Join(root, "briefs", "secret")
-	if err := os.Chmod(secret, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chmod(secret, 0o755) }) //nolint:errcheck // best-effort restore for TempDir cleanup
-	// The folder turning unreadable is itself a change to the briefs tree;
-	// let that event land (or not) before the claim edit, without asserting
-	// on it — what this test pins is the claim edit.
-	select {
-	case <-events:
-	case <-time.After(time.Second):
-	}
-
-	const marker = "edited while a brief folder is unreadable."
-	writeFile(t, filepath.Join(root, "claims", "one.yaml"),
-		strings.Replace(draftClaim("widget.contract.one"), "a draft claim.", marker, 1))
-	waitChanged(t, events, 3*time.Second)
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		resp, page := do(t, http.MethodGet, base+"/", "")
-		if resp.StatusCode == http.StatusOK && strings.Contains(string(page), marker) {
-			// And the unreadable folder is reported, not silently watched
-			// around: the status verdict carries its brief-shape finding.
-			if _, status := do(t, http.MethodGet, base+"/api/status", ""); !strings.Contains(string(status), `briefs/secret/`) {
-				t.Fatalf("the status verdict must report the unreadable brief folder: %s", status)
+			locked := filepath.Join(root, filepath.FromSlash(tc.unreadable))
+			if err := os.Chmod(locked, 0o000); err != nil {
+				t.Fatal(err)
 			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("a claim edit must reach the page while a brief folder is unreadable: %d", resp.StatusCode)
-		}
-		time.Sleep(fastPoll)
+			t.Cleanup(func() { os.Chmod(locked, 0o755) }) //nolint:errcheck // best-effort restore for TempDir cleanup
+			// The tree turning unreadable is itself a change to the briefs
+			// tree; let that event land (or not) before the claim edit,
+			// without asserting on it — what this test pins is the claim edit.
+			select {
+			case <-events:
+			case <-time.After(time.Second):
+			}
+
+			const marker = "edited while a brief folder is unreadable."
+			writeFile(t, filepath.Join(root, "claims", "one.yaml"),
+				strings.Replace(draftClaim("widget.contract.one"), "a draft claim.", marker, 1))
+			waitChanged(t, events, 3*time.Second)
+			deadline := time.Now().Add(3 * time.Second)
+			for {
+				resp, page := do(t, http.MethodGet, base+"/", "")
+				if resp.StatusCode == http.StatusOK && strings.Contains(string(page), marker) {
+					// And the unreadable entry is reported, not silently
+					// watched around: the status verdict carries its
+					// brief-shape finding.
+					if _, status := do(t, http.MethodGet, base+"/api/status", ""); !strings.Contains(string(status), tc.reported) {
+						t.Fatalf("the status verdict must report the unreadable %s (%q): %s", tc.unreadable, tc.reported, status)
+					}
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("a claim edit must reach the page while %s is unreadable: %d", tc.unreadable, resp.StatusCode)
+				}
+				time.Sleep(fastPoll)
+			}
+		})
 	}
 }
 
