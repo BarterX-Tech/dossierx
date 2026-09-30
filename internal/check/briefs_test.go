@@ -149,6 +149,75 @@ func TestBriefSymlinksAreRefusedInBothModes(t *testing.T) {
 	}
 }
 
+// TestBriefSubmodulesAreRefusedInBothModes is the submodule half of the parity
+// above: another repository checked out where a brief folder, or briefs_dir
+// itself, should be. The index holds it as one gitlink (mode 160000), which
+// --staged refuses as brief-shape; the working tree holds a directory with a
+// .git entry, which --validate used to read as a plain folder, judging the
+// other repository's files as this project's briefs. Both rows put a brief
+// with no shape fault inside the checkout, so reading it raises no brief-shape
+// finding and only the refusal matches. The folder row is a real `git
+// submodule add`, whose checkout carries a .git FILE (gitdir: <path>); the
+// root row is an embedded repository, whose .git is the directory git init
+// makes. Both are what Load must recognise.
+func TestBriefSubmodulesAreRefusedInBothModes(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		checkout  string            // repo-relative path of the other repository
+		files     map[string]string // its files
+		submodule bool              // git submodule add; otherwise embed it in place
+		want      []string
+	}{
+		{
+			name:      "a submodule added as a brief folder",
+			checkout:  "briefs/vendored",
+			files:     map[string]string{"flow.md": cleanBrief},
+			submodule: true,
+			want:      []string{"brief-shape briefs/vendored"},
+		},
+		{
+			name:     "an embedded repository as briefs_dir itself",
+			checkout: "briefs",
+			files:    map[string]string{"widget/flow.md": cleanBrief},
+			want:     []string{"brief-shape briefs/"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := filepath.Join(t.TempDir(), "repo")
+			files := map[string]string{"claims/overview.yaml": draftClaim("widget.contract.overview")}
+			if tc.checkout != "briefs" {
+				files["briefs/widget/flow.md"] = cleanBrief
+			}
+			cfg := writeProjectFiles(t, repo, baseConfig, files)
+			checkout := filepath.Join(repo, filepath.FromSlash(tc.checkout))
+			if tc.submodule {
+				other := filepath.Join(t.TempDir(), "other")
+				nestedRepo(t, other, tc.files)
+				gitRepo(t, repo)
+				git(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", other, tc.checkout)
+				if info, err := os.Lstat(filepath.Join(checkout, ".git")); err != nil || !info.Mode().IsRegular() {
+					t.Fatalf("fixture precondition: a submodule checkout carries a .git file, got %v %v", info, err)
+				}
+			} else {
+				nestedRepo(t, checkout, tc.files)
+				gitRepo(t, repo)
+			}
+			git(t, repo, "add", "-A")
+			git(t, repo, "commit", "-qm", "fixture")
+			requireMode(t, repo, tc.checkout, "160000")
+
+			worktree := briefRulesIn(worktreeVerdict(t, cfg))
+			staged, _ := stagedVerdict(t, cfg)
+			if strings.Join(worktree, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("--validate must refuse the submodule checkout, not read it: got %v, want %v", worktree, tc.want)
+			}
+			if got := briefRulesIn(staged); strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("--staged must refuse the gitlink --validate refuses: got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestRunStopsAtLintOnABriefError pins that a brief ERROR is a lint error of
 // the writing run: it stops before the catalog and the viewer, exactly as a
 // claim's would — the caps are final, not advisory.

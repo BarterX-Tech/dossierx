@@ -1462,9 +1462,11 @@ briefs/                       # briefs_dir; absent means no briefs
   the folder does not hold.
 - The tree is plain directories and plain files. A symlinked or submodule
   folder is refused on its path, and a `briefs_dir` that is itself a symlink
-  is refused on `briefs/` — never followed, and never read as no briefs. A
-  folder or file that cannot be read is refused on its own path, and the rest
-  of the tree is still read.
+  or a submodule is refused on `briefs/` — never followed, never read, and
+  never read as no briefs. On disk a submodule is a directory holding a `.git`
+  entry (the directory or the file a checkout carries). A folder or file that
+  cannot be read is refused on its own path, and the rest of the tree is
+  still read.
 - Folder names, brief names and image names are drawn from `[a-z0-9-]`, and
   every extension is lowercase. That is what makes a brief's id
   `<folder>.<slug>` slash-free, so it can be one route segment and one store
@@ -1547,7 +1549,7 @@ brief finding's `claim_id` is the **path** it is about — the brief
 (`briefs/checkout/flow.md`), the folder (`briefs/checkout/`) or the tree
 (`briefs/`). `check --staged` reads the briefs from the index, like the
 claims, and refuses a symlink or a submodule entry there exactly as the
-working tree refuses the link.
+working tree refuses the link or the checkout.
 
 ### What a brief never touches
 

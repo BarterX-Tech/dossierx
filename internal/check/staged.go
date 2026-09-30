@@ -986,12 +986,9 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 // brief-shape, and dropping one from the index would let the hook pass a tree
 // --validate refuses. Each goes to FromFiles as a non-regular File, so both
 // modes judge it under the same rule — including a briefs_dir that is itself a
-// link, which the index lists as one entry at the spec (Rel ".").
-//
-// The one residual difference is the safe direction: a submodule checked out as
-// a brief FOLDER is a directory on disk, which Load reads, while --staged
-// refuses the gitlink. A refusal at the keyboard, never a false clean in the
-// mode the hook runs.
+// link, which the index lists as one entry at the spec (Rel "."). A submodule
+// is a gitlink here and a directory holding .git on disk; Load refuses that
+// directory as the same non-regular entry, so the two modes agree on it too.
 func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 	dir := cfg.BriefsDirPath()
 	spec, err := g.spec(dir)

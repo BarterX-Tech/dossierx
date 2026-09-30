@@ -193,7 +193,9 @@ type File struct {
 // The root is read with Lstat, not Stat: a briefs_dir that is a SYMLINK is
 // refused (brief-shape on the tree), for the reason a symlinked brief is. Stat
 // followed the link and WalkDir then declined to descend a symlinked root, so a
-// linked tree read as a project with no briefs at all.
+// linked tree read as a project with no briefs at all. A directory holding a
+// .git entry — briefs_dir itself or any folder below it — is a submodule
+// checkout and is refused the same way, without being read (see nestedRepo).
 func Load(cfg *config.Config) *Set {
 	dir := cfg.BriefsDirPath()
 	info, err := os.Lstat(dir)
@@ -207,6 +209,9 @@ func Load(cfg *config.Config) *Set {
 	}
 	if !info.IsDir() {
 		return FromFiles(cfg, []File{{Rel: ".", Regular: info.Mode().IsRegular(), Size: info.Size()}})
+	}
+	if nestedRepo(dir) {
+		return FromFiles(cfg, []File{{Rel: "."}})
 	}
 	// An entry that cannot be read below the root is ONE finding on that
 	// entry, and the walk goes on: an unreadable folder must not drop every
@@ -252,12 +257,18 @@ func Load(cfg *config.Config) *Set {
 			}
 			return nil
 		}
-		if d.IsDir() {
-			return nil
-		}
 		rel, relErr := filepath.Rel(dir, p)
 		if relErr != nil {
 			return relErr
+		}
+		if d.IsDir() {
+			if nestedRepo(p) {
+				// A checked-out submodule: the non-regular entry the index
+				// holds as a gitlink, refused under the same rule, never read.
+				files = append(files, File{Rel: filepath.ToSlash(rel)})
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		f := File{Rel: filepath.ToSlash(rel), Regular: d.Type().IsRegular()}
 		if !f.Regular {
@@ -289,6 +300,16 @@ func Load(cfg *config.Config) *Set {
 		s.add(RuleShape, u.display, "could not be read (%v); a brief the engine cannot read is not judged, so this is refused rather than skipped", readErrText(u.err))
 	}
 	return s
+}
+
+// nestedRepo reports whether dir holds a .git entry, a directory or the file a
+// submodule checkout carries: another repository's work tree, which the index
+// lists as one gitlink. Load hands such a directory to FromFiles as a
+// non-regular File so the working tree refuses exactly the path --staged does,
+// where it used to read the checkout as a plain folder.
+func nestedRepo(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 // readErrText is an I/O error without the absolute path a *fs.PathError
