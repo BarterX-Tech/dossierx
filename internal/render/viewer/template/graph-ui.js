@@ -36,7 +36,7 @@
   //    is a reading-view target id; the graph appends its own state after a
   //    "!" separator and owns nothing before it. replaceState does not fire
   //    hashchange, so changing a filter never re-enters the reading view's
-  //    routing and can never reset it to the first module. The one place
+  //    routing and can never move it to Home. The one place
   //    location.hash is assigned is the detail panel's "open claim" action,
   //    which WANTS the reading view to move.
   //

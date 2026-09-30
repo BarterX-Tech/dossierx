@@ -1,6 +1,8 @@
 package render
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -8,6 +10,9 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
 )
@@ -41,8 +46,13 @@ func TestRender_HomeWaitingOnYou(t *testing.T) {
 	threaded := projectTestClaim("gateway", "threaded", model.StatusLocked)
 	threaded.Comments = []model.Comment{openComment("c-aaaaaa", "why?"), openComment("c-bbbbbb", "and?")}
 	quiet := projectTestClaim("gateway", "quiet", model.StatusLocked)
+	// A draft whose dependency changed has no approval to re-read, and a
+	// locked claim with only a ledger-integrity cause is the status strip's,
+	// not "something it rests on changed": neither is to re-read.
+	draftDep := projectTestClaim("gateway", "draftdep", model.StatusDraft)
+	drifted := projectTestClaim("gateway", "drifted", model.StatusLocked)
 
-	cat, err := catalog.Build([]model.Claim{edited, upstream, direct, threaded, quiet}, cfg)
+	cat, err := catalog.Build([]model.Claim{edited, upstream, direct, threaded, quiet, draftDep, drifted}, cfg)
 	if err != nil {
 		t.Fatalf("catalog.Build: %v", err)
 	}
@@ -54,6 +64,8 @@ func TestRender_HomeWaitingOnYou(t *testing.T) {
 		upstream.ID: cause(readiness.CauseUpstreamDependencyReview),
 		direct.ID:   cause(readiness.CauseDirectDependencyChange),
 		threaded.ID: cause(readiness.CauseOwnThread),
+		draftDep.ID: cause(readiness.CauseDirectDependencyChange),
+		drifted.ID:  cause(readiness.CauseApprovalContentDrift),
 	})
 	cat.SetApprovedEdits(map[string]approvaledit.Change{edited.ID: {ClaimID: edited.ID}})
 
@@ -67,7 +79,7 @@ func TestRender_HomeWaitingOnYou(t *testing.T) {
 		{"edited", "1", edited.ID},
 		{"review", "2", direct.ID},
 		{"thread", "2", threaded.ID},
-		{"draft", "1", edited.ID},
+		{"draft", "2", draftDep.ID},
 	}
 	if got := strings.Join(order, ","); got != "edited,review,thread,draft" {
 		t.Fatalf("cards in order %q, want edited,review,thread,draft", got)
@@ -78,8 +90,8 @@ func TestRender_HomeWaitingOnYou(t *testing.T) {
 			t.Errorf("%s card = count %s -> #%s, want count %s -> #%s", w.kind, got[0], got[1], w.count, w.target)
 		}
 	}
-	if !strings.Contains(out, "6 items across 4 kinds") {
-		t.Errorf("header summary missing \"6 items across 4 kinds\"")
+	if !strings.Contains(out, "7 items across 4 kinds") {
+		t.Errorf("header summary missing \"7 items across 4 kinds\"")
 	}
 	if strings.Contains(out, `class="home-clear"`) {
 		t.Errorf("the all-clear line rendered while cards are waiting")
@@ -89,9 +101,9 @@ func TestRender_HomeWaitingOnYou(t *testing.T) {
 // TestRender_HomeEmptyStates pins the design review's empty states: with
 // nothing waiting the card row is one "Nothing waiting on you" line, and a
 // project with no constitution.yaml has no Constitution tile, while one with
-// it shows the file's counts and lock state. The sidebar's Constitution
-// entry follows the file (a project claim alone also keeps it, see
-// project_claims_test.go's fixture, which has one).
+// it shows the file's counts and the roof gate's lock state (the lock
+// store's verdict, not the file's status line). The sidebar's Constitution
+// entry shows while there is the file or a project claim.
 func TestRender_HomeEmptyStates(t *testing.T) {
 	cfg := projectTestConfig(t)
 	claims := []model.Claim{
@@ -117,9 +129,58 @@ func TestRender_HomeEmptyStates(t *testing.T) {
 		t.Errorf("Modules tile missing, or not leading to the first module with 2 of 2 locked")
 	}
 
-	writeFile(t, cfg.ConstitutionPath(),
-		"status: locked\ninvariants:\n  - slug: one\n    body: One rule.\n  - slug: two\n    body: Two rules.\ndecisions:\n  - slug: d\n    body: A decision.\n")
+	// A project claim with no constitution.yaml keeps the sidebar entry: its
+	// page is where project claims live. The tile still needs the file.
+	scope := model.Claim{ID: "project.scope", Scope: model.ScopeProject, Status: model.StatusDraft,
+		Layout: model.LayoutCard, Body: "scope", RestsOn: model.RestsNone("test fixture")}
+	out = renderProject(t, cfg, append(append([]model.Claim(nil), claims...), scope))
+	if !strings.Contains(out, `class="sec-tab site-nav__item constitution-tab"`) {
+		t.Errorf("Constitution sidebar entry missing for a project claim with no constitution.yaml")
+	}
+	if strings.Contains(out, `<a class="home-tile" data-tile="constitution"`) {
+		t.Errorf("Constitution tile rendered with no constitution.yaml")
+	}
+
+	const roof = "status: locked\ninvariants:\n  - slug: one\n    body: One rule.\n  - slug: two\n    body: Two rules.\ndecisions:\n  - slug: d\n    body: A decision.\n"
+	writeFile(t, cfg.ConstitutionPath(), roof)
+
+	// "status: locked" with no lock record is the gate's "unrecorded": never
+	// approved, so neither the tile nor the sidebar may say Locked.
 	out = renderProject(t, cfg, claims)
+	if tile := between(t, out, `<a class="home-tile" data-tile="constitution"`, `</a>`); !strings.Contains(tile, `data-state="unrecorded">Not locked`) {
+		t.Errorf("an unrecorded roof must read Not locked:\n%s", tile)
+	}
+	if strings.Contains(out, `class="dx-icon dx-icon--lock site-nav__lock"`) {
+		t.Errorf("the sidebar shows a lock for a roof with no lock record")
+	}
+
+	// Record the lock the way constitution lock does, then edit the file:
+	// the gate says edited, and so must Home.
+	f, err := constitution.Load(cfg.ConstitutionPath())
+	if err != nil {
+		t.Fatalf("load roof: %v", err)
+	}
+	store, err := lock.LoadStore(cfg.LockStorePath())
+	if err != nil {
+		t.Fatalf("load store: %v", err)
+	}
+	store.Constitution = &constitution.LockRecord{Hash: constitution.Hash(f), Reason: "test"}
+	if err := store.Save(); err != nil {
+		t.Fatalf("save store: %v", err)
+	}
+	out = renderProject(t, cfg, claims)
+	if !strings.Contains(out, `class="dx-icon dx-icon--lock site-nav__lock"`) {
+		t.Errorf("the sidebar shows no lock for a locked roof")
+	}
+	writeFile(t, cfg.ConstitutionPath(), strings.Replace(roof, "One rule.", "One rule, edited.", 1))
+	edited := renderProject(t, cfg, claims)
+	if tile := between(t, edited, `<a class="home-tile" data-tile="constitution"`, `</a>`); !strings.Contains(tile, `data-state="edited">Edited since lock`) {
+		t.Errorf("a roof edited after its lock must not read Locked:\n%s", tile)
+	}
+	if strings.Contains(edited, `class="dx-icon dx-icon--lock site-nav__lock"`) {
+		t.Errorf("the sidebar shows a lock for a roof edited after its lock")
+	}
+	writeFile(t, cfg.ConstitutionPath(), roof)
 	if !strings.Contains(out, `class="sec-tab site-nav__item constitution-tab"`) {
 		t.Errorf("Constitution sidebar entry missing once constitution.yaml exists")
 	}
@@ -151,6 +212,57 @@ func TestRender_HomeCardsNameABoundedNumberOfClaims(t *testing.T) {
 	card := between(t, out, `<a class="home-card" data-kind="thread"`, `</a>`)
 	if !strings.Contains(card, "On T0, T1, T2 and 4 more.") {
 		t.Errorf("thread card does not name three claims and count four more:\n%s", card)
+	}
+}
+
+// TestRender_HomeSizeIsIndependentOfCorpusSize pins the graph-safety bound
+// docs/graph-safety/nit-196-home.md records: with every claim on every card
+// (a draft or a locked claim with a dependency change, each with an open
+// thread, across five modules), the Home section grows only by the digits of
+// its counts, and the draft card names at most three modules.
+func TestRender_HomeSizeIsIndependentOfCorpusSize(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "project.config.yaml")
+	writeFile(t, cfgPath, "schema_version: 1\nfacets: [contract, internals]\nmodules: [m1, m2, m3, m4, m5]\nclaims_dir: claims\n")
+	if err := os.MkdirAll(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	homeBytes := func(n int) (int, string) {
+		var claims []model.Claim
+		ra := map[string]readiness.Assessment{}
+		for i := 0; i < n; i++ {
+			st := model.StatusDraft
+			if i%2 == 0 {
+				st = model.StatusLocked
+			}
+			c := projectTestClaim("m"+strconv.Itoa(1+i%5), "c"+strconv.Itoa(100000+i), st)
+			c.Comments = []model.Comment{openComment("c-"+strconv.Itoa(100000+i), "q")}
+			claims = append(claims, c)
+			ra[c.ID] = readiness.Assessment{ReviewPending: true, ReviewCauses: []readiness.Cause{{Kind: readiness.CauseUpstreamDependencyReview}}}
+		}
+		cat, err := catalog.Build(claims, cfg)
+		if err != nil {
+			t.Fatalf("catalog.Build: %v", err)
+		}
+		cat.SetReadiness(ra)
+		out, err := Render(cat, cfg)
+		if err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		home := between(t, out, `<section class="module-section home-section"`, `</main>`)
+		return len(home), home
+	}
+	small, _ := homeBytes(10)
+	large, home := homeBytes(2000)
+	if large-small > 64 {
+		t.Errorf("Home grew %d bytes from 10 to 2,000 claims (%d -> %d); it must grow only by count digits", large-small, small, large)
+	}
+	if !strings.Contains(home, "and 2 more modules.") {
+		t.Errorf("draft card does not name three modules and count the other two")
 	}
 }
 

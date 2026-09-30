@@ -8,6 +8,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
@@ -64,9 +65,16 @@ type HomeCard struct {
 
 // HomeConstitutionTile summarises constitution.yaml. Present is false when
 // the project has no constitution file, which hides the tile.
+//
+// State is the roof gate's own verdict (constitution.Evaluate against the
+// lock store's record), not the file's status line: a hand-flipped
+// "status: locked" with no record, or a locked file edited since, is not
+// shown as Locked. Label is the pill's word for it.
 type HomeConstitutionTile struct {
 	Present       bool
 	Locked        bool
+	State         string
+	Label         string
 	ProjectClaims int
 	// Stats are the invariants, decisions and glossary counts in that order,
 	// each with its label already made singular or plural; Line is the same
@@ -86,8 +94,11 @@ type HomeStat struct {
 type HomeModulesTile struct {
 	Modules int
 	Claims  int
-	Locked  int
-	Draft   int
+	// Line is "214 claims · 202 locked · 12 draft", the draft part only
+	// when there are drafts.
+	Line   string
+	Locked int
+	Draft  int
 	// Percent is Locked/Claims rounded down, 0..100.
 	Percent int
 	// FirstModuleID is where the tile leads.
@@ -146,7 +157,7 @@ func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGro
 			Count:      len(review),
 			Label:      "To re-read",
 			ShortLabel: "To re-read",
-			Detail:     countNoun(len(review), "claim") + ": something they rest on changed since approval.",
+			Detail:     reviewDetail(len(review)),
 			Short:      countNoun(len(review), "claim"),
 			Action:     "Review",
 			Target:     review[0].ID,
@@ -191,6 +202,13 @@ func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGro
 	return view
 }
 
+func reviewDetail(n int) string {
+	if n == 1 {
+		return "1 claim: something it rests on changed since approval."
+	}
+	return countNoun(n, "claim") + ": something they rest on changed since approval."
+}
+
 // dependencyChanged reports whether live readiness says a claim must be
 // re-read because something it rests on changed: a direct dependency moved
 // since its baseline, or the change reached it through an unchanged
@@ -219,6 +237,10 @@ func homeModulesTile(modules []ModuleGroup) HomeModulesTile {
 	if t.Claims > 0 {
 		t.Percent = t.Locked * 100 / t.Claims
 	}
+	t.Line = fmt.Sprintf("%s · %d locked", countNoun(t.Claims, "claim"), t.Locked)
+	if t.Draft > 0 {
+		t.Line += fmt.Sprintf(" · %d draft", t.Draft)
+	}
 	if len(modules) > 0 {
 		t.FirstModuleID = modules[0].ID
 	}
@@ -237,13 +259,33 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 	if cfg == nil {
 		return t
 	}
-	f, err := constitution.LoadOptional(cfg.ConstitutionPath())
-	if err != nil || f == nil {
+	var rec *constitution.LockRecord
+	if store, err := lock.LoadStore(cfg.LockStorePath()); err == nil && store != nil {
+		rec = store.Constitution
+	}
+	f, loadErr := constitution.Load(cfg.ConstitutionPath())
+	v := constitution.Evaluate(cfg.ConstitutionPath(), f, loadErr, rec)
+	switch v.State {
+	case constitution.StateMissing:
+		return t
+	case constitution.StateLocked:
+		t.Label = "Locked"
+	case constitution.StateDraft:
+		t.Label = "Draft"
+	case constitution.StateEdited:
+		t.Label = "Edited since lock"
+	case constitution.StateUnrecorded:
+		t.Label = "Not locked"
+	default:
+		t.Label = "Unreadable"
+	}
+	t.Present = true
+	t.State = string(v.State)
+	t.Locked = v.State == constitution.StateLocked
+	if f == nil {
 		return t
 	}
 	d := constitution.NewDigest(cfg.ConstitutionPath(), f)
-	t.Present = true
-	t.Locked = d.Status == string(model.StatusLocked)
 	t.Stats = []HomeStat{
 		{d.Invariants, plural(d.Invariants, "invariant")},
 		{d.Decisions, plural(d.Decisions, "decision")},

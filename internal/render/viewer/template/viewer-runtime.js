@@ -103,10 +103,9 @@
         // sourceToFacet maps every SOURCE ROW's anchor id
         // ("<claim-id>-source-<n>", components.ClaimSourceAnchorID) to its
         // owning .claim-group. A "[n]" citation marker in a claim body links
-        // straight at one of these, and resolve() falls back to the FIRST
-        // MODULE for any hash it does not recognize — so without this index a
-        // reader clicking a citation would be moved to a different module
-        // entirely, which is both wrong and hard to attribute to the click.
+        // straight at one of these, and resolve() falls back to Home for any
+        // hash it does not recognize — so without this index a reader
+        // clicking a citation would be moved off the module entirely, which is both wrong and hard to attribute to the click.
         // Every claim renders exactly once, so this map is one-to-one for the
         // same reason claimToFacet is.
         sourceToFacet = {};
@@ -143,8 +142,9 @@
       // triple. Checked in order: a claim id -> its own card's facet + module; a
       // source row's anchor id -> the same, but scrolled to the row rather than
       // to the card; a facet id -> its own module + itself; a bare module id
-      // -> that module + its default facet; anything else -> the first module
-      // + its default facet.
+      // -> that module + its default facet; Home's own id -> Home; anything
+      // else -> Home, or the first module + its default facet when the shell
+      // has no Home section.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -169,10 +169,12 @@
         }
         // Home (NIT-196) is the page the viewer opens on, and where any hash
         // it does not recognise lands. It holds no facet, so it resolves to
-        // itself alone. A shell override without a Home section keeps the
-        // older landing: the first module.
-        if (document.getElementById('home')) {
-          return { module: 'home' };
+        // itself alone. Its id, HOME_ID, carries an underscore, which
+        // render.slugify never emits, so no module can share it. A shell
+        // override without a Home section keeps the older landing: the first
+        // module.
+        if (document.getElementById(HOME_ID)) {
+          return { module: HOME_ID };
         }
         return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
       }
@@ -185,6 +187,14 @@
       // theme probes, and live-reload witnesses that call getElementById keep
       // working without visiting every facet first.
       var SOFT_MOUNT_MIN_CLAIMS = 80;
+
+      // HOME_ID is the Home section's element id and hash (shell.html).
+      var HOME_ID = '_home';
+
+      function homeActive() {
+        var home = document.getElementById(HOME_ID);
+        return !!home && !home.hidden;
+      }
 
       function claimCorpusSize() {
         var n = 0;
@@ -327,9 +337,9 @@
       // history.replaceState only. A hash with no '!' behaves exactly as it
       // did before the graph pane existed.
       //
-      // The split matters in both directions. resolve() falls back to the
-      // FIRST MODULE for anything it does not recognize, so a bare graph-state
-      // hash reaching it would silently reset the reader's module — hence
+      // The split matters in both directions. resolve() falls back to
+      // Home for anything it does not recognize, so a bare graph-state hash
+      // reaching it would silently move the reader off their module — hence
       // hashId() truncating. And showModuleFacet rewrites the hash on every
       // nav, so a rewrite that dropped the suffix would erase the graph state
       // the pane had just written — hence hashGraphSuffix() being appended.
@@ -2765,7 +2775,10 @@
         var bannerShowing = groups.length > 0 && actionable;
         renderClaimReadiness(lastStatusData.readiness || offlineReadiness(), bannerShowing);
         renderApprovedEdits();
-        if (!groups.length || !actionable) {
+        // Home is not a facet: its cards already say what is waiting, and a
+        // strip there would count findings "in this facet" for a page that
+        // has none. The strip returns with the next module page.
+        if (!groups.length || !actionable || homeActive()) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
@@ -4009,6 +4022,13 @@
           noteToggle.textContent = opening
             ? (noteToggle.getAttribute('data-collapse-label') || 'show less')
             : ((noteSt && noteSt.expandLabel) || 'show more');
+          return;
+        }
+        // The project name is a plain link to Home. The hash change does the
+        // navigation; closing the drawer here covers the case it cannot: a
+        // tap while Home is already showing fires no hashchange.
+        if (e.target.closest('.home-link')) {
+          setDrawer(false);
           return;
         }
         var secTab = e.target.closest('.sec-tab');

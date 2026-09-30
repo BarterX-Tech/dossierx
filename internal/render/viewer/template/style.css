@@ -10063,13 +10063,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   font-weight: 500;
 }
 .site-nav__item.on { font-weight: 600; }
-/* B0 draws every site-nav row, the Modules header included, at 34px. */
-.site-nav .sec-tab,
-.system-nav-groups .system-nav-group__toggle,
-.nav-utilities #dxgOpen {
-  height: 34px;
-  min-height: 34px;
-}
 .site-nav__icon {
   width: 16px;
   height: 16px;
@@ -10097,8 +10090,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 .system-nav-groups .system-nav-group__toggle {
   gap: 10px;
-  min-height: 32px;
-  height: 32px;
   margin: 1px 0;
   padding: 7px 10px;
   border-radius: 6px;
@@ -10135,6 +10126,22 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   margin: 0;
   padding: 7px 10px;
   border-radius: 6px;
+}
+/* Desktop only: B0 draws every site-nav row, the Modules header included,
+   at 34px with a 2px gap, and the Claims graph 12px under its hairline. The
+   phone drawer keeps its own taller touch rows (the <=860px rules). */
+@media screen and (min-width: 861px) {
+  .site-nav,
+  .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
+  .site-nav { padding-bottom: 2px; }
+  .site-nav .sec-tab,
+  .system-nav-groups .system-nav-group__toggle,
+  .nav-utilities #dxgOpen {
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+  }
+  .nav-utilities { padding-top: 12px; }
 }
 .home-link {
   color: inherit;
@@ -10315,9 +10322,21 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-.home-pill[data-state="draft"] {
+.home-pill[data-state="draft"],
+.home-pill[data-state="unrecorded"] {
   background: var(--status-draft-bg);
   color: var(--status-draft);
+}
+.home-pill[data-state="edited"],
+.home-pill[data-state="unreadable"] {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+/* The phone row carries its own pill beside the chevron (B0 mobile boards);
+   the title-line one is the desktop copy. */
+.home-tile > .home-pill {
+  flex-shrink: 0;
+  margin-left: 0;
 }
 .home-tile__desc {
   color: var(--muted);
@@ -10334,7 +10353,7 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 }
 .home-stat__count { font: 600 24px/28px var(--font-sans); }
 .home-stat__label {
-  color: var(--muted);
+  color: var(--faint);
   font: 12px/16px var(--font-sans);
 }
 .home-progress {

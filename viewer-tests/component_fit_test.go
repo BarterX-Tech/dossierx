@@ -432,10 +432,10 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 		var groups = scroll && scroll.querySelectorAll('.system-nav-group');
 		return scroll && footer && getComputedStyle(footer).flexShrink === '0' &&
 		  kids.join('|') === 'nav-search|site-nav|system-nav-groups|nav-utilities' &&
-		  siteItems.length === 2 && siteItems[0].classList.contains('home-tab') && siteItems[0].dataset.target === '#home' &&
+		  siteItems.length === 2 && siteItems[0].classList.contains('home-tab') && siteItems[0].dataset.target === '#_home' &&
 		  siteItems[1].classList.contains('constitution-tab') && siteItems[1].dataset.target === '#constitution' &&
 		  utilities && utilities.children.length === 1 && utilities.children[0].id === 'dxgOpen' &&
-		  getComputedStyle(utilities.children[0]).height === '30px' &&
+		  getComputedStyle(utilities.children[0]).height === '34px' &&
 		  groups && groups.length === 1 && groups[0].open &&
 		  footer.children.length === 1 && footer.children[0].classList.contains('theme-control') &&
 		  !footer.querySelector('[data-dxg-open]') &&

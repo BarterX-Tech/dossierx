@@ -194,8 +194,10 @@ type shellData struct {
 	// have. The client threshold in viewer-runtime.js must stay in lockstep.
 	SoftMount bool
 
-	// Constitution is the project roof, pinned above Modules. Always present
-	// as a nav target; Present is false when the file is absent (NIT-11).
+	// Constitution is the project roof, listed above Modules. Its section is
+	// always rendered (reachable by hash); Present is false when the file is
+	// absent (NIT-11). The sidebar entry shows only when there is something
+	// under it: the file or a project claim (NIT-196).
 	Constitution ConstitutionView
 
 	// Home is the landing page (NIT-196), built from ModuleGroups, so it is

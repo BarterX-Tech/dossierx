@@ -63,7 +63,7 @@
   <div class="layout">
     <header class="mobile-app-bar" aria-label="Viewer controls">
       <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg></button>
-      <a class="mobile-app-bar__wordmark home-link" href="#home">{{.Title}}</a>
+      <a class="mobile-app-bar__wordmark home-link" href="#_home">{{.Title}}</a>
       <button id="mobileSearchToggle" class="mobile-app-bar__search" type="button" aria-controls="navSearch" aria-label="Search modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg></button>
       <button id="mobileThemeToggle" class="mobile-theme-toggle" type="button" data-theme-toggle aria-label="Use dark theme" title="Use dark theme"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg></button>
     </header>
@@ -72,7 +72,7 @@
       <div class="sidebar-header">
         <div class="top">
           <div class="logo"><span></span></div>
-          <h1><a class="home-link" href="#home">{{.Title}}</a></h1>
+          <h1><a class="home-link" href="#_home">{{.Title}}</a></h1>
           <button id="navDrawerClose" class="nav-drawer-close" type="button" aria-label="Close modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
         </div>
 {{if .Eyebrow}}        <div class="eyebrow">{{.Eyebrow}}</div>{{end}}
@@ -91,7 +91,7 @@
              Features and Briefs join this list with briefs (NIT-192/NIT-194);
              until then the viewer has no page for them. -->
           <div class="site-nav">
-            <button class="sec-tab site-nav__item home-tab" data-target="#home"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-home"/></svg><span class="sec-tab__label">Home</span></button>
+            <button class="sec-tab site-nav__item home-tab" data-target="#_home"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-home"/></svg><span class="sec-tab__label">Home</span></button>
 {{if or .Home.Constitution.Present .Home.Constitution.ProjectClaims}}            <button class="sec-tab site-nav__item constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-landmark"/></svg><span class="sec-tab__label">Constitution</span>{{if .Home.Constitution.Locked}}<svg class="dx-icon dx-icon--lock site-nav__lock" aria-label="Locked" role="img"><use href="#dx-icon-lock"/></svg>{{end}}</button>{{end}}
           </div>
           <div class="system-nav-groups">
@@ -170,7 +170,8 @@
           </section>
         </section>
 <!-- Home (NIT-196): what is waiting on the human, then one tile per
-     section. It sits after the Constitution for the same reason the
+     section. Its id is _home: render.slugify never emits an underscore, so
+     no module section can share it. It sits after the Constitution for the same reason the
      Constitution sits after the modules — the first .module-section stays the
      first module — and it is the page the viewer opens on
      (viewer-runtime.js resolve). It holds no .claim-group, so no facet TOC,
@@ -180,7 +181,7 @@
      "last check" text is the RFC3339 instant until viewer-runtime.js
      (localizeHomeCheck) rewrites it in the reader's own time zone; no third
      timestamp format enters the document. -->
-        <section class="module-section home-section" id="home" hidden aria-labelledby="homeTitle">
+        <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
           <header class="home-head">
             <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked" datetime="{{.GeneratedAt}}">{{.GeneratedAt}}</time></p>
             <h2 id="homeTitle" class="home-title">{{.Title}}</h2>
@@ -207,11 +208,12 @@
 {{if .Constitution.Present}}            <a class="home-tile" data-tile="constitution" href="#constitution">
               <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-landmark"/></svg></span>
               <span class="home-tile__main">
-                <span class="home-tile__head"><span class="home-tile__title">Constitution</span>{{if .Constitution.Locked}}<span class="home-pill" data-state="locked">Locked</span>{{else}}<span class="home-pill" data-state="draft">Draft</span>{{end}}</span>
+                <span class="home-tile__head"><span class="home-tile__title">Constitution</span><span class="home-pill home-wide" data-state="{{.Constitution.State}}">{{.Constitution.Label}}</span></span>
                 <span class="home-tile__desc home-wide">From constitution.yaml.{{if .Constitution.ProjectClaims}} {{.Constitution.ProjectClaims}} project {{if eq .Constitution.ProjectClaims 1}}claim rests{{else}}claims rest{{end}} on it.{{end}}</span>
                 <span class="home-stats home-wide">{{range .Constitution.Stats}}<span class="home-stat"><span class="home-stat__count">{{.Count}}</span><span class="home-stat__label">{{.Label}}</span></span>{{end}}</span>
                 <span class="home-tile__line home-narrow">{{.Constitution.Line}}</span>
               </span>
+              <span class="home-pill home-narrow" data-state="{{.Constitution.State}}">{{.Constitution.Label}}</span>
               <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
             </a>
 {{end}}{{if .Modules.Modules}}            <a class="home-tile" data-tile="modules" href="#{{.Modules.FirstModuleID}}">
@@ -220,7 +222,7 @@
                 <span class="home-tile__head"><span class="home-tile__title">Modules</span><span class="home-tile__count home-wide">{{.Modules.Modules}}</span></span>
                 <span class="home-tile__desc home-wide">Who owns what. Every claim lives in exactly one.</span>
                 <span class="home-progress">
-                  <span class="home-progress__text"><span>{{.Modules.Claims}} claims · {{.Modules.Locked}} locked{{if .Modules.Draft}} · {{.Modules.Draft}} draft{{end}}</span><span class="home-progress__pct home-wide">{{.Modules.Percent}}%</span></span>
+                  <span class="home-progress__text"><span>{{.Modules.Line}}</span><span class="home-progress__pct home-wide">{{.Modules.Percent}}%</span></span>
                   <span class="home-progress__bar"><span class="home-progress__fill" style="width: {{.Modules.Percent}}%"></span></span>
                 </span>
               </span>

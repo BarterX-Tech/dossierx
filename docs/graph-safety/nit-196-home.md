@@ -5,11 +5,16 @@ rendered by the embedded shell as the Home page, and the sidebar and routing
 changes around it (`shell.html`, `viewer-runtime.js`, `system-record.js`).
 Home is a consumer of readiness, never a producer: it reads the live
 `readiness.Assessment` already on the catalog, the approved-edit projection,
-each claim's comments and the module groups the shell already builds. It adds
-no edge, cause, condition, baseline or traversal, and writes nothing.
+each claim's comments and the module groups the shell already builds. For the
+Constitution tile it also reads two files the renderer did not read before:
+`constitution.yaml` (a second read; the Constitution section already reads
+it) and the lock store's constitution record, which it passes to
+`constitution.Evaluate`, the roof gate's own evaluator. It adds no edge,
+cause, condition, baseline or traversal, and writes nothing.
 
-- Candidate: the head of `claude/project-thread-u0i976`, based on
-  `release/v0.7.22` at `a17942e`.
+- Candidate: the head of `claude/project-thread-u0i976` (PR #131), based on
+  `release/v0.7.22` at `a17942e`. The figures below were re-measured on the
+  commit that adds this revision of the note.
 - Environment: go1.26.5 darwin/arm64.
 
 ## What Home reads, and the one judgement it makes
@@ -31,10 +36,16 @@ re-derives them; the saved `review_pending` field on the claim file is not read.
 
 ## Preserved invariants
 
-- **Readiness is read, not recomputed.** `buildHomeView` takes the catalog by
-  value and reads `Readiness`, `ApprovedEdits` and `Claims`; it calls no
-  readiness, lock or reaudit function and holds no writer. The lock store,
-  flags, receipts and claim files are untouched by construction.
+- **Readiness is read, not recomputed.** `buildHomeView` takes a
+  `*catalog.Catalog` and only reads `Readiness`, `ApprovedEdits` and `Claims`;
+  it calls no readiness or reaudit function and holds no writer. The one lock
+  call is `lock.LoadStore`, a read; the store, flags, receipts and claim files
+  are untouched by construction.
+- **The roof's state is the gate's.** The tile and the sidebar lock icon show
+  `constitution.Evaluate`'s verdict against the store's record, the same
+  evaluator `check` refuses on, so a hand-flipped `status: locked` with no
+  record reads "Not locked" and a locked file edited since reads "Edited since
+  lock" (`TestRender_HomeEmptyStates`).
 - **Independent boundaries stay independent.** A claim appears on the re-read
   card only through its own dependency causes; an open thread or an unapproved
   edit on the same claim is counted where it belongs and does not clear or
@@ -47,11 +58,15 @@ re-derives them; the saved `review_pending` field on the claim file is not read.
 
 ## Complexity and output size
 
-One pass over the claims plus one over each claim's comments (O(V + T)), one
-sort of the claims by id (O(V log V)) and one pass over the module groups. No
-path, witness or pairwise term. Output is bounded independently of corpus
-size: a card names at most three claims and the draft card at most three
-modules, each followed by a count of the rest.
+Two passes over the claims (the cards, and the project-claim count for the
+tile) plus one over each claim's comments (O(V + T)), one sort of the claims
+by id (O(V log V)), one pass over the module groups, and two small file reads
+(`constitution.yaml` and the lock store). No path, witness or pairwise term.
+Home is built once per render: eagerly for the embedded shell, and memoised
+(`sync.Once`) on the lazy path a project shell override uses, however many
+times the template references `.Home`. Output is bounded independently of
+corpus size: a card names at most three claims and the draft card at most
+three modules, each followed by a count of the rest.
 
 Measured on a synthetic corpus in which every claim carries an open thread and
 an `upstream_dependency_review` cause and half are drafts (the worst case for
@@ -59,11 +74,17 @@ Home: every card populated by every claim):
 
 | Claims | `buildHomeView` | Home section bytes |
 | --- | --- | --- |
-| 10 | 17 µs | 3,624 |
-| 1,000 | 0.62 ms | 3,648 |
-| 10,000 | 6.0 ms | 3,660 |
+| 10 | 18 µs | 3,696 |
+| 1,000 | 0.76 ms | 3,720 |
+| 10,000 | 6.0 ms | 3,732 |
 
-The byte growth is the digits of the counts.
+The byte growth is the digits of the counts. The table was measured with a
+throwaway benchmark over `buildHomeView` and `Render`; the bound itself is
+pinned in the suite by `TestRender_HomeSizeIsIndependentOfCorpusSize`
+(10 versus 2,000 fully loaded claims across five modules, growth at most 64
+bytes, and the draft card's three-module cap):
+
+    go test ./internal/render -run 'TestRender_Home' -count=1 -v
 
 ## Verdict
 
