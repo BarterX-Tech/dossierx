@@ -71,7 +71,7 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 // keeping it out bounds the map by the claims rather than by what briefs
 // happen to say. A guidance brief — one that rests on nothing — lands in no
 // entry at all.
-func buildBriefsExplainingLookup(cat *catalog.Catalog, set *briefs.Set) map[string][]components.BriefRow {
+func buildBriefsExplainingLookup(cat *catalog.Catalog, set *briefs.Set, anchors map[string]string) map[string][]components.BriefRow {
 	if cat == nil || set.Empty() {
 		return nil
 	}
@@ -83,7 +83,7 @@ func buildBriefsExplainingLookup(cat *catalog.Catalog, set *briefs.Set) map[stri
 	for _, b := range set.Briefs {
 		for _, id := range b.RestsOn {
 			if claims[id] {
-				out[id] = append(out[id], briefRow(b))
+				out[id] = append(out[id], briefRow(b, anchors))
 			}
 		}
 	}
@@ -118,7 +118,7 @@ func buildBriefsExplainingLookup(cat *catalog.Catalog, set *briefs.Set) map[stri
 // path looks like one: FORMAT.md's promise is that a project with no briefs
 // sees no brief-derived byte in its viewer, and such a source is still in the
 // Sources panel with its drift finding in `check`.
-func buildBriefsCitedLookup(cat *catalog.Catalog, cfg *config.Config, set *briefs.Set) map[string][]components.BriefRow {
+func buildBriefsCitedLookup(cat *catalog.Catalog, cfg *config.Config, set *briefs.Set, anchors map[string]string) map[string][]components.BriefRow {
 	if cat == nil || set.Empty() {
 		return nil
 	}
@@ -153,7 +153,7 @@ func buildBriefsCitedLookup(cat *catalog.Catalog, cfg *config.Config, set *brief
 			}
 			row := components.BriefRow{Path: p, Folder: path.Base(folderDir), Title: s.Title}
 			if b, ok := byPath[p]; ok {
-				row = briefRow(b)
+				row = briefRow(b, anchors)
 			} else if row.Title == "" {
 				row.Title = p
 			}
@@ -202,10 +202,12 @@ func sourceDriftCheck(cfg *config.Config) func(string, model.Source) bool {
 	return func(string, model.Source) bool { return true }
 }
 
-// briefRow is the row fields a brief itself supplies.
-func briefRow(b briefs.Brief) components.BriefRow {
+// briefRow is the row fields a brief itself supplies, and its page id from
+// anchors (briefAnchors' map, the one the brief pages are given).
+func briefRow(b briefs.Brief, anchors map[string]string) components.BriefRow {
 	return components.BriefRow{
 		ID:     b.ID,
+		Anchor: anchors[b.ID],
 		Path:   b.Path,
 		Folder: b.Folder,
 		Slug:   b.Slug,
@@ -215,10 +217,17 @@ func briefRow(b briefs.Brief) components.BriefRow {
 }
 
 // buildBriefRelationsLookup joins the two brief lookups into the one value
-// per claim the edges footer takes.
+// per claim the edges footer takes. Each row's link is the brief page's own
+// id from briefAnchors, computed from the same set, catalog and config the
+// pages are rendered from — so a brief whose plain id another brief or a
+// module already spells links to its own -2 section, not the other one's.
 func buildBriefRelationsLookup(cat *catalog.Catalog, cfg *config.Config, set *briefs.Set) map[string]components.BriefRelations {
-	explained := buildBriefsExplainingLookup(cat, set)
-	cited := buildBriefsCitedLookup(cat, cfg, set)
+	if set.Empty() {
+		return nil
+	}
+	anchors := briefAnchors(set, cat, cfg)
+	explained := buildBriefsExplainingLookup(cat, set, anchors)
+	cited := buildBriefsCitedLookup(cat, cfg, set, anchors)
 	if len(explained) == 0 && len(cited) == 0 {
 		return nil
 	}

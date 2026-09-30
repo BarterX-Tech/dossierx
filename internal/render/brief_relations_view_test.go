@@ -219,3 +219,42 @@ func TestSourceDriftCheck_MemoKeysOnRecordID(t *testing.T) {
 		t.Fatal("record b does not hash to record a's pin, so its pin is out of date")
 	}
 }
+
+// TestRenderWith_BriefRowsLinkToTheirOwnSection is NIT-202 audit F2: two
+// briefs can spell the same brief-<folder>-<slug> (api/design-notes and
+// api-design/notes), and the brief pages give the later one a -2 suffix. Each
+// BRIEFS row must link to the section that holds its own brief — the row
+// takes its anchor from the pages' map, never a recomputed plain id.
+func TestRenderWith_BriefRowsLinkToTheirOwnSection(t *testing.T) {
+	cfg, set := briefRelationsProject(t, map[string]string{
+		"briefs/api/design-notes.md": "---\nsummary: One spelling.\nrests_on: [widget.contract.a]\n---\n# Api design notes\n",
+		"briefs/api-design/notes.md": "---\nsummary: The other spelling.\nrests_on: [widget.contract.a]\n---\n# Api-design notes\n",
+	})
+	cat := &catalog.Catalog{Claims: []model.Claim{{
+		ID: "widget.contract.a", Module: "widget", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusDraft, Body: "a",
+	}}}
+	page, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rowLink := regexp.MustCompile(`<a class="claim-brief-ref" href="#([^"]+)" title="([^"]+)">`)
+	links := rowLink.FindAllStringSubmatch(claimSection(t, page, "widget.contract.a"), -1)
+	if len(links) != 2 {
+		t.Fatalf("want two linked brief rows, got %d", len(links))
+	}
+	seen := map[string]bool{}
+	for _, l := range links {
+		anchor, path := l[1], l[2]
+		if seen[anchor] {
+			t.Fatalf("two rows link to the same section %q", anchor)
+		}
+		seen[anchor] = true
+		section := `<section class="module-section brief-section" id="` + anchor + `" hidden data-brief-path="` + path + `"`
+		if !strings.Contains(page, section) {
+			t.Errorf("row for %s links to #%s, which is not that brief's section", path, anchor)
+		}
+	}
+	if !seen["brief-api-design-notes"] || !seen["brief-api-design-notes-2"] {
+		t.Fatalf("want the plain id and its -2 suffix, got %v", seen)
+	}
+}

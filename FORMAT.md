@@ -1636,8 +1636,10 @@ DEPENDED ON BY, marked "derived" and counted in the relationships chip.
   still gets a row: the source's title, no link and no status, and "pin out of
   date", since the file cannot be read.
 
-Each row gives the brief's folder, its title (linking to the brief) and its
-`status`. A brief's review state joins the row when briefs gain their lock
+Each row gives the brief's folder, its title and its `status`. The title is a
+link to the brief's page, at the id that page takes (`#brief-<folder>-<slug>`,
+or its `-2` form when another brief or a module spells it first), so a click
+opens the brief it names. A brief's review state joins the row when briefs gain their lock
 lifecycle (NIT-205, NIT-200). A brief that rests on nothing and that no claim
 cites appears on no card; a project with no brief shows no group. The
 claim's Sources panel is unchanged.

@@ -255,3 +255,36 @@ func TestBriefRowsLayOutAsTheBoardDrawsThem(t *testing.T) {
 		t.Fatalf("rendering the derived brief rows changed the claim file:\nbefore:\n%s\nafter:\n%s", before, got)
 	}
 }
+
+// TestBriefRowClickLandsOnThatBrief is NIT-202 audit F1: a BRIEFS row's title
+// is a link to the brief, so clicking it on a claim card must open that
+// brief's page section — shown, addressed by the hash, headed by its title —
+// not fall through to Home.
+func TestBriefRowClickLandsOnThatBrief(t *testing.T) {
+	p := newBriefRelationsProject(t)
+	base := p.ensureServe()
+	ctx := withInstantScroll(t, browserContext(t))
+	runCDP(t, ctx, chromedp.EmulateViewport(1440, 900), chromedp.Navigate(base+"/"+widgetPage))
+	pollTrue(t, ctx, `document.readyState === 'complete' && !!document.getElementById('widget.contract.overview')`)
+	runCDP(t, ctx, chromedp.Evaluate(`(function () {
+		var c = document.getElementById('widget.contract.overview');
+		c.querySelector('details.claim-links').open = true;
+		c.querySelector('a.claim-brief-ref').scrollIntoView({block: 'center'});
+	})()`, nil))
+	settleLayoutTransitions(t, ctx)
+	href := evalString(t, ctx, `document.getElementById('widget.contract.overview').querySelector('a.claim-brief-ref').getAttribute('href')`)
+	if href != "#brief-decisions-round-once" {
+		t.Fatalf("the first brief row links to %q, want the round-once brief's section", href)
+	}
+	runCDP(t, ctx, chromedp.Click(`[id="widget.contract.overview"] a.claim-brief-ref[href="#brief-decisions-round-once"]`, chromedp.ByQuery))
+	pollTrue(t, ctx, `location.hash === '#brief-decisions-round-once'`)
+	settleLayoutTransitions(t, ctx)
+	requireAll(t, ctx, "the clicked brief's page", `var s = document.getElementById('brief-decisions-round-once');
+		var h = document.getElementById('brief-decisions-round-once_title');
+		var home = document.getElementById('_home');`, [][2]string{
+		{"the brief's section is shown", `!!s && !s.hidden && s.getBoundingClientRect().height > 0`},
+		{"the section is headed by the brief's title", `!!h && h.textContent.trim() === 'Balances round to the cent, once'`},
+		{"Home is not what the click landed on", `!home || home.hidden`},
+		{"the claim's module page is left", `document.getElementById('widget.contract.overview').closest('.module-section').hidden`},
+	})
+}

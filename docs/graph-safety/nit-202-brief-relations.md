@@ -9,7 +9,8 @@ BRIEFS group.
   file, with the `source-internal-drift` verdict for each), their join
   `buildBriefRelationsLookup`, and one more argument to `attachEdgesOverride`.
 - `internal/render/render.go`: `renderBoundedAt` passes `Extras.Briefs` to that
-  lookup.
+  lookup, which takes each row's link from `briefAnchors` — the brief pages'
+  own id map (NIT-197), computed from the same set, catalog and config.
 - `internal/render/components/components.go`: `BriefRow`, `BriefRelations`,
   `writeBriefsGroup`; `EdgesHTMLWithCodeLinks` gains the group and counts its
   rows in the relationships chip.
@@ -22,10 +23,12 @@ traversal. It reads two things the engine already has — each brief's
 `rests_on` (NIT-204) and each claim's `sources` — and writes nothing: no claim
 file, no store, no ledger, no sentinel.
 
-- Baseline: `7f0264c3873f4a7e005d718a42b25184cabcb465` (the NIT-178 combo tip,
-  NIT-196 Home and NIT-204 briefs read side). Candidate: the head of
-  `work/nit-202-viewer-briefs-in-a-claims-relationships-derived-b5` carrying
-  this note; the figures below were measured on its final tree.
+- Baseline: `cb06088f` (NIT-197's brief page and Briefs sidebar tree, on the
+  NIT-178 combo tip `7f0264c3` with NIT-196 Home and NIT-204 briefs read side).
+  Candidate: the head of
+  `work/nit-202-viewer-briefs-in-a-claims-relationships-derived-b5`, rebased
+  onto that baseline and carrying this note; the figures below were measured
+  on its final tree.
 - Environment: go1.26.5 darwin/arm64 (Apple M4 Pro); browser suite on Chrome
   for Testing (Playwright chromium-1234).
 
@@ -43,7 +46,7 @@ file, no store, no ledger, no sentinel.
 - **Claim hashes and the claim graph are unchanged.** The claim-side packages
   are untouched, and `internal/briefs` too:
 
-      git diff --stat 7f0264c3 -- internal/lock internal/readiness \
+      git diff --stat cb06088f -- internal/lock internal/readiness \
         internal/catalog internal/model internal/lint internal/manifest \
         internal/loader internal/reaudit internal/briefs          # empty
 
@@ -74,7 +77,7 @@ file, no store, no ledger, no sentinel.
 
 ## The differential, as run
 
-`dx-base` from `git archive 7f0264c3`, `dx-cand` from the candidate, each run
+`dx-base` from `git archive cb06088f`, `dx-cand` from the candidate, each run
 over copies of the candidate's five fixtures (committed `build/viewer/index.html`
 removed first, so each binary writes its own), with the loop and `norm` of
 `docs/graph-safety/nit-204-briefs.md` plus a `shasum -a 256` of every file
@@ -86,7 +89,7 @@ under `claims/` and of `constitution.yaml` before and after:
 | fixture-conformance-v1 | 11 | 10 | `index.html` (stylesheet only) | identical |
 | fixture-portability | 9 | 8 | `index.html` (stylesheet only) | identical |
 | fixture-theme-flat | 9 | 8 | `index.html` (stylesheet only) | identical |
-| fixture-graph-demo | 10 | 9 | `index.html` (stylesheet, two cards) | identical |
+| fixture-graph-demo | 11 | 10 | `index.html` (stylesheet, two cards) | identical |
 
 With every `<style>` block masked, the four corpora without briefs have zero
 differing lines in `index.html`; graph-demo differs in exactly two lines, the
@@ -120,7 +123,7 @@ on 200 claims; every claim citing three briefs with a holding pin.
 
 | Rows derived | Card bytes added | Lookup time | Allocations | Bytes allocated |
 | --- | --- | --- | --- | --- |
-| 18,000 | 12,900,983 | 7.4 ms | 26,830 | 8.5 MB |
+| 18,000 | 12,900,983 | 7.1 ms | 26,912 | 9.3 MB |
 
 Before the verdict was memoised the same run took 261 ms and 113 MB (6,000
 reads and hashes of the same 60 files); the memo is why the drift term is

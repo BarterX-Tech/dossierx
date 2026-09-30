@@ -802,6 +802,12 @@ type BriefRow struct {
 	Folder string
 	Slug   string
 	Title  string
+	// Anchor is the id of the brief's page section, taken from the brief
+	// page's own anchor map (internal/render's briefAnchors) rather than
+	// recomputed: a second brief spelling the same brief-<folder>-<slug>
+	// takes a -2 suffix there, and a row that rebuilt the plain id would
+	// open the first brief instead of its own. Empty means no link.
+	Anchor string
 	// Locked is the brief's frontmatter status (NIT-204); NIT-205's lock
 	// store is what will put a record behind it.
 	Locked bool
@@ -828,10 +834,6 @@ type BriefRelations struct {
 
 // Len is the group's row count, which the relationships chip includes.
 func (r BriefRelations) Len() int { return len(r.ExplainedBy) + len(r.CitedAsEvidence) }
-
-// BriefAnchor is the fragment a brief row links to: the brief page section
-// id, brief-<folder>-<slug>, which NIT-197's brief page emits.
-func BriefAnchor(folder, slug string) string { return "brief-" + folder + "-" + slug }
 
 // briefDocIconHTML is the BRIEFS group's head icon — the board's document
 // glyph, stroked in currentColor so it takes the head's --faint in both
@@ -895,6 +897,7 @@ func writeBriefSubgroup(b *strings.Builder, label, note string, rows []BriefRow,
 // empty when there is nothing to say, so the desktop columns stay in lanes.
 func writeBriefRow(b *strings.Builder, r BriefRow, cited bool) {
 	known := r.ID != ""
+	linked := known && r.Anchor != ""
 	b.WriteString(`<li class="claim-brief claim-relationship`)
 	if r.PinOutOfDate {
 		b.WriteString(` claim-brief--pin-out-of-date`)
@@ -910,14 +913,22 @@ func writeBriefRow(b *strings.Builder, r BriefRow, cited bool) {
 		b.WriteString(`<span class="claim-relationship-dot claim-relationship-dot--`)
 		b.WriteString(briefDotModifier(r))
 		b.WriteString(`" aria-hidden="true"></span>`)
+	}
+	switch {
+	case linked:
 		b.WriteString(`<a class="claim-brief-ref" href="#`)
-		b.WriteString(html.EscapeString(BriefAnchor(r.Folder, r.Slug)))
+		b.WriteString(html.EscapeString(r.Anchor))
 		b.WriteString(`" title="`)
 		b.WriteString(html.EscapeString(r.Path))
 		b.WriteString(`">`)
 		b.WriteString(html.EscapeString(r.Title))
 		b.WriteString(`</a>`)
-	} else {
+	case known:
+		// A brief with no page id to link to (a caller with no anchor map).
+		b.WriteString(`<span class="claim-brief-ref">`)
+		b.WriteString(html.EscapeString(r.Title))
+		b.WriteString(`</span>`)
+	default:
 		b.WriteString(`<span class="claim-brief-ref claim-brief-ref--missing" title="no brief at this path">`)
 		b.WriteString(html.EscapeString(r.Title))
 		b.WriteString(`</span>`)
