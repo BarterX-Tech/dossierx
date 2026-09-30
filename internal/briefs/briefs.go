@@ -22,10 +22,11 @@
 //     way it branches on every other rule, but they are this package's rule set
 //     (Rules), not lint.Registry's, and `claim lock` never sees them.
 //
-// WHAT IS NOT HERE YET. The lock store, the state transitions (brief lock,
-// unlock, reaudit), content and dependency drift, and review-pending
-// computation are NIT-205. Status is read from the frontmatter and reported;
-// nothing here writes a file, takes a sentinel or records an approval.
+// THE LOCK LIFECYCLE (NIT-205) is lockstate.go: a brief's state against its
+// record in the lock store, its review-pending state against the rests_on
+// baselines that record keeps, and the four findings they raise. write.go is
+// the one place a brief file is rewritten — its status line and its comments
+// block, never a byte of the body. Discovery itself still writes nothing.
 //
 // THE SHAPE, in full. briefs_dir (default briefs) is ONE folder level deep:
 // briefs/<folder>/ holds <slug>.md files and the images those briefs reference,
@@ -65,11 +66,13 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
 // Status is a brief's lifecycle state as its frontmatter declares it. Only the
-// two values exist; NIT-205 is what will give "locked" a record behind it.
+// two values exist; a "locked" brief is approved only when the lock store holds
+// a standing record for it (lockstate.go).
 type Status string
 
 const (
@@ -116,6 +119,13 @@ type Brief struct {
 	Content string
 	Body    string
 	Digest  string
+
+	// Comments is the brief's review threads (NIT-205), engine-managed and in
+	// the claim's comment shape. LockHash is what `brief lock` signs — summary,
+	// rests_on and body (see LockHash) — so neither status nor a comment moves
+	// it, the way a claim's status and comments never move its hashes.
+	Comments []model.Comment
+	LockHash string
 
 	// Words is constitution.CountWords — the meter the roof's cap uses — over
 	// the text the rendered Body puts on the page (markdown.DocumentText), so
@@ -487,7 +497,8 @@ func (s *Set) parse(folder string, f File) Brief {
 	for _, p := range problems {
 		s.add(RuleFrontmatter, b.Path, "%s", p)
 	}
-	b.Summary, b.RestsOn, b.Body = fm.summary, fm.restsOn, body
+	b.Summary, b.RestsOn, b.Body, b.Comments = fm.summary, fm.restsOn, body, fm.comments
+	b.LockHash = LockHash(b.Summary, b.RestsOn, b.Body)
 	if fm.status != "" {
 		b.Status = Status(fm.status)
 	}
@@ -514,6 +525,44 @@ func (s *Set) parse(folder string, f File) Brief {
 		s.add(RuleShape, b.Path, "image %q is not one a brief can show, so it renders as literal text; a brief references an image by its bare file name in its own folder — [a-z0-9-] and a lowercase .png/.jpg/.jpeg/.gif/.webp/.svg extension, as ![alt](flow-diagram.svg)", src)
 	}
 	return b
+}
+
+// LockHash is the hash `brief lock` records and brief-content-drift compares:
+// the summary, the rests_on set and the body — everything a reader of the
+// brief reads. Status and comments are left out on purpose, as a claim's are:
+// locking flips status, and a review thread is about the brief, not part of
+// it. rests_on is hashed as a set (sorted), because its order carries no
+// meaning. Each field is length-prefixed so no two different briefs can
+// concatenate to the same input.
+//
+// Images a brief references are not signed: the hash covers the markdown file.
+// An image file replaced under the same name is not brief-content-drift.
+func LockHash(summary string, restsOn []string, body string) string {
+	ids := append([]string(nil), restsOn...)
+	sort.Strings(ids)
+	h := sha256.New()
+	fmt.Fprintf(h, "dossierx-brief-lock/v1\nsummary=%d:%s\nrests_on=%d\n", len(summary), summary, len(ids))
+	for _, id := range ids {
+		fmt.Fprintf(h, "id=%d:%s\n", len(id), id)
+	}
+	fmt.Fprintf(h, "body=%d:%s\n", len(body), body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// FilePath is the brief's file on disk: briefs_dir/<folder>/<slug>.md.
+func FilePath(cfg *config.Config, b Brief) string {
+	return filepath.Join(cfg.BriefsDirPath(), b.Folder, b.Slug+briefExt)
+}
+
+// OpenThreads is how many of the brief's comment threads are unresolved.
+func (b Brief) OpenThreads() int {
+	n := 0
+	for _, c := range b.Comments {
+		if c.Status == model.CommentStatusOpen {
+			n++
+		}
+	}
+	return n
 }
 
 // titleCase turns a slug into the fallback title: each hyphen-separated word

@@ -7,6 +7,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -74,6 +75,59 @@ func BenchmarkBriefsView(b *testing.B) {
 				}
 			}
 			b.ReportMetric(float64(size), "page-bytes")
+		})
+	}
+}
+
+// BenchmarkBriefsPayloadWithReview is the NIT-205 half of the payload's scale
+// evidence (docs/graph-safety/nit-192-briefs.md): n locked briefs at the
+// default word cap, each with a standing record whose approved markdown is the
+// brief's own body, resting on r = 10 claims of about 1,800 bytes that have ALL
+// moved — every changed claim carries its wording then and now, and every
+// brief its approved text rendered as HTML. It reports the payload's bytes,
+// which grow with the briefs' bytes plus n·r claim wordings and nothing else.
+func BenchmarkBriefsPayloadWithReview(b *testing.B) {
+	_, cfg := briefViewFixture()
+	body := "# Title\n\n## Why\n\n" + strings.Repeat("word ", 2000) + "\n"
+	const r = 10
+	claims := make([]model.Claim, 0, r)
+	var rests strings.Builder
+	for j := 0; j < r; j++ {
+		id := fmt.Sprintf("widget.contract.c%02d", j)
+		claims = append(claims, model.Claim{ID: id, Summary: "s", Body: strings.Repeat("claim words ", 150)})
+		fmt.Fprintf(&rests, "  - %s\n", id)
+	}
+	moved := make([]model.Claim, len(claims))
+	for i, c := range claims {
+		c.Body += " moved"
+		moved[i] = c
+	}
+	for _, n := range []int{60, 2000} {
+		files := make([]briefs.File, 0, n)
+		for i := 0; i < n; i++ {
+			files = append(files, briefFile(fmt.Sprintf("f%04d/b%04d.md", i/12, i), "---\nsummary: s\nstatus: locked\nrests_on:\n"+rests.String()+"---\n"+body))
+		}
+		set := briefs.FromFiles(cfg, files)
+		store, err := lock.LoadStore(b.TempDir() + "/lock-store.json")
+		if err != nil {
+			b.Fatal(err)
+		}
+		for _, br := range set.Briefs {
+			hashes, receipts, _ := briefs.Baselines(br, claims)
+			lock.RecordBriefApproval(store, br.ID, lock.BriefRecord{Path: br.Path, Hash: br.LockHash, Approved: lock.BriefApproved{Markdown: br.Body}, Baselines: hashes, Receipts: receipts})
+		}
+		review := briefs.Evaluate(set, moved, store)
+		b.Run(fmt.Sprintf("briefs=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			var size int
+			for i := 0; i < b.N; i++ {
+				out, err := briefsPayloadJSON(set, nil, review, &renderByteBudget{remaining: 1 << 30})
+				if err != nil {
+					b.Fatal(err)
+				}
+				size = len(out)
+			}
+			b.ReportMetric(float64(size), "payload-bytes")
 		})
 	}
 }

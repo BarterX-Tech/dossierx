@@ -206,6 +206,13 @@ const (
 	// Resolve in the viewer — that click IS the approval this gate is waiting
 	// for — so an agent must not treat this as something to work around.
 	CodeUnresolvedComments Code = "unresolved_comments"
+	// CodeCommentOpen is `brief lock` or `brief reaudit` refusing a brief that
+	// carries an open comment thread (NIT-205). It is the brief's twin of
+	// unresolved_comments, with the same recovery — reply, and the human
+	// resolves — and its own code because a brief's thread anchors on a path,
+	// not a claim id, so an agent that branches on unresolved_comments would
+	// go looking for a claim.
+	CodeCommentOpen Code = "comment_open"
 	// CodeConstitutionOverCap is check+lock refusing a present constitution.yaml
 	// that exceeds the 800-word cap. The wire token is the Done-when name.
 	CodeConstitutionOverCap Code = "CONSTITUTION_OVER_CAP"

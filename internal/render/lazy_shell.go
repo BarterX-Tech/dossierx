@@ -24,7 +24,7 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	in.graphPayload = graphPayload
 
 	rendered := renderBriefs(in.briefs, in.cat, in.cfg)
-	briefsPayload, err := briefsPayloadJSONWithBudget(in.briefs, rendered, in.briefsBudgetOr(budget))
+	briefsPayload, err := briefsPayloadJSON(in.briefs, rendered, in.briefReview, in.briefsBudgetOr(budget))
 	if err != nil {
 		return shellData{}, err
 	}
@@ -167,7 +167,7 @@ func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {
 
 func (p *lazyShellProjection) briefsPayloadJSON() (template.JS, error) {
 	p.briefsOnce.Do(func() {
-		p.briefs, p.briefsErr = briefsPayloadJSONWithBudget(p.in.briefs, p.renderedBriefs(), p.in.briefsBudgetOr(p.budget))
+		p.briefs, p.briefsErr = briefsPayloadJSON(p.in.briefs, p.renderedBriefs(), p.in.briefReview, p.in.briefsBudgetOr(p.budget))
 	})
 	return p.briefs, p.briefsErr
 }

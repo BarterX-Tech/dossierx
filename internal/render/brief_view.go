@@ -7,6 +7,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
 // briefsPayload is the viewer's data for briefs (NIT-204): the
@@ -51,6 +52,17 @@ type briefPayload struct {
 	Words      int            `json:"words"`
 	ImageCount int            `json:"image_count"`
 	Images     []briefs.Image `json:"images"`
+
+	// Review is the brief's lock and review state (NIT-205), flattened into
+	// this object: lock_state (draft / locked / edited / unrecorded),
+	// locked_at, lock_reason, locked_by, review_pending and its trigger, the
+	// changed rests_on claims — each with when its current content was
+	// approved and its wording at the baseline and now — open_threads, and
+	// the retained approved text. ApprovedBodyHTML is that approved markdown
+	// rendered as BodyHTML is, so the viewer shows Approved beside Current
+	// without a renderer of its own; empty while no record stands.
+	briefs.Review
+	ApprovedBodyHTML string `json:"approved_body_html"`
 }
 
 // briefsPayloadJSONWithBudget encodes set for the shell and charges every byte
@@ -68,6 +80,12 @@ type briefPayload struct {
 // each body is rendered once; nil renders it here, with no catalog or config
 // to reserve page ids against.
 func briefsPayloadJSONWithBudget(set *briefs.Set, rendered map[string]renderedBrief, budget *renderByteBudget) (template.JS, error) {
+	return briefsPayloadJSON(set, rendered, nil, budget)
+}
+
+// briefsPayloadJSON is briefsPayloadJSONWithBudget with each brief's review
+// state read off review (nil: every brief a draft with nothing pending).
+func briefsPayloadJSON(set *briefs.Set, rendered map[string]renderedBrief, review *briefs.Evaluation, budget *renderByteBudget) (template.JS, error) {
 	if set.Empty() {
 		return "", nil
 	}
@@ -89,6 +107,11 @@ func briefsPayloadJSONWithBudget(set *briefs.Set, rendered map[string]renderedBr
 		if images == nil {
 			images = []briefs.Image{}
 		}
+		r := review.Review(b)
+		approvedHTML := ""
+		if r.Approved != nil {
+			approvedHTML = string(markdown.RenderDocument(r.Approved.Markdown, BriefAssetURLPrefix(b.Folder)))
+		}
 		p.Briefs = append(p.Briefs, briefPayload{
 			ID:         b.ID,
 			Anchor:     rendered[b.ID].anchor,
@@ -102,6 +125,9 @@ func briefsPayloadJSONWithBudget(set *briefs.Set, rendered map[string]renderedBr
 			Words:      b.Words,
 			ImageCount: len(b.Images),
 			Images:     images,
+
+			Review:           r,
+			ApprovedBodyHTML: approvedHTML,
 		})
 	}
 	out, err := json.Marshal(p)

@@ -450,6 +450,10 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 // The zero value renders exactly what Render always rendered.
 type Extras struct {
 	Briefs *briefs.Set
+	// BriefReview is every brief's lock and review state (NIT-205), read by
+	// the caller against the same claims and lock store it rendered from. Nil
+	// renders every brief as a draft with nothing pending.
+	BriefReview *briefs.Evaluation
 }
 
 // RenderWith is Render with the non-claim inputs supplied. Like Render it puts
@@ -543,6 +547,7 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generat
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
 		briefs:                   x.Briefs,
+		briefReview:              x.BriefReview,
 		briefsBudget:             unboundedBriefsBudget(maxBytes),
 		generatedAt:              generatedAt,
 	}
@@ -898,6 +903,7 @@ type shellInputs struct {
 	// charged by briefsPayloadJSONWithBudget, empty for a project with no
 	// briefs.
 	briefs        *briefs.Set
+	briefReview   *briefs.Evaluation
 	briefsPayload template.JS
 
 	// briefsBudget, when set, is the budget the briefs payload alone is

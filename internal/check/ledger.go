@@ -208,9 +208,11 @@ type ledgerInputs struct {
 	// briefs is the project's briefs tree (NIT-204) as the SAME tree holds it —
 	// disk for Run and Status, the index for StatusStaged — for the reason
 	// constitution rides here: a registered lint sees only claims and config,
-	// and --staged must judge nothing from the working tree. It is not ledger
-	// state and no ledger rule reads it; its findings join lint_findings, and
-	// the render beside the catalog draws the viewer's briefs payload from it.
+	// and --staged must judge nothing from the working tree. Its rule findings
+	// join lint_findings; its lock lifecycle is read against store beside it
+	// (briefEvaluation), whose two integrity findings and the briefs' comment
+	// digest rules join the ledger gate (briefLedgerFindings); and the render
+	// beside the catalog draws the viewer's briefs payload from both.
 	briefs *briefs.Set
 
 	// THERE ARE NO HISTORY FIELDS HERE ANY MORE, and that is deliberate. This
@@ -274,8 +276,52 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 // lint.RunAll alone: brief state does not gate a claim.
 func lintFindings(claims []model.Claim, cfg *config.Config, in ledgerInputs) []lint.Finding {
 	findings := lint.RunAll(claims, cfg)
-	findings = append(findings, in.briefs.Findings(claims)...)
+	findings = append(findings, in.briefs.FindingsWith(claims, briefEvaluation(claims, in))...)
 	return withConstitutionFindings(in.constitution, findings)
+}
+
+// briefEvaluation reads every brief's lock lifecycle (NIT-205) against the
+// claims and the lock store of the SAME tree — disk, or the index under
+// --staged. A nil store (unreadable) makes every locked brief unrecorded: there
+// is no evidence any of them was approved, as for a claim.
+func briefEvaluation(claims []model.Claim, in ledgerInputs) *briefs.Evaluation {
+	return briefs.Evaluate(in.briefs, claims, in.store)
+}
+
+// briefLedgerFindings is the briefs' half of the ledger gate: the two integrity
+// findings of a brief's lock (brief-content-drift, brief-unrecorded), and the
+// comment-digest rules over the briefs' threads, under the claims' rule names —
+// comment-ledger-drift for a thread block that no longer matches its recorded
+// digest, comment-digest-unrecorded for threads with no entry in a
+// ledger-covered project. The claim is named by the brief's PATH, which can
+// never be a claim id.
+func briefLedgerFindings(claims []model.Claim, in ledgerInputs) []lock.Finding {
+	if in.briefs.Empty() {
+		return nil
+	}
+	findings := briefEvaluation(claims, in).Integrity
+	if in.digests == nil {
+		return findings
+	}
+	covered := in.store.LedgerCovered() && in.digests.FileExists()
+	for _, b := range in.briefs.Briefs {
+		recorded, known := in.digests.BriefDigest(b.ID)
+		switch {
+		case known && recorded != digest.BriefCommentsDigest(b.ID, b.Comments):
+			findings = append(findings, lock.Finding{
+				Rule:    lock.RuleCommentLedgerDrift,
+				ClaimID: b.Path,
+				Message: fmt.Sprintf("%s's comments block does not match the digest recorded at the last comment operation on it, so a review thread was edited or deleted outside dossierx. Comments are engine-managed: restore %s (or %s, if a commit carried the brief without it) from version control — they are written as a pair and agree only as a pair.", b.Path, b.Path, config.CommentDigestDisplayPath),
+			})
+		case !known && covered && len(b.Comments) > 0:
+			findings = append(findings, lock.Finding{
+				Rule:    lock.RuleCommentDigestUnrecorded,
+				ClaimID: b.Path,
+				Message: fmt.Sprintf("%s carries %d comment thread(s) but %s has no entry for it, in a project covered by the lock ledger; the only code path that writes a brief's thread records its digest in the same act, so either the entry was removed or the threads were not written by dossierx. Restore %s from version control, or the brief's comments block if that is what was forged.", b.Path, len(b.Comments), config.CommentDigestDisplayPath, config.CommentDigestDisplayPath),
+			})
+		}
+	}
+	return findings
 }
 
 // constitutionRecord is the store's roof record, or nil for an unreadable or
@@ -403,6 +449,7 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
+	findings = append(findings, briefLedgerFindings(claims, in)...)
 	// Leftover build-order artifacts and "build-order" ledger rows from before
 	// v0.7.21 are never read: lock.Audit filters on SubjectClaim, and nothing
 	// here opens build/build-order/. TestLeftoverBuildOrderArtifactsAreIgnored

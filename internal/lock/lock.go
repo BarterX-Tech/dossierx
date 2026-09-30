@@ -82,6 +82,12 @@ var nowFunc = time.Now
 // CrossPreLedger, which refuses while the project still holds a locked artifact
 // — see it for why the trigger is "the file exists at an older version" and
 // never "the ledger is empty".
+//
+// Version 4 (briefsSchemaVersion, briefs.go) added the `briefs` map. It is
+// EARNED rather than stamped: storeSchemaVersion stays 3, the version every
+// claim-side write and a fresh store carry, and only the first brief record
+// raises a store to 4. So a project that never locks a brief keeps a version-3
+// store byte for byte, and the version-3 read path is the only one it needs.
 const (
 	storeSchemaVersion      = 3
 	nestedHashSchemaVersion = 1
@@ -174,6 +180,12 @@ type Store struct {
 	// constitution is not a claim: none of the ledger's per-claim rules
 	// (orphan, abandoned, released) mean anything for it.
 	Constitution *constitution.LockRecord `json:"constitution,omitempty"`
+
+	// Briefs is the briefs' approval records (NIT-205), keyed by brief id —
+	// see briefs.go. A sibling of Ledger and Constitution, never read by a
+	// claim rule, and omitempty so a store that never held a brief record is
+	// shaped exactly as the version-3 store.
+	Briefs map[string]BriefRecord `json:"briefs,omitempty"`
 
 	path string
 
@@ -365,7 +377,7 @@ func DecodeStore(raw []byte) (*Store, error) {
 	}
 	for key := range probe {
 		switch key {
-		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger", "constitution":
+		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger", "constitution", "briefs":
 		default:
 			return nil, fmt.Errorf("lock: decode store: unknown key %q", key)
 		}
@@ -378,8 +390,13 @@ func DecodeStore(raw []byte) (*Store, error) {
 	if err := json.Unmarshal(versionRaw, &version); err != nil {
 		return nil, fmt.Errorf("lock: decode store: version: %w", err)
 	}
-	if version != nestedHashSchemaVersion && version != storeSchemaVersion {
+	if version != nestedHashSchemaVersion && version != storeSchemaVersion && version != briefsSchemaVersion {
 		return nil, fmt.Errorf("lock: decode store: version %d is not one this engine writes", version)
+	}
+	// The briefs map landed at version 4; a lower version carrying it is not
+	// a store this engine wrote (RecordBriefApproval stamps 4 in the same act).
+	if _, hasBriefs := probe["briefs"]; hasBriefs && version < briefsSchemaVersion {
+		return nil, fmt.Errorf("lock: decode store: version %d carries a briefs map, which only version %d stores hold", version, briefsSchemaVersion)
 	}
 	return decodeStore(raw, "")
 }
@@ -412,6 +429,11 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 		// schema version: the record is a sibling of the ledger, not part of
 		// it, so a pre-ledger store that carries one still knows its roof.
 		Constitution *constitution.LockRecord `json:"constitution"`
+		// Briefs is the briefs' records (NIT-205). Read at every version,
+		// like the constitution's: it is a sibling of the ledger, and a
+		// check that could not see a record would report every locked brief
+		// as unrecorded.
+		Briefs map[string]BriefRecord `json:"briefs"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
@@ -420,6 +442,7 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 		s.LockedAt = onDisk.LockedAt
 	}
 	s.Constitution = onDisk.Constitution
+	s.Briefs = onDisk.Briefs
 	if len(onDisk.Ledger) > 0 {
 		s.ledgerKeyOnDisk = true
 		var ledger map[string]LedgerRecord

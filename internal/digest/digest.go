@@ -114,6 +114,15 @@ type Store struct {
 	// empty case is what makes a hand-added thread detectable.
 	Digests map[string]string `json:"digests"`
 
+	// Briefs maps a brief id (<folder>.<slug>) -> BriefCommentsDigest of its
+	// threads as of the engine's last comment write to the brief (NIT-205).
+	// It is a map of its own, never keys in Digests: every claim-side rule
+	// (comment-digest-abandoned among them) reads Digests as "the claims the
+	// store has seen", and a brief id there would read as a claim that was
+	// deleted. omitempty, so a store whose project never commented on a brief
+	// is byte-identical to the version-1 store it always was.
+	Briefs map[string]string `json:"briefs,omitempty"`
+
 	// Reaudits records every human-authorised RE-ADOPTION of a claim's comment
 	// block: who asked for it, when, and in whose words (see Store.Reaudit).
 	//
@@ -217,6 +226,7 @@ func decodeInto(s *Store, raw []byte, strict bool) error {
 	var onDisk struct {
 		Version  int                  `json:"version"`
 		Digests  map[string]string    `json:"digests"`
+		Briefs   map[string]string    `json:"briefs"`
 		Reaudits map[string][]Reaudit `json:"reaudits"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -229,6 +239,7 @@ func decodeInto(s *Store, raw []byte, strict bool) error {
 	if onDisk.Digests != nil {
 		s.Digests = onDisk.Digests
 	}
+	s.Briefs = onDisk.Briefs
 	s.Reaudits = onDisk.Reaudits
 	s.fileExists = true
 	return nil
@@ -359,6 +370,30 @@ func (s *Store) Reaudit(c model.Claim, actor, reason string) {
 // because a rename cannot reach it.
 func (s *Store) Forget(claimID string) {
 	delete(s.Digests, claimID)
+}
+
+// BriefDigest returns the recorded digest of a brief's threads and whether the
+// store has one.
+func (s *Store) BriefDigest(briefID string) (string, bool) {
+	if s == nil || s.Briefs == nil {
+		return "", false
+	}
+	d, ok := s.Briefs[briefID]
+	return d, ok
+}
+
+// RecordBrief records a brief's threads as the engine just wrote them.
+func (s *Store) RecordBrief(briefID string, threads []model.Comment) {
+	if s.Briefs == nil {
+		s.Briefs = map[string]string{}
+	}
+	s.Briefs[briefID] = BriefCommentsDigest(briefID, threads)
+}
+
+// BriefCommentsDigest is CommentsDigest over a brief's threads, domain-separated
+// from a claim's by a "brief:" prefix on the id it hashes.
+func BriefCommentsDigest(briefID string, threads []model.Comment) string {
+	return CommentsDigest(model.Claim{ID: "brief:" + briefID, Comments: threads})
 }
 
 // EmptyCommentsDigest is CommentsDigest of claimID with NO comment threads —
