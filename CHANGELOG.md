@@ -267,6 +267,26 @@ binary predates that guard.
 
 ### Added
 
+- **Features in the viewer** (NIT-201). A brief in `briefs/features/` is a
+  feature. The sidebar lists features under their own **Features** entry,
+  between Modules and Briefs, in file-name order and by title, each with its
+  brief's own state mark (a padlock for `locked`, a hollow dot for `draft`);
+  the Briefs tree still leaves `features/` out, so a feature is listed once.
+  A feature's page is the brief page with a `FEATURE · path` kicker, a meta
+  line counting what it rests on ("Rests on 6 claims in Expenses, Splitting
+  and Settlements, all locked", or "M of N locked" while any is not), and a
+  **Made of** list in place of Rests on: its `rests_on` claims grouped by
+  module in the order the file names them, each row the claim's lifecycle
+  badge and a link to it, captioned "rests_on, not an order". "On this page"
+  ends with a "Made of" row. Home gains a Features tile listing each feature
+  and its state. Nothing shows built, specified or conformance state. A link
+  in any brief's body to another brief's file — relative
+  (`../voice/talking-about-money.md`) or from the project root
+  (`briefs/voice/talking-about-money.md`) — opens that brief's page, and so
+  does a hash naming a brief's path. A `brief-rests-on-duplicate` warning
+  shows in the status strip on each feature's page, naming the other. A
+  project with a `features/` folder and no other brief now gets the "Search
+  claims and briefs" box and the marks legend.
 - **Briefs on a claim card** (NIT-202). A claim's relationships panel gains a
   BRIEFS group after RESTS ON and DEPENDED ON BY, derived at render time and
   marked "derived": "Explained by" lists the briefs whose `rests_on` names the

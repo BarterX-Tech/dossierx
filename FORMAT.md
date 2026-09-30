@@ -1751,11 +1751,35 @@ reads "Search claims and briefs": a module row matches its claims' titles,
 summaries and ids, and a brief row its title, file name, summary and folder.
 A `check` finding whose `claim_id` is a brief's path, its folder's or the
 tree's shows in the status strip and on the Issues screen of that brief's
-page. A project whose only briefs are in `features/` gets their pages, but no
-Briefs group, no index and no "…and briefs" in the search box. The viewer also
-carries the briefs as data (a `dossierx-briefs` JSON block); a project with no
-brief has none of this, and its search reads "Search modules" while still
-matching claims.
+page. A project whose only briefs are in `features/` gets no Briefs group
+and no index. The viewer also carries the briefs as data (a `dossierx-briefs`
+JSON block); a project with no brief has none of this, and its search reads
+"Search modules" while still matching claims.
+
+A brief in `features/` is a **feature**. Features have their own **Features**
+entry in the sidebar, between Modules and Briefs: one row per feature in
+file-name order, labelled with its title, each carrying the brief's state mark
+in the same slot a brief row uses. A feature's page is the brief page with
+these differences: the kicker is `FEATURE · path`; the meta line reads
+"Rests on N claims in <modules>", then "all locked" when every `rests_on` id
+names a locked claim and "M of N locked" otherwise (a phone shows "N claims,
+all locked"); and a **Made of** list takes the place of Rests on — the
+`rests_on` claims grouped under their module's title-cased name (a project
+claim under "Project"), modules in the order their first claim appears and
+rows in the order the file lists them, captioned "rests_on, not an order". An
+id that names no claim sits last, under "Not a claim". "On this page" ends
+with a "Made of" row. Home gains a **Features** tile: each feature and its
+`status`, or on a phone one line counting them. A feature shows its brief's
+own state only: nothing built, specified or conformance-related.
+
+A link in any brief's body to another brief opens that brief's page: a
+markdown link to `briefs/<folder>/<slug>.md`, written relative to the brief's
+own file (`../voice/talking-about-money.md`, `export-to-csv.md`) or from the
+project root (`briefs/voice/talking-about-money.md`, with or without a leading
+`/`), is rewritten to the page's id. A hash naming a brief's path
+(`#briefs/features/split-a-bill.md`) opens the page too. A link that names no
+brief is left as written. A `brief-rests-on-duplicate` warning shows in the
+status strip on each brief it names, with its message naming the other.
 
 A claim card does show the briefs around it, derived at render time and never
 stored: a **BRIEFS** group in its relationships panel, after RESTS ON and
