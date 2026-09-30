@@ -37,7 +37,7 @@ dossierx version
 
 **Work one module at a time:** `manifest show <module> --isolation` → `manifest list` / `--integration` for neighbors → the human locks. Never walk or read the whole claims tree; `dossierx-modules` has the full reading order and the caps.
 `claim recover-approved-content` is a one-time upgrade migration — `dossierx-upgrading` owns it.
-A **brief** (`briefs/<folder>/<slug>.md`, frontmatter `summary`/`status`/`rests_on`; FORMAT.md "Briefs") is a document, not a claim, and gates no claim. `check` enforces its shape and caps as `brief-*` findings in `lint_findings`, whose `claim_id` is the file's path. Split or trim an over-cap brief; raising a `max_brief*` cap is the human's call.
+A **brief** (`briefs/<folder>/<slug>.md`, frontmatter `summary`/`status`/`rests_on`; FORMAT.md "Briefs") is a document, not a claim, and gates no claim. `check` enforces its shape and caps as `brief-*` findings in `lint_findings`, whose `claim_id` is a path (the brief, its folder, or `briefs/`). Split or trim an over-cap brief; raising a `max_brief*` cap is the human's call.
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.

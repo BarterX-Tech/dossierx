@@ -1674,7 +1674,7 @@ The second is the briefs tree, a load-bearing folder **beside** `claims/`
 rather than inside it: `briefs_dir` (default `briefs/`) is exactly one folder
 level deep, and a brief's folder and file name ARE its id
 (`briefs/<folder>/<slug>.md` is `<folder>.<slug>`). There, and only there,
-where a file sits is what it means. See "Briefs" below.
+where a file sits is what it means. See "Briefs" above.
 
 #### Recommended authoring convention (non-enforced)
 
