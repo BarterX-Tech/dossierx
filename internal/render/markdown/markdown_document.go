@@ -73,7 +73,7 @@ func DocumentImages(body string) []string {
 
 // DocumentRefusedImages returns every image src in body that DocumentImageSrc
 // refuses, as authored, in document order: "PIC.svg", "./pic.svg",
-// "../x.svg", "https://...". RenderDocument writes each as the literal text of
+// "../x.svg", a URL. RenderDocument writes each as the literal text of
 // its "![alt](src)", so internal/briefs raises it as a finding rather than let
 // an image the author meant to show read as nothing wrong. It runs the same
 // block and inline passes, so an image in a fenced example is absent here as it
