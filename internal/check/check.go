@@ -252,7 +252,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
 	res.Constitution = inputs.constitution
-	res.LintFindings = withConstitutionFindings(inputs.constitution, lint.RunAll(claims, cfg))
+	res.LintFindings = lintFindings(claims, cfg, inputs)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -350,7 +350,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: inputs.briefs})
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
@@ -409,7 +409,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: inputs.briefs})
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
@@ -653,7 +653,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 	}
 
 	res.Constitution = in.constitution
-	res.LintFindings = withConstitutionFindings(in.constitution, lint.RunAll(claims, cfg))
+	res.LintFindings = lintFindings(claims, cfg, in)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -735,7 +735,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		return res
 	}
 
-	_, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+	_, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: in.briefs})
 	if renderErr != nil {
 		res.RenderError = renderErr.Error()
 		res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)

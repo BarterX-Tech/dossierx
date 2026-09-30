@@ -157,6 +157,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
@@ -962,7 +963,45 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	}
 	cfg.ConstitutionIndex = indexed
 
+	// The briefs tree, from the index like the roof: a brief edited but not
+	// staged is not what the commit carries.
+	in.briefs, err = stagedBriefs(g, cfg)
+	if err != nil {
+		return ledgerInputs{}, err
+	}
+
 	return in, nil
+}
+
+// stagedBriefs reads briefs_dir as the INDEX holds it and judges it under
+// exactly the rules the working tree gets — briefs.FromFiles is Load's own
+// second half. A tree absent from the index, or outside the work tree, is an
+// empty set, which is how briefs.Load reads a directory that does not exist:
+// no commit can carry a brief git cannot name.
+//
+// The index lists files, never directories, and indexEntries has already
+// dropped symlinks and gitlinks (see there for why their oids are not content),
+// so every File here is a regular file with its bytes in hand.
+func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
+	dir := cfg.BriefsDirPath()
+	spec, err := g.spec(dir)
+	if err != nil {
+		return briefs.FromFiles(cfg, nil), nil
+	}
+	blobs, err := g.indexBlobs(spec)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]briefs.File, 0, len(blobs))
+	for repoRel, raw := range blobs {
+		files = append(files, briefs.File{
+			Rel:     relToClaimsDir(spec, repoRel),
+			Size:    int64(len(raw)),
+			Regular: true,
+			Data:    raw,
+		})
+	}
+	return briefs.FromFiles(cfg, files), nil
 }
 
 // materializeIndexFile writes the index's copy of src (an absolute path) into

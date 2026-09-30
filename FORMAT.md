@@ -1426,6 +1426,124 @@ cleverer predicate — so v0.4.0 removed the operation rather than gating it.
 A **downgraded** store is left alone and is not crossed. That diagnosis belongs
 to `lock-ledger-downgraded`, and its recovery is version control.
 
+## Briefs
+
+A **brief** is a markdown document beside the claims, for the prose a project
+needs that is not a claim: why a feature exists, how a flow reads end to end,
+what a design is for. Not everything is a claim. A claim is one reviewable
+fact; a brief is a document a human reads in one sitting, and it may rest on
+claims. `dossierx brief list` and `dossierx brief show` read them; `check`
+holds them to the shape and the caps below. The lock lifecycle for briefs
+(lock, unlock, reaudit, drift) is not in this release: `status` is read from
+the frontmatter and reported, and nothing records an approval for a brief.
+
+### The tree
+
+```
+project.config.yaml
+claims/
+briefs/                       # briefs_dir; absent means no briefs
+  checkout/                   # a folder: [a-z0-9-]
+    flow.md                   # a brief: [a-z0-9-] + .md  → id checkout.flow
+    flow-diagram.svg          # an image flow.md references
+```
+
+- One folder level. A file directly under `briefs/`, and anything deeper than
+  `briefs/<folder>/<file>`, is refused (`brief-shape`).
+- A folder holds `<slug>.md` briefs and the `.png` `.jpg` `.jpeg` `.gif`
+  `.webp` `.svg` images its briefs reference, and nothing else. Any other file,
+  a non-regular file (a symlink), and an image no brief in the folder
+  references are refused (`brief-shape`), as is a reference to an image the
+  folder does not hold.
+- Folder names, brief names and image names are drawn from `[a-z0-9-]`, and
+  every extension is lowercase. That is what makes a brief's id
+  `<folder>.<slug>` slash-free, so it can be one route segment and one store
+  key.
+- A name beginning with `.` is not read at all — `.DS_Store`, an editor's swap
+  file, a `.gitkeep`. It is operating-system and tool litter, not authored
+  content.
+- An absent `briefs/` is a project with no briefs, and such a project sees no
+  change anywhere: no finding, no field, no byte of its viewer.
+
+### Frontmatter
+
+A brief opens with a `---` block and nothing else opens one: the file's first
+line is exactly `---`, and the block ends at the next line that is exactly
+`---`. The body is everything after it.
+
+```markdown
+---
+summary: How checkout reads end to end, from cart to receipt.
+status: draft
+rests_on:
+  - checkout.contract.cart-total
+  - project.currency
+---
+# Checkout flow
+
+## Why
+...
+```
+
+- `summary` — required; one line of plain text, at most 200 characters (Unicode
+  code points). It is the line `brief list` prints.
+- `status` — `draft` or `locked`; omitted, `draft`.
+- `rests_on` — optional; a list of claim ids, none repeated. An id that is not
+  a claim is `brief-rests-on-unknown` (ERROR). Two briefs whose non-empty
+  `rests_on` sets are identical are each `brief-rests-on-duplicate` (WARNING):
+  they may be one brief.
+- No other key. The decode is strict and kind-checked: `summary: 5` is refused,
+  not read as the string "5". Every frontmatter defect is `brief-frontmatter`
+  (ERROR); the brief is still listed and shown.
+
+### The body is a document
+
+A brief's body renders in **document mode**: the claim-body markdown ceiling
+with one difference — `#` and `##` are headings. A claim card sits inside viewer
+chrome that owns h1 and h2, so a claim body renders `# x` as literal text (see
+"`body` and the markdown ceiling"); a brief is the whole page it is shown on.
+A brief's title is its first `#` heading, and otherwise its file name
+title-cased (`order-plan.md` → "Order Plan"). An image is referenced by its
+bare file name in the brief's own folder: `![Flow](flow-diagram.svg)`.
+Citation markers do not resolve in a brief (it has no `sources`).
+
+### Caps
+
+| Cap | Default | Override | Rule |
+|---|---|---|---|
+| words per brief | 2,000 | `max_brief_words` | `brief-word-cap` |
+| images per brief | 3 | `max_brief_images` | `brief-image-cap` |
+| bytes per image | 1,048,576 | `max_brief_image_bytes` | `brief-image-cap` |
+| briefs per folder | 12 | `max_briefs_per_folder` | `brief-folder-cap` |
+| briefs in total | 60 | `max_briefs` | `brief-total-cap` |
+
+Every cap is an ERROR and final: `check` refuses the project until the brief is
+split or trimmed. Images count toward neither the folder nor the total cap.
+Words are counted over the text the rendered body puts on the page, so image
+references and link targets are not words. Raising a cap is the human's call,
+only on their explicit approval, and every cap finding says so.
+
+### Findings
+
+The eight brief rules are a rule set of their own, beside the claim lints and
+never among them: `brief-shape`, `brief-frontmatter`, `brief-word-cap`,
+`brief-image-cap`, `brief-folder-cap`, `brief-total-cap`,
+`brief-rests-on-unknown` and `brief-rests-on-duplicate`. Their findings ride in
+`check`'s `data.lint_findings`, keyed by `lint` like every other finding, and a
+brief finding's `claim_id` is the **path** it is about — the brief
+(`briefs/checkout/flow.md`), the folder (`briefs/checkout/`) or the tree
+(`briefs/`). `check --staged` reads the briefs from the index, like the
+claims.
+
+### What a brief never touches
+
+A claim never learns about briefs. A brief never enters `manifest show
+--isolation` or `--integration`, the catalog, or the claims graph. Brief state
+never affects claim readiness, locking or review — `claim lock` does not see a
+brief finding — and no brief byte enters any claim hash. The viewer carries the
+briefs as data (a `dossierx-briefs` JSON block, present only when the project
+holds a brief) and does not yet draw them.
+
 ## Project config (`project.config.yaml`)
 
 ```yaml
@@ -1450,6 +1568,21 @@ conformance:                     # optional; read only with declared embodiment
 constitution: path               # optional; default constitution.yaml at the project root
                                   # (the roof: not a module, not a graph node)
 project_claims_dir: path         # optional; default project-claims (scope: project nodes)
+briefs_dir: path                 # optional; default briefs, beside this file. The
+                                  # briefs tree (see "Briefs"). Absent is no
+                                  # briefs. May not be this file's directory or
+                                  # overlap claims_dir, project_claims_dir or
+                                  # build_dir.
+max_brief_words: int             # optional; omit → 2000 words per brief
+max_brief_images: int            # optional; omit → 3 images per brief
+max_brief_image_bytes: int       # optional; omit → 1048576 bytes per image
+max_briefs_per_folder: int       # optional; omit → 12 briefs per folder
+max_briefs: int                  # optional; omit → 60 briefs in the project.
+                                  # The five brief caps; check reports
+                                  # brief-word-cap / brief-image-cap /
+                                  # brief-folder-cap / brief-total-cap (ERROR).
+                                  # Raise one only on the human's explicit yes.
+                                  # Values below 1 are a config-load error.
 source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-claim: <id>" and
                                   # "dossierx-step: <id> #<n> <sha256-hex>"
@@ -1508,7 +1641,7 @@ All paths in this file are resolved relative to the config file's own
 location, never the process's current working directory — this is what
 lets the same engine binary be pointed at a config file from anywhere.
 
-### Directory layout is not part of this spec (one exception)
+### Directory layout is not part of this spec (two exceptions)
 
 `claims_dir`'s internal structure for **claim files** — subdirectory names,
 nesting depth, how claim YAML is grouped on disk — carries no meaning to the
@@ -1519,9 +1652,15 @@ finds; it skips `manifest.yaml` / `manifest.yml`. A claim's `module` and
 never from where the file happens to live on disk. Claim files can be
 reorganized freely.
 
-The exception is the required module manifest: it **must** live at
+The first exception is the required module manifest: it **must** live at
 `claims_dir/<module>/manifest.yaml`. That path is load-bearing. See
 "Module `manifest.yaml`" above.
+
+The second is the briefs tree, a load-bearing folder **beside** `claims/`
+rather than inside it: `briefs_dir` (default `briefs/`) is exactly one folder
+level deep, and a brief's folder and file name ARE its id
+(`briefs/<folder>/<slug>.md` is `<folder>.<slug>`). There, and only there,
+where a file sits is what it means. See "Briefs" below.
 
 #### Recommended authoring convention (non-enforced)
 
