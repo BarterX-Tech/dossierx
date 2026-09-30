@@ -397,7 +397,9 @@
     "dossierx-upgrading"
   ],
   "http_routes": [
+    "DELETE /api/briefs/{id}/comments/{tid}",
     "DELETE /api/claims/{id}/comments/{tid}",
+    "GET /api/briefs/{id}/comments",
     "GET /api/comments",
     "GET /api/events",
     "GET /api/fragment",
@@ -407,7 +409,12 @@
     "GET /brief-assets/{folder}/{name}",
     "GET /claim-assets/{rest...}",
     "GET /{$}",
+    "PATCH /api/briefs/{id}/comments/{tid}",
     "PATCH /api/claims/{id}/comments/{tid}",
+    "POST /api/briefs/{id}/comments",
+    "POST /api/briefs/{id}/comments/{tid}/reopen",
+    "POST /api/briefs/{id}/comments/{tid}/replies",
+    "POST /api/briefs/{id}/comments/{tid}/resolve",
     "POST /api/claims/{id}/comments",
     "POST /api/claims/{id}/comments/{tid}/reopen",
     "POST /api/claims/{id}/comments/{tid}/replies",
@@ -580,7 +587,7 @@
     "internal/render/components": "sha256:dc27f5f67831ae687248c6946641250a9f331861bb918a6c47a5423a9fd2537e",
     "internal/render/markdown": "sha256:28114410fe8fd4d85f8abf01e720d5449bfc2d08f68cd1f462cd2be13cc0bc17",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:a4776843d3de2408abed4d138cb6c5827d0c14621120175515ecf6ff910e33e3",
+    "internal/serve": "sha256:efbd8229197f15cbcdbbc30e9a848dbe198448d78bd839fc234e4d55bd6ef2c5",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
@@ -1011,7 +1018,7 @@
     "brief_rules": 10,
     "commands": 26,
     "error_codes": 52,
-    "http_routes": 15,
+    "http_routes": 22,
     "lint_rules": 30,
     "nouns": 9
   }

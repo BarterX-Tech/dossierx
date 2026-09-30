@@ -250,8 +250,10 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		// (NIT-205).
 		"brief_rules": 10,
 		// 14 -> 15 with GET /brief-assets/{folder}/{name}, serve's answer
-		// for a brief page's images (NIT-197).
-		"http_routes": 15,
+		// for a brief page's images (NIT-197). 15 -> 22 with the seven
+		// /api/briefs/{id}/comments routes, the claim comment routes' twins
+		// plus a per-brief list (NIT-198).
+		"http_routes": 22,
 	}
 	for name, expected := range want {
 		if got := doc.Counts[name]; got != expected {

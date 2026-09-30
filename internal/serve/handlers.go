@@ -734,9 +734,18 @@ type replyDTO struct {
 }
 
 // commentDTO is one thread in a JSON response, carrying its owning claim id and
-// the same raw+rendered body pairing as replyDTO.
+// the same raw+rendered body pairing as replyDTO. The thread itself is
+// threadDTO, embedded so its fields follow claim_id on the wire exactly as they
+// did before briefs (NIT-198) shared them: encoding/json flattens an embedded
+// struct in place, so a claim's response is byte-identical.
 type commentDTO struct {
-	ClaimID    string     `json:"claim_id"`
+	ClaimID string `json:"claim_id"`
+	threadDTO
+}
+
+// threadDTO is a thread's own fields, shared by a claim's commentDTO and a
+// brief's briefCommentDTO.
+type threadDTO struct {
 	ID         string     `json:"id"`
 	Status     string     `json:"status"`
 	Author     string     `json:"author"`
@@ -756,6 +765,11 @@ type commentDTO struct {
 // renderer, which escapes hostile HTML so an <img onerror=...> body arrives as
 // inert &lt;img text, never live markup.
 func commentToDTO(claimID string, cm model.Comment) commentDTO {
+	return commentDTO{ClaimID: claimID, threadDTO: threadToDTO(cm)}
+}
+
+// threadToDTO renders one thread's wire form; see commentToDTO.
+func threadToDTO(cm model.Comment) threadDTO {
 	replies := make([]replyDTO, 0, len(cm.Replies))
 	for _, rp := range cm.Replies {
 		replies = append(replies, replyDTO{
@@ -767,8 +781,7 @@ func commentToDTO(claimID string, cm model.Comment) commentDTO {
 			Edited:   rp.Edited,
 		})
 	}
-	return commentDTO{
-		ClaimID:    claimID,
+	return threadDTO{
 		ID:         cm.ID,
 		Status:     cm.Status,
 		Author:     string(cm.Author),
