@@ -1537,11 +1537,14 @@ title-cased (`order-plan.md` → "Order Plan"). An image is referenced by its
 bare file name in the brief's own folder: `![Flow](flow-diagram.svg)`. Any
 other image src — `PIC.svg`, `./pic.svg`, `../x.svg`, a URL — would render as
 the literal text of its `![alt](src)`, and is refused (`brief-shape`) on the
-brief's path. No route serves a brief's image yet, so for now the viewer
-payload renders **every** image reference as the literal text of its
-`![alt](src)`, the accepted bare-name ones included, until the briefs UI adds
-an image route (NIT-197). The bare-name rule is what the image checks and the
-image cap count today.
+brief's path. An accepted image renders as an image at
+`brief-assets/<folder>/<name>`, relative to the viewer: `dossierx check`
+copies every referenced image there beside `build/viewer/index.html`, and
+`dossierx serve` answers the same path from the brief's folder. The copied
+images count toward the viewer's 64 MiB output bound together with the page.
+A copy reads each image as a plain file only: an image that is no longer the
+plain file of the size `check` discovered (swapped for a symlink, resized,
+unreadable) fails the render with its path named rather than being copied.
 Citation markers do not resolve in a brief (it has no `sources`).
 
 ### Caps
@@ -1581,9 +1584,27 @@ stricter.
 A claim never learns about briefs. A brief never enters `manifest show
 --isolation` or `--integration`, the catalog, or the claims graph. Brief state
 never affects claim readiness, locking or review — `claim lock` does not see a
-brief finding — and no brief byte enters any claim hash. The viewer carries the
-briefs as data (a `dossierx-briefs` JSON block, present only when the project
-holds a brief) and does not yet draw them.
+brief finding — and no brief byte enters any claim hash.
+
+### In the viewer
+
+A project that holds a brief gets a **Briefs** group in the sidebar, after
+Modules: "All briefs", then one row per folder (its name title-cased; the path
+stays as written), each opening to its briefs. `features/` is left out of this
+tree: its briefs are features. Each brief row carries one state mark — a
+padlock for `locked`, a hollow dot for `draft` — and a legend above the theme
+control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
+second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
+`BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
+words and images against their caps, the body, and the claims it **rests on**
+(its frontmatter) and is **cited by** (every claim with an `internal` source
+whose `path` is the brief's). The right rail is "On this page", the body's
+`##` headings; on a phone it is a sheet. The sidebar search reads "Search
+claims and briefs" and matches a brief's title, file name, summary and folder.
+A `check` finding whose `claim_id` is a brief's path, its folder's or the
+tree's shows in the status strip on that brief's page. The viewer also carries
+the briefs as data (a `dossierx-briefs` JSON block); a project with no brief
+has none of this.
 
 ## Project config (`project.config.yaml`)
 
