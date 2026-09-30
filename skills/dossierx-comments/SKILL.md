@@ -50,9 +50,11 @@ dossierx comment add   <claim-id> --as human|agent --body "..."
 dossierx comment reply <claim-id> <thread-id> --as human|agent --body "..."
 ```
 
-A **brief** takes threads too: pass its path (`briefs/<folder>/<slug>.md`) where a claim id goes.
-Same rights, same digest; the inbox lists its threads with `"kind": "brief"` and the path as
-`claim_id`. An open thread refuses `brief lock` and `brief reaudit` (`comment_open`).
+A **brief** takes threads too: pass its path (`briefs/<folder>/<slug>.md`), not its id, where a
+claim id goes. Same rights, same digest; the inbox lists its threads with `"kind": "brief"` and the
+path as `claim_id` (its `claims` count includes such briefs), and `check` prints
+`open comments: brief "<path>": N`. An open thread refuses `brief lock` and `brief reaudit --confirm`
+(`comment_open`); resolving it is the human's, and arrives with the viewer's brief threads.
 
 `--as` is required on every mutating verb and records a **role**, not an identity. Never pass
 `--as human` for something you decided; the rights rule below keys off it, and mislabelling

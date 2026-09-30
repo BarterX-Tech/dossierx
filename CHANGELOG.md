@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Surface** (net, against v0.7.21): 26 leaves under 9 nouns (was 24 under
 9: `track` and its three leaves out, `brief` and its five in), 30 lint rules
-(was 36) plus the 10 brief rules, a set of their own, 51 error codes (was 50:
-`unknown_track` out, `brief_not_found` and `comment_open` in).
+(was 36) plus the 10 brief rules, a set of their own, 52 error codes (was 50:
+`unknown_track` out, `brief_not_found`, `comment_open` and `store_too_new`
+in).
 
 ### Upgrading from v0.7.21
 
@@ -60,7 +61,12 @@ release then reports every locked brief as `brief-unrecorded`; the recovery is
 restoring `build/ledger/lock-store.json` from the commit before that write, not
 re-locking. The comment digest store likewise gains a `briefs` map with the
 first thread on a brief, and a v0.7.21 `comment add` drops it the same way
-(this release then reports `comment-digest-unrecorded` on the brief).
+(this release then reports `comment-digest-unrecorded` on the brief — in a
+ledger-covered project; in one that has never locked anything the dropped
+entry goes unreported). From this release on, a store whose version is newer
+than the binary reading it is refused (`store_too_new`) rather than read and
+re-saved, for the lock store and the comment digest store alike; a v0.7.21
+binary predates that guard.
 
 ### Added — briefs, the read side (NIT-204)
 
@@ -154,22 +160,29 @@ first thread on a brief, and a v0.7.21 `comment add` drops it the same way
 
 ### Added — briefs, lock, review and comments (NIT-205)
 
-- **`dossierx brief lock <path> --reason`**, **`brief unlock <path>
-  --reason`** and **`brief reaudit <path>`** (`--confirm --reason` to apply),
-  all with `--dry-run`: 26 commands under 9 nouns. `brief lock` sets the
-  brief's `status: locked` and records, under a `briefs` map in
-  `build/ledger/lock-store.json`, the brief's lock hash (summary, `rests_on`,
-  body — not `status`, not comments, not image files), the human's reason and
-  time, the approved text, and one baseline per `rests_on` claim (that claim's
-  content hash) with the claim as it read. It refuses `already_locked`
-  (locked and unchanged), `comment_open` (an open thread on the brief; the new
-  error code, exit 1) and `lint_failed` (an error finding on the brief).
-  `brief unlock` sets `status: draft` and stamps the release on the kept
-  record, as `claim unlock` does. `brief reaudit` shows each changed claim's
-  wording at the baseline and now; `--confirm` refreshes the baselines.
-- **Four findings.** `brief-content-drift` (a locked brief edited since its
-  approval) and `brief-unrecorded` (`status: locked` with no standing record)
-  ride in `ledger_findings` and fail `check` with `integrity_failed`;
+- **`dossierx brief lock <path-or-id> --reason`**, **`brief unlock
+  <path-or-id> --reason`** and **`brief reaudit <path-or-id>`** (`--confirm
+  --reason` to apply), all with `--dry-run`: 26 commands under 9 nouns.
+  `brief lock` sets the brief's `status: locked` and records, under a `briefs`
+  map in `build/ledger/lock-store.json`, the brief's lock hash (summary,
+  `rests_on`, body — not `status`, not comments), the sha256 of each image it
+  references, the human's reason and time, the approved text, and one
+  baseline per `rests_on` claim (that claim's content hash) with the claim as
+  it read. It refuses `already_locked` (locked and unchanged), `comment_open`
+  (an open thread on the brief; the new error code, exit 1), `lint_failed` (an
+  error finding on the brief) and `write_conflict` (the file changed while it
+  was being locked). Re-locking an edited brief approves its edit and keeps
+  the standing baselines (`carried_baselines`), so a claim that moved under it
+  stays review-pending for `brief reaudit`. `brief unlock` releases the kept
+  record, as `claim unlock` does, and then sets `status: draft`. `brief
+  reaudit` shows each changed claim's wording at the baseline and now (the
+  text form as a line diff); `--confirm` refreshes the baselines.
+- **Six findings.** `brief-content-drift` (a locked brief edited since its
+  approval, an image included), `brief-unrecorded` (`status: locked` with no
+  standing record; when an older binary dropped the store's `briefs` map it
+  says to restore, not re-lock), `brief-orphan` (a draft on a standing record)
+  and `brief-abandoned` (a standing record whose brief is gone) ride in
+  `ledger_findings` and fail `check` with `integrity_failed`;
   `brief-dependency-drift` (a baselined claim moved: the brief is
   `review_pending`, a warning) and `brief-rests-on-missing` (a baselined claim
   is gone, an error) join the brief rules, now ten. `check --validate` and
@@ -188,7 +201,11 @@ first thread on a brief, and a v0.7.21 `comment add` drops it the same way
   `kind: "brief"`. The threads live in the brief's frontmatter (`comments:`),
   outside its lock hash, with their digests under a `briefs` map in
   `build/ledger/comment-digest.json`; a hand-edited block is
-  `comment-ledger-drift` on the brief's path. `check` reports open brief
+  `comment-ledger-drift` on the brief's path, and threads recorded for a brief
+  that was deleted or renamed away are `comment-digest-abandoned`. No CLI verb
+  resolves a thread, and the viewer's brief threads have not shipped, so an
+  open thread on a brief holds `brief lock` until they do. A comment verb
+  given a brief's id answers `claim_not_found` with the path in its hint. `check` reports open brief
   threads as `open_brief_comments`.
 - **Nothing flows back to a claim.** A brief in any state never refuses
   `claim lock`, never sets `review_pending` on a claim and never enters the

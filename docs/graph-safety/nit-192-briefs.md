@@ -41,10 +41,19 @@ way.
   state is a function of those three alone; review-pending additionally of the
   claims' current `ContentHash`.
 - **Independent obstacles**: content drift (the brief moved) and dependency
-  drift (a claim moved) are independent. Clearing one does not clear the
-  other: `brief reaudit --confirm` refreshes baselines and refuses a brief
-  edited since approval (`integrity_failed`), and `brief lock` re-signs the
-  brief's text and re-records the baselines in one approval.
+  drift (a claim moved) are independent, and each has its own clearer.
+  `brief reaudit --confirm` refreshes baselines and refuses a brief edited
+  since approval (`integrity_failed`). `brief lock` over a standing record
+  re-signs the brief's text and images and **carries the baselines forward**
+  for every `rests_on` id still listed (a newly listed claim is baselined, a
+  dropped one removed), so a re-lock never accepts a claim change the human was
+  not shown; the re-locked brief stays review-pending until `brief reaudit
+  --confirm`, which it now allows. (The first candidate re-recorded every
+  baseline on a re-lock and so cleared dependency drift unseen — audit finding
+  F1; `TestARelockKeepsAReviewPendingBriefPending` and
+  `TestBriefLockAndReauditRefuseWhatTheyCannotSign` pin the fix.) An unlock
+  releases the record, and a later lock is a fresh approval that baselines
+  every claim, as a claim's unlock then lock is.
 - **Identity**: a record is keyed by brief id (`<folder>.<slug>`); a baseline
   by claim id within its record, exactly as `Store.Hashes[dependent][dep]`. A
   changed claim is reported once per (brief, claim).
@@ -118,14 +127,36 @@ way.
   version 3 with no `briefs` key, and after a brief record its claim maps are
   identical (`TestAV0721StoreLoadsAndEarnsTheBriefsSchemaOnlyWhenABriefIsRecorded`).
   The strict decoder refuses a `briefs` map below version 4
-  (`TestDecodeStoreRefusesABriefsMapBelowVersionFour`). No claim-side test or
-  golden changed: `internal/lock`, `internal/readiness`, `internal/catalog`
-  and every claim test pass unedited.
+  (`TestDecodeStoreRefusesABriefsMapBelowVersionFour`), and both readers
+  refuse a store from a newer binary (`TestAStoreFromANewerBinaryIsRefusedNotRead`,
+  `TestADigestStoreFromANewerBinaryIsRefused`). No claim-side test or golden
+  changed for any reason but the three added leaves:
+  `internal/comments/digest_refusal_test.go`'s leaf set gained them, and every
+  other claim test in `internal/lock`, `internal/readiness`,
+  `internal/catalog` and `internal/comments` passes unedited.
+- **Images are signed beside the markdown, not inside its hash.** A brief's
+  lock hash stays the markdown's (summary, `rests_on` set, body), which keeps
+  every claim's internal `sources` pin on a brief file comparing what it always
+  compared; the sha256 of each referenced image is a separate map on the
+  record, and a changed image or a changed set is `brief-content-drift`
+  (`TestEvaluate_TheImagesAreSignedBesideTheMarkdown`; the parity table's image
+  row reads the bytes from the working tree and, under `--staged`, the index).
+- **An approval cannot vanish quietly.** A draft on a standing record
+  (`brief-orphan`) and a standing record whose brief is gone
+  (`brief-abandoned`) are integrity findings, and a thread recorded for a
+  brief renamed away is `comment-digest-abandoned`
+  (`TestRenamingABriefDoesNotEraseItsThread`). `brief unlock` releases before
+  it rewrites the file, so its failure lands in `brief-unrecorded`
+  (`TestAFailedUnlockLandsInTheLoudState`).
+- **Brief threads and serve.** Nothing here adds a route. The viewer's brief
+  threads (NIT-198) must address a brief by its id: a mux `{id}` segment
+  cannot carry a path's slashes, which is why a brief id is slash-free.
 - **Both check modes judge the same tree.** `--staged` reads the briefs, the
   lock store and the comment digest from the index.
   `TestBriefLockFindingsFollowTheTreeEachModeJudges` (`internal/check`) runs
-  five rows — content drift, unrecorded, dependency drift, a gone claim, a
-  forged brief comment block with no digest entry — each unstaged (reported by
+  eight rows — content drift, unrecorded, orphan, abandoned, a changed image,
+  dependency drift, a gone claim, a forged brief comment block with no digest
+  entry — each unstaged (reported by
   `--validate`, not by `--staged`) and then staged (both agree);
   `TestABriefCommentBlockEditedAfterItsDigestIsDrift` does the same for
   `comment-ledger-drift` on a brief whose threads were recorded.
