@@ -133,8 +133,8 @@ func (e *briefImagesBoundError) Is(target error) bool {
 }
 
 // featuresFolder is the brief folder the Briefs tree leaves out: its briefs
-// are features, and they live under Features in the sidebar (NIT-194). Their
-// pages still render, so a link to one resolves.
+// are features, listed under the sidebar's own Features entry and given the
+// feature page (NIT-201, feature_page.go).
 const featuresFolder = "features"
 
 // briefsIndexID is the id of the "All briefs" page. Like Home's "_home" it
@@ -146,7 +146,8 @@ const briefsIndexID = "_briefs"
 type BriefsView struct {
 	// Folders are the tree's folders in name order, features/ excluded.
 	Folders []BriefFolderView
-	// Features are the pages under features/, rendered but not in the tree.
+	// Features are the pages under features/, in file-name order: the
+	// Features entry's rows and pages (NIT-201), never in the tree.
 	Features []BriefPageView
 	// Total is how many briefs the tree lists.
 	Total int
@@ -217,6 +218,9 @@ type BriefPageView struct {
 	// Search is what the sidebar search matches a brief against: its title,
 	// summary and folder, lowercased.
 	Search string
+	// Feature is set on a brief in features/ (NIT-201): its Made of list,
+	// which takes the Rests on list's place. Nil on every other brief.
+	Feature *FeatureDetail
 }
 
 // OpenThreadsLabel is the index row's thread count, "1 open thread".
@@ -318,12 +322,17 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 	}
 	statuses := buildTargetStatusLookup(cat)
 	citedBy := internalCitations(cat)
+	targets := briefLinkTargets(set, rendered)
+	var madeOf map[string]madeOfClaim
 	byFolder := map[string]*BriefFolderView{}
 	var names []string
 	for _, b := range set.Briefs {
-		page := briefPage(b, set.Caps, rendered[b.ID], statuses, citedBy[b.Path])
+		page := briefPage(b, set.Caps, rendered[b.ID], statuses, citedBy[b.Path], targets)
 		if b.Folder == featuresFolder {
-			view.Features = append(view.Features, page)
+			if madeOf == nil {
+				madeOf = madeOfIndex(cat)
+			}
+			view.Features = append(view.Features, featurePage(page, b, madeOf, statuses))
 			continue
 		}
 		f, ok := byFolder[b.Folder]
@@ -343,7 +352,7 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 	return view
 }
 
-func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string) BriefPageView {
+func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string, targets map[string]string) BriefPageView {
 	folderLabel := components.DisplayCase(b.Folder)
 	mark, markLabel := briefMark(b)
 	return BriefPageView{
@@ -362,7 +371,7 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 		Threads:       len(b.Comments),
 		CommentsPanel: components.BriefCommentsPanelHTML(b.ID, b.Comments),
 		Pill:          components.BriefStatusPillHTML(string(b.Status)),
-		Body:          template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body))),
+		Body:          template.HTML(resolveBriefLinks(briefBodyOutline(withoutTitleHeading(r.body, b.Body)), b.Path, targets)),
 		Meta:          fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
 		MetaShort:     groupDigits(b.Words) + " words",
 		RestsOn:       components.BriefRelationRowsHTML(b.RestsOn, statuses),
@@ -393,6 +402,27 @@ func openThreadsLabel(n int) string {
 		return "1 open thread"
 	}
 	return strconv.Itoa(n) + " open threads"
+}
+
+// featurePage turns a features/ brief's page into a feature page (NIT-201):
+// its sidebar row reads the brief's title (Paper B4 lists "Export to CSV",
+// which no file name can spell), its meta line counts what it rests on, and
+// its Made of list replaces the Rests on list.
+func featurePage(page BriefPageView, b briefs.Brief, index map[string]madeOfClaim, statuses map[string]components.TargetStatus) BriefPageView {
+	f := buildFeatureDetail(b.RestsOn, index, statuses)
+	modules := make([]string, 0, len(f.Groups))
+	for _, g := range f.Groups {
+		if g.Label != madeOfUnknownLabel {
+			modules = append(modules, g.Label)
+		}
+	}
+	page.Feature = f
+	page.NavLabel = b.Title
+	page.Meta = featureMeta(f, modules, page.Meta)
+	page.MetaShort = featureMetaShort(f)
+	page.RestsOn = ""
+	page.RestsOnCount = 0
+	return page
 }
 
 // withoutTitleHeading drops the level-1 heading a body opens with when that

@@ -450,7 +450,9 @@
     // The body's section headings: "##" (and a stray "#") render as h3
     // under the page's h2 title (render.briefBodyOutline). A heading inside a
     // quote or a list is not a section, so only the body's own children count.
-    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3')) : [];
+    // A feature's Made of list (NIT-201) is the last row, as Paper B4 draws
+    // the rail: "Made of · 6 claims".
+    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3, :scope > .feature-made-of > .feature-made-of__head')) : [];
   }
 
   // tocTarget is the element a TOC row stands for: a claim card, or on a
@@ -695,7 +697,7 @@
     list.replaceChildren();
     select.replaceChildren();
     headings.forEach(function (heading, index) {
-      var label = heading.textContent.replace(/\s+/g, ' ').trim();
+      var label = (heading.getAttribute('data-toc-label') || heading.textContent).replace(/\s+/g, ' ').trim();
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'facet-toc__item';

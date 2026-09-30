@@ -79,7 +79,7 @@
       </div>
       <nav id="nav">
         <div class="sidebar-nav-scroll">
-          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg>{{if .Briefs.Folders}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search claims and briefs" aria-label="Search claims and briefs">{{else}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules">{{end}}</div>
+          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg>{{if .Briefs.Present}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search claims and briefs" aria-label="Search claims and briefs">{{else}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules">{{end}}</div>
 <!-- The site nav (NIT-196): Home, then the Constitution pin (NIT-27), then
              the Modules group, then the Claims graph below a hairline. Home and
              Constitution sit outside .system-nav-groups on purpose: neither is
@@ -88,8 +88,8 @@
              while a module is the current page (viewer-runtime.js
              syncNavGroups). The Constitution entry is hidden only when there is
              nothing under it: no constitution.yaml and no project claims.
-             Features and Briefs join this list with briefs (NIT-192/NIT-194);
-             until then the viewer has no page for them. -->
+             Features (NIT-201) and Briefs (NIT-197) join .system-nav-groups
+             after Modules when the project holds them. -->
           <div class="site-nav">
             <button class="sec-tab site-nav__item home-tab" data-target="#_home"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-home"/></svg><span class="sec-tab__label">Home</span></button>
 {{if or .Home.Constitution.Present .Home.Constitution.ProjectClaims}}            <button class="sec-tab site-nav__item constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-landmark"/></svg><span class="sec-tab__label">Constitution</span>{{if .Home.Constitution.Locked}}<svg class="dx-icon dx-icon--lock site-nav__lock" aria-label="Locked" role="img"><use href="#dx-icon-lock"/></svg>{{end}}</button>{{end}}
@@ -102,7 +102,20 @@
                 <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}" data-search="{{.Search}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
 {{- end}}
             </div>
-          </details><!-- The Briefs group (NIT-197): a disclosure like Modules, so clicking it
+          </details><!-- The Features entry (NIT-201, Paper B4): features/, one row per feature
+     in file-name order, each with the brief's own state mark in the slot a
+     brief row uses. Before Briefs, which leaves features/ out, so a feature is
+     listed once. Its star is drawn inline for the reason the Briefs icon is.
+     The comment hugs the closing tag, so a project with no feature gains not
+     even a newline. -->{{with .Briefs}}{{if .Features}}
+          <details class="system-nav-group feature-nav">
+            <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><span>Features</span><span class="system-nav-group__count">{{len .Features}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
+            <div class="system-nav-group__body feature-nav__body">
+{{- range .Features}}
+                <button class="sec-tab brief-nav__row feature-nav__row" data-target="#{{.ID}}" data-search="{{.Search}}"><span class="brief-nav__label" title="{{.Title}}">{{.NavLabel}}</span><span class="brief-mark" data-mark="{{.Mark}}" role="img" aria-label="{{.MarkLabel}}" title="{{.MarkLabel}}">{{if eq .Mark "locked"}}<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</span></button>
+{{- end}}
+            </div>
+          </details>{{end}}{{end}}<!-- The Briefs group (NIT-197): a disclosure like Modules, so clicking it
      only opens it. "All briefs" first, then one row per folder (features/ is
      left out: those briefs are features), each opening to its briefs. Only
      the current route's group is open, and only the current brief's folder
@@ -134,7 +147,7 @@
             <button id="dxgOpen" class="nav-utility site-nav__item" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
           </div>
         </div>
-        <div class="sidebar-footer">{{if .Briefs.Folders}}
+        <div class="sidebar-footer">{{if .Briefs.Present}}
           <ul class="brief-legend" aria-label="Brief marks">
             <li><span class="brief-mark" data-mark="edited" aria-hidden="true"></span>edited</li>
             <li><span class="brief-mark" data-mark="review" aria-hidden="true"></span>review</li>
@@ -258,7 +271,17 @@
               </span>
               <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
             </a>
-{{end}}          </div>
+{{end}}{{with $.Briefs.FeaturesTile}}{{if .Count}}            <div class="home-tile home-tile--features" data-tile="features">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><a class="home-tile__title home-tile__link" href="#{{.FirstID}}">Features</a><span class="home-tile__count home-wide">{{.Count}}</span></span>
+                <span class="home-tile__desc home-wide">What people can do, and which claims each one rests on.</span>
+                <span class="home-features home-wide">{{range .Rows}}<a class="home-feature" href="#{{.ID}}"><span class="home-feature__title">{{.Title}}</span><span class="home-feature__state" data-state="{{.State}}">{{.State}}</span></a>{{end}}</span>
+                <span class="home-tile__line home-narrow">{{.Line}}</span>
+              </span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </div>
+{{end}}{{end}}          </div>
 {{end}}        </section>
 <!-- Briefs (NIT-197): the "All briefs" index, then one page per brief,
      features/ included (its briefs are not in the Briefs tree, but a link to
@@ -520,19 +543,25 @@
 </html>
 {{define "briefPage"}}        <section class="module-section brief-section" id="{{.ID}}" hidden data-brief-path="{{.Path}}" data-brief-id="{{.BriefID}}" data-open-threads="{{.OpenThreads}}" data-threads="{{.Threads}}" aria-labelledby="{{.ID}}_title">
           <header class="brief-head">
-            <p class="brief-kicker"><span class="brief-kicker__word">Brief</span> · <span class="brief-kicker__word">{{.FolderLabel}}</span><span class="brief-kicker__path"> · {{.Path}}</span></p>
+            <p class="brief-kicker">{{if .Feature}}<span class="brief-kicker__word">Feature</span>{{else}}<span class="brief-kicker__word">Brief</span> · <span class="brief-kicker__word">{{.FolderLabel}}</span>{{end}}<span class="brief-kicker__path"> · {{.Path}}</span></p>
             <div class="brief-title-row"><h2 class="brief-title" id="{{.ID}}_title">{{.Title}}</h2><span class="brief-wide">{{.Pill}}</span></div>
 {{if .Summary}}            <p class="brief-lede">{{.Summary}}</p>
 {{end}}            <div class="brief-meta-row"><span class="brief-narrow">{{.Pill}}</span><p class="brief-meta"><span class="brief-wide">{{.Meta}}</span><span class="brief-narrow">{{.MetaShort}}</span></p><span class="brief-toc-slot"></span></div>
           </header>
           <article class="brief-body">{{.Body}}</article>
-{{if or .RestsOnCount .CitedByCount}}          <section class="brief-relations" aria-label="Claims this brief rests on and is cited by">
+{{with .Feature}}          <section class="brief-relations feature-made-of" aria-label="Claims this feature is made of">
+            <div class="brief-relations__head feature-made-of__head" data-toc-label="{{.ShortLabel}}"><span class="brief-relations__label"><span class="brief-wide">{{.Label}}</span><span class="brief-narrow">{{.ShortLabel}}</span></span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">rests_on, not an order</span></div>
+{{range .Groups}}            <p class="feature-made-of__module">{{.Label}}</p>
+            <ul class="brief-relations__list">{{.Rows}}</ul>
+{{else}}            <p class="feature-made-of__empty">Its rests_on names no claim yet.</p>
+{{end}}          </section>
+{{end}}{{if or .RestsOnCount .CitedByCount}}          <section class="brief-relations" aria-label="Claims this brief rests on and is cited by">
 {{if .RestsOnCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.RestsOnLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">this brief explains them</span></div>
             <ul class="brief-relations__list">{{.RestsOn}}</ul>
 {{end}}{{if .CitedByCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.CitedByLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">uses it as evidence</span></div>
             <ul class="brief-relations__list">{{.CitedBy}}</ul>
 {{end}}          </section>
-{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" aria-controls="commentsPanel" aria-expanded="false"{{if not .Threads}} disabled{{end}}><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this brief</button><p class="brief-comment-count"{{if not .OpenThreads}} hidden>{{else}}>{{.OpenThreadsLabel}}{{end}}</p><p class="brief-comment-note">Read only: comments are written through dossierx serve.</p></div>
+{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" aria-controls="commentsPanel" aria-expanded="false"{{if not .Threads}} disabled{{end}}><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>Comment on this {{if .Feature}}feature{{else}}brief{{end}}</button><p class="brief-comment-count"{{if not .OpenThreads}} hidden>{{else}}>{{.OpenThreadsLabel}}{{end}}</p><p class="brief-comment-note">Read only: comments are written through dossierx serve.</p></div>
 {{if .CommentsPanel}}          {{.CommentsPanel}}
 {{end}}        </section>
 {{end}}

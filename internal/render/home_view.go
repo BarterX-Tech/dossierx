@@ -24,8 +24,12 @@ import (
 // Of the brief halves, the Open threads card carries one (NIT-198): a
 // brief's open threads count on it beside the claims', since an open thread
 // on a brief holds `brief lock` as one on a claim holds `claim lock`. The
-// other cards' brief halves and the Features and Briefs tiles are not built
-// yet; they are hidden, not shown as zero, as in the "no briefs/" state.
+// other cards' brief halves and the Briefs tile are not built yet; they are
+// hidden, not shown as zero, as in the "no briefs/" state.
+//
+// The Features tile (NIT-201) is not built here: it is BriefsView's
+// FeaturesTile (feature_page.go), read by the shell beside this view, and it
+// shows only when briefs/features/ holds a brief.
 //
 // Cost: two passes over the claims (the cards, and the project-claim count)
 // plus one over each claim's comments, one over the module groups, and two

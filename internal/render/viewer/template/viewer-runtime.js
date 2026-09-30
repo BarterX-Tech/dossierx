@@ -172,6 +172,15 @@
         if (briefPageSection(id)) {
           return { module: id };
         }
+        // A brief named by its path, as check names it
+        // ("briefs/features/split-a-bill.md"), opens its page (NIT-201). A
+        // body link to another brief is rewritten to the page's id at render
+        // (render.resolveBriefLinks); this is the same mapping for a hash
+        // typed or pasted by hand.
+        var byPath = briefSectionForPath(id);
+        if (byPath) {
+          return { module: byPath.id };
+        }
         // Home (NIT-196) is the page the viewer opens on, and where any hash
         // it does not recognise lands. It holds no facet, so it resolves to
         // itself alone. Its id, HOME_ID, carries an underscore, which
@@ -1693,6 +1702,13 @@
         }
         var group = groups[key];
         if (fields.claimID) { group.claimIDs[fields.claimID] = true; }
+        // A brief finding's message is what names the other party (the
+        // brief whose rests_on is the same set), so a brief row keeps each
+        // distinct one to show under its path (NIT-201).
+        if (fields.message) {
+          group.messages = group.messages || [];
+          if (group.messages.indexOf(fields.message) < 0) { group.messages.push(fields.message); }
+        }
         group.count += 1;
         return group;
       }
@@ -1745,10 +1761,25 @@
             severity: 'check',
             title: humanRule(finding.lint) || 'Check issue',
             kind: finding.lint || 'lint',
-            claimID: finding.claim_id
+            claimID: finding.claim_id,
+            message: (finding.claim_id || '').indexOf('/') >= 0 ? finding.message : ''
           });
         });
         lintWarnings.forEach(function (finding) {
+          // A brief warning (its claim_id is a path) is the one finding a
+          // brief page has, brief-rests-on-duplicate today; Paper B4 shows
+          // it in the strip, so it files under Check where a claim warning
+          // waits under Later (NIT-201).
+          if ((finding.claim_id || '').indexOf('/') >= 0) {
+            addStatusGroup(groups, 'check:lint:' + (finding.lint || 'lint'), {
+              severity: 'check',
+              title: humanRule(finding.lint) || 'Check issue',
+              kind: finding.lint || 'lint',
+              claimID: finding.claim_id,
+              message: finding.message
+            });
+            return;
+          }
           addStatusGroup(groups, 'later:lint:' + (finding.lint || 'lint'), {
             severity: 'later',
             title: humanRule(finding.lint) || 'Later warning',
@@ -1910,6 +1941,9 @@
           detail.appendChild(link);
         }
         if (detail) { text.appendChild(detail); }
+        (group.messages || []).forEach(function (message) {
+          text.appendChild(textEl('span', 'status-finding-detail status-finding-message', message));
+        });
         row.appendChild(text);
 
         // The right-hand slot. A blocker row keeps its count (04 §4.8: the
