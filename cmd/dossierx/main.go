@@ -1626,7 +1626,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	data.StagedFiles = sp.FromIndex
 	out := cmdResult{
 		Data:     data,
-		Warnings: append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...),
+		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), sp.Warnings...),
 		Text:     func() { formatCheckStagedResult(cmd, sp, res) },
 	}
 
@@ -1697,6 +1697,9 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 	reportProjectionError(cmd, res)
 	reportConformanceBlocking(cmd, res)
 	reportGitignoreCheck(cmd, res)
+	for _, w := range sp.Warnings {
+		fmt.Fprintf(out, "  warning: %s\n", w)
+	}
 	for _, step := range res.NextSteps {
 		fmt.Fprintf(out, "  next: %s\n", step)
 	}

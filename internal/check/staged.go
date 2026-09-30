@@ -273,6 +273,12 @@ type StagedProject struct {
 	// decide where content is read from.
 	FromIndex []string
 
+	// Warnings name what this run could not judge from the index and did not
+	// refuse, so the envelope says so rather than passing in silence. Today it
+	// carries one: a briefs_dir outside the git work tree, which no commit can
+	// carry — see stagedBriefs.
+	Warnings []string
+
 	// ledger is the gate's input state, built from the index. Unexported: a
 	// caller's only legitimate use for it is handing this whole value back to
 	// StatusStaged, and exporting the stores would invite someone to Save() one
@@ -354,6 +360,9 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	}
 	cfg = sp.Config
 	sp.readConformanceIndex = stagedConformanceReader(g, cfg.BuildDirPath())
+	if warning := briefsOutsideWorkTree(g, cfg); warning != "" {
+		sp.Warnings = append(sp.Warnings, warning)
+	}
 
 	// claims_dir as a git pathspec, anchored at the REPOSITORY TOP LEVEL rather
 	// than at the config file's own directory — see gitRunner.spec. It fails
@@ -979,6 +988,14 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 // empty set, which is how briefs.Load reads a directory that does not exist:
 // no commit can carry a brief git cannot name.
 //
+// The out-of-work-tree case is empty but NOT silent: --validate reads that
+// directory off disk, so a --staged that judged zero briefs without a word
+// would pass, in the hook, a tree the keyboard mode refuses. Staged adds an
+// envelope warning for it (briefsOutsideWorkTree), mirroring claims_dir's own
+// out-of-tree case, which warns (ErrNoIndex) rather than refusing. It is a
+// warning and not a refusal because the tree really is outside what any commit
+// of this repository can carry; the warning names the one mode that reads it.
+//
 // The index lists files, never directories. indexBlobs holds the regular
 // files with their bytes. Symlinks and gitlinks are NOT dropped here the way
 // indexEntries drops them from the claims registry: their oids are not content
@@ -1025,6 +1042,22 @@ func stagedBriefs(g *gitRunner, cfg *config.Config) (*briefs.Set, error) {
 		files = append(files, briefs.File{Rel: relToClaimsDir(spec, repoRel)})
 	}
 	return briefs.FromFiles(cfg, files), nil
+}
+
+// briefsOutsideWorkTree returns the --staged warning for a briefs_dir git
+// cannot name — outside the work tree, so the index can hold none of it — and
+// "" for every briefs_dir inside it. The path is spelled relative to the
+// config file's directory, as the config names it.
+func briefsOutsideWorkTree(g *gitRunner, cfg *config.Config) string {
+	dir := cfg.BriefsDirPath()
+	if _, err := g.spec(dir); err == nil {
+		return ""
+	}
+	shown := dir
+	if rel, err := filepath.Rel(cfg.Dir(), dir); err == nil {
+		shown = filepath.ToSlash(rel)
+	}
+	return fmt.Sprintf("briefs_dir %s is outside the git work tree at %s, so no commit can carry it and --staged judged no briefs; check --validate reads them from disk", shown, g.Dir())
 }
 
 // materializeIndexFile writes the index's copy of src (an absolute path) into

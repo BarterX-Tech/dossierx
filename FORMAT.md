@@ -1481,6 +1481,10 @@ briefs/                       # briefs_dir; absent means no briefs
   hook reads them as the working tree does. The hook is the stricter of the
   two here: a submodule folder the working tree reads clean is still refused
   at commit, never the other way round.
+- A `briefs_dir` outside the git work tree can never be committed, so `check
+  --staged` reads no briefs from it and says so in a warning (`warnings` in the
+  envelope, a `warning:` line in text) rather than passing in silence; `check
+  --validate` still reads it from disk.
 - Folder names, brief names and image names are drawn from `[a-z0-9-]`, and
   every extension is lowercase. That is what makes a brief's id
   `<folder>.<slug>` slash-free, so it can be one route segment and one store
