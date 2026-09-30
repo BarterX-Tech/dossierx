@@ -94,6 +94,107 @@ func TestRenderWith_BriefsPayload(t *testing.T) {
 	}
 }
 
+// briefViewSet is a set whose payload is a few kilobytes: enough to move a
+// budget measurably, small enough to fit an ordinary one.
+func briefViewSet(cfg *config.Config) *briefs.Set {
+	return briefs.FromFiles(cfg, []briefs.File{
+		briefFile("widget/long.md", "---\nsummary: Long.\n---\n"+strings.Repeat("words ", 500)+"\n"),
+	})
+}
+
+// TestBuildEagerShellData_ChargesTheBriefsPayloadToTheOutputBudget is the
+// eager (embedded-shell) half of A8's "charged to the render byte budget", at
+// the stage that does the charging: the briefs payload's bytes come off the
+// shared output budget exactly, and a budget that holds the claims and the
+// graph but not the payload is refused there, with the briefs-payload error,
+// before any shell executes. The end-to-end test below cannot tell this from
+// the final writer catching the overflow later, which is why it passed with
+// the charge removed; this one fails without it.
+func TestBuildEagerShellData_ChargesTheBriefsPayloadToTheOutputBudget(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	tmpl, err := loadTemplates("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := func(set *briefs.Set) shellInputs {
+		return shellInputs{cat: cat, cfg: cfg, briefs: set, generatedAt: time.Unix(1_700_000_000, 0).UTC()}
+	}
+	const roomy = 1 << 30
+	budget := func(n int) *renderByteBudget {
+		return &renderByteBudget{remaining: n, exceeded: conformance.ErrCapacityExceeded}
+	}
+
+	claimsOnly := budget(roomy)
+	if _, err := buildEagerShellData(in(nil), tmpl.partials, claimsOnly); err != nil {
+		t.Fatal(err)
+	}
+	withBriefs := budget(roomy)
+	data, err := buildEagerShellData(in(briefViewSet(cfg)), tmpl.partials, withBriefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	charged := claimsOnly.remaining - withBriefs.remaining
+	if len(data.BriefsPayload) == 0 || charged != len(data.BriefsPayload) {
+		t.Fatalf("the briefs payload (%d bytes) must be charged exactly; the budget moved by %d", len(data.BriefsPayload), charged)
+	}
+
+	short := budget(roomy - withBriefs.remaining - 1)
+	_, err = buildEagerShellData(in(briefViewSet(cfg)), tmpl.partials, short)
+	if !errors.Is(err, conformance.ErrCapacityExceeded) || !strings.Contains(err.Error(), "briefs payload") {
+		t.Fatalf("a budget one byte short of claims+graph+briefs must be refused at the briefs payload, got %v", err)
+	}
+}
+
+// TestLazyShell_BriefsPayload is the template-override path: a project shell
+// that references {{.BriefsPayload}} gets the same bytes the embedded shell
+// carries, the projection is computed once however often it is referenced,
+// its bytes come off the intermediate budget exactly, and a budget smaller than
+// the payload refuses it with the intermediate-capacity error.
+func TestLazyShell_BriefsPayload(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	at := time.Unix(1_700_000_000, 0).UTC()
+	set := briefViewSet(cfg)
+	want, err := briefsPayloadJSONWithBudget(set, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir+"/shell.html", `<!doctype html><script type="application/json" id="dossierx-briefs">{{.BriefsPayload}}</script>{{if .BriefsPayload}}twice{{end}}`)
+	override := *cfg
+	override.Viewer.TemplateOverrides = dir
+	out, err := renderBoundedAt(cat, &override, Extras{Briefs: set}, at, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := briefsBlock.FindStringSubmatch(out); m == nil || m[1] != string(want) || !strings.Contains(out, "twice") {
+		t.Fatalf("an override shell must carry the same briefs payload the embedded shell does")
+	}
+
+	tmpl, err := loadTemplates(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := shellInputs{cat: cat, cfg: &override, briefs: set, generatedAt: at}
+	const roomy = 1 << 30
+	b := &renderByteBudget{remaining: roomy, exceeded: ErrIntermediateCapacityExceeded}
+	lazy := newLazyShellData(in, tmpl.partials, b)
+	for i := 0; i < 2; i++ {
+		got, err := lazy.BriefsPayload()
+		if err != nil || got != want {
+			t.Fatalf("lazy payload differs from the eager one (err %v)", err)
+		}
+	}
+	if charged := roomy - b.remaining; charged != len(want) {
+		t.Fatalf("the lazy payload (%d bytes) must be charged once, exactly; the budget moved by %d", len(want), charged)
+	}
+
+	short := &renderByteBudget{remaining: len(want) - 1, exceeded: ErrIntermediateCapacityExceeded}
+	if _, err := newLazyShellData(in, tmpl.partials, short).BriefsPayload(); !errors.Is(err, ErrIntermediateCapacityExceeded) {
+		t.Fatalf("a budget smaller than the payload must refuse it with the intermediate error, got %v", err)
+	}
+}
+
 // TestRenderBoundedWith_BriefsAreChargedToTheBudget pins that brief bytes count
 // against the viewer's bound: a budget the claims alone fit under is refused
 // with the capacity error once the briefs are added.
