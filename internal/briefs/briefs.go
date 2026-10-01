@@ -357,7 +357,7 @@ func load(cfg *config.Config, digests bool) *Set {
 // fileDigest is the sha256 of a file's bytes, hex, streamed, and the number
 // of bytes hashed. text normalizes CRLF to LF on the way through, exactly as
 // imageContent normalizes the index's copy.
-func fileDigest(p string, text bool) (string, int64, error) {
+func fileDigest(p string, text bool) (digest string, n int64, err error) {
 	f, err := os.Open(p)
 	if err != nil {
 		return "", 0, err
@@ -365,18 +365,18 @@ func fileDigest(p string, text bool) (string, int64, error) {
 	defer f.Close()
 	h := sha256.New()
 	if !text {
-		n, err := io.Copy(h, f)
+		n, err = io.Copy(h, f)
 		if err != nil {
 			return "", 0, err
 		}
 		return hex.EncodeToString(h.Sum(nil)), n, nil
 	}
 	w := &crlfWriter{w: h}
-	if _, err := io.Copy(w, f); err != nil {
+	if _, err = io.Copy(w, f); err != nil {
 		return "", 0, err
 	}
-	if err := w.flush(); err != nil {
-		return "", 0, err
+	if flushErr := w.flush(); flushErr != nil {
+		return "", 0, flushErr
 	}
 	return hex.EncodeToString(h.Sum(nil)), w.n, nil
 }
@@ -389,7 +389,7 @@ func textImage(name string) bool { return path.Ext(name) == ".svg" }
 // form the reader handed over: Load's streamed digest, or the index's bytes,
 // hashed here under the same normalization. A File with neither (a test's
 // size-only fixture) has no digest, and its size is its content.
-func imageContent(f File) (string, int64) {
+func imageContent(f File) (digest string, n int64) {
 	if f.Digest != "" {
 		return f.Digest, f.ContentSize
 	}
