@@ -141,7 +141,10 @@ func TestBriefThreads_OnAPhoneThePageFootOpensTheBottomSheet(t *testing.T) {
 	runCDP(t, ctx, chromedp.EmulateViewport(390, 844))
 
 	evalVoid(t, ctx, `document.querySelector('#`+roundBrief+` .brief-comment').click()`)
-	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)
+	// comments-open is set before GET /api/briefs/.../comments returns and
+	// buildComposer runs; wait for the input the same way the desktop
+	// TestBriefThreads_OpenFromThePageThenResolveClearsTheMark does.
+	pollTrue(t, ctx, `document.body.classList.contains('comments-open') && !!document.querySelector('#commentsPanel .comment-composer .comment-composer-input')`)
 	requireAll(t, ctx, "the bottom sheet on a brief",
 		`var rail = document.getElementById('commentsPanel');
 		 var r = rail.getBoundingClientRect();`,

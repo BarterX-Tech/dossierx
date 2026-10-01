@@ -789,6 +789,10 @@ func writeRelationshipDirection(b *strings.Builder, arrow, label string, count i
 // and turns into a real flex row at 520px, where R-I.2 stacks them together
 // as the relationship row's mobile "line two".
 func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
+	writeRelationshipRowNoted(b, liClass, targetID, fromModule, fromFacet, targetStatuses, "")
+}
+
+func writeRelationshipRowNoted(b *strings.Builder, liClass, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus, changed string) {
 	st, known := targetStatuses[targetID]
 	b.WriteString(`<li class="`)
 	b.WriteString(liClass)
@@ -801,6 +805,11 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 	writeClaimRef(b, targetID, fromModule, fromFacet, nil, false)
 	b.WriteString(`<span class="claim-relationship-line2">`)
 	writeRelationshipMeta(b, targetID)
+	if changed != "" {
+		b.WriteString(`<span class="brief-relation-changed">`)
+		b.WriteString(html.EscapeString(changed))
+		b.WriteString(`</span>`)
+	}
 	if known {
 		b.WriteString(`<span class="claim-relationship-badge claim-relationship-badge--`)
 		b.WriteString(lifecycleModifier(st))
@@ -835,10 +844,9 @@ type BriefRow struct {
 	// Locked is the brief's frontmatter status (NIT-204); NIT-205's lock
 	// store is what will put a record behind it.
 	Locked bool
-	// ReviewPending is the brief's review state. Nothing sets it yet: the
-	// review computation is NIT-205's, and until the payload carries it
-	// every brief reads as not pending. The row already draws the state
-	// ("review pending", amber) so NIT-205 only has to fill the field.
+	// ReviewPending is the brief's review state from briefs.Evaluate
+	// (NIT-200 fills it at the render boundary). The row already draws
+	// "review pending" in amber when it is true.
 	ReviewPending bool
 	// Pin is the sha256 this claim's source records for the brief — cited
 	// rows only. PinOutOfDate is true when source-internal-drift reports

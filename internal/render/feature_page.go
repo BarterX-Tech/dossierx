@@ -124,7 +124,7 @@ func madeOfIndex(cat *catalog.Catalog) map[string]madeOfClaim {
 }
 
 // buildFeatureDetail groups rests_on by module. O(R) for R rests_on ids.
-func buildFeatureDetail(restsOn []string, index map[string]madeOfClaim, statuses map[string]components.TargetStatus) *FeatureDetail {
+func buildFeatureDetail(restsOn []string, index map[string]madeOfClaim, statuses map[string]components.TargetStatus, changed map[string]string) *FeatureDetail {
 	f := &FeatureDetail{Count: len(restsOn)}
 	byModule := map[string][]string{}
 	labels := map[string]string{}
@@ -147,10 +147,10 @@ func buildFeatureDetail(restsOn []string, index map[string]madeOfClaim, statuses
 	}
 	f.Modules = len(order)
 	for _, key := range order {
-		f.Groups = append(f.Groups, MadeOfGroup{Label: labels[key], Rows: components.BriefRelationRowsHTML(byModule[key], statuses)})
+		f.Groups = append(f.Groups, MadeOfGroup{Label: labels[key], Rows: components.BriefRelationRowsChangedHTML(byModule[key], statuses, changed)})
 	}
 	if len(unknown) > 0 {
-		f.Groups = append(f.Groups, MadeOfGroup{Label: madeOfUnknownLabel, Rows: components.BriefRelationRowsHTML(unknown, statuses), Unknown: true})
+		f.Groups = append(f.Groups, MadeOfGroup{Label: madeOfUnknownLabel, Rows: components.BriefRelationRowsChangedHTML(unknown, statuses, changed), Unknown: true})
 	}
 	return f
 }

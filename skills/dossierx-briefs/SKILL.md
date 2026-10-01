@@ -193,6 +193,7 @@ that no longer exists is `brief-rests-on-missing` (ERROR): unlock, remove or rep
 1. `dossierx brief reaudit <path>` — the preview, read-only and never refused by an open thread:
    `data.changed_claims[]` carries each moved claim's wording at the baseline and now (a baseline
    no snapshot matches reads "earlier wording not available"); empty when nothing is pending.
+   The served viewer draws the same list as one amber banner per claim on the brief's page.
 2. Update the brief so it describes the claim as it now reads: unlock → edit → lock on the
    human's yes, or an in-place re-lock when that is how they approved the edit. Both paths keep
    the pending review (the baselines are carried); the reaudit alone refreshes only the baselines.

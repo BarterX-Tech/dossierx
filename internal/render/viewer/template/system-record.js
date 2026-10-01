@@ -607,19 +607,37 @@
     var live = document.body.classList.contains('comments-live');
     // A feature's page (NIT-201) speaks of a feature.
     var noun = page.hasAttribute('data-feature') ? 'feature' : 'brief';
+    var edited = page.getAttribute('data-lock-state') === 'edited';
+    var pending = page.getAttribute('data-review-pending') === 'true';
     // A static build has nothing to write to, so the note states the count
     // and asks for nothing; the read-only line says why.
     var note = open === 0 ? 'None open.' : open + ' open.';
+    var action = 'Comment';
     if (live) {
-      note += open === 0
-        ? ' Comment on the ' + noun + ' to ask the agent for a change.'
-        : ' Reply to or resolve ' + (open === 1 ? 'it' : 'them') + ' in the thread.';
+      // Same order as the page-foot Comment label: pending (Confirm in a
+      // thread) outranks edited when both hold.
+      if (pending) {
+        note = open === 0
+          ? 'To confirm the ' + noun + ' still holds, say so in a thread. On your yes the agent runs brief reaudit --confirm. Claim locking is not blocked.'
+          : 'Say in the thread whether the ' + noun + ' still holds.';
+        action = 'Start a thread';
+      } else if (edited) {
+        note = open === 0
+          ? 'To approve the new wording, say so in a thread. On your yes the agent unlocks, fixes and locks, or restores from version control.'
+          : 'Say in the thread what should happen to the new wording.';
+        action = 'Start a thread';
+      } else {
+        note += open === 0
+          ? ' Comment on the ' + noun + ' to ask the agent for a change.'
+          : ' Reply to or resolve ' + (open === 1 ? 'it' : 'them') + ' in the thread.';
+      }
     }
     return {
       open: open,
       total: total,
       enabled: live || total > 0,
       note: note,
+      action: action,
       count: open === 0 ? '' : (open === 1 ? '1 open thread' : open + ' open threads'),
       line: live ? '' : BRIEF_READ_ONLY_LINE
     };
@@ -639,6 +657,16 @@
     var state = briefThreadState(page);
     setText(threads.querySelector('.facet-toc__threads-note'), state.note);
     var btn = threads.querySelector('.facet-toc__comment');
+    var label = btn.querySelector('.facet-toc__comment-label');
+    if (!label) {
+      label = document.createElement('span');
+      label.className = 'facet-toc__comment-label';
+      btn.appendChild(label);
+    }
+    Array.prototype.forEach.call(btn.childNodes, function (n) {
+      if (n.nodeType === 3) { n.textContent = ''; }
+    });
+    setText(label, state.action);
     btn.disabled = !state.enabled;
     var id = page.getAttribute('data-brief-id') || '';
     btn.setAttribute('data-brief-id', id);
@@ -728,7 +756,7 @@
     if (!toc.querySelector('.facet-toc__threads')) {
       var threads = document.createElement('div');
       threads.className = 'facet-toc__threads';
-      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note"></p><button type="button" class="facet-toc__comment" aria-controls="commentsPanel" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg>Comment</button><p class="facet-toc__threads-later"></p>';
+      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note"></p><button type="button" class="facet-toc__comment" aria-controls="commentsPanel" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg><span class="facet-toc__comment-label">Comment</span></button><p class="facet-toc__threads-later"></p>';
       list.insertAdjacentElement('afterend', threads);
     }
     syncBriefThreadsBlock(toc.querySelector('.facet-toc__threads'), brief);

@@ -273,7 +273,10 @@ func (s *Server) Serve(ctx context.Context) error {
 	// detected (the baseline reflects the pre-serve state). Then poll in the
 	// background until ctx is cancelled, feeding the render pipeline and the SSE
 	// hub on each debounced change.
-	extraFiles := []string(nil)
+	// The lock store is not under claims_dir or briefs_dir. A brief reaudit
+	// (NIT-200) writes only that file, and the page's review banners must
+	// clear without a brief-file edit.
+	extraFiles := []string{s.cfg.LockStorePath()}
 	if s.cfg.Conformance.Observations != "" {
 		extraFiles = append(extraFiles, s.cfg.Conformance.Observations)
 	}

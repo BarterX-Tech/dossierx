@@ -11,7 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 
@@ -362,5 +366,64 @@ func TestServe_RefusesWhenOutputsInsideClaimsTree(t *testing.T) {
 	armConstitution(t, cfg)
 	if !strings.Contains(err.Error(), "claims_dir") || !strings.Contains(err.Error(), "build_dir") {
 		t.Fatalf("refusal = %v, want it to name both claims_dir and build_dir", err)
+	}
+}
+
+// TestSSE_BriefReauditClearsReviewPending is NIT-200: brief reaudit --confirm
+// writes only the lock store. Serve must watch that file so the banners
+// leave the live page without a brief-file edit.
+func TestSSE_BriefReauditClearsReviewPending(t *testing.T) {
+	files := map[string]string{
+		"claims/one.yaml":       "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  now wording.\nrests_on:\n  none: true\n  reason: fixture\n",
+		"briefs/widget/flow.md": "---\nsummary: The widget flow.\nstatus: locked\nrests_on:\n  - widget.contract.one\n---\n# Flow\n\nText.\n",
+	}
+	_, base, root := startServerFast(t, files)
+	cfg, err := config.LoadConfig(filepath.Join(root, "project.config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := briefs.Load(cfg)
+	if len(set.Briefs) != 1 {
+		t.Fatalf("briefs = %d, want 1", len(set.Briefs))
+	}
+	b := set.Briefs[0]
+	claims, err := loader.LoadClaims(cfg.ClaimsDir)
+	if err != nil || len(claims) != 1 {
+		t.Fatalf("load claims: %v n=%d", err, len(claims))
+	}
+	then := claims[0]
+	then.Body = "then wording."
+	store, err := lock.LoadStore(cfg.LockStorePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, receipts, _ := briefs.Baselines(b, []model.Claim{then})
+	lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{
+		Path: b.Path, Hash: b.LockHash, At: "2026-09-18T10:00:00Z", Reason: "flow approved",
+		Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: b.RestsOn, Markdown: b.Body},
+		Baselines: hashes, Receipts: receipts,
+	})
+	events, cancel := sseClient(t, base)
+	defer cancel()
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	waitChanged(t, events, 3*time.Second)
+	resp, page := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `data-review-pending="true"`) {
+		t.Fatalf("pending brief must draw the B3 banner after the lock store lands: %d", resp.StatusCode)
+	}
+
+	hashes, receipts, _ = briefs.Baselines(b, claims)
+	if !lock.RecordBriefReaudit(store, b.ID, hashes, receipts, b.ImageDigests(), lock.Approval{Actor: "human", Reason: "still holds"}, []string{"widget.contract.one"}) {
+		t.Fatal("reaudit did not find the standing record")
+	}
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	waitChanged(t, events, 3*time.Second)
+	resp, page = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || strings.Contains(string(page), `data-review-pending="true"`) {
+		t.Fatalf("reaudit must drop the banners without a brief-file edit: %d", resp.StatusCode)
 	}
 }
