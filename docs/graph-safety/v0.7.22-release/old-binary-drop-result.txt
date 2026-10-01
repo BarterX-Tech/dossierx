@@ -1,0 +1,2 @@
+after v0.7.21 claim unlock: version 4 briefs key present: False
+candidate check --validate: integrity_failed [('brief-unrecorded', 'briefs/notes/why.md')]

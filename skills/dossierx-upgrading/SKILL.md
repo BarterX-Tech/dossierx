@@ -37,13 +37,24 @@ from v0.7.20, `governed_by` and `build_role` too), so every locked claim has to 
 re-locked once. Plan the whole pass with the human before the first unlock. Steps marked
 **(v0.7.20)** are already done on a v0.7.21 project.
 
+**Already on the new binary?** Steps 1–3 need the old one: on this release every locked claim reads
+`review_pending` (cause `approval_content_drift`), which hides the claims that really wait on a
+review, `claim reaudit` refuses with `integrity_failed`, and a claim file still carrying a retired
+key does not load, so `claim list` and `claim unlock` refuse too. Tell the human, and put the old
+binary back for steps 1–3 only (`go install` the v0.7.21 tag, or its release download), then return to this release for step 4 on. Do not unlock and re-lock
+everything on the new binary instead: that approves every pending upstream change unreviewed.
+
 **Before upgrading the binary — on the old one:**
 
 1. **Settle two kinds of locked claim** — the bulk re-lock would otherwise erase them silently. List
    them with `dossierx claim list` (`review_pending`, `open_threads`):
    - **`review_pending: true`**: a lock refreshes the baselines and clears the flag, approving an
      upstream change nobody reviewed. Show the human each cause (`claim show <id>`) and take it
-     through `claim reaudit` or a real review, not the batch.
+     through `claim reaudit` or a real review, not the batch. Reaudit only the claims whose
+     `review_causes[]` has an entry with `direct: true`: an inherited cause
+     (`upstream_dependency_review`) clears when its root claim clears or its upstream thread is
+     resolved, and `claim reaudit` refuses it with `not_review_pending` — that refusal does not
+     mean unlock it.
    - **an open thread**: `claim lock` refuses it later (`unresolved_comments`), so it stays draft and
      its dependents show `dependency_unapproved`. The human resolves the thread in the viewer first.
 2. **Recover old approval wording if the human wants it.** `dossierx claim
@@ -153,7 +164,8 @@ A feature is now a brief in `briefs/features/` whose `rests_on` lists the claims
 refuses with a hint starting `tracks-retired`. From the copies you kept at step 6:
 
 1. For each track write `briefs/features/<slug>.md`, the track id slugged to `[a-z0-9-]` (`Checkout
-   Flow v2` → `checkout-flow-v2`): the body from the owner claim's summary and body — with no owner,
+   Flow v2` → `checkout-flow-v2`): the body from the owner claim's summary and body, minus its `[n]` source markers (a brief renders
+   them as literal text; link the source instead) — with no owner,
    from the track's title and summary, filled out from the cited claims — and every cited claim id
    in `rests_on`. Two tracks with the same members become one brief (`brief-rests-on-duplicate`
    says so). The folder holds 12 briefs, the feature briefs already there included; over it, say
