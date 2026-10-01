@@ -205,6 +205,24 @@ binary predates that guard.
   response carries `brief_id` and `path`. The claim routes and
   `GET /api/comments` answer byte for byte as before, now pinned by a test.
 
+### Added — a brief whose rests_on claim moved, in the viewer (NIT-200)
+
+- **One banner per changed claim.** A locked brief that is `review_pending`
+  (`brief-dependency-drift`) opens with an amber REVIEW PENDING pill and
+  sidebar mark, and one banner per `changed_claims[]` entry: the claim's id
+  as a link, its wording at the brief's baseline redlined against its wording
+  now (NIT-199's passage wrap over the claim renderer), or "earlier wording
+  not available" when no snapshot retains the baseline. A gone claim names
+  `brief-rests-on-missing`. That claim's Rests on row (Made of, on a feature)
+  reads "changed <date>" in amber. "Confirm in a thread" is the page-foot
+  Comment button — NIT-198's existing handler, no second click path. On the
+  human's yes the agent runs `brief reaudit --confirm`; claim locking is not
+  blocked. If the brief was also edited to follow the claim, the B2 views sit
+  under the banners as "Updated by the agent since approval".
+- **Claim-card BRIEFS rows** now fill `ReviewPending` from the evaluation, so
+  an explaining brief that is pending reads "review pending" in amber,
+  including on a phone.
+
 ### Added — a brief edited since its approval, in the viewer (NIT-199)
 
 - **Changes, Approved and Current.** A locked brief whose file moved since its

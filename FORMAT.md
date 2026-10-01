@@ -1841,6 +1841,26 @@ page, under the meta line a feature page always has (what it rests on, not
 the approval), and in every view a link to another brief opens that brief's
 page.
 
+A locked brief **whose rests_on claim moved since approval** —
+`brief-dependency-drift`, a warning, so `check` still passes — is
+review-pending. Its page opens with one amber banner per changed claim, stacked,
+each naming the claim and showing that claim's wording then and now as the
+same redline the edited brief uses (the claim renderer, not document mode).
+A baseline no snapshot retains says "earlier wording not available" and still
+links the claim. A listed claim that is gone names `brief-rests-on-missing`.
+That claim's Rests on row (Made of, on a feature) reads "changed <date>" in
+amber, or "changed" when the current wording has no standing approval time.
+The sidebar mark is amber ("review"); edited since approval still outranks
+it. There is no confirm button of the engine's: "Confirm in a thread", the
+page-foot Comment button, opens the brief's threads, and on the human's yes
+the agent runs `brief reaudit --confirm`. Claim locking is not blocked. If
+the agent already edited the brief to follow the claim, the B2 views sit
+under the banners, captioned "Updated by the agent since approval". After
+`brief reaudit --confirm` the banners go and the brief reads as locked
+again. The Threads block on an edited or pending brief says so in those
+words ("To approve the new wording…" / "To confirm the brief still holds…")
+and its button reads "Start a thread".
+
 A claim card does show the briefs around it, derived at render time and never
 stored: a **BRIEFS** group in its relationships panel, after RESTS ON and
 DEPENDED ON BY, marked "derived" and counted in the relationships chip.
@@ -1860,8 +1880,9 @@ DEPENDED ON BY, marked "derived" and counted in the relationships chip.
 Each row gives the brief's folder, its title and its `status`. The title is a
 link to the brief's page, at the id that page takes (`#brief-<folder>-<slug>`,
 or its `-2` form when another brief or a module spells it first), so a click
-opens the brief it names. A brief's review state joins the row when briefs gain their lock
-lifecycle (NIT-205, NIT-200). A brief that rests on nothing and that no claim
+opens the brief it names. An explaining brief whose review is pending reads
+"review pending" in amber on that row (the draft hue, including on a phone).
+A brief that rests on nothing and that no claim
 cites appears on no card; a project with no brief shows no group. The
 claim's Sources panel is unchanged.
 

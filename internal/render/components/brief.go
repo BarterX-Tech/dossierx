@@ -43,21 +43,32 @@ func BriefStatusPillHTML(status string) template.HTML {
 // check reports as brief-rests-on-unknown) degrades to the bare link, exactly
 // as it does in a claim footer.
 func BriefRelationRowsHTML(ids []string, statuses map[string]TargetStatus) template.HTML {
+	return BriefRelationRowsChangedHTML(ids, statuses, nil)
+}
+
+// BriefRelationRowsChangedHTML is BriefRelationRowsHTML with an optional
+// "changed <date>" amber note per claim id (NIT-200): a rests_on claim
+// whose baseline moved since the brief was approved. Unknown ids stay
+// empty. The note is escaped.
+func BriefRelationRowsChangedHTML(ids []string, statuses map[string]TargetStatus, changed map[string]string) template.HTML {
 	var b strings.Builder
 	for _, id := range ids {
-		writeRelationshipRow(&b, "brief-relation", id, "", "", statuses)
+		note := ""
+		if changed != nil {
+			note = changed[id]
+		}
+		writeRelationshipRowNoted(&b, "brief-relation", id, "", "", statuses, note)
 	}
 	return template.HTML(b.String())
 }
 
 // BriefLockPillHTML is a brief's pill once its lock record is read
-// (NIT-199): a locked or draft brief keeps BriefStatusPillHTML's pill; a
-// locked brief whose file moved since its approval reads EDITED SINCE
-// APPROVAL (Paper B2; "Edited" on a phone, short), a closed padlock in the
-// blocked colour; and one whose file says locked with no approval on record
-// reads LOCK NOT RECORDED ("Unrecorded" short) under an open padlock in the
-// draft colour — the status line approves nothing, so the pill may not say
-// Locked.
+// (NIT-199 / NIT-200): a locked or draft brief keeps BriefStatusPillHTML's
+// pill; a locked brief whose file moved since its approval reads EDITED
+// SINCE APPROVAL (Paper B2; "Edited" on a phone); a standing locked brief
+// whose rests_on claim moved reads REVIEW PENDING ("Review" short) in the
+// draft hue; and one whose file says locked with no approval on record
+// reads LOCK NOT RECORDED ("Unrecorded" short). Edited outranks review.
 func BriefLockPillHTML(lockState, status string, short bool) template.HTML {
 	var cls, icon, label string
 	switch lockState {
@@ -65,6 +76,14 @@ func BriefLockPillHTML(lockState, status string, short bool) template.HTML {
 		cls, icon, label = "brief-pill--edited", "#dx-icon-lock", "Edited since approval"
 		if short {
 			label = "Edited"
+		}
+	case "review":
+		// Amber, the draft hue, matching the sidebar review mark and
+		// brief-dependency-drift's Needs-you tone — not the claim card's
+		// red review-pending pill.
+		cls, icon, label = "pv brief-pill--review", "#dx-icon-lock", "Review pending"
+		if short {
+			label = "Review"
 		}
 	case "unrecorded":
 		cls, icon, label = "pv brief-pill--unrecorded", "#dx-icon-lock-open", "Lock not recorded"

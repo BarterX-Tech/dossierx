@@ -43,7 +43,7 @@ func BenchmarkBriefRelationsAtScale(b *testing.B) {
 	b.ResetTimer()
 	var lookup map[string]components.BriefRelations
 	for i := 0; i < b.N; i++ {
-		lookup = buildBriefRelationsLookup(cat, cfg, set)
+		lookup = buildBriefRelationsLookup(cat, cfg, set, nil)
 	}
 	b.StopTimer()
 	rows, bytes := 0, 0

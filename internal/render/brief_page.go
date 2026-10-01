@@ -215,6 +215,12 @@ type BriefPageView struct {
 	// Edit is the edited-since-approval page (NIT-199): nil unless the
 	// brief is locked and its file moved since the approval.
 	Edit *BriefEditView
+	// Review is the review-pending page (NIT-200): nil unless a locked
+	// brief's rests_on baselines no longer match the claims.
+	Review *BriefReviewView
+	// ReviewPending is Review != nil, also stamped on the section so the
+	// Threads block can speak of confirming without reading the banners.
+	ReviewPending bool
 	// RepoPath is the brief's path for `git log -p` in the recover note:
 	// from the repository root when the project sits in a git work tree
 	// (RepoRelative), else relative to the project directory. Set only for
@@ -394,6 +400,18 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 	if edit != nil && edit.Retained {
 		edit.Changes, edit.Approved, edit.Current = links(edit.Changes), links(edit.Approved), links(edit.Current)
 	}
+	pending := briefReviewView(rv)
+	if pending != nil {
+		for i := range pending.Claims {
+			if pending.Claims[i].Diff != "" {
+				pending.Claims[i].Diff = links(pending.Claims[i].Diff)
+			}
+		}
+	}
+	var restsOnNotes map[string]string
+	if pending != nil {
+		restsOnNotes = pending.ChangedAt
+	}
 	return BriefPageView{
 		ID:            r.anchor,
 		Path:          b.Path,
@@ -410,14 +428,16 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 		OpenThreads:   b.OpenThreads(),
 		Threads:       len(b.Comments),
 		CommentsPanel: components.BriefCommentsPanelHTML(b.ID, b.Comments),
-		Pill:          components.BriefLockPillHTML(lockState, string(b.Status), false),
-		PillShort:     components.BriefLockPillHTML(lockState, string(b.Status), true),
+		Pill:          components.BriefLockPillHTML(reviewPillState(rv), string(b.Status), false),
+		PillShort:     components.BriefLockPillHTML(reviewPillState(rv), string(b.Status), true),
 		Approval:      briefApproval(rv),
 		Edit:          edit,
+		Review:        pending,
+		ReviewPending: pending != nil,
 		Body:          links(template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body)))),
 		Meta:          fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
 		MetaShort:     groupDigits(b.Words) + " words",
-		RestsOn:       components.BriefRelationRowsHTML(b.RestsOn, statuses),
+		RestsOn:       components.BriefRelationRowsChangedHTML(b.RestsOn, statuses, restsOnNotes),
 		RestsOnCount:  len(b.RestsOn),
 		CitedBy:       components.BriefRelationRowsHTML(citedBy, statuses),
 		CitedByCount:  len(citedBy),
@@ -445,7 +465,11 @@ func briefMark(r briefs.Review) (mark, label, state string) {
 	switch {
 	case r.LockState == briefs.LockEdited:
 		return "edited", "Edited since approval", "edited"
-	case r.LockState == briefs.LockLocked && r.ReviewPending:
+	case r.ReviewPending:
+		// NIT-200: the amber review mark. A standing locked brief (and an
+		// edited one that is also pending — edited already returned above)
+		// whose rests_on baselines moved. ReviewPending is never true on a
+		// draft; Evaluate is the only writer.
 		return "review", "Review pending", "review"
 	case r.OpenThreads > 0:
 		return "thread", openThreadsLabel(r.OpenThreads), state
@@ -484,7 +508,11 @@ func openThreadsLabel(n int) string {
 // which no file name can spell), its meta line counts what it rests on, and
 // its Made of list replaces the Rests on list.
 func featurePage(page BriefPageView, b briefs.Brief, index map[string]madeOfClaim, statuses map[string]components.TargetStatus, review *briefs.Evaluation) BriefPageView {
-	f := buildFeatureDetail(b.RestsOn, index, statuses)
+	var changed map[string]string
+	if page.Review != nil {
+		changed = page.Review.ChangedAt
+	}
+	f := buildFeatureDetail(b.RestsOn, index, statuses, changed)
 	modules := make([]string, 0, len(f.Groups))
 	for _, g := range f.Groups {
 		if !g.Unknown {

@@ -2439,8 +2439,8 @@ a.claim-brief-ref:hover {
   }
 
   .claim-brief .claim-brief-state--pending {
-    color: var(--faint);
-    font-weight: 400;
+    color: var(--status-draft);
+    font-weight: 500;
   }
 
   .claim-brief .claim-brief-sep {
@@ -11167,6 +11167,37 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 .brief-head .brief-pill.brief-pill--edited {
   background: var(--warn-bg);
   color: var(--warn);
+}
+.brief-head .brief-pill.brief-pill--review {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+.brief-banner--review {
+  border-left-color: var(--status-draft);
+  background: var(--status-draft-bg);
+}
+.brief-banner--review .brief-banner__title,
+.brief-banner--review .brief-banner__title a {
+  color: var(--status-draft);
+}
+.brief-banner--review .brief-banner__title a:hover { text-decoration: underline; }
+.brief-review-diff {
+  margin-top: 4px;
+}
+.brief-review-diff .claim-edit-passage--removed,
+.brief-review-diff .claim-edit-passage--added { padding: 7px 10px 7px 23px; }
+.brief-review-diff .claim-edit-passage--removed::before,
+.brief-review-diff .claim-edit-passage--added::before { left: 10px; }
+.brief-review-diff .claim-edit-passage + .claim-edit-passage { margin-top: 0; }
+.brief-review-diff > .claim-edit-passage--removed + .claim-edit-passage--added { margin-top: -12px; }
+.brief-review__unavailable {
+  margin: 0;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+.brief-relation-changed {
+  color: var(--status-draft);
+  font: 500 12px/16px var(--font-sans);
 }
 .brief-meta time { font: inherit; }
 .brief-banner {

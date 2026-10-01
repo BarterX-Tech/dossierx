@@ -1504,11 +1504,11 @@ func TestDisplayCase(t *testing.T) {
 }
 
 // TestBriefRowDrawsAPendingReviewAmberWithTheDraftDot pins the review-state
-// slot NIT-205 will fill (NIT-202): nothing in the engine sets
-// BriefRow.ReviewPending yet, so the render boundary cannot reach this branch.
-// A locked brief whose review is pending reads "review pending" in the amber
-// state class with the draft-hue dot (board B5), beside its LOCKED badge; the
-// same brief with nothing pending has an empty state and the lock-hue dot.
+// slot NIT-200 fills from briefs.Evaluate: a locked brief whose review is
+// pending reads "review pending" in the amber state class with the draft-hue
+// dot (board B5), beside its LOCKED badge; the same brief with nothing
+// pending has an empty state and the lock-hue dot. The render-boundary
+// wiring is TestRenderWith_ExplainingBriefShowsReviewPending.
 func TestBriefRowDrawsAPendingReviewAmberWithTheDraftDot(t *testing.T) {
 	c := model.Claim{ID: "widget.contract.a", Module: "widget", Facet: "contract", Status: model.StatusLocked}
 	row := BriefRow{ID: "decisions.round-once", Path: "briefs/decisions/round-once.md", Folder: "decisions", Slug: "round-once", Title: "Round once", Locked: true}

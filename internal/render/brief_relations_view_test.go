@@ -13,6 +13,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -265,5 +266,44 @@ func TestRenderWith_BriefRowsLinkToTheirOwnSection(t *testing.T) {
 	}
 	if !seen["brief-api-design-notes"] || !seen["brief-api-design-notes-2"] {
 		t.Fatalf("want the plain id and its -2 suffix, got %v", seen)
+	}
+}
+
+// TestRenderWith_ExplainingBriefShowsReviewPending is the NIT-200 wiring of
+// BriefRow.ReviewPending: a locked brief whose rests_on claim moved reads
+// "review pending" in amber on that claim's BRIEFS row. The row already
+// knew how to draw the state; nothing filled the field until now.
+func TestRenderWith_ExplainingBriefShowsReviewPending(t *testing.T) {
+	cfg, set := briefRelationsProject(t, map[string]string{
+		"briefs/decisions/round-once.md": "---\nsummary: Round once.\nstatus: locked\nrests_on: [widget.contract.a]\n---\n# Round once\n",
+	})
+	then := model.Claim{ID: "widget.contract.a", Module: "widget", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusLocked, Body: "as approved"}
+	now := then
+	now.Body = "rewritten"
+	cat := &catalog.Catalog{Claims: []model.Claim{now}}
+	store, err := lock.LoadStore(t.TempDir() + "/lock-store.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := set.Briefs[0]
+	hashes, receipts, _ := briefs.Baselines(b, []model.Claim{then})
+	lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{
+		Path: b.Path, Hash: b.LockHash, At: "2026-09-18T10:00:00Z", Reason: "approved",
+		Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: b.RestsOn, Markdown: b.Body},
+		Baselines: hashes, Receipts: receipts,
+	})
+	page, err := renderBoundedAt(cat, cfg, Extras{Briefs: set, BriefReview: briefs.Evaluate(set, cat.Claims, store)}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := claimSection(t, page, "widget.contract.a")
+	for _, want := range []string{
+		`claim-brief-state--pending`,
+		`>review pending</span>`,
+		`claim-relationship-dot--draft`,
+	} {
+		if !strings.Contains(row, want) {
+			t.Errorf("explaining row is missing %q:\n%s", want, row)
+		}
 	}
 }
