@@ -381,9 +381,16 @@ func mdFenceCloses(line string, openLen int) bool {
 // document — the same quadratic the renderer's own cost sweep bounds, reachable
 // here through the same reviewer-authored bodies.
 func mdCloserRuns(lines []string) []int {
-	suffixMax := make([]int, len(lines)+1)
+	// No slot past the last line: the suffix after it is empty, so its
+	// value is 0, and mdScanFence treats index len(lines) that way. A
+	// len(lines)+1 size is the arithmetic CodeQL flags as a possible
+	// overflow (go/allocation-size-overflow).
+	suffixMax := make([]int, len(lines))
 	for j := len(lines) - 1; j >= 0; j-- {
-		best := suffixMax[j+1]
+		best := 0
+		if j+1 < len(lines) {
+			best = suffixMax[j+1]
+		}
 		n := mdLeadingSpaces(lines[j])
 		if run := mdBacktickRun(lines[j], n); run > best && strings.TrimSpace(lines[j][n+run:]) == "" {
 			best = run
@@ -396,7 +403,7 @@ func mdCloserRuns(lines []string) []int {
 // mdScanFence reports the closing line of the fence opened at lines[start], or
 // closed=false when it never closes.
 func mdScanFence(lines []string, closers []int, start, openLen int) (closeIdx int, closed bool) {
-	if closers[start+1] < openLen {
+	if start+1 >= len(closers) || closers[start+1] < openLen {
 		return start, false
 	}
 	for j := start + 1; j < len(lines); j++ {

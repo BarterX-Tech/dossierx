@@ -282,10 +282,16 @@ func fenceCloses(line string, openLen int) bool {
 // pass. It changes no rendered output: the early rejection fires exactly in
 // the cases the old walk would have reported closed=false.
 func closerRuns(lines []string) []int {
-	// One extra slot so scanFence can index start+1 for the last line.
-	suffixMax := make([]int, len(lines)+1)
+	// No slot past the last line: the suffix after it is empty, so its
+	// value is 0, and scanFence treats index len(lines) that way. A
+	// len(lines)+1 size is the arithmetic CodeQL flags as a possible
+	// overflow (go/allocation-size-overflow).
+	suffixMax := make([]int, len(lines))
 	for j := len(lines) - 1; j >= 0; j-- {
-		best := suffixMax[j+1]
+		best := 0
+		if j+1 < len(lines) {
+			best = suffixMax[j+1]
+		}
 		n := leadingSpaces(lines[j])
 		if run := backtickRun(lines[j], n); run > best && strings.TrimSpace(lines[j][n+run:]) == "" {
 			best = run
@@ -306,7 +312,7 @@ func closerRuns(lines []string) []int {
 // is what makes "this opener never closes" an O(1) answer instead of a walk
 // to the end of the document (see closerRuns).
 func scanFence(lines []string, closers []int, start, indent, openLen int) (content string, closeIdx int, closed bool) {
-	if closers[start+1] < openLen {
+	if start+1 >= len(closers) || closers[start+1] < openLen {
 		return "", start, false
 	}
 	var body []string
