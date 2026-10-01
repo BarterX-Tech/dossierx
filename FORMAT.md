@@ -1837,7 +1837,9 @@ file as it reads now. A brief whose file says `locked` with no approval on
 record reads LOCK NOT RECORDED, not Locked, and its meta line says "Not
 locked: no approval on record", its sidebar mark's label. A feature brief
 edited since its approval gets the same banner and views on its feature
-page, and in every view a link to another brief opens that brief's page.
+page, under the meta line a feature page always has (what it rests on, not
+the approval), and in every view a link to another brief opens that brief's
+page.
 
 A claim card does show the briefs around it, derived at render time and never
 stored: a **BRIEFS** group in its relationships panel, after RESTS ON and

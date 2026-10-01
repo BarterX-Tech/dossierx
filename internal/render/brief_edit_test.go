@@ -219,8 +219,9 @@ func TestRender_BriefEditedEscapesAuthorMarkup(t *testing.T) {
 // the other lock states the record decides: a locked brief names its
 // approval's date and reason and keeps the padlock; a brief whose file says
 // locked with no approval on record is not drawn as locked (LOCK NOT
-// RECORDED, the draft mark, and the meta line says why); and the mark
-// follows the legend's priority when a brief carries more than one state.
+// RECORDED, the draft mark, and the meta line says why in the mark's own
+// words). The mark's priority is briefMark's, owned by
+// TestRender_BriefMarksReadTheReviewState.
 func TestRender_BriefLockStateInTheHeaderAndMark(t *testing.T) {
 	cat, cfg := briefViewFixture()
 	doc := "---\nsummary: s\nstatus: locked\n---\nBody.\n"
@@ -395,5 +396,85 @@ func TestRepoRelativePath(t *testing.T) {
 	}
 	if got, ok := repoRelativePath("", "briefs/x/y.md"); ok || got != "briefs/x/y.md" {
 		t.Fatalf("no project directory = %q, %v", got, ok)
+	}
+}
+
+// TestRender_EditedFeatureViewsOpenBriefLinks is an edited feature (NIT-199
+// on NIT-201's feature page): a features/ brief whose file moved since its
+// approval keeps its feature page — the data-feature section, the Feature
+// kicker and the Made of list — and gains the banner and the three views;
+// and in each view a link to another brief, by any spelling the body's own
+// links resolve (relative, project-rooted, with a fragment), opens that
+// brief's page as it does in the plain body, while a link to no brief is
+// left as written. With no approved text kept, the recover note names the
+// feature as a feature.
+func TestRender_EditedFeatureViewsOpenBriefLinks(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	approved := "---\nsummary: A CSV.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# Export\n\n## What\n\nWording follows [money](../voice/money.md).\n\nKept as [written](../voice/none.md).\n"
+	current := "---\nsummary: A CSV.\nstatus: locked\nrests_on: [widget.contract.overview]\n---\n# Export\n\n## What\n\nWording follows [money](../voice/money.md).\n\nKept as [written](../voice/none.md).\n\nLayout follows [type](/briefs/voice/money.md#type).\n"
+	render := func(approvedText bool) string {
+		t.Helper()
+		was := briefs.FromFiles(cfg, []briefs.File{briefFile("features/export.md", approved)}).Briefs[0]
+		set := briefs.FromFiles(cfg, []briefs.File{briefFile("features/export.md", current), briefFile("voice/money.md", "---\nsummary: s\n---\n# Money\n")})
+		store, err := lock.LoadStore(t.TempDir() + "/lock-store.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := lock.BriefRecord{Path: was.Path, Hash: was.LockHash, At: "2026-09-18T10:00:00Z", Images: map[string]string{},
+			Approved: lock.BriefApproved{Summary: was.Summary, RestsOn: was.RestsOn, Markdown: was.Body}}
+		if !approvedText {
+			rec.Approved.Markdown = ""
+		}
+		lock.RecordBriefApproval(store, was.ID, rec)
+		out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set, BriefReview: briefs.Evaluate(set, cat.Claims, store)}, time.Unix(1_700_000_000, 0).UTC(), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sectionHTML(t, out, "brief-features-export")
+	}
+
+	sec := render(true)
+	for _, want := range []string{
+		`data-lock-state="edited" aria-labelledby="brief-features-export_title" data-feature>`,
+		`<span class="brief-kicker__word">Feature</span>`,
+		`class="brief-banner"`,
+		`<div class="brief-compare" data-brief-view="changes">`,
+		`class="brief-relations feature-made-of"`,
+		`Approve or restore in a thread</button>`,
+		// The meta line stays the feature's own (B4): what it rests on, not
+		// the approval, which the banner names.
+		`<p class="brief-meta"><span class="brief-wide">Rests on 1 claim in Widget, 0 of 1 locked · `,
+	} {
+		if !strings.Contains(sec, want) {
+			t.Errorf("edited feature page is missing %q:\n%s", want, sec)
+		}
+	}
+	for _, name := range []string{"changes", "approved", "current"} {
+		v := view(t, sec, name)
+		if !strings.Contains(v, `<a href="#brief-voice-money">money</a>`) {
+			t.Errorf("%s: a relative link to a brief does not open its page:\n%s", name, v)
+		}
+		if !strings.Contains(v, `<a href="../voice/none.md">written</a>`) {
+			t.Errorf("%s: a link to no brief is not left as written:\n%s", name, v)
+		}
+		if strings.Contains(v, `href="../voice/money.md"`) || strings.Contains(v, `href="/briefs/voice/money.md`) {
+			t.Errorf("%s: a link to a brief is left as a file path:\n%s", name, v)
+		}
+	}
+	for _, name := range []string{"changes", "current"} {
+		if v := view(t, sec, name); !strings.Contains(v, `<a href="#brief-voice-money">type</a>`) {
+			t.Errorf("%s: the added project-rooted link does not open the brief's page:\n%s", name, v)
+		}
+	}
+
+	recover := render(false)
+	for _, want := range []string{
+		`no approved text for this feature,`,
+		`or unlocks the feature, fixes it`,
+		`<a href="#brief-voice-money">type</a>`,
+	} {
+		if !strings.Contains(recover, want) {
+			t.Errorf("edited feature with no approved text is missing %q:\n%s", want, recover)
+		}
 	}
 }

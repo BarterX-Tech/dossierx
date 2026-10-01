@@ -11339,7 +11339,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   align-items: flex-start;
   gap: 8px;
 }
-.brief-section[data-lock-state="edited"] .brief-comment-note[hidden] { display: none; }
 
 /* The "On this page" rail is the facet panel (system-record.js renderToc)
    with a brief's ## headings for rows and a Threads block under them. */

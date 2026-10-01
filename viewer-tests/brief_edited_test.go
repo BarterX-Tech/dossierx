@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -21,7 +22,7 @@ import (
 // (TestRender_BriefEditedSinceApproval); what is asserted here is what only a
 // browser can show.
 
-const moneyBrief = "brief-voice-money"
+const editedMoneyBrief = "brief-voice-money"
 
 const moneyApprovedMD = "---\nsummary: Plain, specific, never scolding.\nstatus: locked\n---\n# Talking about money\n\n## Principles\n\nSay the amount before the person.\n\nNever use the word debt.\n\n![An arrow](arrow.png)\n\n## Tone\n\nKind, never scolding.\n\n## Words we avoid\n\n- debt\n- owe\n"
 
@@ -94,41 +95,41 @@ func TestBriefEdited_ThreeViewsFollowTheReader(t *testing.T) {
 	url := p.renderStaticDrifted()
 	ctx := withInstantScroll(t, browserContext(t))
 	desktopViewport(t, ctx)
-	runCDP(t, ctx, chromedp.Navigate(url+"#"+moneyBrief), chromedp.WaitVisible("#"+moneyBrief, chromedp.ByQuery))
-	pollTrue(t, ctx, `(function(){ var i = document.querySelector('#`+moneyBrief+` .brief-view:not([hidden]) img.md-img'); return !!i && i.complete; })()`)
+	runCDP(t, ctx, chromedp.Navigate(url+"#"+editedMoneyBrief), chromedp.WaitVisible("#"+editedMoneyBrief, chromedp.ByQuery))
+	pollTrue(t, ctx, `(function(){ var i = document.querySelector('#`+editedMoneyBrief+` .brief-view:not([hidden]) img.md-img'); return !!i && i.complete; })()`)
 
 	requireAll(t, ctx, "an edited brief opened by its hash",
-		`var sec = document.getElementById('`+moneyBrief+`');
-		 var row = document.querySelector('#nav .sec-tab[data-target="#`+moneyBrief+`"]');
+		`var sec = document.getElementById('`+editedMoneyBrief+`');
+		 var row = document.querySelector('#nav .sec-tab[data-target="#`+editedMoneyBrief+`"]');
 		 var banner = sec.querySelector('.brief-banner');`,
 		[][2]string{
 			{"the wide pill says edited since approval", `sec.querySelector('.brief-title-row .brief-pill').textContent === 'Edited since approval'`},
 			{"the sidebar mark is the edited one", `row.querySelector('.brief-mark').getAttribute('data-mark') === 'edited' && getComputedStyle(row.querySelector('.brief-mark'), '::before').backgroundColor === getComputedStyle(sec.querySelector('.brief-title-row .brief-pill')).color`},
 			{"the banner is on screen with its count", `banner.getBoundingClientRect().height > 0 && banner.querySelector('.brief-banner__title').textContent === 'Edited after you approved it · 3 passages changed'`},
 			{"the meta line names the approval and its reason", `sec.querySelector('.brief-meta .brief-wide').textContent.indexOf('Approved ') === 0 && sec.querySelector('.brief-meta .brief-wide').textContent.indexOf('“voice approved”') > 0`},
-			{"Changes is the view shown", shownView(moneyBrief) + ` === 'changes'`},
+			{"Changes is the view shown", shownView(editedMoneyBrief) + ` === 'changes'`},
 			{"its switch segment is pressed", `sec.querySelector('.brief-view-switch__seg[aria-pressed="true"]').textContent === 'Changes'`},
 			{"the approved paragraph is struck", `getComputedStyle(sec.querySelector('.brief-view:not([hidden]) .claim-edit-passage--removed')).textDecorationLine === 'line-through'`},
 			{"the image loads in Changes", `sec.querySelector('.brief-view:not([hidden]) img.md-img').naturalWidth === 40`},
 			{"the rail lists the shown view's headings, not the struck one", tocRows() + ` === 'Principles|Reminders|Words we avoid'`},
-			{"the thread button is disabled until threads exist", `sec.querySelector('.brief-comment[data-brief-thread]').disabled && sec.querySelector('.brief-comment-note').getBoundingClientRect().height > 0`},
+			{"a static build with no thread disables the thread button and says why", `sec.querySelector('.brief-comment').disabled && sec.querySelector('.brief-comment').textContent === 'Approve or restore in a thread' && sec.querySelector('.brief-comment-note').getBoundingClientRect().height > 0 && sec.querySelector('.brief-comment-note').textContent.indexOf('dossierx serve') >= 0`},
 		})
 
 	// The switch keeps its width, to the subpixel, whichever segment is
 	// pressed (F11: the pressed label's weight used to move it by 1px).
 	evalVoid(t, ctx, `window.__switchWidths = ['changes', 'approved', 'current', 'changes'].map(function (v) {
-		document.querySelector('#`+moneyBrief+` .brief-view-switch__seg[data-brief-view="' + v + '"]').click();
-		return document.querySelector('#`+moneyBrief+` .brief-view-switch').getBoundingClientRect().width;
+		document.querySelector('#`+editedMoneyBrief+` .brief-view-switch__seg[data-brief-view="' + v + '"]').click();
+		return document.querySelector('#`+editedMoneyBrief+` .brief-view-switch').getBoundingClientRect().width;
 	});`)
 	if got := evalString(t, ctx, `window.__switchWidths.join(',')`); !evalBool(t, ctx, `window.__switchWidths.every(function (w) { return w === window.__switchWidths[0]; })`) {
 		t.Fatalf("the view switch changes width as the pressed segment moves: %s", got)
 	}
 
-	evalVoid(t, ctx, `document.querySelector('#`+moneyBrief+` .brief-view-switch__seg[data-brief-view="approved"]').click()`)
-	pollTrue(t, ctx, shownView(moneyBrief)+` === 'approved'`)
-	pollTrue(t, ctx, `(function(){ var i = document.querySelector('#`+moneyBrief+` .brief-view:not([hidden]) img.md-img'); return !!i && i.complete; })()`)
+	evalVoid(t, ctx, `document.querySelector('#`+editedMoneyBrief+` .brief-view-switch__seg[data-brief-view="approved"]').click()`)
+	pollTrue(t, ctx, shownView(editedMoneyBrief)+` === 'approved'`)
+	pollTrue(t, ctx, `(function(){ var i = document.querySelector('#`+editedMoneyBrief+` .brief-view:not([hidden]) img.md-img'); return !!i && i.complete; })()`)
 	requireAll(t, ctx, "the Approved view",
-		`var sec = document.getElementById('`+moneyBrief+`'); var v = sec.querySelector('.brief-view:not([hidden])');`,
+		`var sec = document.getElementById('`+editedMoneyBrief+`'); var v = sec.querySelector('.brief-view:not([hidden])');`,
 		[][2]string{
 			{"it is the approved text", `v.textContent.indexOf('Never use the word debt.') >= 0 && v.textContent.indexOf('Reminders') < 0 && v.textContent.indexOf('Kind, never scolding.') >= 0`},
 			{"it carries no marks", `!v.querySelector('.claim-edit-passage')`},
@@ -137,13 +138,13 @@ func TestBriefEdited_ThreeViewsFollowTheReader(t *testing.T) {
 			{"the rail lists the approved headings", tocRows() + ` === 'Principles|Tone|Words we avoid'`},
 		})
 
-	evalVoid(t, ctx, `document.querySelector('#`+moneyBrief+` .brief-view-switch__seg[data-brief-view="current"]').click()`)
-	pollTrue(t, ctx, shownView(moneyBrief)+` === 'current'`)
+	evalVoid(t, ctx, `document.querySelector('#`+editedMoneyBrief+` .brief-view-switch__seg[data-brief-view="current"]').click()`)
+	pollTrue(t, ctx, shownView(editedMoneyBrief)+` === 'current'`)
 	requireAll(t, ctx, "the Current view",
-		`var v = document.querySelector('#`+moneyBrief+` .brief-view:not([hidden])');`,
+		`var v = document.querySelector('#`+editedMoneyBrief+` .brief-view:not([hidden])');`,
 		[][2]string{
 			{"no removed passage", `v.textContent.indexOf('Never use') < 0 && v.textContent.indexOf('Kind, never scolding.') < 0`},
-			{"the changed run is ruled in the blocked colour", `getComputedStyle(v.querySelector('.brief-passage--current'), '::before').backgroundColor === getComputedStyle(document.querySelector('#` + moneyBrief + ` .brief-title-row .brief-pill')).color`},
+			{"the changed run is ruled in the blocked colour", `getComputedStyle(v.querySelector('.brief-passage--current'), '::before').backgroundColor === getComputedStyle(document.querySelector('#` + editedMoneyBrief + ` .brief-title-row .brief-pill')).color`},
 			{"and captioned", `Array.prototype.map.call(v.querySelectorAll('.brief-passage__caption'), function (c) { return c.textContent; }).join('|') === 'changed since approval|changed since approval'`},
 			{"the rail lists the current headings", tocRows() + ` === 'Principles|Reminders|Words we avoid'`},
 		})
@@ -154,19 +155,8 @@ func TestBriefEdited_ThreeViewsFollowTheReader(t *testing.T) {
 	if got := evalString(t, ctx, shownView("brief-voice-tone")); got != "current" {
 		t.Fatalf("another edited brief opened on %q; the reader chose current", got)
 	}
-	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#`+moneyBrief+`';`, nil))
-	pollTrue(t, ctx, shownView(moneyBrief)+` === 'current'`)
-
-	// Once the thread rail's entry point exists (NIT-198's
-	// window.dossierxOpenBriefCommentPanel), the button opens it on this
-	// brief.
-	evalVoid(t, ctx, `window.dossierxOpenBriefCommentPanel = function (id) { window.__openedBrief = id; return true; };
-		document.querySelector('#`+moneyBrief+` .brief-view-switch__seg[data-brief-view="changes"]').click();`)
-	pollTrue(t, ctx, `!document.querySelector('#`+moneyBrief+` .brief-comment[data-brief-thread]').disabled`)
-	evalVoid(t, ctx, `document.querySelector('#`+moneyBrief+` .brief-comment[data-brief-thread]').click()`)
-	if got := evalString(t, ctx, `String(window.__openedBrief)`); got != "voice.money" {
-		t.Fatalf("the thread button opened %q, want the brief's id voice.money", got)
-	}
+	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#`+editedMoneyBrief+`';`, nil))
+	pollTrue(t, ctx, shownView(editedMoneyBrief)+` === 'current'`)
 }
 
 func TestBriefEdited_LightDarkAndPhone(t *testing.T) {
@@ -174,7 +164,7 @@ func TestBriefEdited_LightDarkAndPhone(t *testing.T) {
 	url := p.renderStaticDrifted()
 	ctx := withInstantScroll(t, browserContext(t))
 	desktopViewport(t, ctx)
-	runCDP(t, ctx, chromedp.Navigate(url+"#"+moneyBrief), chromedp.WaitVisible("#"+moneyBrief, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Navigate(url+"#"+editedMoneyBrief), chromedp.WaitVisible("#"+editedMoneyBrief, chromedp.ByQuery))
 	suppressTransitions(t, ctx, "")
 
 	for _, tc := range []struct{ theme, warn, card, track, on string }{
@@ -183,7 +173,7 @@ func TestBriefEdited_LightDarkAndPhone(t *testing.T) {
 	} {
 		evalVoid(t, ctx, `document.querySelector('.theme-control [data-theme-choice="`+tc.theme+`"]').click()`)
 		requireAll(t, ctx, "the edited brief in "+tc.theme,
-			`var sec = document.getElementById('`+moneyBrief+`');`,
+			`var sec = document.getElementById('`+editedMoneyBrief+`');`,
 			[][2]string{
 				{"data-theme is " + tc.theme, `document.documentElement.getAttribute('data-theme') === '` + tc.theme + `'`},
 				{"the pill is the blocked colour", `getComputedStyle(sec.querySelector('.brief-title-row .brief-pill')).color === '` + tc.warn + `'`},
@@ -197,7 +187,7 @@ func TestBriefEdited_LightDarkAndPhone(t *testing.T) {
 	evalVoid(t, ctx, `document.querySelector('.theme-control [data-theme-choice="light"]').click()`)
 	runCDP(t, ctx, chromedp.EmulateViewport(390, 844))
 	requireAll(t, ctx, "the edited brief on a phone",
-		`var sec = document.getElementById('`+moneyBrief+`');
+		`var sec = document.getElementById('`+editedMoneyBrief+`');
 		 var card = sec.querySelector('.brief-compare');
 		 var sw = sec.querySelector('.brief-view-switch');
 		 var first = sec.querySelector('.brief-view:not([hidden])');
@@ -210,7 +200,7 @@ func TestBriefEdited_LightDarkAndPhone(t *testing.T) {
 			{"its three segments share the width", `(function(){ var s = sec.querySelectorAll('.brief-view-switch__seg'); return Math.abs(s[0].getBoundingClientRect().width - s[2].getBoundingClientRect().width) < 1; })()`},
 			{"the caption is left out", `getComputedStyle(sec.querySelector('.brief-compare__caption')).display === 'none'`},
 			{"the banner's rule id is left out", `getComputedStyle(sec.querySelector('.brief-banner__rule')).display === 'none'`},
-			{"the thread button is 44px at the page foot", `sec.querySelector('.brief-comment[data-brief-thread]').getBoundingClientRect().height === 44`},
+			{"the thread button is 44px at the page foot", `sec.querySelector('.brief-comment').getBoundingClientRect().height === 44`},
 			{"nothing is wider than the phone", `document.documentElement.scrollWidth <= 390`},
 		})
 }
@@ -219,20 +209,52 @@ func TestBriefEdited_LightDarkAndPhone(t *testing.T) {
 // reader chose is theirs, not the render's, and survives the swap.
 func TestBriefEdited_LiveReloadKeepsTheView(t *testing.T) {
 	p := editedBriefProject(t)
-	ctx := serveAndOpenLive(t, p, "#"+moneyBrief)
-	pollTrue(t, ctx, shownView(moneyBrief)+` === 'changes'`)
-	evalVoid(t, ctx, `document.querySelector('#`+moneyBrief+` .brief-view-switch__seg[data-brief-view="approved"]').click()`)
-	pollTrue(t, ctx, shownView(moneyBrief)+` === 'approved'`)
+	ctx := serveAndOpenLive(t, p, "#"+editedMoneyBrief)
+	pollTrue(t, ctx, shownView(editedMoneyBrief)+` === 'changes'`)
+	evalVoid(t, ctx, `document.querySelector('#`+editedMoneyBrief+` .brief-view-switch__seg[data-brief-view="approved"]').click()`)
+	pollTrue(t, ctx, shownView(editedMoneyBrief)+` === 'approved'`)
 
 	if err := os.WriteFile(filepath.Join(p.dir, "briefs", "voice", "money.md"), []byte(moneyCurrentMD+"\nA line added while the page was open.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pollTrue(t, ctx, `document.querySelector('#`+moneyBrief+` .brief-view[data-view="current"]').textContent.indexOf('A line added while the page was open.') >= 0`)
+	pollTrue(t, ctx, `document.querySelector('#`+editedMoneyBrief+` .brief-view[data-view="current"]').textContent.indexOf('A line added while the page was open.') >= 0`)
 	requireAll(t, ctx, "the edited brief after a live reload",
-		`var sec = document.getElementById('`+moneyBrief+`');`,
+		`var sec = document.getElementById('`+editedMoneyBrief+`');`,
 		[][2]string{
-			{"the Approved view is still the one shown", shownView(moneyBrief) + ` === 'approved'`},
+			{"the Approved view is still the one shown", shownView(editedMoneyBrief) + ` === 'approved'`},
 			{"its segment is still pressed", `sec.querySelector('.brief-view-switch__seg[aria-pressed="true"]').textContent === 'Approved'`},
 			{"the banner counts the new edit", `sec.querySelector('.brief-banner__title').textContent === 'Edited after you approved it · 4 passages changed'`},
 		})
+}
+
+// "Approve or restore in a thread" is the edited brief's page-foot Comment
+// button, owned by NIT-198's one delegated handler: under dossierx serve a
+// click opens the comments rail on this brief and the rail stays open (a
+// second handler on the same button opened it and NIT-198's toggled it shut
+// in the same click, audit F3); a second click closes it.
+func TestBriefEdited_ThreadButtonOpensTheRail(t *testing.T) {
+	p := editedBriefProject(t)
+	ctx := serveAndOpenLive(t, p, "#"+editedMoneyBrief)
+	desktopViewport(t, ctx)
+	btn := `document.querySelector('#` + editedMoneyBrief + ` .brief-comment')`
+	pollTrue(t, ctx, `!document.getElementById('`+editedMoneyBrief+`').hidden && `+btn+`.disabled === false`)
+	requireAll(t, ctx, "the thread button under serve", `var b = `+btn+`;`, [][2]string{
+		{"it is the edited brief's action", `b.textContent === 'Approve or restore in a thread'`},
+		{"it is on screen", `b.getBoundingClientRect().height === 44`},
+		{"it controls the rail, closed", `b.getAttribute('aria-controls') === 'commentsPanel' && b.getAttribute('aria-expanded') === 'false'`},
+		{"no read-only line under serve", `document.querySelector('#` + editedMoneyBrief + ` .brief-comment-note').hidden`},
+	})
+
+	evalVoid(t, ctx, btn+`.click()`)
+	pollTrue(t, ctx, `document.body.classList.contains('comments-open') && window.dossierxCommentRailBrief() === 'voice.money'`)
+	runCDP(t, ctx, chromedp.Sleep(600*time.Millisecond))
+	requireAll(t, ctx, "the rail after the click has settled", `var rail = document.getElementById('commentsPanel');`, [][2]string{
+		{"it is still open", `document.body.classList.contains('comments-open')`},
+		{"on this brief", `window.dossierxCommentRailBrief() === 'voice.money' && document.getElementById('commentsRailSubtitle').textContent === 'on Talking about money'`},
+		{"with the composer", `!!rail.querySelector('.comment-composer .comment-composer-input')`},
+		{"the button says the rail is open", btn + `.getAttribute('aria-expanded') === 'true'`},
+	})
+
+	evalVoid(t, ctx, btn+`.click()`)
+	pollTrue(t, ctx, `!document.body.classList.contains('comments-open') && `+btn+`.getAttribute('aria-expanded') === 'false'`)
 }
