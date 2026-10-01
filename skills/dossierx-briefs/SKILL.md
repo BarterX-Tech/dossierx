@@ -216,8 +216,8 @@ A feature is an ordinary brief in `briefs/features/`. The body says **what the f
 how it works for the user**, in the user's order, and links the voice or design briefs it relies
 on by name rather than restating them. `rests_on` lists the claims the feature is made of —
 across modules, `contract` claims and `project.*` alike. That list is **composition**: it says
-which promises the feature is built from. It is never a gate, never a build sequence, and never
-a status.
+which promises the feature rests on. It is never a gate, never an order of work, and never a
+status.
 
 - **No owner claim.** A claim that only says "the checkout feature exists" or narrates the
   feature fails the three questions and is not written; one already locked is unlocked, then
@@ -225,9 +225,9 @@ a status.
 - **Two briefs with the same `rests_on` set** — features or not — are `brief-rests-on-duplicate`
   (WARNING): two features made of the same claims are one feature. Merge them, or make one of
   them describe something the other does not.
-- **Nothing reports a feature as specified or built.** `brief show` derives nothing from the
-  claims a brief rests on, `check` reports nothing of the kind, and neither do you: every claim
-  in `rests_on` locked and linked is evidence about the claims, not about the feature.
+- **Nothing reports a feature's progress.** `brief show` derives nothing from the claims a brief
+  rests on, `check` reports nothing of the kind, and neither do you: every claim in `rests_on`
+  locked and linked is evidence about the claims, not about the feature.
   **Never say a feature is built** — say which of its claims are locked, which are linked, and stop.
 
 ## Citing a brief from a claim

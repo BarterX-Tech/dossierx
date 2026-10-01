@@ -100,5 +100,3 @@ summary — together with the constitution text, in one fixed **10240-byte** bud
 whose index line crosses it gets `shared-context-budget` (project-wide when the constitution alone
 is over). Recovery: shorten project claim summaries, retire a project claim, or trim the
 constitution — there is no config value to raise.
-
-Upgrading a corpus that still has a doctrine hub or `governed_by`: **[`dossierx-upgrading`](../dossierx-upgrading/SKILL.md)**.

@@ -161,23 +161,15 @@ with them. It would also forge the approval that the lock gate is waiting for.
 
 ## Comment or `dossierx claim flag`? One question
 
-**Can you state a specific before/after for the claim's wording?** The same four arms, word for
-word, are in **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**; the router's "Which command" table is the short form.
+**Can you state a specific before/after for the claim's wording?** No → a comment: "Is this still
+true?", "why was it done this way?", "I think this rests_on the wrong module." The thread is the
+deliverable; no claim text changes when it resolves. Yes → it is not a comment: a body-only locked
+claim gets `dossierx claim flag`, any other claim goes through unlock → fix → lock (`claim flag`
+refuses it with `structured_layout`), and code that only moved is re-tagged. **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)** has the four arms in
+full.
 
-- **Yes, and the claim renders from `body` only → `dossierx claim flag`.** Only for a **locked**
-  claim whose stated meaning has drifted from what the code now does. It carries `--claim-says` /
-  `--now-does` / `--reason`, sets `review_pending`, and feeds the reaudit diff.
-- **Yes, but the claim renders from `rows`, `steps`, `raw_html` or a `mockup` layout → `unlock →
-  fix → lock`** with the human's `--reason`. `claim flag` rewrites `body` only and refuses these
-  with `structured_layout`; the before/after goes in your message to the human instead.
-- **Yes, but only the code moved — same meaning, new file or name → re-tag or `dossierx claim
-  link`.** Nothing to approve; do not flag a refactor.
-- **No → a comment.** "Is this still true?", "why was it done this way?", "I think this rests_on
-  the wrong module." The thread is the deliverable; no claim text changes when it resolves.
-
-If you find yourself unable to fill in `--now-does`, you have a question, not a flag. Conversely,
-do not bury a concrete "this line should say X instead of Y" in a thread where it cannot feed a
-reviewable diff.
+If you cannot fill in `--now-does`, you have a question, not a flag. Conversely, do not bury a
+concrete "this line should say X instead of Y" in a thread where it cannot feed a reviewable diff.
 
 ## How an open thread gates the lifecycle
 
@@ -213,5 +205,5 @@ Four refusals, all of them meaning "look again, do not retry":
 ## Portability
 
 Comments add no configuration. The `comments:` field is engine-managed bookkeeping on every claim,
-`omitempty` and excluded from a claim's content hash — so commenting never rewrites an
+omitted when empty and excluded from a claim's content hash — so commenting never rewrites an
 uncommented claim or flips its dependents to `review_pending` by accident.

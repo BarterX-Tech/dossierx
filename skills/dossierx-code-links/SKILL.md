@@ -6,53 +6,46 @@ description: >-
   longer true. Use this WHENEVER you are about to implement code from locked claims,
   WHENEVER you finish implementing or modifying code against a locked claim,
   whenever you add a "dossierx-claim: <id>" or "dossierx-step: <id> #<n> <hash>"
-  comment to source, whenever dossierx check reports a drifted or unlinked claim,
-  and whenever a maintenance change makes a claim's stated behavior stop matching
-  reality. Covers the dossierx-claim and dossierx-step tag conventions scanned by
-  dossierx check, dossierx claim link
-  for the cases scanning cannot reach, the fully-autonomous vs. human-gated
-  decision rule, and dossierx claim flag for reporting a spec mismatch. Load
-  the DossierX router skill first, and dossierx-claims for the lock basics.
+  comment to source, whenever dossierx check reports a drifted or unlinked claim
+  or a conformance result, whenever you declare a claim's embodiment, and whenever
+  a maintenance change makes a claim's stated behavior stop matching reality.
+  Covers the reading order for implementation, the dossierx-claim and
+  dossierx-step tags scanned by dossierx check, dossierx claim link for the cases
+  scanning cannot reach, the code-link gate, embodiment and conformance checks,
+  the comment / flag / unlock / re-tag decision, and dossierx claim flag. Load the
+  DossierX router skill first, and dossierx-claims for the lock basics.
 ---
 
 # DossierX code links — grounding claims in real code
 
-Read **[`dossierx`](../dossierx/SKILL.md)** for the envelope and error codes, and **[`dossierx-claims`](../dossierx-claims/SKILL.md)** for the lock
-lifecycle.
+Read **[`dossierx`](../dossierx/SKILL.md)** for the envelope and error codes, and
+**[`dossierx-claims`](../dossierx-claims/SKILL.md)** for the lock lifecycle.
 
-Two deliberately separate channels close the loop from spec back to code:
+Two channels close the loop from spec back to code, and they never mix:
 
-| | Channel B — grounding correct code | Channel A — the spec is wrong |
+| | Grounding correct code | The spec is wrong |
 |---|---|---|
 | About | where a still-correct claim lives in code | the locked claim itself needs revisiting |
-| Gate | **fully yours**, no human gate | human, via `dossierx claim flag` → reaudit |
+| Gate | **yours alone**, no human step | the human, via `claim flag` → reaudit, or unlock → fix → lock |
 | Trigger | code finished, or a linked file moved with identical meaning | the code's *meaning* changed relative to what the claim states |
 
 ## Implement from a locked module, then tag
-
-There is no sequencer: the order comes from the claims themselves.
 
 1. **Read the module, not the tree.** `dossierx manifest show <module> --isolation` gives the
    constitution, the project claims index, the manifest and every claim's summary. Implement from
    **locked** claims; a draft can still change under you.
 2. **Follow the edges.** The manifest's `depends_on` names the neighbor contracts this module
-   consumes — `manifest show <module> --integration` gives their summaries. A claim's `rests_on`
+   consumes (`manifest show <module> --integration` gives their summaries). A claim's `rests_on`
    (`dossierx claim show <id>`) names what must already hold for it to be true: build or confirm
-   those first. Read a body with `claim show` only when the summary is not enough.
-3. **Tag as you finish each claim** (Channel B below), then run plain `dossierx check`. When the
-   project sets `source_dirs`, every locked module claim must end up linked to real code. One that
-   genuinely has no code behind it is the human's call, not a file to tag around: on their yes it
-   declares `embodiment: {mode: none, reason: "…"}` through unlock → fix → lock.
-4. **When the code cannot honor a claim**, stop: that is a comment or a flag for the human (Channel
-   A), never a quiet deviation and never a tag on code that does something else.
+   those first. Open a body with `claim show` only when the summary is not enough.
+3. **Tag as you finish each claim** (below), then run plain `dossierx check`.
+4. **When the code cannot honor a claim**, stop: that is a comment or a flag for the human, never a
+   quiet deviation and never a tag on code that does something else.
 
-## Channel B — tag it, `dossierx check` does the rest
+## Tag it — `dossierx check` does the rest
 
-The everyday case, and the only thing most implementation work needs.
-
-1. Immediately after finishing a claim's code (or, for a claim a test proves, that test), put a
-   comment next to the relevant function or type. Any comment syntax works — the engine searches
-   for the literal marker string:
+1. Right after finishing a claim's code (or, for a claim a test proves, that test), put a comment
+   next to the function or type. Any comment syntax works — the scan looks for the literal marker:
 
    ```python
    # dossierx-claim: widget.internals.queue-saturation-policy
@@ -60,8 +53,8 @@ The everyday case, and the only thing most implementation work needs.
        ...
    ```
 
-   For a claim that carries `steps:`, pin each implemented step with a **1-based**
-   index and the sha256-hex of **that YAML step string** (not the source file):
+   For a claim that carries `steps:`, pin each implemented step with its **1-based** index and the
+   sha256-hex of **that step's YAML string** (not the source file):
 
    ```python
    # dossierx-step: widget.contract.walkthrough #2 <64-char-sha256>
@@ -69,115 +62,118 @@ The everyday case, and the only thing most implementation work needs.
        ...
    ```
 
-   Compute the digest over the claim's `steps[n-1]` text as loaded (`dossierx`
-   uses the same sha256-hex). A bare `dossierx-step: <id>` without `#n` and hash
-   is a hard scan error. `dossierx-claim:` still grounds a whole claim (including
-   claims that have no `steps`). Both markers may appear; they add links, they
-   do not replace each other. Unknown id, not-locked, `#n` out of range, a claim
-   with no `steps`, or a hash mismatch all fail `dossierx check` (`implink_refused`).
+   A bare `dossierx-step: <id>` with no `#n` and hash is a scan error. Both markers may appear on
+   the same claim; each adds a link. A claim may have any number of tagged files, and a file may
+   carry tags for any number of claims.
 
-2. Run `dossierx check`. If the project's `project.config.yaml` sets `source_dirs`, the scan finds
-   the tag and links it — no separate command. A claim may have any number of tagged files; a file
-   may carry tags for any number of claims.
-3. An invalid tag is a **hard failure**: an unknown claim id (check for a typo) or a claim that is
-   not locked yet makes `dossierx check` exit non-zero (`implink_refused`, `stopped_at: scan`) and
-   name exactly what is wrong. Deliberate — an unbacked or stale tag must never sit silently wrong
-   in the codebase. **One of those two shapes is not a bad tag.** While you hold a claim open to
-   edit it — `claim unlock` … fix … `claim lock` — its already-correct tags name a `draft` claim,
-   so every `dossierx check` in between fails with `claim is not locked (status "draft")`. That is
-   the unlock you asked for, mid-flight: finish the relock and the same `check` goes green. Never
-   delete or retarget a tag to clear it, and never leave the claim unlocked to keep `check` quiet —
-   `check --validate` and `check --staged` scan no source, so a hook and a CI run stay green while
-   the viewer rebuild you actually need is the thing failing.
-4. Symbol capture (the `#function_name` a reader sees later) is a best-effort text heuristic over
-   common declaration shapes below the tag line, not a real parser. File-level linking is reliable
-   regardless.
+2. Run `dossierx check`. When `project.config.yaml` sets `source_dirs`, the scan finds the tag and
+   links it — no separate command.
+3. An invalid tag is a **hard failure**: an unknown id, a claim that is not locked, `#n` out of range,
+   a claim with no `steps`, or a hash that does not match makes `dossierx check` exit 1
+   (`implink_refused`, `stopped_at: scan`) and name the file and line in `data.scan_errors[]`. **One
+   of those is not a bad tag.** While you hold a claim open — `claim unlock` … fix … `claim lock` —
+   its correct tags name a `draft` claim, so every `check` in between fails `claim is not locked
+   (status "draft")`. That is the unlock you asked for, mid-flight: finish the re-lock and the same
+   `check` goes green. Never delete or retarget the tag, and never leave the claim unlocked to keep
+   `check` quiet — `--validate` and `--staged` scan no source, so they stay green while the rebuild
+   you need is the thing failing.
+4. The `#symbol` a reader sees later is a best-effort guess from the declaration below the tag; the
+   file-level link is what counts.
 
-When there is no `source_dirs`, or the file genuinely cannot carry a comment (a generated artifact,
-a migration with nowhere to put one), link it explicitly — same validation, same artifact, simply
-not tag-triggered:
+When there is no `source_dirs`, or the file cannot carry a comment (a generated artifact), link it
+explicitly — same validation, same record:
 
 ```
 dossierx claim link --module <name> --claim <id> --file <project-relative-path> [--symbol <name>]
 ```
 
-It takes `--dry-run`, needs no `--reason` (it records a fact, it does not change what is approved),
-and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write the same generated
-`build/code-links/<module>.json` — never hand-edit it.
+It takes `--dry-run`, needs no `--reason` (it records a fact, it approves nothing), and refuses a
+claim that is not locked (`not_locked`). Both paths write `build/code-links/<module>.json`, a
+committed artifact — never hand-edit it.
 
-**Green `check` means linked, and only that.** Once `source_dirs` is set, plain `dossierx check`
-refuses (`unlinked_claims`, `stopped_at: links`) when any locked module claim (project claims and
-claims declaring `embodiment: {mode: none}` are exempt) has no linked file, or a claim with `steps:` is not tagged on every step — a
-`dossierx-claim:` tag on a stepped claim links the file but attests no step, so it counts as 0 of N.
-The catalog and viewer are regenerated before the refusal; only the exit status is withheld, and the
-claim's card reads "not linked to code" or "steps linked: k of N". `data.code_links` carries the
-counts per module with `scanned` and `gated`; `--validate` and `--staged` fill it with both false
-and never refuse. Linked is not followed: the gate proves a pointer exists, never that the code still
-means what the claim says — that is the human's lock and the project's tests. Nor is it your saying
-so: "the code matches the claim" in chat is not a certificate and closes nothing; when the green plain
-`check`, the conformance result or the Resolve is missing, stop and say which. `check` also reports the
-drift count (a linked file changed since it was linked). `dossierx claim show <id>` gives the same
-thing for one claim, per file:
+## The code-link gate
+
+With `source_dirs` set, plain `dossierx check` refuses `unlinked_claims` (`stopped_at: links`) while
+any locked module claim has no linked file, or a stepped claim is not tagged on every step (a
+`dossierx-claim:` tag on a stepped claim counts as 0 of N). Project claims are exempt. The catalog and
+viewer are rebuilt before the refusal; `data.code_links.modules[]` names each `unlinked` and
+`partial` claim. `--validate` and `--staged` report `code_links` with `gated: false` and never refuse,
+so a green there is not a linked green.
+
+Recover by tagging the real code. **Never tag an unrelated file to clear it.** A locked claim with
+genuinely no code behind it is the human's call: on their yes, unlock → add
+`embodiment: {mode: none, reason: "…"}` → lock with their `--reason` (or it becomes a project claim).
+
+Linked is not followed: the gate proves a pointer exists, never that the code still means what the
+claim says. Nor is it your saying so: "the code matches the claim" in chat is not a certificate and closes nothing. `check` also counts drift (a linked
+file changed since it was linked), and `claim show <id>` reports it per file:
 
 ```json
 "implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]
 ```
 
-## Channel A — when a code change reveals the spec is wrong
+## Embodiment and conformance — checks the project's own tools observe
 
-The scenario: months after lock, a new requirement changes the code, and the change means the
-locked claim's stated behavior is no longer true. Channel B must not paper over that.
+A claim may declare what its implementation must show, so the project's own tooling can compare it:
 
-**Is it actually a flag?** One question — *can you state a specific before/after for the claim's
-wording?* — with four arms, the same four **[`dossierx-comments`](../dossierx-comments/SKILL.md)** states and the router's "Which command" table shortens:
+```yaml
+embodiment:
+  mode: compare
+  checks:
+    - id: public-states                # unique within the claim
+      adapter: source-symbols/v1       # opaque to DossierX: names the project's tool
+      target: source://widget/state    # opaque: what that tool looks at
+      expectation: {shape: set, value: [blocked, ready, waiting]}
+    - id: schema-version
+      adapter: schema-metadata/v1
+      target: schema://widget/record
+      expectation: {shape: scalar, value: "3"}
+```
 
-- **Yes, and the claim renders from `body` only → `dossierx claim flag`** (Channel A, below).
-- **Yes, but the claim renders from `rows`, `steps`, `raw_html` or a `mockup` layout → `unlock →
-  fix → lock`** with the human's `--reason`: `claim flag` refuses these with `structured_layout`
-  (the paragraph at the end of this section says exactly which shapes).
-- **Yes, but only the code moved — same meaning, new file or name → Channel B.** Re-tag (or re-run
-  `dossierx claim link`) with the new location. Nothing else, no approval needed. This is the
-  common case and it is entirely yours.
-- **No → a comment**, not a flag. A question or a doubt has no `--now-does`.
+Every value is a string; DossierX never interprets versions, units or numbers. A project-owned
+adapter writes one observation file (the path in `conformance.observations`); **DossierX never runs
+the adapter** — producing that file is the project's job. Each check comes out `matched`, `owed`
+(no observation for that adapter and target), `mismatch` (with sorted `missing` / `extra`, or
+`expected` / `observed`) or `uncheckable` (bad input or an adapter error). Results are in
+`data.conformance` and `build/conformance/status.json`, and on the claim's card.
 
-Meaning changed, body-only claim → Channel A:
+With `conformance.blocking: true`, any non-matched check fails `check` with `conformance_failed`.
+Fix the code or produce the observation, then re-run. **Never unlock or re-lock to clear it**: this
+gate does not touch approval. The `embodiment` block is signed content, so adding or changing it on
+a locked claim is unlock → fix → lock with the human. `mode: none` is the declaration that no code
+embodies the claim, and it exempts the claim from the code-link gate.
 
-  ```
-  dossierx claim flag <id> \
-    --claim-says "what the claim currently states" \
-    --now-does   "what the code now actually does" \
-    --reason     "why the code changed"
-  ```
+## When a code change means the claim is wrong
 
-  All three are required, and `--dry-run` previews it. This sets `locked, review_pending` and hands
-  the claim to the human: `--claim-says` renders as the removal and `--now-does` as the addition in
-  `dossierx claim reaudit`'s diff, so they review a real before/after instead of reverse-engineered
-  prose. Continue from **[`dossierx-claims`](../dossierx-claims/SKILL.md)**'s reaudit section. This is the **only** place a human
-  re-enters this otherwise fully autonomous workflow — a genuine mismatch, never routine linking.
+Months after a lock, a new requirement changes the code. Ask one question: **can you state a
+specific before/after for the claim's wording?**
 
-  **The before/after lives in `build/ledger/flag-store.json`, and that file is a tracked artifact.**
-  Only `review_pending` goes into the claim; the two strings the human is going to review go into
-  that store, beside `build/ledger/lock-store.json` and
-  `build/ledger/comment-digest.json`. Commit it in the same commit as the flagged claim and never
-  `.gitignore` it. Unlike the other two it has **no gate rule behind it** — nothing compares it to
-  anything — so a flag that does not travel is lost in silence: the claim arrives elsewhere
-  `review_pending`, `reaudit` proposes an empty diff, and confirming that empty diff clears the
-  flag having changed nothing. After flagging, tell the human the store needs committing.
+- **Yes, and the claim renders from `body` only → `dossierx claim flag`** (below).
+- **Yes, but the claim carries `rows`, `steps` or `raw_html`, or uses `layout: mockup` → unlock →
+  fix → lock** with the human's `--reason`. `claim flag` refuses these with `structured_layout`: a
+  flag's reaudit rewrites `body` only, and would clear `review_pending` while the content a reader
+  sees stayed stale. Put the before/after in your message to the human instead.
+- **Yes, but only the code moved — same meaning, new file or name → re-tag** (or re-run `claim
+  link`). Nothing to approve; never flag a refactor.
+- **No → a comment** (`dossierx-comments`). A question or a doubt has no `--now-does`.
 
-  `dossierx claim flag` works only on claims whose content really is **just `body`**. The test is
-  on CONTENT, not on the layout name. A claim is refused with `structured_layout` when it carries
-  `rows` or `steps` (whether or not `layout:` says `table`/`steps` — an omitted layout is inferred
-  from exactly those fields), when its layout is `mockup`, **or when it carries `raw_html` at all, on
-  any layout including `card`, `banner`, `list` and `tree`**: a `card` claim bearing markup the
-  viewer renders is refused, and there is no layout that is flaggable by name.
+```
+dossierx claim flag <id> \
+  --claim-says "what the claim currently states" \
+  --now-does   "what the code now actually does" \
+  --reason     "why the code changed"
+```
 
-  The reason is one sentence: a flag-sourced reaudit rewrites `body` and nothing else, so accepting
-  it on any of those would clear `review_pending` while the `rows`, `steps` or `raw_html` a reader
-  actually sees stayed stale. For those, take the claim through **unlock → fix → lock** with the
-  human's approval instead. The refusal message names which of the three it was.
+All three are required; `--dry-run` previews it. It sets `locked, review_pending` and hands the claim
+to the human: `--claim-says` renders as the removal and `--now-does` as the addition in `claim
+reaudit`'s diff. Continue from the reaudit section of
+**[`dossierx-claims`](../dossierx-claims/SKILL.md)**.
 
-## Portability
+**The before/after lives in `build/ledger/flag-store.json`.** Commit it in the same commit as the
+flagged claim and never `.gitignore` it. No integrity rule covers it, so a flag that does not travel
+is lost in silence: the claim arrives elsewhere `review_pending`, `reaudit` proposes an empty diff,
+and confirming that empty diff clears the flag having changed nothing. After flagging, tell the human
+the store needs committing.
 
-`source_dirs` is the one opt-in `project.config.yaml` field this skill depends on; unset, a project
-sees no behavior change. The tag marker string, the link artifact and the flag/reaudit dispatch are
-all covered by the same zero-hardcoded-assumptions guarantee as everything else in DossierX.
+`source_dirs` and `conformance` are the only config fields this skill depends on; unset, a project
+sees no change in behavior.
