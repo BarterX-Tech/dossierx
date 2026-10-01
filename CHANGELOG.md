@@ -449,6 +449,18 @@ never restore or re-lock the store.
   move (`fixture-basic`, `fixture-conformance-v1`, `fixture-portability`) are
   its 3 silent changes, all this redesign, and graph-demo's viewer and
   theme-flat's viewer and catalog (`tracks` gone) are its 3 explained ones.
+- **The exported skills, audited against the binary.** Every bundle was checked
+  command by command against this release and rewritten where it was wrong or
+  silent. The skills no longer mention retired fields outside
+  `dossierx-upgrading`. A claim's content may be any of `body`, `rows`, `steps`
+  or `raw_html`. `raw_html_reviewed` is the human's to set. A confirmed flag
+  replaces the whole body and never the summary. Every `check` refuses until
+  the constitution is locked. `dossierx-code-links` covers embodiment,
+  conformance, step-tag hashing and stale links. The router carries the
+  `.gitignore` block and reads a lock refusal from
+  `data.evaluation.verdicts[]`. `dossierx-upgrading` is one ordered pass from
+  v0.7.20 or v0.7.21: settle pending reviews and unlock on the old binary,
+  upgrade every binary, fold, then re-lock once.
 
 ### Removed
 
