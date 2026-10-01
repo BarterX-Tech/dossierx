@@ -1609,7 +1609,11 @@ only on their explicit approval, and every cap finding says so.
   markdown's alone, so that pin is unaffected by the images;
 - the **sha256 of every image** the brief references, beside the hash: an
   image whose bytes change, or a change to the set referenced, is
-  `brief-content-drift` naming the image;
+  `brief-content-drift` naming the image. An `.svg` is hashed, and counted
+  against `max_brief_image_bytes`, with CRLF normalized to LF (the other five
+  formats byte for byte), so a `core.autocrlf` checkout signs the image its
+  index holds; Git LFS pointer images are not supported, since the index
+  holds the pointer and not the image;
 - the human's `--reason`, the time and the actor;
 - the **approved text** (summary, `rests_on`, markdown), so an edited brief can
   be shown beside what was approved;

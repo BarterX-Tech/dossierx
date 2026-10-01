@@ -287,7 +287,10 @@ binary predates that guard.
   `brief lock` sets the brief's `status: locked` and records, under a `briefs`
   map in `build/ledger/lock-store.json`, the brief's lock hash (summary,
   `rests_on`, body — not `status`, not comments), the sha256 of each image it
-  references, the human's reason and time, the approved text, and one
+  references (an `.svg`'s with CRLF normalized to LF, as the markdown's is, so
+  a `core.autocrlf` checkout and the index sign the same image and
+  `brief-image-cap` counts the same bytes in both; Git LFS pointer images are
+  not supported), the human's reason and time, the approved text, and one
   baseline per `rests_on` claim (that claim's content hash) with the claim as
   it read. It refuses `already_locked` (locked and unchanged), `comment_open`
   (an open thread on the brief; the new error code, exit 1), `lint_failed` (an

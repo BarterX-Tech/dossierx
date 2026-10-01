@@ -93,8 +93,18 @@ type Image struct {
 	Present bool   `json:"present"`
 	// Digest is the sha256 of the image file's bytes, hex, when present:
 	// what `brief lock` records and brief-content-drift compares (NIT-205).
-	// Not in the payload; the viewer has no use for it.
+	// An .svg is text, so its bytes are hashed with CRLF normalized to LF, as
+	// a brief's markdown is: under core.autocrlf the working tree holds CRLF
+	// and the index LF, and the two must sign the same image. The binary
+	// formats are hashed as they are. Not in the payload; the viewer has no
+	// use for it.
 	Digest string `json:"-"`
+	// ContentBytes is the length of the bytes Digest is taken over — Bytes
+	// for a binary image, the normalized length for an .svg — and is what
+	// brief-image-cap counts, so --validate and --staged reach one verdict on
+	// one image. Bytes stays the file's own size: it is what a static build
+	// copies and charges to the viewer's bound.
+	ContentBytes int64 `json:"-"`
 }
 
 // Brief is one parsed brief. Everything on it is derived from the file's own
@@ -200,10 +210,13 @@ type File struct {
 	Size    int64
 	Regular bool
 	Data    []byte
-	// Digest is the sha256 of a regular non-.md file's bytes, hex, when the
-	// reader hashed it without keeping the bytes (Load streams images); the
-	// index reader hands the bytes in Data instead, and FromFiles hashes them.
-	Digest string
+	// Digest is the sha256 of a regular image's bytes, hex — an .svg's with
+	// CRLF normalized (see Image.Digest) — when the reader hashed it without
+	// keeping the bytes (Load streams images), and ContentSize is the length
+	// it was taken over; the index reader hands the bytes in Data instead,
+	// and FromFiles hashes them.
+	Digest      string
+	ContentSize int64
 }
 
 // Load discovers the briefs tree on disk at cfg.BriefsDirPath(). A directory
@@ -308,11 +321,11 @@ func Load(cfg *config.Config) *Set {
 		} else if markdown.IsDocumentImageExt(path.Ext(f.Rel)) {
 			// An image is signed by a brief's lock (its sha256 on the
 			// record), so it is hashed here — streamed, never held.
-			digest, hashErr := fileDigest(p)
+			digest, n, hashErr := fileDigest(p, textImage(f.Rel))
 			if hashErr != nil {
 				return skip(p, d, hashErr)
 			}
-			f.Digest = digest
+			f.Digest, f.ContentSize = digest, n
 		}
 		files = append(files, f)
 		return nil
@@ -329,18 +342,92 @@ func Load(cfg *config.Config) *Set {
 	return s
 }
 
-// fileDigest is the sha256 of a file's bytes, hex, streamed.
-func fileDigest(p string) (string, error) {
+// fileDigest is the sha256 of a file's bytes, hex, streamed, and the number
+// of bytes hashed. text normalizes CRLF to LF on the way through, exactly as
+// imageContent normalizes the index's copy.
+func fileDigest(p string, text bool) (string, int64, error) {
 	f, err := os.Open(p)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	if !text {
+		n, err := io.Copy(h, f)
+		if err != nil {
+			return "", 0, err
+		}
+		return hex.EncodeToString(h.Sum(nil)), n, nil
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	w := &crlfWriter{w: h}
+	if _, err := io.Copy(w, f); err != nil {
+		return "", 0, err
+	}
+	if err := w.flush(); err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), w.n, nil
+}
+
+// textImage reports whether an image file is text, and so hashed with its
+// line endings normalized: .svg, the one text format of the six.
+func textImage(name string) bool { return path.Ext(name) == ".svg" }
+
+// imageContent is an image file's Digest and ContentBytes, from whichever
+// form the reader handed over: Load's streamed digest, or the index's bytes,
+// hashed here under the same normalization. A File with neither (a test's
+// size-only fixture) has no digest, and its size is its content.
+func imageContent(f File) (string, int64) {
+	if f.Digest != "" {
+		return f.Digest, f.ContentSize
+	}
+	if f.Data == nil {
+		return "", f.Size
+	}
+	data := f.Data
+	if textImage(f.Rel) {
+		data = normalizeLineEndings(data)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), int64(len(data))
+}
+
+// crlfWriter is normalizeLineEndings as a stream: it writes what it is given
+// with each CRLF as LF, holding a CR that ends one chunk until the next shows
+// whether an LF follows. n counts the bytes written through.
+type crlfWriter struct {
+	w  io.Writer
+	cr bool
+	n  int64
+}
+
+func (c *crlfWriter) Write(p []byte) (int, error) {
+	out := make([]byte, 0, len(p)+1)
+	for _, b := range p {
+		if c.cr && b != '\n' {
+			out = append(out, '\r')
+		}
+		c.cr = b == '\r'
+		if !c.cr {
+			out = append(out, b)
+		}
+	}
+	c.n += int64(len(out))
+	if _, err := c.w.Write(out); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// flush writes a CR the input ended on.
+func (c *crlfWriter) flush() error {
+	if !c.cr {
+		return nil
+	}
+	c.cr = false
+	c.n++
+	_, err := c.w.Write([]byte{'\r'})
+	return err
 }
 
 // ImageDigests is the sha256 of every present image b references, by name —
@@ -459,11 +546,7 @@ func FromFiles(cfg *config.Config, files []File) *Set {
 				b.Images[i].Present = ok
 				b.Images[i].Bytes = file.Size
 				if ok {
-					b.Images[i].Digest = file.Digest
-					if b.Images[i].Digest == "" && file.Data != nil {
-						sum := sha256.Sum256(file.Data)
-						b.Images[i].Digest = hex.EncodeToString(sum[:])
-					}
+					b.Images[i].Digest, b.Images[i].ContentBytes = imageContent(file)
 				}
 				if !ok {
 					s.add(RuleShape, b.Path, "references image %q, which is not in %s/%s/; a brief's images sit beside it in its own folder", img.Name, s.DisplayDir, folder)
@@ -585,8 +668,9 @@ func (s *Set) parse(folder string, f File) Brief {
 // meaning. Each field is length-prefixed so no two different briefs can
 // concatenate to the same input.
 //
-// Images a brief references are not signed: the hash covers the markdown file.
-// An image file replaced under the same name is not brief-content-drift.
+// Images a brief references are not in this hash: it covers the markdown file.
+// `brief lock` records each image's Digest beside it, and brief-content-drift
+// compares those separately.
 func LockHash(summary string, restsOn []string, body string) string {
 	ids := append([]string(nil), restsOn...)
 	sort.Strings(ids)
