@@ -433,6 +433,22 @@ never restore or re-lock the store.
   stays reachable at `#constitution`. Under `dossierx serve`, a live reload now also
   refreshes Home's "last check" time (`/api/fragment` carries
   `generated_at`).
+- **Every rendered viewer grows**, briefs or not: Home, the new sidebar and
+  the brief, feature and claim-card BRIEFS styles and scripts ship in every
+  viewer. Measured on the regenerated fixture viewers (`wc -c` on
+  `testdata/<fixture>/build/viewer/index.html`, before -> after, against the
+  v0.7.21 baseline): `fixture-basic` 1,229,461 -> 1,300,312 (+70,851),
+  `fixture-conformance-v1` 1,284,733 -> 1,355,856 (+71,123),
+  `fixture-graph-demo` 1,486,876 -> 1,604,741 (+117,865; it gains three briefs,
+  two of them features, and an image), `fixture-portability` 1,233,700 -> 1,304,640
+  (+70,940) and `fixture-theme-flat` 1,273,896 -> 1,339,123 (+65,227). In
+  `fixture-basic` that is about 45 KB of stylesheet, 21 KB of script and 6 KB
+  of markup (the Home section). The across-release report
+  (`testdata/render-across-releases.golden.txt`, against v0.7.21) compares 153
+  artifacts, 0 added and 0 removed; the three viewers whose own inputs did not
+  move (`fixture-basic`, `fixture-conformance-v1`, `fixture-portability`) are
+  its 3 silent changes, all this redesign, and graph-demo's viewer and
+  theme-flat's viewer and catalog (`tracks` gone) are its 3 explained ones.
 
 ### Removed
 
