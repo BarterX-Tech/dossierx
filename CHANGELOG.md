@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.22] - 2026-10-01
+
 **Surface** (net, against v0.7.21): 26 leaves under 9 nouns (was 24 under
 9: `track` and its three leaves out, `brief` and its five in), 30 lint rules
 (was 36) plus the 10 brief rules, a set of their own, 52 error codes (was 50:
