@@ -1,0 +1,24 @@
+    scale_audit_test.go:118: V=32 E=31 facts=496 witnessIDs=5952 catalogBytes=613050 htmlBytes=1661164 compute=1.479916ms allocatedBytes=993040 allocations=6992
+    scale_audit_test.go:118: V=64 E=63 facts=2016 witnessIDs=45696 catalogBytes=3771802 htmlBytes=3448428 compute=4.72125ms allocatedBytes=5853216 allocations=26771
+    scale_audit_test.go:118: V=128 E=127 facts=8128 witnessIDs=357632 catalogBytes=25852762 htmlBytes=15254499 compute=19.503875ms allocatedBytes=37825632 allocations=103757
+    scale_audit_test.go:118: V=40 E=175 facts=700 witnessIDs=2800 catalogBytes=517042 htmlBytes=1768586 compute=797.666µs allocatedBytes=1078608 allocations=10191
+    scale_audit_test.go:118: V=80 E=375 facts=3000 witnessIDs=20000 catalogBytes=2632042 htmlBytes=3217454 compute=4.129625ms allocatedBytes=5194160 allocations=41504
+    scale_audit_test.go:118: V=120 E=575 facts=6900 witnessIDs=64400 catalogBytes=7137442 htmlBytes=5948897 compute=10.79775ms allocatedBytes=13097312 allocations=93513
+    scale_audit_test.go:118: V=40 E=175 facts=3540 witnessIDs=15440 catalogBytes=3305822 htmlBytes=3387074 compute=4.482416ms allocatedBytes=7093936 allocations=77559
+    scale_audit_test.go:118: V=80 E=375 facts=16580 witnessIDs=117080 catalogBytes=18270702 htmlBytes=12170782 compute=27.075708ms allocatedBytes=41601360 allocations=366663
+--- PASS: TestAuditScale (0.34s)
+ok  	github.com/BarterX-Tech/dossierx/internal/readiness	0.789s
+    conformance_scale_test.go:110: claims=32 declarations=15 checks=16 status_bytes=7900 catalog_bytes=660657 viewer_bytes=1795426 elapsed=11.632ms TotalAlloc=25068632
+    conformance_scale_test.go:110: claims=64 declarations=30 checks=34 status_bytes=16169 catalog_bytes=4076554 viewer_bytes=3905599 elapsed=29.720042ms TotalAlloc=71951176
+    conformance_scale_test.go:110: claims=128 declarations=60 checks=68 status_bytes=32048 catalog_bytes=28084213 viewer_bytes=17767132 elapsed=152.4415ms TotalAlloc=291085160
+    conformance_scale_test.go:110: claims=40 declarations=19 checks=22 status_bytes=10499 catalog_bytes=550634 viewer_bytes=1923227 elapsed=9.451167ms TotalAlloc=27316368
+    conformance_scale_test.go:110: claims=80 declarations=37 checks=42 status_bytes=19896 catalog_bytes=2794034 viewer_bytes=3591144 elapsed=24.94425ms TotalAlloc=60960296
+    conformance_scale_test.go:110: claims=120 declarations=56 checks=64 status_bytes=30106 catalog_bytes=7601529 viewer_bytes=6720868 elapsed=55.616916ms TotalAlloc=137340488
+--- PASS: TestConformanceEndToEndGraphScaleBounds (0.57s)
+    --- PASS: TestConformanceEndToEndGraphScaleBounds/chain-32 (0.03s)
+    --- PASS: TestConformanceEndToEndGraphScaleBounds/chain-64 (0.06s)
+    --- PASS: TestConformanceEndToEndGraphScaleBounds/chain-128 (0.29s)
+    --- PASS: TestConformanceEndToEndGraphScaleBounds/dense-8x5 (0.02s)
+    --- PASS: TestConformanceEndToEndGraphScaleBounds/dense-16x5 (0.05s)
+    --- PASS: TestConformanceEndToEndGraphScaleBounds/dense-24x5 (0.11s)
+ok  	github.com/BarterX-Tech/dossierx/internal/check	1.022s

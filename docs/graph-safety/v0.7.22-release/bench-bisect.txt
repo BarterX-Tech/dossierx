@@ -1,0 +1,10 @@
+# go test ./internal/render -run '^$' -bench 'BriefRelationsAtScale|BuildHomeView/10000' -benchmem -benchtime=3x -count=1
+# run on `git archive <rev>` extracts, same host, 2026-10-01
+f64a11aa (NIT-202 final)          BriefRelationsAtScale 4.27 ms  9,270,170 B/op 26,912 allocs/op 12,900,983 card-bytes | BuildHomeView/10000 5.69 ms 40,307,245 B/op 25,128 allocs/op
+3a232863 (#136 NIT-202 merge)     BriefRelationsAtScale 4.22 ms  9,269,597 B/op 26,912 allocs/op 12,900,983 card-bytes | BuildHomeView/10000 6.23 ms 40,307,245 B/op 25,128 allocs/op
+2bde5e52 (#135 NIT-205 merge)     BriefRelationsAtScale 4.41 ms  9,272,245 B/op 26,913 allocs/op 12,900,983 card-bytes | BuildHomeView/10000 6.07 ms 40,307,165 B/op 25,127 allocs/op
+41f603be (#137 NIT-205 follow-up) BriefRelationsAtScale 4.21 ms  9,271,517 B/op 26,912 allocs/op 12,900,983 card-bytes | BuildHomeView/10000 5.31 ms 40,307,165 B/op 25,127 allocs/op
+bd54b5ae (#138 NIT-198 merge)     BriefRelationsAtScale 22.07 ms 28,266,082 B/op 97,290 allocs/op 13,062,983 card-bytes | BuildHomeView/10000 7.05 ms 41,853,605 B/op 65,133 allocs/op
+3967ab5f (#142 NIT-199 merge)     BriefRelationsAtScale 21.55 ms 28,372,024 B/op 97,319 allocs/op 13,062,983 card-bytes | BuildHomeView/10000 6.75 ms 41,853,573 B/op 65,133 allocs/op
+36b1ed01 (#143 NIT-200 merge)     BriefRelationsAtScale 22.37 ms 28,338,240 B/op 97,301 allocs/op 13,062,983 card-bytes | BuildHomeView/10000 7.19 ms 41,852,840 B/op 65,131 allocs/op
+candidate (see bench.txt)         BriefRelationsAtScale 21.84 ms 28,274,874 B/op 97,290 allocs/op 13,062,983 card-bytes | BuildHomeView/10000 7.95 ms 41,853,605 B/op 65,133 allocs/op
