@@ -118,6 +118,14 @@ binary predates that guard.
   `conformance_capacity_exceeded`; `serve`: the render-error page). It is
   emitted only when the project holds a brief.
   `dossierx serve` watches `briefs_dir` too, so a brief edit reloads the page.
+- **`dossierx-briefs` skill** (NIT-193), the eighth bundle, between
+  `dossierx-constitution` and `dossierx-comments` in the reading order: when a
+  brief rather than a claim, the shape and the folder names, writing short,
+  the caps (trim or merge; raising one is the human's call), the human-gated
+  lock loop, `rests_on` as what a brief describes and the reaudit loop it
+  drives, feature briefs as composition that nothing reports as built, citing
+  a brief from a claim only as evidence, and threads on a brief. The router's
+  companion table gains its row.
 - **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
   `briefs_dir` that is the config directory, sits inside a `.git` directory,
   or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at

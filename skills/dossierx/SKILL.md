@@ -6,8 +6,8 @@ description: >-
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
   any DossierX command. It is short on purpose: the nine nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, which command (flag vs unlock vs reaudit),
-  and which companion skill to load (claims, modules, constitution, comments, code-links,
-  upgrading). Load a companion skill only when this one sends you there.
+  and which companion skill to load (claims, modules, constitution, briefs, comments,
+  code-links, upgrading). Load a companion skill only when this one sends you there.
 ---
 
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
@@ -210,11 +210,12 @@ locked claim still resolves to its record. A move that **strands** them fails as
 | cite the evidence behind a claim (`sources`, `[n]` markers) | `dossierx-claims` |
 | orient in a module, draft `manifest.yaml`, read neighbors (`manifest show --isolation` / `--integration`, `manifest list`), or meet any cap | `dossierx-modules` |
 | draft, show, lock or re-lock the constitution; author a project claim (`project.<slug>`) | `dossierx-constitution` |
+| write, edit, lock, unlock or reaudit a brief under `briefs/`, write a feature brief, choose a brief's `rests_on`, cite a brief from a claim, or meet a `brief-*` finding | `dossierx-briefs` |
 | implement code from a locked module, tag it with `dossierx-claim:` or `dossierx-step:`, or report that shipped code no longer matches a locked claim | `dossierx-code-links` |
 | read `dossierx comment inbox`, reply to a review thread, or decide comment vs. `claim flag` | `dossierx-comments` |
 | upgrade the binary: a corpus you did not touch refuses (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks-retired`, `doctrine_facet`, `layout_legacy`, pre-ledger), or re-export skills | `dossierx-upgrading` |
 
-Load one at a time, not all seven.
+Load one at a time, not all eight.
 
 ## Bootstrap — setting DossierX up in a repo
 
