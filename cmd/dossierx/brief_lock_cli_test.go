@@ -280,6 +280,49 @@ func TestBriefStateNeverGatesAClaim(t *testing.T) {
 	}
 }
 
+// TestACitedBriefsMovedPinRefusesClaimLock is the G-1 exception: a brief
+// does not gate a claim, but a claim that pins the brief's content hash
+// still owns source-internal-drift when that content moves.
+func TestACitedBriefsMovedPinRefusesClaimLock(t *testing.T) {
+	cfgPath, claimPath, briefPath, _ := briefLockProject(t)
+	cfg, err := config.LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := briefs.Load(cfg).Lookup("widget.flow")
+	if !ok {
+		t.Fatal("no brief")
+	}
+	claim := mustRead(t, claimPath)
+	cited := string(claim) +
+		"sources:\n" +
+		"  - ref: 1\n    kind: internal\n    title: flow\n    path: briefs/widget/flow.md\n    sha256: " + b.LockHash + "\n"
+	if err := os.WriteFile(claimPath, []byte(cited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, "--config", cfgPath, "brief", "lock", "briefs/widget/flow.md", "--reason", "approved")
+	raw := mustRead(t, briefPath)
+	if err := os.WriteFile(briefPath, []byte(strings.Replace(string(raw), "One paragraph.", "One paragraph, rewritten.", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var preview policyLockPreviewData
+	decodeData(t, env, &preview)
+	if !preview.Blocked {
+		t.Fatal("a moved brief pin must refuse claim lock")
+	}
+	rawPreview, err := json.Marshal(env.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(rawPreview), "source-internal-drift") {
+		t.Fatalf("refusal must name the claim's pin lint: %s", rawPreview)
+	}
+}
+
 // TestBriefLockRefusesALinkedBriefAndWritesNothing: a brief file that is a
 // symlink is refused by discovery (brief-shape), so brief lock cannot find it
 // (brief_not_found) and neither the link's target nor the lock store is

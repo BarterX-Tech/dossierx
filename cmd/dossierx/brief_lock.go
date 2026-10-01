@@ -7,10 +7,12 @@
 // claim — that claim's ContentHash as the brief read it. The brief's own file
 // carries `status: locked`, exactly as a claim or the constitution does.
 //
-// THE APPROVAL CONTRACT. A brief never gates a claim: nothing here is read by
-// `claim lock`, a claim's review_pending, the claim graph or any claim hash.
-// The baselines point from the brief to the claims, and only a claim moving
-// makes the BRIEF review-pending (internal/briefs/lockstate.go).
+// THE APPROVAL CONTRACT. A brief's lock, review or findings never gate a
+// claim: nothing here is read by `claim lock`, a claim's review_pending, the
+// claim graph or any claim hash. A claim that cites a brief still owns that
+// pin (`source-internal-drift` on the claim). The baselines point from the
+// brief to the claims, and only a claim moving makes the BRIEF review-pending
+// (internal/briefs/lockstate.go).
 //
 // LOCKING. The claims sentinel first (every authored-file write takes it: the
 // brief file is authored content, and the comment ops on a brief take it too,

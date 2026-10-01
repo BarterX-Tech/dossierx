@@ -307,3 +307,55 @@ func TestRenderWith_ExplainingBriefShowsReviewPending(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderWith_ExplainingBriefUsesEvaluatedLockState is combo-audit C-B5:
+// a file that says status: locked is not a LOCKED badge unless the lock
+// store agrees. Edited-since-approval and unrecorded briefs must not
+// endorse a standing lock on the claim card.
+func TestRenderWith_ExplainingBriefUsesEvaluatedLockState(t *testing.T) {
+	approved := "---\nsummary: Then.\nstatus: locked\nrests_on: [widget.contract.a]\n---\n# Then\n"
+	current := "---\nsummary: Now.\nstatus: locked\nrests_on: [widget.contract.a]\n---\n# Now\n"
+	unrecorded := "---\nsummary: Never approved.\nstatus: locked\nrests_on: [widget.contract.a]\n---\n# Typed locked\n"
+	cfg, editedSet := briefRelationsProject(t, map[string]string{
+		"briefs/decisions/round-once.md": current,
+	})
+	was := briefs.FromFiles(cfg, []briefs.File{{Rel: "decisions/round-once.md", Regular: true, Data: []byte(approved)}}).Briefs[0]
+	store, err := lock.LoadStore(t.TempDir() + "/lock-store.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock.RecordBriefApproval(store, was.ID, lock.BriefRecord{
+		Path: was.Path, Hash: was.LockHash, At: "2026-09-18T10:00:00Z", Reason: "approved",
+		Approved: lock.BriefApproved{Summary: was.Summary, RestsOn: was.RestsOn, Markdown: was.Body},
+	})
+	cat := &catalog.Catalog{Claims: []model.Claim{{
+		ID: "widget.contract.a", Module: "widget", Facet: "contract", Layout: model.LayoutCard, Status: model.StatusLocked, Body: "a",
+	}}}
+	editedPage, err := renderBoundedAt(cat, cfg, Extras{Briefs: editedSet, BriefReview: briefs.Evaluate(editedSet, cat.Claims, store)}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editedRow := claimSection(t, editedPage, "widget.contract.a")
+	if strings.Contains(editedRow, `claim-relationship-badge--locked">LOCKED<`) {
+		t.Fatalf("an edited brief must not badge LOCKED:\n%s", editedRow)
+	}
+	if !strings.Contains(editedRow, `claim-relationship-badge--draft">DRAFT<`) {
+		t.Fatalf("an edited brief falls back to the draft badge, not a lock endorsement:\n%s", editedRow)
+	}
+
+	_, unrecSet := briefRelationsProject(t, map[string]string{
+		"briefs/decisions/typed-locked.md": unrecorded,
+	})
+	empty, err := lock.LoadStore(t.TempDir() + "/empty-lock-store.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrecPage, err := renderBoundedAt(cat, cfg, Extras{Briefs: unrecSet, BriefReview: briefs.Evaluate(unrecSet, cat.Claims, empty)}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrecRow := claimSection(t, unrecPage, "widget.contract.a")
+	if strings.Contains(unrecRow, `claim-relationship-badge--locked">LOCKED<`) {
+		t.Fatalf("an unrecorded brief must not badge LOCKED:\n%s", unrecRow)
+	}
+}

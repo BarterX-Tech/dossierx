@@ -205,6 +205,7 @@ func sourceDriftCheck(cfg *config.Config) func(string, model.Source) bool {
 // briefRow is the row fields a brief itself supplies, and its page id from
 // anchors (briefAnchors' map, the one the brief pages are given).
 func briefRow(b briefs.Brief, anchors map[string]string, review *briefs.Evaluation) components.BriefRow {
+	rv := briefReviewOf(review, b)
 	return components.BriefRow{
 		ID:            b.ID,
 		Anchor:        anchors[b.ID],
@@ -212,8 +213,8 @@ func briefRow(b briefs.Brief, anchors map[string]string, review *briefs.Evaluati
 		Folder:        b.Folder,
 		Slug:          b.Slug,
 		Title:         b.Title,
-		Locked:        b.Status == briefs.StatusLocked,
-		ReviewPending: briefReviewOf(review, b).ReviewPending,
+		Locked:        rv.LockState == briefs.LockLocked,
+		ReviewPending: rv.ReviewPending,
 	}
 }
 

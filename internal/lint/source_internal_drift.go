@@ -129,7 +129,7 @@ func (sourceInternalDriftLint) Check(claims []model.Claim, cfg *config.Config) [
 			}
 
 			full := filepath.Join(root, filepath.FromSlash(s.Path))
-			data, err := os.ReadFile(full)
+			data, err := readPinnedFile(cfg, root, full)
 			if err != nil {
 				add(fmt.Sprintf("cannot read path %q (relative to the project config's directory): %v; the citation names a file that is not there to be checked", s.Path, err))
 				continue
@@ -179,6 +179,22 @@ func (sourceInternalDriftLint) Check(claims []model.Claim, cfg *config.Config) [
 		}
 	}
 	return findings
+}
+
+// readPinnedFile returns the bytes this run is judging for an internal
+// source. When cfg.BriefTree names the config-relative path, those bytes
+// win — check --staged puts the index blob there so a staged brief rewrite
+// is hashed even if the worktree copy still matches the pin.
+func readPinnedFile(cfg *config.Config, root, full string) ([]byte, error) {
+	if cfg != nil && len(cfg.BriefTree) > 0 && root != "" {
+		rel, err := filepath.Rel(root, full)
+		if err == nil {
+			if data, ok := cfg.BriefTree[filepath.ToSlash(rel)]; ok {
+				return data, nil
+			}
+		}
+	}
+	return os.ReadFile(full)
 }
 
 // BriefContentHash returns the content hash of the brief file at rel

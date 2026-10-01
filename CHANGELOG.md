@@ -26,11 +26,12 @@ Re-lock each once, on the human's approval.
 
 A claim file carrying `tracks:`, or a config declaring `tracks:`, no longer
 loads either (`invalid_claim` / `invalid_config`; the hint opens with
-`tracks-retired`). Follow the upgrading skill's "tracks are gone" fold: keep a
-copy of the old track list and each owning claim for the later fold into
-feature briefs, then delete `tracks:` everywhere. `tracks` was signed only when
-present, so only a locked claim that carried it reports `lock-content-drift`;
-re-lock it in the same pass as the `migrated_from` re-lock.
+`tracks-retired`). Follow the upgrading skill's "tracks are gone" fold in the
+same pass: copy the old track list, fold each track into
+`briefs/features/<slug>.md` (cited claims in `rests_on`), then delete
+`tracks:` everywhere. `tracks` was signed only when present, so only a locked
+claim that carried it reports `lock-content-drift`; re-lock it in the same
+pass as the `migrated_from` re-lock.
 
 Re-running `dossierx skills export` also deletes the
 `docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
@@ -126,6 +127,13 @@ binary predates that guard.
   drives, feature briefs as composition that nothing reports as built, citing
   a brief from a claim only as evidence, and threads on a brief. The router's
   companion table gains its row.
+- **Claim fit in the existing skills** (NIT-190). `dossierx-claims` puts a
+  routing step in front of the three-question claims test (the test itself
+  is unchanged) and a table of homes: brief, delete, claim, reject.
+  `dossierx-modules` recovers a cap first by moving prose to a brief.
+  Discovery of briefs is `dossierx brief list`, never the isolation view.
+  `dossierx-upgrading` adds an advisory claim-fit triage after the load
+  folds. The track fold is the same pass as deleting `tracks:`.
 - **Config:** `briefs_dir` (default `briefs`) and the five cap overrides. A
   `briefs_dir` that is the config directory, sits inside a `.git` directory,
   or overlaps `claims_dir`, `project_claims_dir` or `build_dir`, is refused at
@@ -326,9 +334,12 @@ binary predates that guard.
   then an open thread on a brief holds `brief lock`. A comment verb
   given a brief's id answers `claim_not_found` with the path in its hint. `check` reports open brief
   threads as `open_brief_comments`.
-- **Nothing flows back to a claim.** A brief in any state never refuses
-  `claim lock`, never sets `review_pending` on a claim and never enters the
-  claim graph; no brief byte enters a claim hash. See
+- **Nothing flows back to a claim.** A brief's own lock, review or findings
+  never refuse `claim lock`, never set `review_pending` on a claim and never
+  enter the claim graph; no brief byte enters a claim hash. A claim that
+  cites a brief as an internal source still owns that pin: when the brief's
+  content hash no longer matches the recorded sha256, `source-internal-drift`
+  refuses that claim (including `claim lock`). See
   `docs/graph-safety/nit-192-briefs.md`.
 
 ### Added

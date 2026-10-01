@@ -108,6 +108,41 @@ func TestACitedBriefsPinIgnoresItsThreadsAndStatus(t *testing.T) {
 	bothModes(t, "after the note's status line changed", []string{"widget.contract.cites|sources[1]"})
 }
 
+// TestACitedBriefsStagedPinReadsTheIndex is the combo-audit ENG-1 pin: a
+// pre-commit hook that hashed the worktree would accept a staged brief
+// rewrite whenever the unstaged copy still matched the claim's sha256.
+func TestACitedBriefsStagedPinReadsTheIndex(t *testing.T) {
+	flow := filepath.Join("briefs", "widget", "flow.md")
+	repo := filepath.Join(t.TempDir(), "repo")
+	cfg := writeProjectFiles(t, repo, baseConfig, map[string]string{
+		"claims/overview.yaml":  draftClaim("widget.contract.overview"),
+		"briefs/widget/flow.md": pinnedBrief,
+		"notes/evidence.md":     pinnedNote,
+	})
+	b, ok := briefs.Load(cfg).Lookup("widget.flow")
+	if !ok {
+		t.Fatal("no brief")
+	}
+	noteSum := sha256.Sum256([]byte(pinnedNote))
+	writeFixtureFile(t, filepath.Join(repo, "claims", "cites.yaml"), citingClaim(b.LockHash, hex.EncodeToString(noteSum[:])))
+	gitRepo(t, repo)
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-qm", "fixture")
+
+	rewritten := strings.Replace(pinnedBrief, "Text.", "Text, rewritten.", 1)
+	writeFixtureFile(t, filepath.Join(repo, flow), rewritten)
+	git(t, repo, "add", flow)
+	writeFixtureFile(t, filepath.Join(repo, flow), pinnedBrief)
+
+	if got := sourceDrift(worktreeVerdict(t, cfg)); len(got) != 0 {
+		t.Fatalf("--validate must follow the worktree (still pinned): got %v", got)
+	}
+	got, _ := stagedVerdict(t, cfg)
+	if want := []string{"widget.contract.cites|sources[0]"}; strings.Join(sourceDrift(got), ",") != strings.Join(want, ",") {
+		t.Fatalf("--staged must hash the index blob: got %v, want %v", sourceDrift(got), want)
+	}
+}
+
 func readFixtureFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)

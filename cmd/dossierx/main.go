@@ -1353,6 +1353,23 @@ func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
 // shipped a refusal naming a verb the binary does not have, and a reader wedged
 // at exactly that moment got "unknown command" instead of a way out. See
 // TestLedgerHintsNameOnlyRealCommands.
+// commentLedgerDriftNamesABrief is true when a comment-ledger-drift finding
+// is keyed by a brief path (briefs/<folder>/<slug>.md), not a claim id. The
+// recovery must not name claim unlock: that leaves the forged brief thread
+// in place.
+func commentLedgerDriftNamesABrief(findings []lock.Finding) bool {
+	for _, f := range findings {
+		if f.Rule != lock.RuleCommentLedgerDrift {
+			continue
+		}
+		id := filepath.ToSlash(f.ClaimID)
+		if strings.Contains(id, "/") || strings.HasSuffix(id, ".md") {
+			return true
+		}
+	}
+	return false
+}
+
 func ledgerRecoveryHint(findings []lock.Finding) string {
 	rules := make(map[string]bool, len(findings))
 	for _, f := range findings {
@@ -1404,6 +1421,9 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 	case rules[check.RuleCommentDigestAbsent], rules[lock.RuleCommentDigestUnrecorded], rules[check.RuleCommentDigestMissing]:
 		return "the comment digest store is missing entries (or the whole file), so review history on those claims is checked against nothing. Restore " + config.CommentDigestDisplayPath + " from version control — or git add it, if this commit is the one that updated it — then run: dossierx check --validate. Do not run a comment op to re-create an entry: that records whatever the claim says now as the truth"
 	case rules[lock.RuleCommentLedgerDrift]:
+		if commentLedgerDriftNamesABrief(findings) {
+			return "a brief's comment block changed outside the engine. Restore the brief file from version control (and " + config.CommentDigestDisplayPath + ", if a commit carried them as a pair) and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx brief unlock <path> --reason \"...\", fix, then dossierx brief lock <path> --reason \"...\""
+		}
 		return "a locked claim's comment block changed outside the engine. Restore the claim file from version control and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx claim unlock <id> --reason \"...\", fix, then dossierx claim lock <id> --reason \"...\""
 	case rules[lock.RuleLockContentDrift], rules[lock.RuleLockLedgerMissing], rules[lock.RuleLockLedgerOrphan], rules[lock.RuleLockLedgerReleased]:
 		return "read data.ledger_findings: each names its claim and its own recovery. A locked claim that no longer matches its approval is restored from version control, or taken through dossierx claim unlock <id> --reason \"...\", fixed, then dossierx claim lock <id> --reason \"...\" — which is the only path that records a new approval"

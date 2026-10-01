@@ -276,9 +276,24 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 // but they are never lint.Registry's and never reach `claim lock`, which runs
 // lint.RunAll alone: brief state does not gate a claim.
 func lintFindings(claims []model.Claim, cfg *config.Config, in ledgerInputs) []lint.Finding {
+	cfg.BriefTree = briefTree(in.briefs)
 	findings := lint.RunAll(claims, cfg)
 	findings = append(findings, in.briefs.FindingsWith(claims, briefEvaluation(claims, in))...)
 	return withConstitutionFindings(in.constitution, findings)
+}
+
+// briefTree is each parsed brief's judged bytes, keyed the way an internal
+// source path is spelled (config-relative, slash form). source-internal-drift
+// reads this instead of the worktree so --staged hashes the index blob.
+func briefTree(set *briefs.Set) map[string][]byte {
+	if set == nil || len(set.Briefs) == 0 {
+		return nil
+	}
+	out := make(map[string][]byte, len(set.Briefs))
+	for _, b := range set.Briefs {
+		out[b.Path] = []byte(b.Content)
+	}
+	return out
 }
 
 // briefEvaluation reads every brief's lock lifecycle (NIT-205) against the

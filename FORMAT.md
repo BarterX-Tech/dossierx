@@ -1643,9 +1643,12 @@ shows each changed claim's wording at the baseline and now;
 (refused `comment_open`, `not_review_pending`, and for a brief edited since
 approval). The brief's own approval is untouched by a reaudit.
 
-**Nothing flows back.** A brief in any state never refuses `claim lock`, never
-sets `review_pending` on a claim and never enters the claim graph, and no brief
-hash enters any claim's hashes.
+**Nothing flows back.** A brief's own lock, review or findings never refuse
+`claim lock`, never set `review_pending` on a claim and never enter the claim
+graph, and no brief hash enters any claim's hashes. A claim that cites a brief
+as an internal source still owns that pin: if the brief's content hash no
+longer matches the recorded sha256, `source-internal-drift` refuses that
+claim (including `claim lock`).
 
 A comment thread anchors on a brief's **path** the way it anchors on a claim id:
 `comment add|reply|list briefs/<folder>/<slug>.md` (a brief's id is refused as

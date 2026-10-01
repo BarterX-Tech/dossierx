@@ -21,7 +21,10 @@ description: >-
 Read **[`dossierx`](../dossierx/SKILL.md)** first for the envelope, the exit codes and the
 `error.code` recovery table, and **[`dossierx-claims`](../dossierx-claims/SKILL.md)** for what a
 claim is. A brief is a **document**, not a claim: the human reads it in one sitting, it may rest
-on claims, and it gates no claim work in any state.
+on claims, and its own lock, review or findings never gate claim locking. A
+claim that cites a brief as an internal source still owns that pin:
+`source-internal-drift` refuses that claim when the brief's content hash
+moves.
 
 ## The contract, in one table
 
