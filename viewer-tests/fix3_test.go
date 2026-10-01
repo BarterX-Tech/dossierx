@@ -52,7 +52,7 @@ func evalString(t *testing.T, ctx context.Context, expr string) string {
 func serveOpenTabWithStop(t *testing.T, p *project) (ctx context.Context, base string, stop func()) {
 	t.Helper()
 	base, stop = p.serve()
-	ctx = browserContext(t)
+	ctx = withInstantScroll(t, browserContext(t)) // see newLiveTab
 	runCDP(t, ctx,
 		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
