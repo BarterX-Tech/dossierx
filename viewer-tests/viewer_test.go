@@ -139,13 +139,19 @@ func waitVisible(t *testing.T, ctx context.Context, sel string) {
 // opens on Home without a hash), and waits until the reachability probe has
 // mounted the write controls (body.comments-live). The chip is present and
 // visible on return.
+//
+// The tab scrolls instantly (withInstantScroll). Landing on "#widget" and every
+// later module switch otherwise smooth-scroll the window (~25-50px at the
+// default headless viewport over ~60ms); a chromedp.Click reads its target's
+// box in one CDP round trip and presses in the next, so on a loaded runner the
+// press lands where the control was and the test reads the previous state.
 func newLiveTab(t *testing.T, p *project) context.Context {
 	t.Helper()
 	// ensureServe, not serve: a test may already have started the server to
 	// reach the HTTP API (resolveViaAPI) before opening a tab, and a second
 	// serve process on the same project directory would race the first.
 	base := p.ensureServe()
-	ctx := browserContext(t)
+	ctx := withInstantScroll(t, browserContext(t))
 	runCDP(t, ctx,
 		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
@@ -217,7 +223,7 @@ func withInstantScroll(t *testing.T, ctx context.Context) context.Context {
 func newLiveTabWithStatus(t *testing.T, p *project) context.Context {
 	t.Helper()
 	base := p.ensureServe()
-	ctx := browserContext(t)
+	ctx := withInstantScroll(t, browserContext(t))
 	runCDP(t, ctx, chromedp.ActionFunc(func(c context.Context) error {
 		_, err := page.AddScriptToEvaluateOnNewDocument(liveStatusProbeScript).Do(c)
 		return err
@@ -269,7 +275,7 @@ func TestFileURLStaysReadOnly(t *testing.T) {
 	p.seedComment("human", "a baked thread")
 	url := p.renderStatic()
 
-	ctx := browserContext(t)
+	ctx := withInstantScroll(t, browserContext(t))
 	runCDP(t, ctx,
 		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
