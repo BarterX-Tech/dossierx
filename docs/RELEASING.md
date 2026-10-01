@@ -160,7 +160,8 @@ The checklist below asks for each one.
 
       As of v0.7.0 that is FOUR pins across THREE files: `README.md` (the `go
       install` line and the `install-git-hook.sh` raw URL),
-      `skills/dossierx/SKILL.md` (the same raw URL), and
+      `skills/dossierx/SKILL.md` (the same raw-URL prefix, counted once though
+      it appears on two lines: the hook installer and the CI template), and
       `scripts/ci/dossierx-check.yml` (the `go install` line, which is a template
       users copy into their own repository, so a stale pin there ships a stale
       binary into somebody else's merge gate).

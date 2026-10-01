@@ -32,7 +32,12 @@ and approves the upstream change) and those with an open thread (they cannot
 re-lock until the human resolves it). Then re-lock each once, on the human's
 approval. `claim recover-approved-content` compares the new hash, so it no
 longer recovers an approval recorded before this release; run it with v0.7.21
-first if you need it.
+first if you need it. The `dossierx-upgrading` skill orders this as one pass:
+settle the pending reviews and open threads, recover and unlock on the
+v0.7.21 binary, then upgrade every binary, fold, and re-lock once. An agent
+that has already upgraded puts v0.7.21 back for those first steps: on this
+release every locked claim reads `review_pending` (`approval_content_drift`)
+and `claim reaudit` refuses with `integrity_failed`.
 
 A claim file carrying `tracks:`, or a config declaring `tracks:`, no longer
 loads either (`invalid_claim` / `invalid_config`; the hint opens with

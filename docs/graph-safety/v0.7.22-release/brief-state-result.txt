@@ -1,0 +1,16 @@
+list.json identical (117356 B)
+manifest.json identical (26863 B)
+catalog.json identical (39443 B)
+graph.json identical (77662 B)
+viewer-claims.html DIFF
+claimfiles.txt identical (8894 B)
+--- A (with briefs)
+check rc=1
+validate rc=1
+check error: integrity_failed ledger: [('brief-content-drift', 'briefs/graph/reading-the-graph.md'), ('lock-content-drift', 'engine.contract.build-is-pure')] lint: [('brief-dependency-drift', 'briefs/features/open-the-graph.md'), ('brief-dependency-drift', 'briefs/graph/reading-the-graph.md'), ('comments-unresolved', 'engine.internals.lint-runs-before-catalog'), ('orphan', 'engine.contract.facts-not-verdicts'), ('orphan', 'engine.contract.single-source-of-truth'), ('orphan', 'engine.internals.no-code-nodes'), ('orphan', 'telemetry.internals.counters-are-local'), ('orphan', 'viewer.contract.facts-not-verdicts'), ('orphan', 'viewer.internals.colour-is-not-the-only-channel')]
+validate error: integrity_failed ledger: [('brief-content-drift', 'briefs/graph/reading-the-graph.md'), ('lock-content-drift', 'engine.contract.build-is-pure')] lint: [('brief-dependency-drift', 'briefs/features/open-the-graph.md'), ('brief-dependency-drift', 'briefs/graph/reading-the-graph.md'), ('comments-unresolved', 'engine.internals.lint-runs-before-catalog'), ('orphan', 'engine.contract.facts-not-verdicts'), ('orphan', 'engine.contract.single-source-of-truth'), ('orphan', 'engine.internals.no-code-nodes'), ('orphan', 'telemetry.internals.counters-are-local'), ('orphan', 'viewer.contract.facts-not-verdicts'), ('orphan', 'viewer.internals.colour-is-not-the-only-channel')]
+--- B (no briefs)
+check rc=1
+validate rc=1
+check error: integrity_failed ledger: [('lock-content-drift', 'engine.contract.build-is-pure')] lint: [('comments-unresolved', 'engine.internals.lint-runs-before-catalog'), ('orphan', 'engine.contract.facts-not-verdicts'), ('orphan', 'engine.contract.single-source-of-truth'), ('orphan', 'engine.internals.no-code-nodes'), ('orphan', 'telemetry.internals.counters-are-local'), ('orphan', 'viewer.contract.facts-not-verdicts'), ('orphan', 'viewer.internals.colour-is-not-the-only-channel')]
+validate error: integrity_failed ledger: [('lock-content-drift', 'engine.contract.build-is-pure')] lint: [('comments-unresolved', 'engine.internals.lint-runs-before-catalog'), ('orphan', 'engine.contract.facts-not-verdicts'), ('orphan', 'engine.contract.single-source-of-truth'), ('orphan', 'engine.internals.no-code-nodes'), ('orphan', 'telemetry.internals.counters-are-local'), ('orphan', 'viewer.contract.facts-not-verdicts'), ('orphan', 'viewer.internals.colour-is-not-the-only-channel')]

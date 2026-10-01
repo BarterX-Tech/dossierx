@@ -1,0 +1,73 @@
+PASS dx-base claim lock widget.contract.overview --dry-run gives a proposal
+PASS dx-base claim lock widget.contract.overview rc=0
+PASS dx-base claim lock widget.internals.fields --dry-run gives a proposal
+PASS dx-base claim lock widget.internals.fields rc=0
+PASS dx-base claim lock widget.contract.c --dry-run gives a proposal
+PASS dx-base claim lock widget.contract.c rc=0
+PASS v0.7.21 store is version 3 with no briefs key
+PASS v0.7.21 ledger holds the three approvals
+PASS v0.7.21 ledger snapshot carries the retired MigratedFrom key
+PASS unfolded corpus: check --validate refuses invalid_claim naming migrated_from
+PASS unfolded refusal left the store byte-identical
+PASS folded: ledger findings are exactly lock-content-drift x3 (got [('lock-content-drift', 'widget.contract.c'), ('lock-content-drift', 'widget.contract.overview'), ('lock-content-drift', 'widget.internals.fields')])
+PASS no lock-ledger-unreadable: the v0.7.21 snapshots decode
+PASS candidate claim show widget.contract.overview rc=0
+PASS widget.contract.overview: local_approved false with approval_content_drift
+PASS widget.contract.overview: no dependency baseline moved (ContentHash unchanged)
+PASS candidate claim show widget.internals.fields rc=0
+PASS widget.internals.fields: local_approved false with approval_content_drift
+PASS widget.internals.fields: no dependency baseline moved (ContentHash unchanged)
+PASS candidate claim show widget.contract.c rc=0
+PASS widget.contract.c: local_approved false with approval_content_drift
+PASS widget.contract.c: no dependency baseline moved (ContentHash unchanged)
+PASS check --validate, claim list and claim show x3 on the folded corpus left the store byte-identical
+PASS candidate claim unlock widget.contract.overview rc=0
+PASS candidate claim unlock widget.internals.fields rc=0
+PASS candidate claim unlock widget.contract.c rc=0
+PASS dx-cand claim lock widget.contract.overview --dry-run gives a proposal
+PASS dx-cand claim lock widget.contract.overview rc=0
+PASS dx-cand claim lock widget.internals.fields --dry-run gives a proposal
+PASS dx-cand claim lock widget.internals.fields rc=0
+PASS dx-cand claim lock widget.contract.c --dry-run gives a proposal
+PASS dx-cand claim lock widget.contract.c rc=0
+PASS after re-lock: plain check rc=0
+PASS candidate claim show widget.contract.overview rc=0
+PASS widget.contract.overview: ready after re-lock
+PASS candidate claim show widget.internals.fields rc=0
+PASS widget.internals.fields: ready after re-lock
+PASS candidate claim show widget.contract.c rc=0
+PASS widget.contract.c: ready after re-lock
+PASS a store with no brief record stays version 3
+PASS candidate brief lock rc=0
+PASS first brief record raises the store to version 4
+PASS check rc=0 with the locked brief
+PASS catalog.json (readiness included) is identical with and without the locked brief
+PASS unlock overview
+PASS dx-cand claim lock widget.contract.overview --dry-run gives a proposal
+PASS dx-cand claim lock widget.contract.overview rc=0
+PASS candidate claim show widget.internals.fields rc=0
+PASS widget.internals.fields: review_pending via direct_dependency_change (claim propagation unchanged)
+PASS candidate claim show widget.contract.c rc=0
+PASS widget.contract.c: review_pending via direct_dependency_change (claim propagation unchanged)
+PASS brief review_pending with exactly the moved claim in changed_claims
+PASS check reports brief-dependency-drift
+PASS candidate claim show widget.contract.overview rc=0
+PASS candidate claim show widget.internals.fields rc=0
+PASS candidate claim show widget.contract.c rc=0
+PASS candidate claim show widget.contract.overview rc=0
+PASS candidate claim show widget.internals.fields rc=0
+PASS candidate claim show widget.contract.c rc=0
+PASS claim show readiness of all three claims identical with and without the brief
+PASS brief reaudit --confirm rc=0
+PASS reaudit clears the brief only
+PASS candidate claim show widget.internals.fields rc=0
+PASS widget.internals.fields: still review_pending (the brief's reaudit clears no claim cause)
+PASS candidate claim show widget.contract.c rc=0
+PASS widget.contract.c: still review_pending (the brief's reaudit clears no claim cause)
+PASS version-5 store: check names lock-ledger-unreadable with an upgrade hint
+PASS version-5 store: claim unlock refused store_too_new
+PASS candidate claim show widget.contract.overview rc=0
+PASS version-5 store: claim show fails closed (approval_unknown, not ready)
+PASS version-5 store: brief unlock refused
+PASS version-5 store left byte-identical by every refused command
+carry.py: 72 checks passed

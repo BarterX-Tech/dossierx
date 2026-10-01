@@ -234,6 +234,9 @@ triggers stands, and clears only when all are gone (or on `unlock`):
 | shipped code no longer matches the claim | `dossierx claim flag` (body-only claims) | the same confirmed reaudit |
 | an open comment thread on the claim | anyone commenting (`dossierx-comments`) | the **human** resolving it in the viewer |
 
+A claim can also be `review_pending` only because something upstream is: its `review_causes[]` entries
+carry `direct: false` (`upstream_dependency_review`). Reaudit the root, the claim whose cause has
+`direct: true`; the inherited flag clears with it, or when the upstream thread is resolved.
 `claim reaudit` refuses a claim that is not locked and `review_pending` (`not_review_pending`), and
 one whose only trigger is an open thread (`review_pending`, exit 2) — there is no diff to confirm. Its dependency-drift
 proposal is a no-change stub, and it rewrites `body` and nothing else. Any other change — new
