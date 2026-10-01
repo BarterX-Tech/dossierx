@@ -273,7 +273,10 @@ binary predates that guard.
   before `export-to-csv.md`) and titled, each with one
   mark for its brief's own lock and review state (NIT-205): edited since
   approval, review pending, an open thread, then a padlock for locked or a
-  hollow dot for draft;
+  hollow dot for draft. A Briefs tree row now reads the same mark from the
+  same state, so an edited or review-pending brief shows it there too, and a
+  file that says `status: locked` with no approval on record takes the draft
+  mark;
   the Briefs tree still leaves `features/` out, so a feature is listed once.
   A feature's page is the brief page with a `FEATURE · path` kicker, a meta
   line counting what it rests on ("Rests on 6 claims in Expenses, Splitting
@@ -291,7 +294,8 @@ binary predates that guard.
   Needs you ("1 claim this feature rests on has changed since approval"), and
   `brief-rests-on-duplicate` under Check, naming the other brief and opening
   it ("Rests on the same claims as Export to CSV"). A feature's page says
-  "feature" in its strip, Issues screen and Threads copy, and a feature that
+  "feature" in its strip, Issues screen and Threads copy, and its page-foot
+  button reads "Comment on this feature"; and a feature that
   rests on nothing reads "Rests on no claims yet" at every width. The phone
   drawer no longer takes focus back from a control focused just after it
   closes. A

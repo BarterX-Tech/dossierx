@@ -1723,10 +1723,13 @@ review-pending, never the reverse.
 A project that holds a brief outside `features/` gets a **Briefs** group in
 the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
 stays as written), each opening to its briefs. `features/` is left out of this
-tree: its briefs are features. Each brief row carries one state mark — a
-padlock for `locked`, a hollow dot for `draft`, and a blue dot for a brief with
-an open comment thread, which outranks both — and a legend above the theme
-control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
+tree: its briefs are features. Each brief row carries one state mark, read
+from the brief's own lock and review state (its `lock_state`,
+`review_pending` and `open_threads`) in the legend's order: edited since
+approval, then review pending, then a blue dot for an open comment thread,
+then a hollow dot for `draft` or a padlock for `locked`. A file that says
+`status: locked` with no approval on record (`brief-unrecorded`) takes the
+draft mark. A legend above the theme control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
 second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
 `BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
 words and images against their caps, the body, and the claims it **rests on**
@@ -1759,18 +1762,15 @@ JSON block); a project with no brief has none of this, and its search reads
 A brief in `features/` is a **feature**. Features have their own **Features**
 entry in the sidebar, between Modules and Briefs: one row per feature in
 order of file name without `.md` (so `export.md` comes before
-`export-to-csv.md`), labelled with its title, each carrying one state mark in the
-same slot a brief row uses. The mark is the brief's own lock and review state
-(its `lock_state`, `review_pending` and `open_threads`), in the legend's order:
-edited since approval, then review pending, then an open thread, then a
-padlock for locked or a hollow dot for draft. A file that says `status:
-locked` with no approval on record (`brief-unrecorded`) takes the draft mark.
+`export-to-csv.md`), labelled with its title, each carrying the same state
+mark a brief row carries, in the same slot.
 A feature's page is the brief page with these differences: the kicker is `FEATURE · path`; the meta line reads
 "Rests on N claims in <modules>", then "all locked" when every `rests_on` id
 names a locked claim and "M of N locked" otherwise (a phone shows "N claims,
 all locked"); a feature that rests on nothing reads "Rests on no claims yet"
 at every width, and so does its Made of card; the page speaks of itself as a
-feature (its status strip, Issues screen and Threads copy); and a **Made of** list takes the place of Rests on — the
+feature (its status strip, Issues screen, Threads copy and its page-foot
+"Comment on this feature"); and a **Made of** list takes the place of Rests on — the
 `rests_on` claims grouped by module, each group under its module's
 title-cased name (a project claim under "Project"; two modules whose names
 title-case alike stay two groups), modules in the order their first claim appears and
