@@ -555,7 +555,7 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:afec4086a3414d394f1ff2d8e3efe7ed17fc43f710fad692cf7670c8655e7cb3",
+  "render_fingerprint": "sha256:c0f6ed9be9a2b93e747e3ae36f9e3f8f9ec03419c41c2523a17085ccf9d5a379",
   "behaviour_fingerprint": {
     "cmd/dossierx": "sha256:4a2e9d96c2fda3092583fa51fbca61a765236ffe51e6846d91ebc1c3b66f6761",
     "internal/approvaledit": "sha256:c4fbe1de3d6094eadbe58d37a539db0eb8f3e3dcfd643dea42694fc964cbbf57",
@@ -585,15 +585,15 @@
     "internal/readiness": "sha256:cdb64ad140edbcbfd5b35808b395f041264e0ee0d27d09a9c0301ebb76b96255",
     "internal/reaudit": "sha256:ad8a5525510b78d79bdfa9e9d4a3097e5f5c91371f75df98af891911268d2c57",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:08e2c0edde2e964a8acc6780c4871a41ec429e839c1d6e99aaddd93f16e60fab",
-    "internal/render/components": "sha256:b4c63547d8926ce1d6a24155009d12e588d74c6d5e02c4e69e038b9721ea1f54",
+    "internal/render": "sha256:ceaad3b1ba71ef7734a41f4d9099f7800a5c7fc552b9ce577eb58d609b12b014",
+    "internal/render/components": "sha256:ed1937686c6fb2f95a45fc3bd064c5df2f506c5cee2cd7c62a7402a069b0532a",
     "internal/render/markdown": "sha256:28114410fe8fd4d85f8abf01e720d5449bfc2d08f68cd1f462cd2be13cc0bc17",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
-    "internal/serve": "sha256:cb12cbe4e8aeeee12f23943f33fff543890f0705d6842d50d5365876ac39a86d",
+    "internal/serve": "sha256:7688691774545eff886e832d5bdc8b762bf8ed0610c13d8bebe5dd19de4d8d5a",
     "internal/textdiff": "sha256:ac0dbdbd151bb7bacccc189a43126e2206e6c3bc25661a4d879aec31c73c5162",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
     "internal/visibility": "sha256:721ff98900b33d22b5ce1a7c2f80d8a3ba1221d46e69b7eb064c1873dc86129b",
-    "skills": "sha256:8b8c73a53d653979a34301897b9cce0862f9ec27e5a3fb4a318bc110f38a0e02"
+    "skills": "sha256:fc349ad19cb61b6b94f1ce5930a4eaad75def2a1df00b213d738fa5b05a31a80"
   },
   "envelope": {
     "keys": [
