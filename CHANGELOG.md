@@ -22,16 +22,24 @@ fold: a note naming a file that still exists becomes an internal `sources`
 entry (path and sha256, cited from the body as `[n]`); any other note is
 deleted. Every locked claim then reports `lock-content-drift`, note or not:
 the lock hash signed the field even when it was empty, so every hash moved.
-Re-lock each once, on the human's approval.
+Upgrade every binary that judges the project (the pre-commit hook's, CI's pin
+and each collaborator's) before the first re-lock lands: a v0.7.21 binary
+reports every re-locked claim as `lock-content-drift`. Before unlocking,
+settle the locked claims that are `review_pending` (a re-lock clears the flag
+and approves the upstream change) and those with an open thread (they cannot
+re-lock until the human resolves it). Then re-lock each once, on the human's
+approval. `claim recover-approved-content` compares the new hash, so it no
+longer recovers an approval recorded before this release; run it with v0.7.21
+first if you need it.
 
 A claim file carrying `tracks:`, or a config declaring `tracks:`, no longer
 loads either (`invalid_claim` / `invalid_config`; the hint opens with
 `tracks-retired`). Follow the upgrading skill's "tracks are gone" fold in the
 same pass: copy the old track list, fold each track into
 `briefs/features/<slug>.md` (cited claims in `rests_on`), then delete
-`tracks:` everywhere. `tracks` was signed only when present, so only a locked
-claim that carried it reports `lock-content-drift`; re-lock it in the same
-pass as the `migrated_from` re-lock.
+`tracks:` everywhere. Removing `tracks` adds no drift beyond the
+`migrated_from` re-lock, so re-lock in that same pass and each claim
+re-locks once.
 
 Re-running `dossierx skills export` also deletes the
 `docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
@@ -53,7 +61,7 @@ Locking a brief moves `build/ledger/lock-store.json` to `version` `4` (it gains
 a `briefs` map); a store that never holds a brief record stays at `3`, byte for
 byte, and a v0.7.21 store loads unchanged. Upgrade every binary that touches
 the project — the pre-commit hook's, CI's and each collaborator's — before the
-first `brief lock`. Measured against a v0.7.21 binary: its `check --staged`
+first re-lock or `brief lock`. Measured against a v0.7.21 binary: its `check --staged`
 does **not** refuse a commit carrying the version-4 store (it reads the store
 leniently and knows nothing of briefs, so it judges no brief at all), and a
 v0.7.21 write to the store (measured: `claim lock`, `constitution lock`)

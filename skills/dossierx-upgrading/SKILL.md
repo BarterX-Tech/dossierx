@@ -7,6 +7,8 @@ description: >-
   migrated_from fails to load, tracks-retired names a claim or config still
   carrying tracks, a config setting doctrine_facet fails, every verb refuses
   layout_legacy, check reports lock-ledger-pre-ledger / pre_ledger_unadopted,
+  every locked claim reports lock-content-drift right after an upgrade with
+  no edit,
   or an old corpus lacks summaries, manifests or code links — and whenever
   you run dossierx claim recover-approved-content or re-export the skills.
   Covers the v0.7.20 → v0.7.21 pass in order, the v0.7.22 migrated_from and
@@ -178,9 +180,24 @@ history; what backs it is `sources`. Fold each note by hand:
    (`source-ref-unused` warns until it is cited).
 2. **Anything else** (free text, a file since deleted, an old claim id): delete the line.
 3. `dossierx check --validate` until clean apart from `lock-content-drift`. **Every** locked claim
-   reports it, note or not: the field was signed even when empty, so every hash moved. Re-lock each
-   once, on the human's yes: `claim unlock` → `claim lock --dry-run` →
+   reports it, note or not: the field was signed even when empty, so every hash moved. Before the
+   first re-lock lands, upgrade every binary that judges the project — the pre-commit hook's, CI's
+   pin and each collaborator's. A v0.7.21 binary reports every re-locked claim as
+   `lock-content-drift`, and re-locking there signs the old hash back. Before unlocking, list two
+   kinds of locked claim and settle them first, because the bulk re-lock would otherwise erase
+   them silently:
+   - **`review_pending: true`** (`dossierx claim list` shows it): a lock refreshes the baselines and
+     clears the flag, approving an upstream change nobody reviewed. Show the human each claim's
+     cause (`claim show <id>`) and take it through `claim reaudit` or a real review, not the batch.
+   - **an open thread** (`open_threads` above 0): `claim lock` refuses it (`unresolved_comments`), so
+     after the unlock it stays draft and its dependents show `dependency_unapproved`. The human
+     resolves the thread in the viewer before you unlock.
+
+   Then re-lock each once, on the human's yes: `claim unlock` → `claim lock --dry-run` →
    `claim lock --reason "…" --proposal "<snapshot>"`, folding the note edit into the same re-lock.
+   `dossierx claim recover-approved-content` compares the new hash, so it can no longer recover an
+   approval recorded before this release: run it with the v0.7.21 binary before upgrading if you
+   need it.
 
 ## Claim fit — an advisory triage, never a gate
 
@@ -241,8 +258,9 @@ longer exists. A feature is a brief in `briefs/features/` that lists the claims 
 4. Propose the batch in one thread per module, as in the claim-fit triage above (its `--reason`
    rule and its thread-deletion refusal apply). On the human's Resolve, unlock each deleted claim,
    then lock each feature brief in the same pass as the re-lock: `dossierx brief lock
-   briefs/features/<slug>.md --dry-run`, show it, then `--reason "…"`. Only a locked claim that
-   carried `tracks:` reports `lock-content-drift`; re-lock it there too, so each claim re-locks once.
+   briefs/features/<slug>.md --dry-run`, show it, then `--reason "…"`. Removing `tracks:` adds no drift beyond the
+   `migrated_from` re-lock above (every locked claim drifts once either way); re-lock in the same
+   pass, so each claim re-locks once.
 
 ## New requirements a v0.7.20 corpus does not meet
 
