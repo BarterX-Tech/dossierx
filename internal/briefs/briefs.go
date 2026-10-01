@@ -237,7 +237,19 @@ type File struct {
 // stricter mode here: it refuses a gitlink (160000) entry under briefs_dir, so
 // a submodule or embedded repository can never be committed as a brief folder
 // (see stagedBriefs in internal/check).
-func Load(cfg *config.Config) *Set {
+func Load(cfg *config.Config) *Set { return load(cfg, true) }
+
+// LoadListing is Load without reading a byte of any image: the same walk and
+// the same refusals, every brief parsed, every image Present or not, but no
+// Digest, and an image's ContentBytes is its file size. It is for a caller
+// that needs only which images the briefs reference — serve's brief-asset
+// route, which answers one image per request and must not hash every image
+// in the tree to do it. Its findings are not a verdict (an .svg's cap is
+// counted on the file's size, and an unreadable image is not noticed), so
+// nothing that judges or locks a brief reads it.
+func LoadListing(cfg *config.Config) *Set { return load(cfg, false) }
+
+func load(cfg *config.Config, digests bool) *Set {
 	dir := cfg.BriefsDirPath()
 	info, err := os.Lstat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -318,7 +330,7 @@ func Load(cfg *config.Config) *Set {
 				return skip(p, d, readErr)
 			}
 			f.Data = raw
-		} else if markdown.IsDocumentImageExt(path.Ext(f.Rel)) {
+		} else if digests && markdown.IsDocumentImageExt(path.Ext(f.Rel)) {
 			// An image is signed by a brief's lock (its sha256 on the
 			// record), so it is hashed here — streamed, never held.
 			digest, n, hashErr := fileDigest(p, textImage(f.Rel))

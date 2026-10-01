@@ -229,6 +229,45 @@ func TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree(t *testing.T) {
 	}
 }
 
+// TestLoadListing_ReadsNoImageBytes pins what serve's brief-asset route relies
+// on: LoadListing finds the briefs and the images they reference without
+// opening an image, so serving one image no longer hashes every image in the
+// tree. An image nobody can read proves it: Load opens it to hash it and
+// reports it, LoadListing never opens it and lists it present.
+func TestLoadListing_ReadsNoImageBytes(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions enforced: an unreadable file is still readable on Windows and to root")
+	}
+	dir := t.TempDir()
+	folder := filepath.Join(dir, "briefs", "x")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"flow.md": okFront + "![a](a.png)\n", "a.png": "png"} {
+		if err := os.WriteFile(filepath.Join(folder, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	img := filepath.Join(folder, "a.png")
+	if err := os.Chmod(img, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(img, 0o644) }) //nolint:errcheck // best-effort restore for TempDir cleanup
+	cfg := testConfig(t, dir, "")
+
+	// Load: the image could not be read, so the brief's reference is missing.
+	if got := rulesAndPaths(Load(cfg).TreeFindings()); !reflect.DeepEqual(got, []string{"brief-shape briefs/x/a.png", "brief-shape briefs/x/flow.md"}) {
+		t.Fatalf("fixture: Load must open the image and fail to, got %v", got)
+	}
+	listing := LoadListing(cfg)
+	if got := listing.TreeFindings(); len(got) != 0 {
+		t.Fatalf("LoadListing must not open an image, got %v", rulesAndPaths(got))
+	}
+	if len(listing.Briefs) != 1 || !reflect.DeepEqual(listing.Briefs[0].Images, []Image{{Name: "a.png", Bytes: 3, Present: true, ContentBytes: 3}}) {
+		t.Fatalf("LoadListing must list the referenced image present, with no digest: %+v", listing.Briefs)
+	}
+}
+
 // TestFromFiles_ShapeRefusals is the brief-shape rule's whole refusal list, one
 // tree per case, each asserting the exact rule and path the finding names.
 func TestFromFiles_ShapeRefusals(t *testing.T) {
