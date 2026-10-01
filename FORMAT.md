@@ -962,7 +962,9 @@ too (`"briefs"`, see "Briefs"), and the store's `version` is `4`; a store that
 has never held a brief record stays at `version` `3`, byte for byte. A lock
 store or comment digest store whose `version` is above what this dossierx
 knows is refused rather than read — a command answers `store_too_new`, and
-`check` reports `lock-ledger-unreadable` naming the upgrade — because reading
+`check` reports `lock-ledger-unreadable` naming the upgrade, with an envelope
+hint that says upgrade, not restore (a lock store too new is the only ledger
+finding that run reports, since every other rule reads it) — because reading
 it would work and the next write would drop whatever this binary does not know,
 which is exactly how a v0.7.21 write drops the `briefs` map.
 
@@ -1609,7 +1611,11 @@ only on their explicit approval, and every cap finding says so.
   markdown's alone, so that pin is unaffected by the images;
 - the **sha256 of every image** the brief references, beside the hash: an
   image whose bytes change, or a change to the set referenced, is
-  `brief-content-drift` naming the image;
+  `brief-content-drift` naming the image. An `.svg` is hashed, and counted
+  against `max_brief_image_bytes`, with CRLF normalized to LF (the other five
+  formats byte for byte), so a `core.autocrlf` checkout signs the image its
+  index holds; Git LFS pointer images are not supported, since the index
+  holds the pointer and not the image;
 - the human's `--reason`, the time and the actor;
 - the **approved text** (summary, `rests_on`, markdown), so an edited brief can
   be shown beside what was approved;

@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -56,6 +57,25 @@ import (
 // store, which makes lock.Audit report every locked claim as unapproved. The
 // gate fails closed, loudly, and says which of the two stores failed.
 const RuleLedgerUnreadable = "lock-ledger-unreadable"
+
+// storeTooNewLead opens the lock-ledger-unreadable message for a store written
+// by a newer dossierx (lock.ErrStoreTooNew, digest.ErrStoreTooNew), whose
+// recovery is the opposite of a corrupt store's: upgrade the binary, never
+// restore the store. StoreTooNew keys on it, so the envelope hint can say so
+// without a second rule name.
+const storeTooNewLead = "a ledger store was written by a newer dossierx than this one"
+
+// StoreTooNew reports whether findings hold the lock-ledger-unreadable finding
+// for a store written by a newer dossierx — the store_too_new condition as
+// check reports it — so the caller's hint says upgrade, not restore.
+func StoreTooNew(findings []lock.Finding) bool {
+	for _, f := range findings {
+		if f.Rule == RuleLedgerUnreadable && strings.HasPrefix(f.Message, storeTooNewLead) {
+			return true
+		}
+	}
+	return false
+}
 
 // RuleStoreGitignored is the project-scoped finding for an engine-written path
 // under the build directory that .gitignore matches and the index does not
@@ -444,7 +464,16 @@ func withConstitutionFindings(v constitution.Verdict, findings []lint.Finding) [
 func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	var findings []lock.Finding
 
-	if in.storeErr != nil {
+	lockTooNew := errors.Is(in.storeErr, lock.ErrStoreTooNew)
+	switch {
+	case lockTooNew:
+		findings = append(findings, lock.Finding{
+			Rule: RuleLedgerUnreadable,
+			Message: fmt.Sprintf(
+				"%s: %v. No other ledger rule is evaluated on this run, because every one of them reads that store. The store is not damaged: do not restore, edit or re-lock it.",
+				storeTooNewLead, in.storeErr),
+		})
+	case in.storeErr != nil:
 		findings = append(findings, lock.Finding{
 			Rule: RuleLedgerUnreadable,
 			Message: fmt.Sprintf(
@@ -452,13 +481,29 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 				in.storeErr),
 		})
 	}
-	if in.digestErr != nil {
+	switch {
+	case errors.Is(in.digestErr, digest.ErrStoreTooNew):
+		findings = append(findings, lock.Finding{
+			Rule: RuleLedgerUnreadable,
+			Message: fmt.Sprintf(
+				"%s: %v. Comment-thread drift is NOT being checked on this run. The store is not damaged: do not restore or edit it.",
+				storeTooNewLead, in.digestErr),
+		})
+	case in.digestErr != nil:
 		findings = append(findings, lock.Finding{
 			Rule: RuleLedgerUnreadable,
 			Message: fmt.Sprintf(
 				"the comment digest store could not be read: %v. Comment-thread drift is NOT being checked on this run — restore the file from version control.",
 				in.digestErr),
 		})
+	}
+	if lockTooNew {
+		// A lock store this binary refuses to read is not missing evidence:
+		// it is evidence a newer binary can read. Judging the claims against a
+		// nil store would report every locked claim and brief as unapproved —
+		// statements about approvals nobody here read — and bury the one
+		// finding whose recovery is right. The gate still refuses.
+		return findings
 	}
 
 	if f, ok := commentDigestAbsent(claims, in); ok {

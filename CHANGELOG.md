@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.22] - 2026-10-01
+
 **Surface** (net, against v0.7.21): 26 leaves under 9 nouns (was 24 under
 9: `track` and its three leaves out, `brief` and its five in), 30 lint rules
 (was 36) plus the 10 brief rules, a set of their own, 52 error codes (was 50:
@@ -22,16 +24,24 @@ fold: a note naming a file that still exists becomes an internal `sources`
 entry (path and sha256, cited from the body as `[n]`); any other note is
 deleted. Every locked claim then reports `lock-content-drift`, note or not:
 the lock hash signed the field even when it was empty, so every hash moved.
-Re-lock each once, on the human's approval.
+Upgrade every binary that judges the project (the pre-commit hook's, CI's pin
+and each collaborator's) before the first re-lock lands: a v0.7.21 binary
+reports every re-locked claim as `lock-content-drift`. Before unlocking,
+settle the locked claims that are `review_pending` (a re-lock clears the flag
+and approves the upstream change) and those with an open thread (they cannot
+re-lock until the human resolves it). Then re-lock each once, on the human's
+approval. `claim recover-approved-content` compares the new hash, so it no
+longer recovers an approval recorded before this release; run it with v0.7.21
+first if you need it.
 
 A claim file carrying `tracks:`, or a config declaring `tracks:`, no longer
 loads either (`invalid_claim` / `invalid_config`; the hint opens with
 `tracks-retired`). Follow the upgrading skill's "tracks are gone" fold in the
 same pass: copy the old track list, fold each track into
 `briefs/features/<slug>.md` (cited claims in `rests_on`), then delete
-`tracks:` everywhere. `tracks` was signed only when present, so only a locked
-claim that carried it reports `lock-content-drift`; re-lock it in the same
-pass as the `migrated_from` re-lock.
+`tracks:` everywhere. Removing `tracks` adds no drift beyond the
+`migrated_from` re-lock, so re-lock in that same pass and each claim
+re-locks once.
 
 Re-running `dossierx skills export` also deletes the
 `docs/dossierx-agent-guide.md` an older export wrote, and `docs/` with it when
@@ -53,7 +63,7 @@ Locking a brief moves `build/ledger/lock-store.json` to `version` `4` (it gains
 a `briefs` map); a store that never holds a brief record stays at `3`, byte for
 byte, and a v0.7.21 store loads unchanged. Upgrade every binary that touches
 the project — the pre-commit hook's, CI's and each collaborator's — before the
-first `brief lock`. Measured against a v0.7.21 binary: its `check --staged`
+first re-lock or `brief lock`. Measured against a v0.7.21 binary: its `check --staged`
 does **not** refuse a commit carrying the version-4 store (it reads the store
 leniently and knows nothing of briefs, so it judges no brief at all), and a
 v0.7.21 write to the store (measured: `claim lock`, `constitution lock`)
@@ -67,7 +77,9 @@ ledger-covered project; in one that has never locked anything the dropped
 entry goes unreported). From this release on, a store whose version is newer
 than the binary reading it is refused (`store_too_new`) rather than read and
 re-saved, for the lock store and the comment digest store alike; a v0.7.21
-binary predates that guard.
+binary predates that guard. `check` reports such a store as
+`lock-ledger-unreadable` with a finding and hint that say upgrade the binary,
+never restore or re-lock the store.
 
 ### Added — briefs, the read side (NIT-204)
 
@@ -287,7 +299,10 @@ binary predates that guard.
   `brief lock` sets the brief's `status: locked` and records, under a `briefs`
   map in `build/ledger/lock-store.json`, the brief's lock hash (summary,
   `rests_on`, body — not `status`, not comments), the sha256 of each image it
-  references, the human's reason and time, the approved text, and one
+  references (an `.svg`'s with CRLF normalized to LF, as the markdown's is, so
+  a `core.autocrlf` checkout and the index sign the same image and
+  `brief-image-cap` counts the same bytes in both; Git LFS pointer images are
+  not supported), the human's reason and time, the approved text, and one
   baseline per `rests_on` claim (that claim's content hash) with the claim as
   it read. It refuses `already_locked` (locked and unchanged), `comment_open`
   (an open thread on the brief; the new error code, exit 1), `lint_failed` (an
@@ -418,6 +433,22 @@ binary predates that guard.
   stays reachable at `#constitution`. Under `dossierx serve`, a live reload now also
   refreshes Home's "last check" time (`/api/fragment` carries
   `generated_at`).
+- **Every rendered viewer grows**, briefs or not: Home, the new sidebar and
+  the brief, feature and claim-card BRIEFS styles and scripts ship in every
+  viewer. Measured on the regenerated fixture viewers (`wc -c` on
+  `testdata/<fixture>/build/viewer/index.html`, before -> after, against the
+  v0.7.21 baseline): `fixture-basic` 1,229,461 -> 1,300,312 (+70,851),
+  `fixture-conformance-v1` 1,284,733 -> 1,355,856 (+71,123),
+  `fixture-graph-demo` 1,486,876 -> 1,604,741 (+117,865; it gains three briefs,
+  two of them features, and an image), `fixture-portability` 1,233,700 -> 1,304,640
+  (+70,940) and `fixture-theme-flat` 1,273,896 -> 1,339,123 (+65,227). In
+  `fixture-basic` that is about 45 KB of stylesheet, 21 KB of script and 6 KB
+  of markup (the Home section). The across-release report
+  (`testdata/render-across-releases.golden.txt`, against v0.7.21) compares 153
+  artifacts, 0 added and 0 removed; the three viewers whose own inputs did not
+  move (`fixture-basic`, `fixture-conformance-v1`, `fixture-portability`) are
+  its 3 silent changes, all this redesign, and graph-demo's viewer and
+  theme-flat's viewer and catalog (`tracks` gone) are its 3 explained ones.
 - **The exported skills, audited against the binary.** Every bundle was checked
   command by command against this release and rewritten where it was wrong or
   silent. The skills no longer mention retired fields outside

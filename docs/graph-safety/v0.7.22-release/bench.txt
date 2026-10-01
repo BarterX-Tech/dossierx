@@ -1,0 +1,36 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/BarterX-Tech/dossierx/internal/briefs
+cpu: Apple M4 Pro
+BenchmarkBriefsAtScale/briefs=60-14         	     100	  10218999 ns/op	     11460 finding-bytes	11741430 B/op	   12502 allocs/op
+BenchmarkBriefsAtScale/briefs=600-14        	      12	  97327934 ns/op	    115389 finding-bytes	115317818 B/op	  124717 allocs/op
+BenchmarkBriefsAtScale/briefs=2000-14       	       4	 329491875 ns/op	    386190 finding-bytes	384528506 B/op	  415289 allocs/op
+BenchmarkEvaluateAtScale/briefs=60/rests_on=10-14         	     762	   1647764 ns/op	       600.0 changed-claims	 1112206 B/op	   12926 allocs/op
+BenchmarkEvaluateAtScale/briefs=600/rests_on=10-14        	      76	  15118188 ns/op	      6000 changed-claims	11688189 B/op	  128512 allocs/op
+BenchmarkEvaluateAtScale/briefs=2000/rests_on=10-14       	      24	  50523418 ns/op	     20000 changed-claims	40062961 B/op	  428151 allocs/op
+PASS
+ok  	github.com/BarterX-Tech/dossierx/internal/briefs	9.913s
+goos: darwin
+goarch: arm64
+pkg: github.com/BarterX-Tech/dossierx/internal/render
+cpu: Apple M4 Pro
+BenchmarkBriefRelationsAtScale-14      	       3	  21838319 ns/op	  13062983 card-bytes	     18000 rows	28274874 B/op	   97290 allocs/op
+BenchmarkBriefsIndex/briefs=60-14      	       3	    207889 ns/op	        12.00 features	         5.000 index-folders	  288456 B/op	    3021 allocs/op
+BenchmarkBriefsIndex/briefs=2000-14    	       3	   7520139 ns/op	       400.0 features	       167.0 index-folders	 9321010 B/op	   99068 allocs/op
+BenchmarkBriefsPayload/briefs=60-14    	       3	   2221694 ns/op	    630490 payload-bytes	 3808946 B/op	     769 allocs/op
+BenchmarkBriefsPayload/briefs=2000-14  	       3	  73104667 ns/op	  21011333 payload-bytes	133878877 B/op	   24089 allocs/op
+BenchmarkBriefsView/briefs=60/claims=1000-14         	       3	   6673195 ns/op	   1106080 page-bytes	 6070768 B/op	   17333 allocs/op
+BenchmarkBriefsView/briefs=2000/claims=10000-14      	       3	 161449792 ns/op	  25086000 page-bytes	138516461 B/op	  260377 allocs/op
+BenchmarkBriefsPayloadWithReview/briefs=60-14        	       3	   7246611 ns/op	   4209970 payload-bytes	23858682 B/op	    1440 allocs/op
+BenchmarkBriefsPayloadWithReview/briefs=2000-14      	       3	 240945361 ns/op	 140327333 payload-bytes	910322688 B/op	   46111 allocs/op
+BenchmarkFeaturesView/features=12/rests_on=200-14    	       3	   5120986 ns/op	   1192812 page-bytes	12402738 B/op	   71541 allocs/op
+BenchmarkFeaturesView/features=2000/rests_on=50-14   	       3	 342342125 ns/op	  66068000 page-bytes	685635184 B/op	 6055125 allocs/op
+BenchmarkRenderBriefDiff/passages-14                 	       3	    697333 ns/op	     54575 html-bytes	 1225512 B/op	    7848 allocs/op
+BenchmarkRenderBriefDiff/one-passage-14              	       3	    149306 ns/op	     30309 html-bytes	  560368 B/op	      83 allocs/op
+BenchmarkRenderBriefDiff/at-mark-cap-14              	       3	    113805 ns/op	     22809 html-bytes	  381424 B/op	      81 allocs/op
+BenchmarkRenderBriefDiff/rewrite-14                  	       3	    213653 ns/op	     32249 html-bytes	  512309 B/op	    2137 allocs/op
+BenchmarkBuildHomeView/10-14                         	       3	      8611 ns/op	   34226 B/op	     128 allocs/op
+BenchmarkBuildHomeView/1000-14                       	       3	    733264 ns/op	 2766994 B/op	    6603 allocs/op
+BenchmarkBuildHomeView/10000-14                      	       3	   7952875 ns/op	41853605 B/op	   65133 allocs/op
+PASS
+ok  	github.com/BarterX-Tech/dossierx/internal/render	5.681s

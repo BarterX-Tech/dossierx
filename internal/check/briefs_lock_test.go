@@ -181,6 +181,77 @@ func TestBriefLockFindingsFollowTheTreeEachModeJudges(t *testing.T) {
 	}
 }
 
+// TestALockedBriefsSVGSurvivesGitsLineEndingConversion pins both directions of
+// core.autocrlf=true (the Windows default) on a locked brief's .svg: git keeps
+// LF in the index and writes CRLF on checkout. The image digest was taken over
+// the raw bytes, so a brief locked from a CRLF checkout drew
+// brief-content-drift under --staged, and one locked from LF and checked out
+// CRLF drew it under --validate, on a tree git itself calls clean. Each row
+// fails the mode named in its comment without the normalization.
+func TestALockedBriefsSVGSurvivesGitsLineEndingConversion(t *testing.T) {
+	const svgLF = "<svg>\n<g/>\n</svg>\n"
+	svgPath := filepath.Join("briefs", "widget", "diagram.svg")
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, cfg *config.Config, repo string)
+	}{
+		{
+			// Locked where the checkout is CRLF, committed as LF: --staged.
+			name: "locked from a CRLF checkout",
+			setup: func(t *testing.T, cfg *config.Config, repo string) {
+				writeFixtureFile(t, filepath.Join(repo, svgPath), strings.ReplaceAll(svgLF, "\n", "\r\n"))
+				armBrief(t, cfg)
+				git(t, repo, "add", "-A")
+				git(t, repo, "commit", "-qm", "fixture")
+			},
+		},
+		{
+			// Locked from LF, then checked out CRLF: --validate.
+			name: "locked from LF and checked out CRLF",
+			setup: func(t *testing.T, cfg *config.Config, repo string) {
+				armBrief(t, cfg)
+				git(t, repo, "add", "-A")
+				git(t, repo, "commit", "-qm", "fixture")
+				if err := os.Remove(filepath.Join(repo, svgPath)); err != nil {
+					t.Fatal(err)
+				}
+				git(t, repo, "checkout", "--", filepath.ToSlash(svgPath))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := filepath.Join(t.TempDir(), "repo")
+			cfg := writeProjectFiles(t, repo, baseConfig, map[string]string{
+				"claims/overview.yaml":    draftClaim("widget.contract.overview"),
+				"briefs/widget/flow.md":   lockedBriefWithImage,
+				filepath.ToSlash(svgPath): svgLF,
+			})
+			gitRepo(t, repo)
+			git(t, repo, "config", "core.autocrlf", "true")
+			tc.setup(t, cfg, repo)
+
+			// The case under test, asserted rather than assumed: CRLF on disk,
+			// LF in the index, and a tree git calls clean.
+			disk, err := os.ReadFile(filepath.Join(repo, svgPath))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(disk), "\r\n") || strings.Contains(git(t, repo, "show", ":"+filepath.ToSlash(svgPath)), "\r") {
+				t.Fatalf("fixture: want CRLF on disk and LF in the index, got disk %q", disk)
+			}
+			if got := porcelain(t, repo); got != "" {
+				t.Fatalf("fixture: the tree must be clean, got %q", got)
+			}
+			if got := lifecycleIn(worktreeVerdict(t, cfg)); len(got) != 0 {
+				t.Errorf("--validate: got %v, want nothing", got)
+			}
+			if got, _ := stagedVerdict(t, cfg); len(lifecycleIn(got)) != 0 {
+				t.Errorf("--staged: got %v, want nothing", lifecycleIn(got))
+			}
+		})
+	}
+}
+
 // TestAStagedBriefLockTravelsWithItsRecord is the hook's reason to read the
 // store from the index: a brief locked in the working tree whose status line is
 // staged WITHOUT the lock store is brief-unrecorded under --staged, and staging

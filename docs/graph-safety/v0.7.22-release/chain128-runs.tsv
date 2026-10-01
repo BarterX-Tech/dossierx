@@ -1,0 +1,16 @@
+base	1	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=149.285416ms TotalAlloc=291120760
+cand	1	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=149.43775ms TotalAlloc=326014888
+base	2	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=148.705166ms TotalAlloc=324838976
+cand	2	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=147.228125ms TotalAlloc=325936712
+base	3	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=149.159875ms TotalAlloc=324833568
+cand	3	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=151.528625ms TotalAlloc=326076408
+base	4	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=147.527375ms TotalAlloc=324759984
+cand	4	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=150.879791ms TotalAlloc=326049664
+base	5	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=146.11025ms TotalAlloc=324903432
+cand	5	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=152.568125ms TotalAlloc=326016136
+base	6	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=149.000625ms TotalAlloc=324873528
+cand	6	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=148.651ms TotalAlloc=325860760
+base	7	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=146.723167ms TotalAlloc=324798120
+cand	7	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=146.404792ms TotalAlloc=325926600
+base	8	PASS:	catalog_bytes=28084213 viewer_bytes=17767132 elapsed=147.528833ms TotalAlloc=291288256
+cand	8	PASS:	catalog_bytes=28084213 viewer_bytes=17846623 elapsed=151.504208ms TotalAlloc=326061488

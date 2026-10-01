@@ -1,0 +1,233 @@
+{
+  "version": 3,
+  "policy_version": 1,
+  "hashes": {
+    "widget.contract.c": {
+      "widget.contract.overview": "69f8108a896cb792a6e4ddfda6e49096096f373ebb47438657270cedb8352276"
+    },
+    "widget.internals.fields": {
+      "widget.contract.overview": "69f8108a896cb792a6e4ddfda6e49096096f373ebb47438657270cedb8352276"
+    }
+  },
+  "receipts": {
+    "widget.contract.c": {
+      "widget.contract.overview": {
+        "hash": "69f8108a896cb792a6e4ddfda6e49096096f373ebb47438657270cedb8352276",
+        "content": {
+          "ID": "widget.contract.overview",
+          "Facet": "contract",
+          "Module": "widget",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "A widget is the smallest unit this fixture project documents.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": true,
+            "Reason": "fixture claim, not backed by any real doctrine",
+            "IDs": null
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/private/tmp/claude-501/-Users-nitinkhanna-Desktop-dossierx/a4f01f83-ec0d-41cb-b340-62e41375584a/scratchpad/gs22/carry/claims/widget-overview.yaml"
+        }
+      }
+    },
+    "widget.internals.fields": {
+      "widget.contract.overview": {
+        "hash": "69f8108a896cb792a6e4ddfda6e49096096f373ebb47438657270cedb8352276",
+        "content": {
+          "ID": "widget.contract.overview",
+          "Facet": "contract",
+          "Module": "widget",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "A widget is the smallest unit this fixture project documents.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": true,
+            "Reason": "fixture claim, not backed by any real doctrine",
+            "IDs": null
+          },
+          "Sources": null,
+          "Tracks": null,
+          "MigratedFrom": "",
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": "/private/tmp/claude-501/-Users-nitinkhanna-Desktop-dossierx/a4f01f83-ec0d-41cb-b340-62e41375584a/scratchpad/gs22/carry/claims/widget-overview.yaml"
+        }
+      }
+    }
+  },
+  "locked_at": {
+    "widget.contract.c": "2026-10-01T13:40:39.978218Z",
+    "widget.contract.overview": "2026-10-01T13:40:39.949047Z",
+    "widget.internals.fields": "2026-10-01T13:40:39.963569Z"
+  },
+  "ledger": {
+    "widget.contract.c": {
+      "subject": "claim",
+      "hash": "5875190f136c4ed1b918546cf098e337fe00cdb2ee4ec1f6e12bc4d6d05ed960",
+      "at": "2026-10-01T13:40:39.978229Z",
+      "actor": "proof",
+      "reason": "approve c",
+      "content": {
+        "ID": "widget.contract.c",
+        "Facet": "contract",
+        "Module": "widget",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "A second contract claim for the carry-over proof.",
+        "Body": "C rests on the overview.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "widget.contract.overview"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "free-text note naming nothing",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/private/tmp/claude-501/-Users-nitinkhanna-Desktop-dossierx/a4f01f83-ec0d-41cb-b340-62e41375584a/scratchpad/gs22/carry/claims/widget-c.yaml"
+      }
+    },
+    "widget.contract.overview": {
+      "subject": "claim",
+      "hash": "200c51869160907441f8979d9caab909b8cbf6b3b2cb21585c0f07b5fe56048c",
+      "at": "2026-10-01T13:40:39.949068Z",
+      "actor": "proof",
+      "reason": "approve a",
+      "content": {
+        "ID": "widget.contract.overview",
+        "Facet": "contract",
+        "Module": "widget",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "card",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "A widget is the smallest unit this fixture project documents.\n",
+        "Rows": null,
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": true,
+          "Reason": "fixture claim, not backed by any real doctrine",
+          "IDs": null
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/private/tmp/claude-501/-Users-nitinkhanna-Desktop-dossierx/a4f01f83-ec0d-41cb-b340-62e41375584a/scratchpad/gs22/carry/claims/widget-overview.yaml"
+      }
+    },
+    "widget.internals.fields": {
+      "subject": "claim",
+      "hash": "841a0f840577523c19ccb26024284b4ad5f36cab30f9fb24c295eb7d4039ec54",
+      "at": "2026-10-01T13:40:39.963583Z",
+      "actor": "proof",
+      "reason": "approve b",
+      "content": {
+        "ID": "widget.internals.fields",
+        "Facet": "internals",
+        "Module": "widget",
+        "Scope": "",
+        "Status": "locked",
+        "Layout": "table",
+        "Kind": "",
+        "Embodiment": null,
+        "Summary": "Fixture claim used by the engine test corpus.",
+        "Body": "",
+        "Rows": [
+          {
+            "\u0000order": [
+              "field",
+              "type"
+            ],
+            "field": "id",
+            "type": "string"
+          },
+          {
+            "\u0000order": [
+              "field",
+              "type"
+            ],
+            "field": "created_at",
+            "type": "timestamp"
+          }
+        ],
+        "Section": "",
+        "RawHTML": "",
+        "RawHTMLReviewed": false,
+        "Steps": null,
+        "RestsOn": {
+          "None": false,
+          "Reason": "",
+          "IDs": [
+            "widget.contract.overview"
+          ]
+        },
+        "Sources": null,
+        "Tracks": null,
+        "MigratedFrom": "old/spec.md#fields",
+        "Order": 0,
+        "Emphasis": false,
+        "ReviewPending": false,
+        "AuditNotes": null,
+        "Comments": null,
+        "SourcePath": "/private/tmp/claude-501/-Users-nitinkhanna-Desktop-dossierx/a4f01f83-ec0d-41cb-b340-62e41375584a/scratchpad/gs22/carry/claims/widget-fields.yaml"
+      }
+    }
+  },
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-24T15:42:24.840544Z"
+  }
+}

@@ -1390,6 +1390,11 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 	// that tamper on its own (lock-ledger-absent when the ledger goes,
 	// lock-ledger-abandoned when claims_dir moves and strands its claims).
 	switch {
+	case check.StoreTooNew(findings):
+		// Before every other branch: a store this binary refuses to read is
+		// the store_too_new contract, and the restore-from-git recovery the
+		// unreadable branch gives would put an older store back.
+		return "the lock store (" + config.LockStoreDisplayPath + ") or the comment digest store (" + config.CommentDigestDisplayPath + ") was written by a newer dossierx than this one. Upgrade dossierx — every binary that touches the project: the pre-commit hook's, CI's, each collaborator's — then run: dossierx check --validate. Do NOT restore, edit or re-lock the store: it is not damaged, and an older binary's write drops what it does not know"
 	case rules[lock.RuleLockLedgerPreLedger]:
 		// The fail-closed pre-ledger refusal. This is the one integrity finding
 		// whose recovery is a sequence of ordinary commands rather than a

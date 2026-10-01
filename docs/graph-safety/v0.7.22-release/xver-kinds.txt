@@ -1,0 +1,13 @@
+rows 16454
+true counts {'dependency_ready': 5176, 'review_pending': 13244, 'local_approved': 8556, 'ready': 1372}
+dependency_unapproved 19332
+direct_dependency_change 18673
+own_flag 14786
+unknown_historical_baseline 13996
+own_thread 11480
+dependency_cycle 8485
+missing_dependency 4648
+unapproved_edit 4641
+approval_missing 3272
+approval_content_drift 2729
+retired_dependency 2041

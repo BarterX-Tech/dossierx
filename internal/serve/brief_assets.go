@@ -23,6 +23,8 @@ const briefAssetRoutePattern = "GET /" + render.BriefAssetDir + "/{folder}/{name
 // It answers from the allowlist the page itself implies — render.BriefAssets
 // over a fresh read of the briefs tree, the same list the render emitted <img>
 // tags for and a static build copies — never from the path the request spells.
+// The read is briefs.LoadListing: the same walk and refusals as Load, without
+// hashing every image in the tree to serve one.
 // Both segments are held to the brief tree's own name rule first
 // ([a-z0-9-] plus one of the six lowercase image extensions), so the lookup key
 // needs no decoding and cannot traverse. The file is then refused unless it is
@@ -52,7 +54,7 @@ func (s *Server) handleBriefAsset(w http.ResponseWriter, r *http.Request) {
 
 	rel := path.Join(render.BriefAssetDir, folder, name)
 	var file string
-	for _, a := range render.BriefAssets(s.cfg, briefs.Load(s.cfg)) {
+	for _, a := range render.BriefAssets(s.cfg, briefs.LoadListing(s.cfg)) {
 		if a.Rel == rel {
 			file = a.Src
 			break

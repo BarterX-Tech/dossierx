@@ -121,8 +121,8 @@ func (s *Set) checkCaps() {
 			s.add(RuleImageCap, b.Path, "brief references %d images, over the cap of %d; keep the figures that carry the argument; %s", len(b.Images), c.Images, capApproval("max_brief_images"))
 		}
 		for _, img := range b.Images {
-			if img.Present && img.Bytes > int64(c.ImageBytes) {
-				s.add(RuleImageCap, b.Path, "image %q is %d bytes, over the cap of %d bytes; export it smaller; %s", img.Name, img.Bytes, c.ImageBytes, capApproval("max_brief_image_bytes"))
+			if img.Present && img.ContentBytes > int64(c.ImageBytes) {
+				s.add(RuleImageCap, b.Path, "image %q is %d bytes, over the cap of %d bytes; export it smaller; %s", img.Name, img.ContentBytes, c.ImageBytes, capApproval("max_brief_image_bytes"))
 			}
 		}
 	}
