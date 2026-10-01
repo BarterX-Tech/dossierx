@@ -39,6 +39,7 @@ dossierx version
 `claim recover-approved-content` is a one-time upgrade migration — `dossierx-upgrading` owns it.
 A **brief** (`briefs/<folder>/<slug>.md`, frontmatter `summary`/`status`/`rests_on`; FORMAT.md "Briefs") is a document, not a claim, and gates no claim. `check` enforces its shape and caps as `brief-*` findings in `lint_findings`, whose `claim_id` is a path (the brief, its folder, or `briefs/`). Split or trim an over-cap brief; raising a `max_brief*` cap is the human's call.
 `brief lock` records the human's approval and a baseline per `rests_on` claim; a moved claim makes the brief `review_pending` (`brief-dependency-drift`), `brief reaudit <path>` shows the change and `--confirm --reason` takes the human's yes. Lock, unlock and reaudit are the human's call, as for claims. A brief's comment threads anchor on its path (`comment add|reply|list briefs/…`) and show in `comment inbox`.
+**DossierX holds guarantees; everything else — design, voice, rationale, research, a feature — goes in `briefs/`** (`dossierx-claims` sorts a statement, `dossierx-briefs` writes the brief). Discovery is `dossierx brief list`, never the isolation view.
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.
@@ -213,7 +214,7 @@ locked claim still resolves to its record. A move that **strands** them fails as
 | write, edit, lock, unlock or reaudit a brief under `briefs/`, write a feature brief, choose a brief's `rests_on`, cite a brief from a claim, or meet a `brief-*` finding | `dossierx-briefs` |
 | implement code from a locked module, tag it with `dossierx-claim:` or `dossierx-step:`, or report that shipped code no longer matches a locked claim | `dossierx-code-links` |
 | read `dossierx comment inbox`, reply to a review thread, or decide comment vs. `claim flag` | `dossierx-comments` |
-| upgrade the binary: a corpus you did not touch refuses (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks-retired`, `doctrine_facet`, `layout_legacy`, pre-ledger), or re-export skills | `dossierx-upgrading` |
+| upgrade the binary: a corpus you did not touch refuses (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks-retired`, `doctrine_facet`, `layout_legacy`, pre-ledger), sort an old corpus into claims and briefs, or re-export skills | `dossierx-upgrading` |
 
 Load one at a time, not all eight.
 
