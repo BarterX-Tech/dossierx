@@ -107,8 +107,8 @@ func (v BriefsView) BriefsTile() BriefsTile {
 	return t
 }
 
-func capPair(n, cap int) string {
-	return groupDigits(n) + " of " + groupDigits(cap)
+func capPair(n, limit int) string {
+	return groupDigits(n) + " of " + groupDigits(limit)
 }
 
 func featuresAre(n int) string {
@@ -118,8 +118,8 @@ func featuresAre(n int) string {
 	return strconv.Itoa(n) + " are features"
 }
 
-func briefsCapHeadline(total, cap, features int) string {
-	h := capPair(total, cap)
+func briefsCapHeadline(total, limit, features int) string {
+	h := capPair(total, limit)
 	if features > 0 {
 		return h + ", " + featuresAre(features)
 	}
