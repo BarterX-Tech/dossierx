@@ -1,6 +1,8 @@
 package briefs
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -227,6 +229,45 @@ func TestLoad_AnUnreadableEntryIsOneFindingNotAnEmptyTree(t *testing.T) {
 	}
 }
 
+// TestLoadListing_ReadsNoImageBytes pins what serve's brief-asset route relies
+// on: LoadListing finds the briefs and the images they reference without
+// opening an image, so serving one image no longer hashes every image in the
+// tree. An image nobody can read proves it: Load opens it to hash it and
+// reports it, LoadListing never opens it and lists it present.
+func TestLoadListing_ReadsNoImageBytes(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions enforced: an unreadable file is still readable on Windows and to root")
+	}
+	dir := t.TempDir()
+	folder := filepath.Join(dir, "briefs", "x")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"flow.md": okFront + "![a](a.png)\n", "a.png": "png"} {
+		if err := os.WriteFile(filepath.Join(folder, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	img := filepath.Join(folder, "a.png")
+	if err := os.Chmod(img, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(img, 0o644) }) //nolint:errcheck // best-effort restore for TempDir cleanup
+	cfg := testConfig(t, dir, "")
+
+	// Load: the image could not be read, so the brief's reference is missing.
+	if got := rulesAndPaths(Load(cfg).TreeFindings()); !reflect.DeepEqual(got, []string{"brief-shape briefs/x/a.png", "brief-shape briefs/x/flow.md"}) {
+		t.Fatalf("fixture: Load must open the image and fail to, got %v", got)
+	}
+	listing := LoadListing(cfg)
+	if got := listing.TreeFindings(); len(got) != 0 {
+		t.Fatalf("LoadListing must not open an image, got %v", rulesAndPaths(got))
+	}
+	if len(listing.Briefs) != 1 || !reflect.DeepEqual(listing.Briefs[0].Images, []Image{{Name: "a.png", Bytes: 3, Present: true, ContentBytes: 3}}) {
+		t.Fatalf("LoadListing must list the referenced image present, with no digest: %+v", listing.Briefs)
+	}
+}
+
 // TestFromFiles_ShapeRefusals is the brief-shape rule's whole refusal list, one
 // tree per case, each asserting the exact rule and path the finding names.
 func TestFromFiles_ShapeRefusals(t *testing.T) {
@@ -340,7 +381,7 @@ func TestFromFiles_BriefFields(t *testing.T) {
 	if flow.Words != 5 {
 		t.Fatalf("words = %d, want 5", flow.Words)
 	}
-	wantImages := []Image{{Name: "a.png", Bytes: 7, Present: true}, {Name: "b.svg", Bytes: 9, Present: true}}
+	wantImages := []Image{{Name: "a.png", Bytes: 7, Present: true, ContentBytes: 7}, {Name: "b.svg", Bytes: 9, Present: true, ContentBytes: 9}}
 	if !reflect.DeepEqual(flow.Images, wantImages) {
 		t.Fatalf("images = %+v, want %+v", flow.Images, wantImages)
 	}
@@ -390,6 +431,73 @@ func TestFromFiles_CapsFollowTheirOverrides(t *testing.T) {
 	defaults := FromFiles(testConfig(t, t.TempDir(), ""), tree(map[string]File{"a/one.md": md(okFront + "one two three four\n")}))
 	if got := defaults.Findings(nil); len(got) != 0 {
 		t.Fatalf("the defaults must not fire on a small brief: %v", rulesAndPaths(got))
+	}
+}
+
+// TestLoad_AnSVGSignsTheSameUnderEitherLineEnding pins that the working tree's
+// image digest and size agree with the index's when they differ only by the
+// CRLF core.autocrlf writes on checkout. Load hashed an image's raw bytes while
+// the markdown beside it was normalized, so a brief locked on one side of the
+// conversion reported brief-content-drift on the other. The .svg carries a CRLF
+// straddling io.Copy's 32 KiB chunk, which the streaming normalizer must hold
+// across the boundary, and ends on a lone CR, which normalization keeps. A .png
+// with the same bytes stays raw in both modes (git converts no binary file): a
+// binary format has no line endings to normalize, and rewriting its bytes would
+// sign a different image.
+func TestLoad_AnSVGSignsTheSameUnderEitherLineEnding(t *testing.T) {
+	dir := t.TempDir()
+	lf := "<svg>" + strings.Repeat("x", 32*1024-6) + "\n<g/>\n</svg>\n\r"
+	crlf := strings.ReplaceAll(lf, "\n", "\r\n")
+	if crlf[32*1024-1:32*1024+1] != "\r\n" {
+		t.Fatal("fixture: the CRLF must straddle the 32 KiB chunk boundary")
+	}
+	front := okFront + "![a](a.svg) ![b](b.png)\n"
+	for rel, body := range map[string]string{"x/flow.md": front, "x/a.svg": crlf, "x/b.png": crlf} {
+		p := filepath.Join(dir, "briefs", filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The cap sits at the LF length: the CRLF file on disk is over it, the
+	// content both modes sign is not.
+	cfg := testConfig(t, dir, fmt.Sprintf("max_brief_image_bytes: %d\n", len(lf)))
+	worktree := Load(cfg)
+	// The index holds LF under core.autocrlf, and CRLF when the file was
+	// committed without it; both are the same image.
+	var index *Set
+	for _, staged := range []string{lf, crlf} {
+		index = FromFiles(cfg, tree(map[string]File{"x/flow.md": md(front), "x/a.svg": md(staged), "x/b.png": md(crlf)}))
+		if len(worktree.Briefs) != 1 || len(index.Briefs) != 1 {
+			t.Fatalf("expected one brief each, got %d and %d", len(worktree.Briefs), len(index.Briefs))
+		}
+		w, i := worktree.Briefs[0].Images[0], index.Briefs[0].Images[0]
+		if w.Digest == "" || w.Digest != i.Digest || w.ContentBytes != int64(len(lf)) || i.ContentBytes != int64(len(lf)) {
+			t.Fatalf("the .svg must sign its LF content in both modes: worktree %+v, index %+v", w, i)
+		}
+	}
+	w, i := worktree.Briefs[0].Images, index.Briefs[0].Images
+	if w[0].Bytes != int64(len(crlf)) {
+		t.Fatalf("Bytes must stay the file's own size, which a static build copies: got %d, want %d", w[0].Bytes, len(crlf))
+	}
+	raw := sha256.Sum256([]byte(crlf))
+	for _, img := range []Image{w[1], i[1]} {
+		if img.Digest != hex.EncodeToString(raw[:]) || img.ContentBytes != int64(len(crlf)) {
+			t.Fatalf("a .png must be hashed raw in both modes: worktree %+v, index %+v", w[1], i[1])
+		}
+	}
+	for name, set := range map[string]*Set{"worktree": worktree, "index": index} {
+		var caps []string
+		for _, f := range set.Findings(nil) {
+			if f.LintName == RuleImageCap {
+				caps = append(caps, f.Message)
+			}
+		}
+		if len(caps) != 1 || !strings.Contains(caps[0], `"b.png"`) {
+			t.Errorf("%s: brief-image-cap must fire on the .png alone, got %q", name, caps)
+		}
 	}
 }
 

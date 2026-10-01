@@ -290,6 +290,33 @@ candidate moved to version 4 by `brief lock`:
 
 CHANGELOG "Upgrading" says so, rather than that an old hook refuses.
 
+## v0.7.22 audit F1: image digests under core.autocrlf
+
+The image digest `brief lock` records was taken over raw bytes while the
+markdown beside it was CRLF-normalized, so under `core.autocrlf=true` a locked
+brief's `.svg` reported `brief-content-drift` in `check --staged` (locked from
+a CRLF checkout, LF in the index) or in `check --validate` (locked from LF,
+checked out CRLF) on a tree `git status` called clean. The fix normalizes
+CRLF to LF for `.svg` only, in both readers (`fileDigest` streams it through
+`crlfWriter`, constant memory; `imageContent` normalizes the index's bytes),
+and `brief-image-cap` counts the normalized length (`Image.ContentBytes`)
+while `Image.Bytes` stays the file's size for the static copy and the
+viewer's byte bound. No graph fact, edge, traversal or baseline changed: an
+image digest is a brief-owned fact compared one-to-one against its record,
+and the work stays linear in image bytes. Evidence:
+`TestALockedBriefsSVGSurvivesGitsLineEndingConversion` (internal/check, both
+directions in a real repository with `core.autocrlf=true`, the fixture
+asserting CRLF on disk, LF in the index and a clean `git status`) and
+`TestLoad_AnSVGSignsTheSameUnderEitherLineEnding` (internal/briefs: a CRLF
+straddling the 32 KiB copy chunk, a trailing lone CR, a `.png` hashed raw,
+the cap on the LF length). Mutation: with `textImage` returning false the
+first fails one row per mode (`--staged` and `--validate`, each
+`brief-content-drift`); dropping the held CR or the index-side
+normalization, or capping on `Bytes`, fails the second. A lock store written
+before this change with a CRLF `.svg` digest reports that brief once as
+`brief-content-drift`; briefs are unreleased before v0.7.22, so no released
+store carries one.
+
 ## Exclusions
 
 - **The claim readiness shape matrix** (chains, diamonds, cycles, dense DAGs)

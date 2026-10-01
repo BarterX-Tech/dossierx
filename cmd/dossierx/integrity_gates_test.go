@@ -181,6 +181,48 @@ func TestCheckOnACorruptLedgerReachesTheLedgerRule(t *testing.T) {
 	}
 }
 
+// TestCheckOnAStoreFromANewerBinarySaysUpgrade pins the store_too_new contract
+// on check's own door: a lock store whose version is above this binary's is
+// not damaged, so the finding and the envelope hint both say upgrade the
+// binary, and neither says restore or re-lock — the two moves that would put
+// an older store back, or have this binary write one that drops what it does
+// not know. Each store is its own row (lock store, comment digest store). The
+// per-claim findings a nil lock store would raise (lock-ledger-missing on every
+// locked claim) are not raised either: they are statements about approvals this
+// binary never read.
+func TestCheckOnAStoreFromANewerBinarySaysUpgrade(t *testing.T) {
+	for _, store := range []string{"lock-store.json", "comment-digest.json"} {
+		t.Run(store, func(t *testing.T) {
+			cfgPath, _, lockFile := ledgerProject(t)
+			if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "approved"); err != nil {
+				t.Fatalf("claim lock: %v", err)
+			}
+			storeFile := filepath.Join(filepath.Dir(lockFile), store)
+			if err := os.WriteFile(storeFile, []byte(`{"version":9}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for _, args := range [][]string{{"check"}, {"check", "--validate"}} {
+				env, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...)
+				if err == nil || env.Error == nil || env.Error.Code != cliout.CodeIntegrityFailed {
+					t.Fatalf("%v: want %s, got %+v", args, cliout.CodeIntegrityFailed, env.Error)
+				}
+				if hint := env.Error.Hint; !strings.Contains(hint, "Upgrade dossierx") || strings.Contains(hint, "Restore it from version control") {
+					t.Errorf("%v: the hint must send the reader to upgrade the binary, got %q", args, hint)
+				}
+				var data checkData
+				envData(t, env, &data)
+				if len(data.LedgerFindings) != 1 || data.LedgerFindings[0].Rule != check.RuleLedgerUnreadable ||
+					!strings.Contains(data.LedgerFindings[0].Message, "Upgrade dossierx") || strings.Contains(data.LedgerFindings[0].Message, "from version control") {
+					t.Errorf("%v: want the one lock-ledger-unreadable finding naming the upgrade, got %+v", args, data.LedgerFindings)
+				}
+			}
+			if got := string(mustRead(t, storeFile)); got != `{"version":9}` {
+				t.Fatalf("check must not write a store it cannot read, got %s", got)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------
 // the ledger fails closed, and the crossing is what clears it
 // ---------------------------------------------------------------------
