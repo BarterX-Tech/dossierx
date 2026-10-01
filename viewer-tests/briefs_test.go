@@ -191,11 +191,13 @@ func TestBriefsIndex_HomeTileAndCaps(t *testing.T) {
 	runCDP(t, ctx, chromedp.Navigate(url), chromedp.WaitVisible("#_home", chromedp.ByQuery))
 
 	requireAll(t, ctx, "Home's Briefs tile on first open",
-		`var tile = document.querySelector('#_home .home-tile[data-tile="briefs"]');`,
+		`var tile = document.querySelector('#_home .home-tile[data-tile="briefs"]');
+		 var navCount = document.querySelector('#nav .brief-nav .system-nav-group__count');`,
 		[][2]string{
 			{"the tile is on Home", `!!tile`},
 			{"it leads to the index", `tile.getAttribute('href') === '#_briefs'`},
 			{"the cap is inclusive", `tile.querySelector('.home-briefs-cap').textContent.indexOf('4 of 60') === 0 && tile.querySelector('.home-briefs-cap').textContent.indexOf('1 is a feature') >= 0`},
+			{"the sidebar count is the non-feature total", `navCount && navCount.textContent === '3'`},
 			{"features/ is not a folder row", `!Array.prototype.some.call(tile.querySelectorAll('.home-brief-folder__label'), function (el) { return el.textContent === 'Features'; })`},
 		})
 
@@ -210,16 +212,50 @@ func TestBriefsIndex_HomeTileAndCaps(t *testing.T) {
 			{"the meter is inclusive", `idx.querySelector('.briefs-index-meter').textContent.indexOf('4 of 60') === 0`},
 			{"no Features group", `!idx.querySelector('[data-folder="features"]')`},
 			{"research starts collapsed", `research && research.open === false`},
-			{"decisions is a folder", `!!decisions`},
+			{"research shows its dots while closed", `research && getComputedStyle(research.querySelector('.briefs-index-folder__dots')).display !== 'none' && research.querySelector('.brief-mark[data-mark="draft"]')`},
+			{"decisions is N of 12", `!!decisions && decisions.querySelector('.briefs-index-folder__count').textContent === '2 of 12'`},
 			{"a row is a link", `!!idx.querySelector('a[href="#` + roundBrief + `"]')`},
 		})
 
+	// Over-cap chrome is omitted here: renderStatic runs check, which
+	// refuses brief-folder-cap / brief-total-cap. The renderer owns that
+	// path (TestRender_BriefsIndexUsesEffectiveCapsAndMarksOver,
+	// TestRender_BriefsIndexMarksTotalOver).
+
+	suppressTransitions(t, ctx, "")
+	for _, tc := range []struct{ theme, card, faint string }{
+		{"light", "rgb(255, 255, 255)", "rgb(110, 124, 142)"},
+		{"dark", "rgb(22, 27, 34)", "rgb(132, 148, 168)"},
+	} {
+		evalVoid(t, ctx, `document.querySelector('.theme-control [data-theme-choice="`+tc.theme+`"]').click()`)
+		requireAll(t, ctx, "the index in "+tc.theme,
+			`var idx = document.getElementById('_briefs');
+			 var folder = idx.querySelector('.briefs-index-folder[data-folder="research"]');`,
+			[][2]string{
+				{"data-theme is " + tc.theme, `document.documentElement.getAttribute('data-theme') === '` + tc.theme + `'`},
+				{"a folder is the card colour", `getComputedStyle(folder).backgroundColor === '` + tc.card + `'`},
+				{"the folder count is faint", `getComputedStyle(folder.querySelector('.briefs-index-folder__count')).color === '` + tc.faint + `'`},
+			})
+	}
+
 	runCDP(t, ctx, chromedp.EmulateViewport(390, 844))
+	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#_home';`, nil))
+	pollTrue(t, ctx, homeVisible)
+	requireAll(t, ctx, "the Briefs tile on a phone",
+		`var tile = document.querySelector('#_home .home-tile[data-tile="briefs"]');`,
+		[][2]string{
+			{"its line counts them", `tile.querySelector('.home-tile__line').textContent.indexOf('3') === 0 && tile.querySelector('.home-tile__line').getBoundingClientRect().height > 0`},
+			{"the folder rows are left to the page", `getComputedStyle(tile.querySelector('.home-briefs')).display === 'none'`},
+		})
 	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#_briefs';`, nil))
 	pollTrue(t, ctx, `!document.getElementById('_briefs').hidden`)
-	requireAll(t, ctx, "the index on a phone", ``, [][2]string{
-		{"the section is the one page", onlyShown("_briefs")},
-	})
+	requireAll(t, ctx, "the index on a phone",
+		`var idx = document.getElementById('_briefs');`,
+		[][2]string{
+			{"the section is the one page", onlyShown("_briefs")},
+			{"nothing is wider than the phone", `document.documentElement.scrollWidth <= 390`},
+			{"a folder toggle is a tap target", `idx.querySelector('.briefs-index-folder__toggle').getBoundingClientRect().height >= 44`},
+		})
 }
 
 func TestBriefPage_LightAndDark(t *testing.T) {

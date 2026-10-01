@@ -12,10 +12,11 @@ effective `BriefCapLimits`, and each page's already-computed `Mark` /
 `OpenThreads` / `Pill`. It adds no claim edge, cause, condition, baseline or
 traversal; it computes no readiness and no brief review; it writes nothing.
 
-- Candidate: the head of
+- Candidate: `17775e3a` on
   `work/nit-203-viewer-briefs-index-behind-all-briefs-b6`, cut from
-  `36b1ed01` (the NIT-178 combo after NIT-200 #143). The figures below were
-  measured on this working tree with the command shown.
+  `36b1ed01` (the NIT-178 combo after NIT-200 #143). Later commits on this
+  branch are audit fixes on the same projection. The figures below were
+  measured on `17775e3a` with the command shown.
 - Environment: go1.26.5 linux/amd64, Cloud Agent VM.
 
 ## What the index reads, and the judgements it makes

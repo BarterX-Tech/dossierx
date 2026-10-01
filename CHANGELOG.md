@@ -134,7 +134,7 @@ binary predates that guard.
 ### Added — briefs in the viewer (NIT-197)
 
 - **The Briefs sidebar tree and the brief page.** A project with briefs gets a
-  Briefs group after Modules: "All briefs" (a plain index for now), then one
+  Briefs group after Modules: "All briefs" (the B6 index, NIT-203), then one
   row per folder, title-cased, each opening to its briefs, with one state mark
   per brief (a padlock for `locked`, a hollow dot for `draft`) and a mark
   legend above the theme control. `features/` is left out of the tree. Each

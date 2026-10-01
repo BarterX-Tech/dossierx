@@ -311,7 +311,7 @@
 {{if .Index.States}}            <p class="briefs-index-states">{{.Index.States}}</p>
 {{end}}          </header>
 {{range .Index.Folders}}          <details class="briefs-index-folder"{{if .Open}} open{{end}} data-folder="{{.Name}}">
-            <summary class="briefs-index-folder__toggle"><svg class="dx-icon briefs-index-folder__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg><h3 class="briefs-index-folder__name">{{.Label}}</h3><span class="briefs-index-folder__count{{if .Over}} briefs-index-folder__count--over{{end}}">{{.Count}} of {{.Cap}}</span>{{if .Over}}<span class="briefs-index-rule">brief-folder-cap</span>{{end}}<span class="briefs-index-folder__dots" aria-hidden="true">{{range .Marks}}<span class="brief-mark" data-mark="{{.}}"></span>{{end}}</span></summary>
+            <summary class="briefs-index-folder__toggle"><svg class="dx-icon briefs-index-folder__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg><h3 class="briefs-index-folder__name">{{.Label}}</h3><span class="briefs-index-folder__count{{if .Over}} briefs-index-folder__count--over{{end}}">{{.Pair}}</span>{{if .Over}}<span class="briefs-index-rule">brief-folder-cap</span>{{end}}<span class="briefs-index-folder__dots" aria-hidden="true">{{range .Marks}}<span class="brief-mark" data-mark="{{.}}"></span>{{end}}</span></summary>
             <ul>
 {{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{.Pill}}{{if .OpenThreads}}<span class="briefs-index__threads"><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>{{.OpenThreadsLabel}}</span>{{end}}{{if .Summary}}<span class="briefs-index__summary">{{.Summary}}</span>{{end}}</li>
 {{end}}            </ul>

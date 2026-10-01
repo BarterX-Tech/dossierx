@@ -33,7 +33,9 @@ type BriefsIndex struct {
 type BriefsIndexFolder struct {
 	Name, Label string
 	Count, Cap  int
-	Over        bool
+	// Pair is "N of 12" with the same grouping the headline uses.
+	Pair string
+	Over bool
 	// Open is true when a brief in the folder is edited, review-pending or
 	// carrying an open thread; a quiet folder starts collapsed.
 	Open bool
@@ -189,6 +191,7 @@ func buildBriefsIndex(set *briefs.Set, folders []BriefFolderView, features int) 
 			Label: f.Label,
 			Count: f.Count,
 			Cap:   caps.PerFolder,
+			Pair:  capPair(f.Count, caps.PerFolder),
 			Over:  f.Count > caps.PerFolder,
 			Open:  folderIsOpen(f.Pages),
 			Marks: folderMarks(f.Pages),

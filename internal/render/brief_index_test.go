@@ -218,7 +218,34 @@ func TestRender_BriefsIndexQuietFolderStartsCollapsed(t *testing.T) {
 	if !strings.Contains(index, `<details class="briefs-index-folder" data-folder="voice">`) {
 		t.Errorf("a quiet folder must start collapsed:\n%s", index)
 	}
+	if !strings.Contains(index, `data-folder="voice"`) || !strings.Contains(index, `data-mark="draft"`) {
+		t.Errorf("a collapsed folder must carry its state dots:\n%s", index)
+	}
 	if !strings.Contains(index, `<details class="briefs-index-folder" open data-folder="notes">`) {
 		t.Errorf("a folder with an open thread must start open:\n%s", index)
+	}
+}
+
+// TestRender_BriefsIndexMarksTotalOver: the inclusive total over the
+// effective max_briefs is red and names brief-total-cap.
+//
+// Authoring gate: (1) the meter must agree with check's brief-total-cap;
+// (2) a folder-only over mark would hide a project-wide overflow; (3) the
+// folder-over test cannot see a total overflow; (4) no new seam.
+func TestRender_BriefsIndexMarksTotalOver(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	total := 1
+	cfg.MaxBriefs = &total
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("notes/a.md", "---\nsummary: A.\n---\n# A\n"),
+		briefFile("notes/b.md", "---\nsummary: B.\n---\n# B\n"),
+	})
+	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := briefsIndexHTML(t, out)
+	if !strings.Contains(index, `briefs-index-meter--over">2 of 1`) || !strings.Contains(index, `>brief-total-cap</span>`) {
+		t.Errorf("an over-cap project must go red and name brief-total-cap:\n%s", index)
 	}
 }

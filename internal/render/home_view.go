@@ -425,16 +425,6 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 	return t
 }
 
-// claimNames lists the first homeCardNames claims by their readable label,
-// then how many more there are.
-func claimNames(claims []model.Claim) string {
-	names := make([]string, 0, len(claims))
-	for _, c := range claims {
-		names = append(names, components.ClaimLabel(c.ID))
-	}
-	return joinNames(names)
-}
-
 // joinNames names at most homeCardNames of names, then a count of the rest.
 func joinNames(names []string) string {
 	shown := names
