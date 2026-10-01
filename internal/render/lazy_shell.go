@@ -33,7 +33,7 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
 	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups, homeBriefThreads(in.briefs, rendered))
-	data.Briefs = buildBriefsView(in.briefs, rendered, in.cat, in.briefReview)
+	data.Briefs = buildBriefsView(in.briefs, rendered, in.cat, in.cfg, in.briefReview)
 	return data, nil
 }
 
@@ -120,7 +120,7 @@ func (p *lazyShellProjection) renderedBriefs() map[string]renderedBrief {
 
 func (p *lazyShellProjection) briefsView() BriefsView {
 	p.briefsViewOnce.Do(func() {
-		p.briefsViewVal = buildBriefsView(p.in.briefs, p.renderedBriefs(), p.in.cat, p.in.briefReview)
+		p.briefsViewVal = buildBriefsView(p.in.briefs, p.renderedBriefs(), p.in.cat, p.in.cfg, p.in.briefReview)
 	})
 	return p.briefsViewVal
 }

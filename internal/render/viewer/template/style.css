@@ -210,6 +210,10 @@
      step lighter than --border. Its own token because dark needs its own
      value, #1E2530, which no mix of the dark tokens reaches. */
   --hairline-soft: #EEF1F5;
+  /* The B2 view switch (NIT-199): its track and its selected segment. */
+  --segment-track: #E3E7ED;
+  --segment-on: #FFFFFF;
+  --edit-banner-bg: rgb(158 59 54 / 8%);
 
   /* TYPE AND SPACING. Declared here, consumed by the screen lanes. Before
      this block every size, leading and tracking in this file was a literal in
@@ -300,6 +304,10 @@
        comment above for why this is its own engine-owned property. */
     --issues-scope-trough: #080B10;
     --hairline-soft: #1E2530;
+    /* The B2 view switch (NIT-199): its track and its selected segment. */
+    --segment-track: #1B212B;
+    --segment-on: #38424F;
+    --edit-banner-bg: rgb(236 138 131 / 10%);
   }
 }
 
@@ -376,6 +384,10 @@
     --sheet-hairline: transparent;
     --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
     --hairline-soft: #EEF1F5;
+    /* The B2 view switch (NIT-199): its track and its selected segment. */
+    --segment-track: #E3E7ED;
+    --segment-on: #FFFFFF;
+    --edit-banner-bg: rgb(158 59 54 / 8%);
   }
 }
 
@@ -419,6 +431,10 @@
        comment above for why this is its own engine-owned property. */
     --issues-scope-trough: #080B10;
     --hairline-soft: #1E2530;
+    /* The B2 view switch (NIT-199): its track and its selected segment. */
+    --segment-track: #1B212B;
+    --segment-on: #38424F;
+    --edit-banner-bg: rgb(236 138 131 / 10%);
   }
 }
 
@@ -11141,6 +11157,190 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   gap: 8px;
 }
 
+/* ---- A brief edited since its approval (NIT-199) ------------------------
+   Paper file "DossierX Viewer — Design Exploration", page Release 0.7.22,
+   group B2. The pill and the sidebar mark take the blocked colour; the
+   banner is a tinted card with a 3px rule; the three views share one card
+   whose bar holds the caption and the switch. The passages are the claim
+   viewer's own (.claim-edit-passage--removed / --added / --current), placed
+   at B2's 10px inset. */
+.brief-head .brief-pill.brief-pill--edited {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.brief-meta time { font: inherit; }
+.brief-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  background: var(--edit-banner-bg);
+}
+.brief-banner > p { margin: 0; }
+.brief-banner__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brief-banner__title {
+  flex: 1 1 auto;
+  color: var(--warn);
+  font: 600 15px/20px var(--font-sans);
+}
+.brief-banner__rule {
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+}
+.brief-banner__text {
+  color: var(--ink);
+  font: 14px/21px var(--font-sans);
+}
+.brief-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 40px 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+/* A view is a brief body inside the card: the body's type and rhythm, not
+   its frame. */
+.brief-compare > .brief-body {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.brief-compare > .brief-body[hidden] { display: none; }
+.brief-compare__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.brief-compare__caption {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--faint);
+  font: 13px/18px var(--font-sans);
+}
+.brief-compare__caption [hidden] { display: none; }
+.brief-view-switch {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--segment-track);
+}
+.brief-view-switch__seg {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: 400 13px/16px var(--font-sans);
+}
+.brief-view-switch__seg[aria-pressed="true"] {
+  background: var(--segment-on);
+  color: var(--ink);
+  font-weight: 500;
+}
+/* A segment is as wide as its label at the pressed weight whether it is
+   pressed or not, so the switch does not shift by a pixel as the pressed
+   segment moves: the hidden second row is the label at 500. */
+.brief-view-switch__seg {
+  display: inline-grid;
+  justify-items: center;
+}
+.brief-view-switch__seg::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
+}
+.brief-compare__note {
+  margin: 0;
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+/* An image the page cannot show (no longer referenced, or its file gone) is
+   named instead of drawn broken. */
+.brief-img-absent {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+/* The redline: the removed passage above the added one, 2px apart, the rule
+   and the text 10px in. */
+.brief-view .claim-edit-passage--removed,
+.brief-view .claim-edit-passage--added { padding: 7px 10px 7px 23px; }
+.brief-view .claim-edit-passage--removed::before,
+.brief-view .claim-edit-passage--added::before { left: 10px; }
+.brief-view .claim-edit-passage + .claim-edit-passage { margin-top: 0; }
+.brief-view > .claim-edit-passage--removed + .claim-edit-passage--added { margin-top: -12px; }
+.brief-view .claim-edit-passage > * { margin: 0; }
+.brief-view .claim-edit-passage > * + * { margin-top: 14px; }
+/* A struck passage's image is struck too: dimmed, so the approved figure
+   does not read as the current one. */
+.brief-view .claim-edit-passage--removed img.md-img { opacity: .55; }
+/* Current: a thin blocked rule and a caption under the passage, the prose
+   in ink (B2 CURRENT view). */
+.brief-view .brief-passage--current { padding: 0 0 0 14px; }
+.brief-view .brief-passage--current::before { width: 2px; background: var(--warn); }
+.brief-view .brief-passage--current > .brief-passage__caption {
+  margin-top: 2px;
+  color: var(--warn);
+  font: 12px/16px var(--font-sans);
+}
+.brief-edit-other {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline-soft);
+  color: var(--muted);
+  font: 14px/21px var(--font-sans);
+}
+.brief-edit-other > p { margin: 0; }
+.brief-edit-other > .brief-edit-other__head {
+  color: var(--faint);
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.brief-recover {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.brief-recover > p { margin: 0; }
+.brief-recover__head { color: var(--ink); font: 600 14px/20px var(--font-sans); }
+.brief-recover__text { color: var(--muted); font: 14px/21px var(--font-sans); }
+.brief-recover code,
+.brief-edit-other code { font: 12.5px/1 var(--font-mono); }
+/* "Approve or restore in a thread" is the edited brief's one action, at
+   every width (B2 draws it at the phone's page foot). */
+.brief-section[data-lock-state="edited"] .brief-comment-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.brief-section[data-lock-state="edited"] .brief-comment-note[hidden] { display: none; }
+
 /* The "On this page" rail is the facet panel (system-record.js renderToc)
    with a brief's ## headings for rows and a Threads block under them. */
 @media screen and (min-width: 1181px) {
@@ -11325,6 +11525,26 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   }
   .brief-comment-note,
   .brief-comment-count { text-align: center; }
+
+  /* B2 MOBILE: the banner and the card at the phone's 10px radius; the
+     switch spans the card's width above the body, and the caption goes. */
+  .brief-banner { gap: 6px; padding: 14px 16px; border-radius: 10px; }
+  .brief-banner__title { font-size: 14px; line-height: 19px; }
+  .brief-banner__rule { display: none; }
+  .brief-banner__text { font-size: 13px; line-height: 19px; }
+  .brief-compare { gap: 12px; padding: 14px 16px 20px; border-radius: 10px; }
+  .brief-compare__bar { padding-bottom: 0; border-bottom: 0; }
+  .brief-compare__caption { display: none; }
+  .brief-view-switch { flex: 1 1 auto; }
+  .brief-view-switch__seg { flex: 1 1 0; padding: 5px 0; text-align: center; }
+  .brief-view .claim-edit-passage--removed,
+  .brief-view .claim-edit-passage--added { padding: 6px 8px 6px 19px; font-size: 15px; line-height: 24px; }
+  .brief-view .claim-edit-passage--removed::before,
+  .brief-view .claim-edit-passage--added::before { left: 8px; top: 6px; bottom: 6px; }
+  .brief-view > .claim-edit-passage--removed + .claim-edit-passage--added { margin-top: -10px; }
+  .brief-view .brief-passage--current { padding-left: 12px; }
+  .brief-recover { border-radius: 10px; }
+  .brief-section[data-lock-state="edited"] .brief-comment-row { align-items: stretch; }
 
   /* Every row in the phone drawer's tree is a 44px tap target. */
   #nav .brief-nav .brief-nav__row,

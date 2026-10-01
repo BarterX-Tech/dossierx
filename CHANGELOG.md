@@ -205,6 +205,36 @@ binary predates that guard.
   response carries `brief_id` and `path`. The claim routes and
   `GET /api/comments` answer byte for byte as before, now pinned by a test.
 
+### Added — a brief edited since its approval, in the viewer (NIT-199)
+
+- **Changes, Approved and Current.** A locked brief whose file moved since its
+  approval (`brief-content-drift`) opens with a red banner ("Edited after you
+  approved it · 2 passages changed") and its body as three views behind one
+  switch, Changes first: the redline against the approved text `brief lock`
+  keeps (the claim viewer's own diff, rendered as a brief renders, images
+  included), the approved text unmarked, and the file as it reads now with each
+  changed or added run ruled and captioned. A moved summary or `rests_on`, and
+  each image changed, added or removed (from the image digests on the record),
+  is named under the redline; an edit that changes only trailing whitespace
+  says so. Images are drawn as they are now, and an image no longer referenced
+  reads "image removed: <name>" instead of drawing broken. The chosen view
+  follows the reader from brief to brief and across a live reload, in memory
+  only. On a phone the switch spans the card above the body. The page offers
+  no lock or restore button: "Approve or restore in a thread", its page-foot
+  Comment button, opens the brief's threads on the comments rail, and the
+  banner says the recovery the router gives —
+  restore from version control, or `brief unlock` → fix → `brief lock` on the
+  human's yes. A record with no approved text shows a note naming
+  `git log -p -- <path>` instead of the views.
+- **The lock record in the header and the sidebar.** A locked brief's meta
+  line names its approval's date (in the reader's time zone) and reason. The
+  pill reads EDITED SINCE APPROVAL for an edited brief and LOCK NOT RECORDED
+  for one whose file says `locked` with no approval on record
+  (`brief-unrecorded`), never Locked; its meta line says "Not locked: no
+  approval on record", the label its sidebar mark carries. A feature brief
+  edited since approval gets the same banner and views on its feature page,
+  and every view's links to other briefs open their pages, as the body's do.
+
 ### Added — briefs, lock, review and comments (NIT-205)
 
 - **`dossierx brief lock <path-or-id> --reason`**, **`brief unlock

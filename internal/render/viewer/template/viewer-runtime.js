@@ -136,6 +136,7 @@
         // delegated click that works the control is still attached once, below.
         mountSourceNoteClamps();
         localizeHomeCheck();
+        syncBriefEdits();
       }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
@@ -513,6 +514,59 @@
           t.textContent = ((phone && sameYear) ? narrow : wide) + ', ' + time;
         } catch (e) {}
       }
+
+      // ---- A brief edited since its approval (NIT-199, Paper B2) ----
+      // The page is server-rendered with all three views (render.BriefDiff);
+      // this only picks which one shows. The choice is one value for the
+      // whole viewer, held in memory: it follows the reader from brief to
+      // brief and across a live reload's fragment swap (initViewer runs this
+      // again over the fresh DOM), and a new tab starts on Changes.
+      var BRIEF_VIEWS = ['changes', 'approved', 'current'];
+      var briefView = 'changes';
+
+      function syncBriefEdits() {
+        document.querySelectorAll('.brief-compare').forEach(function (card) {
+          card.setAttribute('data-brief-view', briefView);
+          card.querySelectorAll('.brief-view').forEach(function (view) {
+            view.hidden = view.getAttribute('data-view') !== briefView;
+          });
+          card.querySelectorAll('[data-caption-for]').forEach(function (caption) {
+            caption.hidden = caption.getAttribute('data-caption-for') !== briefView;
+          });
+          card.querySelectorAll('.brief-view-switch__seg').forEach(function (seg) {
+            seg.setAttribute('aria-pressed', String(seg.getAttribute('data-brief-view') === briefView));
+          });
+        });
+        localizeBriefDates();
+      }
+
+      // localizeBriefDates rewrites each approval date into the reader's own
+      // time zone. The server writes it in UTC so the page is deterministic;
+      // an approval late in the evening west of Greenwich is the next day
+      // there and the same day here. The month is spelled as the claim
+      // panels spell it (editDateLabel), not by the locale.
+      function localizeBriefDates() {
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        document.querySelectorAll('time.brief-date[datetime]').forEach(function (t) {
+          var d = new Date(t.getAttribute('datetime'));
+          if (isNaN(d.getTime())) { return; }
+          var label = d.getDate() + ' ' + months[d.getMonth()];
+          t.textContent = t.getAttribute('data-date-form') === 'short' ? label : label + ' ' + d.getFullYear();
+        });
+      }
+
+      document.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!target || typeof target.closest !== 'function') { return; }
+        var seg = target.closest('.brief-view-switch__seg');
+        if (seg) {
+          var view = seg.getAttribute('data-brief-view');
+          if (BRIEF_VIEWS.indexOf(view) < 0) { return; }
+          event.preventDefault();
+          briefView = view;
+          syncBriefEdits();
+        }
+      });
 
       function showFromHash(opts) {
         var target = resolve(hashId());

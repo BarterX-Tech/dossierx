@@ -66,7 +66,7 @@ func BenchmarkBriefsView(b *testing.B) {
 			b.ReportAllocs()
 			var size int
 			for i := 0; i < b.N; i++ {
-				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, nil)
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, cfg, nil)
 				size = 0
 				for _, f := range view.Folders {
 					for _, p := range f.Pages {
@@ -167,7 +167,7 @@ func BenchmarkFeaturesView(b *testing.B) {
 			b.ReportAllocs()
 			var size int
 			for i := 0; i < b.N; i++ {
-				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, nil)
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, cfg, nil)
 				size = 0
 				for _, p := range view.Features {
 					size += len(p.Body)
@@ -177,6 +177,49 @@ func BenchmarkFeaturesView(b *testing.B) {
 				}
 			}
 			b.ReportMetric(float64(size), "page-bytes")
+		})
+	}
+}
+
+// BenchmarkRenderBriefDiff is the scale evidence for the edited-brief views
+// in docs/graph-safety/nit-199-brief-edited.md: one brief at the default
+// 2,000-word cap, diffed against its approval and drawn as all three views,
+// in the shapes that cost the most. "passages" is 2,000 words in 100
+// paragraphs with every other one reworded by a word (50 marked pairs);
+// "one-passage" is the same words as a single paragraph, one word changed,
+// which is past textdiff.MaxMarkWords and so compared unmarked; "at-mark-cap"
+// is one 1,500-word paragraph with one word changed, the largest pair the
+// word diff marks; "rewrite" replaces every paragraph.
+func BenchmarkRenderBriefDiff(b *testing.B) {
+	para := func(i int, w string) string {
+		return fmt.Sprintf("Paragraph %d %s %s", i, w, strings.Repeat("word ", 17))
+	}
+	var before, reworded, rewritten []string
+	for i := 0; i < 100; i++ {
+		before = append(before, para(i, "alpha"))
+		w := "alpha"
+		if i%2 == 0 {
+			w = "beta"
+		}
+		reworded = append(reworded, para(i, w))
+		rewritten = append(rewritten, fmt.Sprintf("Other %d %s", i, strings.Repeat("text ", 18)))
+	}
+	one := strings.Repeat("word ", 2000)
+	capped := strings.Repeat("word ", 1500)
+	for _, tc := range []struct{ name, before, after string }{
+		{"passages", strings.Join(before, "\n\n"), strings.Join(reworded, "\n\n")},
+		{"one-passage", one + "end", one + "fin"},
+		{"at-mark-cap", capped + "end", capped + "fin"},
+		{"rewrite", strings.Join(before, "\n\n"), strings.Join(rewritten, "\n\n")},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			var size int
+			for i := 0; i < b.N; i++ {
+				d := RenderBriefDiff(tc.before, tc.after, BriefAssetURLPrefix("f"))
+				size = len(d.ChangesHTML()) + len(d.CurrentHTML())
+			}
+			b.ReportMetric(float64(size), "html-bytes")
 		})
 	}
 }
