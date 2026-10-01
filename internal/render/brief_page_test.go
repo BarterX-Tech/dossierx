@@ -287,7 +287,7 @@ func TestRender_BriefThreadsOnThePageTreeAndIndex(t *testing.T) {
 		t.Fatal("no All briefs index")
 	}
 	index, _, _ = strings.Cut(index, "</section>\n        </section>")
-	if !strings.Contains(index, `<a href="#brief-decisions-open">Open</a><span class="briefs-index__threads">`) || strings.Count(index, "open thread") != 1 {
+	if !strings.Contains(index, `<a href="#brief-decisions-open">Open</a>`) || strings.Count(index, `class="briefs-index__threads"`) != 1 {
 		t.Errorf("the index must give the brief with an open thread, and only it, its count:\n%s", index)
 	}
 

@@ -174,6 +174,54 @@ func TestBriefPage_OpensByHashWithItsTreeAndImage(t *testing.T) {
 	pollTrue(t, ctx, briefOnlyShown)
 }
 
+// TestBriefsIndex_HomeTileAndCaps is NIT-203 / Paper B6 in a real browser:
+// the Home Briefs tile and "All briefs" open #_briefs; the totals are
+// inclusive of features; the groups are not; a quiet folder starts closed.
+//
+// Authoring gate: (1) a reader following the tile must land on the index
+// and see the cap line the sidebar count agrees with; (2) a missing tile,
+// a features group on the index, or an always-open folder would disagree
+// with B6; (3) TestBriefPage_OpensByHash already clicks All briefs but does
+// not read the totals, collapse or the tile; (4) no new seam.
+func TestBriefsIndex_HomeTileAndCaps(t *testing.T) {
+	p := briefProject(t)
+	url := p.renderStatic()
+	ctx := withInstantScroll(t, browserContext(t))
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Navigate(url), chromedp.WaitVisible("#_home", chromedp.ByQuery))
+
+	requireAll(t, ctx, "Home's Briefs tile on first open",
+		`var tile = document.querySelector('#_home .home-tile[data-tile="briefs"]');`,
+		[][2]string{
+			{"the tile is on Home", `!!tile`},
+			{"it leads to the index", `tile.getAttribute('href') === '#_briefs'`},
+			{"the cap is inclusive", `tile.querySelector('.home-briefs-cap').textContent.indexOf('4 of 60') === 0 && tile.querySelector('.home-briefs-cap').textContent.indexOf('1 is a feature') >= 0`},
+			{"features/ is not a folder row", `!Array.prototype.some.call(tile.querySelectorAll('.home-brief-folder__label'), function (el) { return el.textContent === 'Features'; })`},
+		})
+
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('#_home .home-tile[data-tile="briefs"]').click();`, nil))
+	pollTrue(t, ctx, `!document.getElementById('_briefs').hidden && location.hash === '#_briefs'`)
+
+	requireAll(t, ctx, "the All briefs index",
+		`var idx = document.getElementById('_briefs');
+		 var research = idx.querySelector('.briefs-index-folder[data-folder="research"]');
+		 var decisions = idx.querySelector('.briefs-index-folder[data-folder="decisions"]');`,
+		[][2]string{
+			{"the meter is inclusive", `idx.querySelector('.briefs-index-meter').textContent.indexOf('4 of 60') === 0`},
+			{"no Features group", `!idx.querySelector('[data-folder="features"]')`},
+			{"research starts collapsed", `research && research.open === false`},
+			{"decisions is a folder", `!!decisions`},
+			{"a row is a link", `!!idx.querySelector('a[href="#` + roundBrief + `"]')`},
+		})
+
+	runCDP(t, ctx, chromedp.EmulateViewport(390, 844))
+	runCDP(t, ctx, chromedp.Evaluate(`location.hash = '#_briefs';`, nil))
+	pollTrue(t, ctx, `!document.getElementById('_briefs').hidden`)
+	requireAll(t, ctx, "the index on a phone", ``, [][2]string{
+		{"the section is the one page", onlyShown("_briefs")},
+	})
+}
+
 func TestBriefPage_LightAndDark(t *testing.T) {
 	p := briefProject(t)
 	url := p.renderStatic()

@@ -205,6 +205,24 @@ binary predates that guard.
   response carries `brief_id` and `path`. The claim routes and
   `GET /api/comments` answer byte for byte as before, now pinned by a test.
 
+### Added — the Briefs index behind “All briefs” (NIT-203)
+
+- **`#_briefs` is the B6 index.** "All briefs" still opens it. Every folder
+  other than `features/` is a group, title-cased, "N of 12" against the
+  effective `max_briefs_per_folder` (red plus `brief-folder-cap` when over).
+  The totals strip is inclusive of features against the effective
+  `max_briefs` (60 by default): "11 of 60, 5 are features", then locked,
+  review pending, edited since approval and open threads for the other
+  folders only, from `briefMark` / `briefs.Evaluation` — the same states as
+  the sidebar. A quiet folder starts collapsed with its state dots. A brief
+  row is title, one lock/review pill, and the summary. Author text is
+  escaped.
+- **Home's Briefs tile and waiting-card halves.** The tile lists the
+  non-feature folders and the inclusive cap total, and leads to `#_briefs`.
+  Edited after approval and To re-read count briefs in those states beside
+  the claims'; Open threads already did (NIT-198). A project with no
+  non-feature brief still hides the tile and the index.
+
 ### Added — a brief whose rests_on claim moved, in the viewer (NIT-200)
 
 - **One banner per changed claim.** A locked brief that is `review_pending`

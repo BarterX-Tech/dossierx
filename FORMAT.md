@@ -1749,8 +1749,18 @@ threads beside the claims', leading to the brief when no claim has one. The view
 a brief: the agent does that after the human settles it in a thread. In a
 static build there is nothing to write to: a brief with threads opens them
 read only, a brief with none has its buttons disabled, and a line says
-comments are written through `dossierx serve`. The "All briefs" index gives a
-brief with an open thread its count. The sidebar search
+comments are written through `dossierx serve`. The "All briefs" index (`#_briefs`)
+lists every folder other than `features/` in file-system order, each "N of 12"
+against the effective per-folder cap (red, with `brief-folder-cap`, when over).
+The totals strip is the inclusive count against the effective total cap
+(60 by default): "11 of 60, 5 are features" when `features/` holds any, then
+locked, review pending, edited since approval and open threads for the other
+folders only, from the same lock and review states as the sidebar marks. Each
+row is the brief's title, its one lock/review pill, and its summary; a folder
+with nothing pending starts collapsed and shows its state dots. Home's
+**Briefs** tile links here: the non-feature folders and the inclusive cap
+total. Home's Edited after approval and To re-read cards count briefs in
+those states beside the claims'. The sidebar search
 reads "Search claims and briefs": a module row matches its claims' titles,
 summaries and ids, and a brief row its title, file name, summary and folder.
 A `check` finding whose `claim_id` is a brief's path, its folder's or the

@@ -356,7 +356,7 @@ func BenchmarkBuildHomeView(b *testing.B) {
 			cat.SetReadiness(ra)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				buildHomeView(cat, nil, nil, nil)
+				buildHomeView(cat, nil, nil, homeBriefWaiting{})
 			}
 		})
 	}

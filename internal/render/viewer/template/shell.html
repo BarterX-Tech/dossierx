@@ -281,9 +281,20 @@
               </span>
               <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
             </div>
+{{end}}{{end}}{{with $.Briefs.BriefsTile}}{{if .Count}}            <a class="home-tile" data-tile="briefs" href="#_briefs">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7"/><path d="M9 16h5"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><span class="home-tile__title">Briefs</span><span class="home-tile__count home-wide">{{.Count}}</span></span>
+                <span class="home-tile__desc home-wide">Design, voice, rationale — everything that is not a claim.</span>
+                <span class="home-briefs-cap home-wide{{if .OverTotal}} home-briefs-cap--over{{end}}">{{.Headline}}{{if .FeaturesNote}}, {{.FeaturesNote}}{{end}}{{if .OverTotal}} <span class="briefs-index-rule">brief-total-cap</span>{{end}}</span>
+                <span class="home-briefs home-wide">{{range .Folders}}<span class="home-brief-folder{{if .Over}} home-brief-folder--over{{end}}"><span class="home-brief-folder__label">{{.Label}}</span><span class="home-brief-folder__count">{{.Count}}</span></span>{{end}}</span>
+                <span class="home-tile__line home-narrow">{{.Line}}</span>
+              </span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </a>
 {{end}}{{end}}          </div>
 {{end}}        </section>
-<!-- Briefs (NIT-197): the "All briefs" index, then one page per brief,
+<!-- Briefs (NIT-197 / NIT-203): the "All briefs" index, then one page per brief,
      features/ included (its briefs are not in the Briefs tree, but a link to
      one resolves). Each page is a .module-section with no .claim-group, as
      Home is, so no module header or claim TOC attaches to it; system-record.js
@@ -296,13 +307,15 @@
           <header class="brief-head">
             <p class="brief-kicker"><span class="brief-kicker__word">Briefs</span></p>
             <h2 id="briefsIndexTitle" class="brief-title">All briefs</h2>
-          </header>
-{{range .Folders}}          <section class="briefs-index-folder">
-            <h3>{{.Label}} <span class="briefs-index-folder__count">{{.Count}}</span></h3>
+            <p class="briefs-index-meter{{if .Index.OverTotal}} briefs-index-meter--over{{end}}">{{.Index.Headline}}{{if .Index.OverTotal}} <span class="briefs-index-rule">brief-total-cap</span>{{end}}</p>
+{{if .Index.States}}            <p class="briefs-index-states">{{.Index.States}}</p>
+{{end}}          </header>
+{{range .Index.Folders}}          <details class="briefs-index-folder"{{if .Open}} open{{end}} data-folder="{{.Name}}">
+            <summary class="briefs-index-folder__toggle"><svg class="dx-icon briefs-index-folder__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg><h3 class="briefs-index-folder__name">{{.Label}}</h3><span class="briefs-index-folder__count{{if .Over}} briefs-index-folder__count--over{{end}}">{{.Count}} of {{.Cap}}</span>{{if .Over}}<span class="briefs-index-rule">brief-folder-cap</span>{{end}}<span class="briefs-index-folder__dots" aria-hidden="true">{{range .Marks}}<span class="brief-mark" data-mark="{{.}}"></span>{{end}}</span></summary>
             <ul>
-{{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{if .OpenThreads}}<span class="briefs-index__threads"><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>{{.OpenThreadsLabel}}</span>{{end}}{{if .Summary}}<span>{{.Summary}}</span>{{end}}</li>
+{{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{.Pill}}{{if .OpenThreads}}<span class="briefs-index__threads"><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>{{.OpenThreadsLabel}}</span>{{end}}{{if .Summary}}<span class="briefs-index__summary">{{.Summary}}</span>{{end}}</li>
 {{end}}            </ul>
-          </section>
+          </details>
 {{end}}        </section>
 {{end}}{{range .Folders}}{{range .Pages}}{{template "briefPage" .}}{{end}}{{end}}{{range .Features}}{{template "briefPage" .}}{{end}}{{end}}    </main>
 

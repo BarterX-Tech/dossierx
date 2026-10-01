@@ -17,6 +17,35 @@ import (
 // whole set JSON-encoded once, and its bytes charged to the budget). n = 60 is
 // the default total cap; 2,000 is a raised max_briefs. It reports the
 // payload's bytes, which grow with the briefs' own bytes and nothing else.
+
+// BenchmarkBriefsIndex is the index half of docs/graph-safety/nit-203-briefs-index.md:
+// buildBriefsView for n briefs across folders of 12, one fifth features/.
+func BenchmarkBriefsIndex(b *testing.B) {
+	_, cfg := briefViewFixture()
+	body := "# Title\n\n## Why\n\n" + strings.Repeat("word ", 40) + "\n"
+	for _, n := range []int{60, 2000} {
+		files := make([]briefs.File, 0, n)
+		for i := 0; i < n; i++ {
+			folder := fmt.Sprintf("f%04d", i/12)
+			if i%5 == 0 {
+				folder = "features"
+			}
+			files = append(files, briefFile(fmt.Sprintf("%s/b%04d.md", folder, i), "---\nsummary: s\n---\n"+body))
+		}
+		set := briefs.FromFiles(cfg, files)
+		b.Run(fmt.Sprintf("briefs=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			var folders, features int
+			for i := 0; i < b.N; i++ {
+				v := buildBriefsView(set, renderBriefs(set, nil, cfg), nil, cfg, nil)
+				folders, features = len(v.Index.Folders), v.Index.Features
+			}
+			b.ReportMetric(float64(folders), "index-folders")
+			b.ReportMetric(float64(features), "features")
+		})
+	}
+}
+
 func BenchmarkBriefsPayload(b *testing.B) {
 	_, cfg := briefViewFixture()
 	body := "# Title\n\n## Why\n\n" + strings.Repeat("word ", 2000) + "\n"

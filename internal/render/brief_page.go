@@ -155,6 +155,9 @@ type BriefsView struct {
 	Total int
 	// IndexID is the "All briefs" page's section id.
 	IndexID string
+	// Index is the B6 "All briefs" page: folders, caps, and the inclusive
+	// total. Empty when there is no tree to index.
+	Index BriefsIndex
 }
 
 // Present reports whether the project holds any brief at all, which is what
@@ -385,6 +388,7 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 	for _, n := range names {
 		view.Folders = append(view.Folders, *byFolder[n])
 	}
+	view.Index = buildBriefsIndex(set, view.Folders, len(view.Features))
 	return view
 }
 
@@ -446,8 +450,9 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 }
 
 // briefMark is a brief's one sidebar mark, its label, and the word Home's
-// Features tile shows for it. The Briefs tree, the Features list and the
-// tile all read it, from the brief's lock and review state (NIT-205's
+// Features tile shows for it. The Briefs tree, the Features list, the
+// "All briefs" index (NIT-203), Home's Briefs tile and the waiting-card
+// halves all read it, from the brief's lock and review state (NIT-205's
 // Review: the payload's lock_state, review_pending and open_threads). The
 // marks outrank one another as the sidebar legend reads: edited since
 // approval, then review pending, then an open thread (NIT-198: a locked
