@@ -128,11 +128,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <check, claim, comment, manifest, serve, skills, track, version>")
+				WithHint("run one of: dossierx <brief, check, claim, comment, constitution, manifest, serve, skills, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <check, claim, comment, manifest, serve, skills, track, version>")
+			WithHint("run one of: dossierx <brief, check, claim, comment, constitution, manifest, serve, skills, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -170,13 +170,13 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-four leaves, and not one more.
+	// The whole surface: nine nouns, twenty-six leaves, and not one more.
 	//
+	//	brief   list show lock unlock reaudit                             5
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link recover-approved-content 9
 	//	comment inbox list add reply                                      4
 	//	constitution show lock                                            2
-	//	track   list show status                                          3
 	//	manifest show list                                                2
 	//	serve · skills export · version                                   3
 	//
@@ -187,16 +187,16 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyFourLeavesUnderEightNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentySixLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
-	// "track" is the seventh noun. It earns its place by answering a question
-	// none of the other six can be asked: every one of them is organized on the
-	// MODULE axis, which says who guarantees a claim, and no arrangement of
-	// them says what a user gets or whether that thing is finished. Its three
-	// leaves are all READ-ONLY by design — see track.go's package comment for
-	// why a track must never gate a lock — so the noun adds a way to look at
-	// the corpus and no new way to change it.
+	// "brief" is the ninth noun: two read-only leaves over the briefs tree
+	// beside the claims (NIT-204), and the lock, unlock and reaudit leaves
+	// that give a brief an approval of its own (NIT-205).
+	//
+	// "track" was a noun through v0.7.21 and was removed in v0.7.22 (NIT-184),
+	// with no retired stub, like build-order below: a feature is a brief now,
+	// and `dossierx track` is an unknown command.
 	//
 	// "build-order" was a noun through v0.7.20 and was removed in v0.7.21,
 	// with no retired stub: `dossierx build-order` is an unknown command. A
@@ -209,11 +209,11 @@ func newRootCmd() *cobra.Command {
 	// holding nothing that predates it, at which point its next lock stamps
 	// the store. It survives as a hidden retired stub; see retired.go.
 	root.AddCommand(
+		newBriefCmd(),
 		newCheckCmd(),
 		newClaimCmd(),
 		newCommentCmd(),
 		newConstitutionCmd(),
-		newTrackCmd(),
 		newManifestCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
@@ -247,7 +247,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyFourLeavesUnderEightNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentySixLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -358,33 +358,6 @@ func requireKnownModule(cfg *config.Config, module string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown module %q; known: %s", module, strings.Join(cfg.Modules, ", "))
-}
-
-// requireKnownTrack validates a track id against the tracks this project
-// declares (cfg.Tracks). It is requireKnownModule's twin, and it exists for a
-// sharper version of the same reason.
-//
-// An unchecked module filter reports an empty result for a typo, which at least
-// looks unusual. An unchecked TRACK id reports the empty document that a real,
-// declared, not-yet-joined track reports — and a track declared before any claim
-// joins it is the ORDINARY state at the start of a feature, not an anomaly. So
-// the two responses would be identical, at exit 0, with nothing in either for a
-// reader to notice. See cliout.CodeUnknownTrack, which the callers attach.
-//
-// The message for a project with no tracks at all says so in words rather than
-// printing "known: " with nothing after it. That project has not adopted the
-// second axis, which is a legitimate way to use this engine (see
-// trackListData), and "you named a track in a project that declares none" is a
-// different mistake from "you misspelled one of these three".
-func requireKnownTrack(cfg *config.Config, id string) error {
-	if cfg.HasTrack(id) {
-		return nil
-	}
-	known := cfg.TrackIDs()
-	if len(known) == 0 {
-		return fmt.Errorf("unknown track %q; this project declares no tracks", id)
-	}
-	return fmt.Errorf("unknown track %q; known: %s", id, strings.Join(known, ", "))
 }
 
 // ---------------------------------------------------------------------
@@ -1189,7 +1162,10 @@ type checkData struct {
 	// read-only green as a linked one. See check.Result.CodeLinks.
 	CodeLinks    *codeLinksData `json:"code_links,omitempty"`
 	OpenComments map[string]int `json:"open_comments,omitempty"`
-	NextSteps    []string       `json:"next_steps,omitempty"`
+	// OpenBriefComments maps a brief's path to its open-thread count
+	// (NIT-205); absent when no brief has one.
+	OpenBriefComments map[string]int `json:"open_brief_comments,omitempty"`
+	NextSteps         []string       `json:"next_steps,omitempty"`
 }
 
 // codeLinksData is check.CodeLinksReport on the wire.
@@ -1268,6 +1244,7 @@ func newCheckData(res check.Result) checkData {
 		ScanErrors:                 scanErrors,
 		CodeLinks:                  newCodeLinksData(res.CodeLinks),
 		OpenComments:               res.OpenComments,
+		OpenBriefComments:          res.OpenBriefComments,
 		NextSteps:                  res.NextSteps,
 	}
 }
@@ -1376,6 +1353,23 @@ func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
 // shipped a refusal naming a verb the binary does not have, and a reader wedged
 // at exactly that moment got "unknown command" instead of a way out. See
 // TestLedgerHintsNameOnlyRealCommands.
+// commentLedgerDriftNamesABrief is true when a comment-ledger-drift finding
+// is keyed by a brief path (briefs/<folder>/<slug>.md), not a claim id. The
+// recovery must not name claim unlock: that leaves the forged brief thread
+// in place.
+func commentLedgerDriftNamesABrief(findings []lock.Finding) bool {
+	for _, f := range findings {
+		if f.Rule != lock.RuleCommentLedgerDrift {
+			continue
+		}
+		id := filepath.ToSlash(f.ClaimID)
+		if strings.Contains(id, "/") || strings.HasSuffix(id, ".md") {
+			return true
+		}
+	}
+	return false
+}
+
 func ledgerRecoveryHint(findings []lock.Finding) string {
 	rules := make(map[string]bool, len(findings))
 	for _, f := range findings {
@@ -1396,6 +1390,11 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 	// that tamper on its own (lock-ledger-absent when the ledger goes,
 	// lock-ledger-abandoned when claims_dir moves and strands its claims).
 	switch {
+	case check.StoreTooNew(findings):
+		// Before every other branch: a store this binary refuses to read is
+		// the store_too_new contract, and the restore-from-git recovery the
+		// unreadable branch gives would put an older store back.
+		return "the lock store (" + config.LockStoreDisplayPath + ") or the comment digest store (" + config.CommentDigestDisplayPath + ") was written by a newer dossierx than this one. Upgrade dossierx — every binary that touches the project: the pre-commit hook's, CI's, each collaborator's — then run: dossierx check --validate. Do NOT restore, edit or re-lock the store: it is not damaged, and an older binary's write drops what it does not know"
 	case rules[lock.RuleLockLedgerPreLedger]:
 		// The fail-closed pre-ledger refusal. This is the one integrity finding
 		// whose recovery is a sequence of ordinary commands rather than a
@@ -1427,6 +1426,9 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 	case rules[check.RuleCommentDigestAbsent], rules[lock.RuleCommentDigestUnrecorded], rules[check.RuleCommentDigestMissing]:
 		return "the comment digest store is missing entries (or the whole file), so review history on those claims is checked against nothing. Restore " + config.CommentDigestDisplayPath + " from version control — or git add it, if this commit is the one that updated it — then run: dossierx check --validate. Do not run a comment op to re-create an entry: that records whatever the claim says now as the truth"
 	case rules[lock.RuleCommentLedgerDrift]:
+		if commentLedgerDriftNamesABrief(findings) {
+			return "a brief's comment block changed outside the engine. Restore the brief file from version control (and " + config.CommentDigestDisplayPath + ", if a commit carried them as a pair) and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx brief unlock <path> --reason \"...\", fix, then dossierx brief lock <path> --reason \"...\""
+		}
 		return "a locked claim's comment block changed outside the engine. Restore the claim file from version control and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx claim unlock <id> --reason \"...\", fix, then dossierx claim lock <id> --reason \"...\""
 	case rules[lock.RuleLockContentDrift], rules[lock.RuleLockLedgerMissing], rules[lock.RuleLockLedgerOrphan], rules[lock.RuleLockLedgerReleased]:
 		return "read data.ledger_findings: each names its claim and its own recovery. A locked claim that no longer matches its approval is restored from version control, or taken through dossierx claim unlock <id> --reason \"...\", fixed, then dossierx claim lock <id> --reason \"...\" — which is the only path that records a new approval"
@@ -1653,7 +1655,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	data.StagedFiles = sp.FromIndex
 	out := cmdResult{
 		Data:     data,
-		Warnings: append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...),
+		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), sp.Warnings...),
 		Text:     func() { formatCheckStagedResult(cmd, sp, res) },
 	}
 
@@ -1724,6 +1726,9 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 	reportProjectionError(cmd, res)
 	reportConformanceBlocking(cmd, res)
 	reportGitignoreCheck(cmd, res)
+	for _, w := range sp.Warnings {
+		fmt.Fprintf(out, "  warning: %s\n", w)
+	}
 	for _, step := range res.NextSteps {
 		fmt.Fprintf(out, "  next: %s\n", step)
 	}
@@ -1902,7 +1907,10 @@ func projectionRecoveryHint(res check.Result) string {
 		case "catalog":
 			action = "reduce projected catalog, readiness, or conformance volume"
 		case "render":
-			action = "reduce projected viewer content or facet/track duplication"
+			action = "reduce projected viewer content or facet duplication"
+			if res.BriefImagesOverBound {
+				action = "shrink or remove brief images: every image a brief references is copied beside the viewer and counts toward its bound, together with the page"
+			}
 		default:
 			action = "reduce declared conformance result multiplicity or member size"
 		}
@@ -1976,6 +1984,7 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 			fmt.Fprintf(out, "open comments: module %q: %d\n", m, res.OpenComments[m])
 		}
 	}
+	writeOpenBriefComments(out, res.OpenBriefComments)
 	if len(res.NextSteps) > 0 {
 		fmt.Fprintln(out, "next steps:")
 		for _, h := range res.NextSteps {
@@ -2057,6 +2066,7 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 			fmt.Fprintf(out, "open comments: module %q: %d\n", m, res.OpenComments[m])
 		}
 	}
+	writeOpenBriefComments(out, res.OpenBriefComments)
 	for _, line := range res.ImplinkStatusStdout {
 		fmt.Fprintln(out, line)
 	}

@@ -31,9 +31,9 @@
 //
 // They are HIDDEN (absent from --help, from the completion script, and from
 // requireSubcommand's "run one of:" list) because they are not surface: nothing
-// should discover them, and the eight-noun/twenty-four-leaf contract is a design
+// should discover them, and the nine-noun/twenty-six-leaf contract is a design
 // constraint the release argues for. annotationRetired is what keeps
-// TestSurfaceIsTwentyFourLeavesUnderEightNouns honest about that — it excludes these
+// TestSurfaceIsTwentySixLeavesUnderNineNouns honest about that — it excludes these
 // by MARK, not by hidden-ness, so a real leaf can never be smuggled past the
 // count by hiding it.
 package main
@@ -168,8 +168,8 @@ func retiredTopLevelCmds() []*cobra.Command {
 			`stale: removed in v0.3.0; "stale" was a filter wearing a verb's clothes, and it is now a flag on claim list`,
 			`run: dossierx claim list --review-pending`),
 		retiredCmd("coverage",
-			`coverage: removed in v0.3.0; "coverage" was a filter wearing a verb's clothes, and it is now a flag on claim list`,
-			`run: dossierx claim list --migrated`),
+			`coverage: removed in v0.3.0; it measured migrated_from notes, and v0.7.22 retired that field — a claim's evidence is its sources, which claim list counts per claim`,
+			`run: dossierx claim list`),
 		retiredCmd("implink",
 			`implink: removed in v0.3.0; recording a code link is dossierx claim link, and reading one back is part of what claim show reports`,
 			// `claim link` is declared cobra.NoArgs and requires --module, --claim
@@ -200,17 +200,25 @@ var retiredFieldPattern = regexp.MustCompile(`field (\w+) not found in type (mod
 // retired field may also carry skills exported by the release that knew it.
 const upgradingSkillStep = "run: dossierx skills export, then load the dossierx-upgrading skill and follow its "
 
+// tracksRetiredHint is the one named error for both halves of the retired
+// track axis (NIT-184): `tracks:` on a claim and `tracks[]` in the config.
+// The same fold removes both, so both name it the same way.
+const tracksRetiredHint = "tracks-retired: `tracks` was retired in v0.7.22 (a feature is a brief now); " + upgradingSkillStep + "\"tracks are gone\" fold"
+
 // retiredFields maps a retired key, by the type that used to carry it, to the
 // hint naming its fold. The error codes stay invalid_claim / invalid_config:
 // the file is still wrong for this binary; only the recovery is named.
 var retiredFields = map[string]map[string]string{
 	"model.Claim": {
-		"build_role":  "`build_role` is a retired claim field; " + upgradingSkillStep + "\"build_role is gone\" fold",
-		"governed_by": "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
-		"mirrors":     "`mirrors` is a retired claim field; " + upgradingSkillStep + "\"mirrors is gone\" fold",
+		"build_role":    "`build_role` is a retired claim field; " + upgradingSkillStep + "\"build_role is gone\" fold",
+		"governed_by":   "`governed_by` is a retired claim field; " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
+		"mirrors":       "`mirrors` is a retired claim field; " + upgradingSkillStep + "\"mirrors is gone\" fold",
+		"migrated_from": "`migrated_from` is a retired claim field; " + upgradingSkillStep + "\"migrated_from is gone\" fold",
+		"tracks":        tracksRetiredHint,
 	},
 	"config.Config": {
 		"doctrine_facet": "`doctrine_facet` is a retired config field (the doctrine hub is gone); " + upgradingSkillStep + "\"governed_by and the doctrine hub are gone\" fold",
+		"tracks":         tracksRetiredHint,
 	},
 }
 

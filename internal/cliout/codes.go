@@ -41,6 +41,13 @@ const (
 	CodeThreadNotFound Code = "thread_not_found"
 	// CodeReplyNotFound is a reply id that does not exist in the named thread.
 	CodeReplyNotFound Code = "reply_not_found"
+	// CodeBriefNotFound is a `brief show` argument that names no brief — neither
+	// a brief's id (<folder>.<slug>) nor its path as `brief list` prints it. It
+	// is its own code rather than claim_not_found because the recovery is a
+	// different listing: claim_not_found sends an agent to `claim list --match`,
+	// which cannot find a brief, and an agent handed that code for a typo'd
+	// brief path would search a registry the brief was never in.
+	CodeBriefNotFound Code = "brief_not_found"
 	// CodeBannerClaim is a comment attempted on a banner claim, which cannot
 	// carry threads.
 	CodeBannerClaim Code = "banner_claim"
@@ -199,6 +206,21 @@ const (
 	// Resolve in the viewer — that click IS the approval this gate is waiting
 	// for — so an agent must not treat this as something to work around.
 	CodeUnresolvedComments Code = "unresolved_comments"
+	// CodeCommentOpen is `brief lock` or `brief reaudit` refusing a brief that
+	// carries an open comment thread (NIT-205). It is the brief's twin of
+	// unresolved_comments, with the same recovery — reply, and the human
+	// resolves — and its own code because a brief's thread anchors on a path,
+	// not a claim id, so an agent that branches on unresolved_comments would
+	// go looking for a claim.
+	CodeCommentOpen Code = "comment_open"
+	// CodeStoreTooNew is a command refusing a lock store or comment digest
+	// store written by a NEWER dossierx (its version is above every version
+	// this binary knows). Reading it would work and the next write would drop
+	// what this binary does not know, so it is refused before anything is
+	// read or written. The recovery is upgrading this binary; nothing about
+	// the project is wrong. `check` reports the same state as
+	// lock-ledger-unreadable, naming the upgrade.
+	CodeStoreTooNew Code = "store_too_new"
 	// CodeConstitutionOverCap is check+lock refusing a present constitution.yaml
 	// that exceeds the 800-word cap. The wire token is the Done-when name.
 	CodeConstitutionOverCap Code = "CONSTITUTION_OVER_CAP"
@@ -248,26 +270,6 @@ const (
 	// declare. Reported rather than answered with an empty report, because an
 	// empty report for a typo'd module looks exactly like success.
 	CodeUnknownModule Code = "unknown_module"
-	// CodeUnknownTrack is a track id — the positional argument to "dossierx
-	// track show" and "dossierx track status" — that the project's config does
-	// not declare in its `tracks:` registry.
-	//
-	// It is its own code rather than a reuse of CodeUnknownModule, and the
-	// reason is the recovery rather than the wording. A skill branching on
-	// unknown_module goes and reads `modules:` and re-derives a --module flag;
-	// nothing in that sequence can find a track, so an agent handed
-	// unknown_module for a mistyped track id would inspect a registry the id was
-	// never in, find it correct, and loop. They are two registries with two
-	// argument shapes.
-	//
-	// The empty-report failure CodeUnknownModule names is SHARPER here, which is
-	// why the check exists at all. An empty module report is at least unusual; an
-	// empty TRACK is an ordinary, expected state — a project may declare a track
-	// the day the feature is scoped and before any claim joins it — so a typo'd
-	// id would otherwise answer with exactly the document a real, not-yet-joined
-	// track answers with, at exit 0. There is nothing in that response for a
-	// reader to notice.
-	CodeUnknownTrack Code = "unknown_track"
 	// CodeMissingFlag is a required flag that was not supplied — --reason,
 	// --as, --module. Distinct from CodeInvalidActor / CodeUnsupportedFormat,
 	// which mean "supplied, but not a legal value".
@@ -358,6 +360,7 @@ func ExitCode(c Code) int {
 		CodeClaimNotFound,
 		CodeThreadNotFound,
 		CodeReplyNotFound,
+		CodeBriefNotFound,
 		CodeNotLocked,
 		CodeNotReviewPending,
 		CodeReviewPending,

@@ -64,7 +64,7 @@ func assertNoSeam(t *testing.T, browser, url, scheme string) {
 	ctx := browserContextFor(t, browser)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1280, 900, chromedp.EmulateScale(1)),
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 	)
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	waitVisible(t, ctx, ".claim-body pre")

@@ -38,6 +38,15 @@
 #              claim. Deliberately named after a word the repository's
 #              offline-scan regex matches, so nothing in the engine can get
 #              away with hardcoding it.
+#
+# briefs/ holds one brief (NIT-204), resting on two claims and referencing one
+# image, so a committed viewer carries the briefs payload and the render report
+# shows it. briefs/features/ holds two features (NIT-201): one locked, resting on
+# locked claims in three modules and linking to the graph/ brief and to the
+# other feature by relative path; one draft, resting on a mix, linking to the
+# graph/ brief from the project root. So the committed viewer carries the
+# Features entry, the Made of lists, rewritten brief links and the Home tile. It is the only fixture with briefs; every other fixture's viewer is
+# the no-briefs case, byte-identical to before briefs existed.
 schema_version: 1
 title: Claims Graph Demo
 eyebrow: the corpus the graph pane was designed against

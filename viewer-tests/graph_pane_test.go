@@ -736,7 +736,7 @@ func TestGraphRefresh(t *testing.T) {
 
 	t.Run("present under serve and preserving the view", func(t *testing.T) {
 		p := newGraphProject(t)
-		ctx := serveAndOpenLive(t, p)
+		ctx := serveAndOpenLive(t, p, widgetPage)
 		desktopViewport(t, ctx)
 		evalVoid(t, ctx, cameraSpy)
 		openGraphPane(t, ctx)
@@ -818,16 +818,21 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	p := newProjectRaw(t, twoModuleConfig)
 	p.writeClaim("widget.yaml", twoModuleClaim("widget.contract.overview", "widget"))
 	p.writeClaim("gadget.yaml", twoModuleClaim("gadget.contract.overview", "gadget"))
-	ctx := staticGraphTab(t, p)
+	// Opened on the first module's reading view (the viewer opens on Home
+	// without a hash), so there is a reading view for the graph to clobber.
+	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()+widgetPage))
+	pollTrue(t, ctx, `!!window.dossierxGraphCore`)
+	desktopViewport(t, ctx)
 	openGraphPane(t, ctx)
 
 	// On load the first module is the visible one.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden`)
 
 	// Change a graph filter. The pane writes its segment through
 	// history.replaceState ONLY, which does not fire hashchange — so the
-	// reading view's routing, which falls back to the FIRST MODULE for
-	// anything it does not recognise, is never re-entered.
+	// reading view's routing, which falls back to Home for anything it does
+	// not recognise, is never re-entered.
 	evalVoid(t, ctx, `(function () {
 		var s = document.getElementById('dxgOverlay');
 		s.value = 'cycles';
@@ -837,7 +842,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	if !strings.Contains(hash, "!g=") || !strings.Contains(hash, "ov=cycles") {
 		t.Fatalf("hash = %q, want a !g= segment carrying the graph state", hash)
 	}
-	if evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden`) {
+	if evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden`) {
 		t.Fatal("a graph filter change must not move the reading view")
 	}
 
@@ -845,7 +850,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 	// Both halves must apply.
 	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=review&ty=r&lb=1&ex=&se=';`)
 	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'review'`)
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
 		t.Fatalf("granularity from the pasted hash = %q, want module", got)
 	}
@@ -864,7 +869,7 @@ func TestGraphPaneSurvivesFragmentSwap(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
 	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 	desktopViewport(t, ctx)
 	openGraphPane(t, ctx)
 

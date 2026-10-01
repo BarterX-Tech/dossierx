@@ -1,6 +1,7 @@
 package digest
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -287,5 +288,22 @@ func TestLoadStoreToleratesAnUnknownKeyAndDecodeStoreRefusesIt(t *testing.T) {
 	}
 	if _, err := DecodeStore([]byte(`{"version":1,"digests":{}}`)); err != nil {
 		t.Fatalf("DecodeStore must accept the exact on-disk shape: %v", err)
+	}
+}
+
+// TestADigestStoreFromANewerBinaryIsRefused pins F5 for the comment digest
+// store: a version above this binary's is refused by the lenient reader and the
+// strict one alike, never read and re-saved without what it recorded.
+func TestADigestStoreFromANewerBinaryIsRefused(t *testing.T) {
+	raw := []byte(`{"version":2,"digests":{},"future":{}}`)
+	path := filepath.Join(t.TempDir(), "comment-digest.json")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadStore(path); !errors.Is(err, ErrStoreTooNew) {
+		t.Fatalf("LoadStore on a version-2 store: %v, want ErrStoreTooNew", err)
+	}
+	if _, err := DecodeStore(raw); !errors.Is(err, ErrStoreTooNew) {
+		t.Fatalf("DecodeStore on a version-2 store: %v, want ErrStoreTooNew", err)
 	}
 }

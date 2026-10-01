@@ -6,7 +6,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// TestNavRowsShareOneLaneWhenSelected pins that selecting a module or track
+// TestNavRowsShareOneLaneWhenSelected pins that selecting a module
 // row does not move its label.
 //
 // `.sec-tab.on` carried `padding-left: 18px`, a fossil of a 2px accent
@@ -27,7 +27,7 @@ func TestNavRowsShareOneLaneWhenSelected(t *testing.T) {
 		t.Run(tier.name, func(t *testing.T) {
 			p := group02NavigationProject(t)
 			ctx := browserContext(t)
-			runCDP(t, ctx, chromedp.EmulateViewport(tier.w, tier.h), chromedp.Navigate(p.renderStatic()),
+			runCDP(t, ctx, chromedp.EmulateViewport(tier.w, tier.h), chromedp.Navigate(p.renderStatic()+widgetPage),
 				chromedp.WaitVisible(".sec-tab", chromedp.ByQuery))
 			if tier.drawer {
 				runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('navToggle').click()`, nil))

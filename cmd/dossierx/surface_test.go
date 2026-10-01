@@ -7,7 +7,7 @@
 // newRootCmd() in main.go and Go forbids importing package main, so the walk has
 // to happen inside this package. The other door — a hidden `dossierx __surface`
 // verb — is worse than inconvenient: it would itself be a twentieth leaf, and
-// TestSurfaceIsTwentyTwoLeavesUnderEightNouns excludes commands by the
+// TestSurfaceIsTwentySixLeavesUnderNineNouns excludes commands by the
 // annotationRetired MARK and deliberately NOT by hidden-ness (see retired.go),
 // so the emitter would break the very count it exists to protect. A generator
 // test has neither problem, and it comes with the staleness check for free:
@@ -94,8 +94,15 @@ type surfaceDoc struct {
 	// would be a client-observable door this inventory never mentions.
 	RootFlags []string `json:"root_flags"`
 
-	Retired    []string `json:"retired"`
-	LintRules  []string `json:"lint_rules"`
+	Retired   []string `json:"retired"`
+	LintRules []string `json:"lint_rules"`
+	// BriefRules is internal/briefs' rule set (NIT-204), inventoried beside
+	// lint_rules and never inside it: the brief rules are a registry of their
+	// own, because the claim Lint interface takes claims and nothing else. It
+	// is REGISTERED by brief_cli_test.go rather than read here, for the reason
+	// surfacePayloadTypes gives: this file is copied into older trees, and an
+	// import of a package they do not have would not compile there.
+	BriefRules []string `json:"brief_rules"`
 	ErrorCodes []string `json:"error_codes"`
 	Skills     []string `json:"skills"`
 	HTTPRoutes []string `json:"http_routes"`
@@ -260,12 +267,14 @@ func buildSurfaceDoc(t *testing.T, root string) surfaceDoc {
 	// quote agreed with the registry while disagreeing with the document it
 	// appears in.
 	rules := surfaceLintRules()
+	briefRules := surfaceBriefRules()
 
 	return surfaceDoc{
 		Commands:             commands,
 		RootFlags:            surfaceCommandFlags(rootCmd),
 		Retired:              retiredPaths,
 		LintRules:            rules,
+		BriefRules:           briefRules,
 		ErrorCodes:           codes,
 		Skills:               surfaceSkills(),
 		HTTPRoutes:           routes,
@@ -278,6 +287,7 @@ func buildSurfaceDoc(t *testing.T, root string) surfaceDoc {
 			"nouns":       nouns,
 			"commands":    len(commands),
 			"lint_rules":  len(rules),
+			"brief_rules": len(briefRules),
 			"error_codes": len(codes),
 			"http_routes": len(routes),
 		},
@@ -289,7 +299,7 @@ func buildSurfaceDoc(t *testing.T, root string) surfaceDoc {
 // ---------------------------------------------------------------------
 
 // surfaceCommandTree walks newRootCmd() the same way
-// TestSurfaceIsTwentyTwoLeavesUnderEightNouns does, and for the same reason: a
+// TestSurfaceIsTwentySixLeavesUnderNineNouns does, and for the same reason: a
 // naive walk yields ~31 leaves against an enforced 19, because cobra's own
 // help/completion furniture and the twelve removal stubs are all in the tree.
 //
@@ -401,6 +411,25 @@ func surfaceLintRules() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// surfaceRegisteredBriefRules holds the brief rule names registered at init
+// time by brief_cli_test.go. See surfaceDoc.BriefRules for why they arrive this
+// way rather than by an import.
+var surfaceRegisteredBriefRules []string
+
+// registerSurfaceBriefRules records the brief rule set from the file whose noun
+// owns it.
+func registerSurfaceBriefRules(names []string) {
+	surfaceRegisteredBriefRules = append(surfaceRegisteredBriefRules, names...)
+}
+
+// surfaceBriefRules is the registered brief rule set, sorted, and an empty
+// list — never null — in a tree that has none.
+func surfaceBriefRules() []string {
+	out := append([]string{}, surfaceRegisteredBriefRules...)
+	sort.Strings(out)
+	return out
 }
 
 // ---------------------------------------------------------------------

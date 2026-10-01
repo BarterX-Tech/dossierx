@@ -14,14 +14,12 @@ import (
 )
 
 // Reading-view scale budgets for deferred surface mounting. Curtainly-shaped
-// synthetic corpus (many modules × facets × cards + tracks) stays in-repo;
+// synthetic corpus (many modules × facets × cards) stays in-repo;
 // Curtainly YAML never does.
 const (
 	readingScaleModules        = 8
 	readingScaleFacets         = 2
 	readingScaleClaimsPerFacet = 12
-	readingScaleTracks         = 2
-	readingScaleClaimsPerTrack = 6
 
 	readingScaleMaxLoadMS        = 15_000
 	readingScaleMaxEnhanceMS     = 8_000
@@ -38,10 +36,7 @@ func readingScaleConfigYAML() string {
 	for i := 0; i < readingScaleModules; i++ {
 		fmt.Fprintf(&b, "  - mod%02d\n", i)
 	}
-	b.WriteString("claims_dir: claims\ntracks:\n")
-	for i := 0; i < readingScaleTracks; i++ {
-		fmt.Fprintf(&b, "  - {id: track%02d, title: Track %02d}\n", i, i)
-	}
+	b.WriteString("claims_dir: claims\n")
 	return b.String()
 }
 
@@ -52,10 +47,6 @@ func readingScaleProject(t *testing.T) (p *project, totalClaims int) {
 		for fi := 0; fi < readingScaleFacets; fi++ {
 			for ci := 0; ci < readingScaleClaimsPerFacet; ci++ {
 				id := fmt.Sprintf("mod%02d.%s.c%02d", mi, []string{"contract", "internals"}[fi], ci)
-				trackBlock := ""
-				if mi < readingScaleTracks && fi == 0 && ci < readingScaleClaimsPerTrack {
-					trackBlock = fmt.Sprintf("tracks:\n  - id: track%02d\n    role: owns\n", mi)
-				}
 				p.writeClaim(id+".yaml", fmt.Sprintf(`id: %s
 facet: %s
 module: mod%02d
@@ -66,7 +57,7 @@ body: |
 rests_on:
   none: true
   reason: viewer-test scale fixture, not backed by any doctrine claim
-%s`, id, []string{"contract", "internals"}[fi], mi, id, trackBlock))
+`, id, []string{"contract", "internals"}[fi], mi, id))
 				totalClaims++
 			}
 		}
@@ -145,7 +136,7 @@ func TestReadingViewBrowserScaleBudgets(t *testing.T) {
 	// never succeeds (no box). Wait for a claim card inside a host instead —
 	// that is the first painted soft-mount witness.
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+"#mod00"),
 		chromedp.WaitVisible("[data-dossierx-surface-host] .claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.readyState === 'complete' && document.querySelectorAll('[data-dossierx-surface-host] .claim').length > 0`)

@@ -43,16 +43,18 @@ func evalString(t *testing.T, ctx context.Context, expr string) string {
 	return v
 }
 
-// serveOpenTabWithStop starts serve for p, opens a tab, waits until the live
+// serveOpenTabWithStop starts serve for p, opens a tab on the widget module
+// (every caller's project holds it; the viewer opens on Home without a
+// hash), waits until the live
 // runtime is mounted, and returns the browser context PLUS serve's base URL and
 // stop func (the server-down and SSE-witness specs need both, which newLiveTab
 // discards).
 func serveOpenTabWithStop(t *testing.T, p *project) (ctx context.Context, base string, stop func()) {
 	t.Helper()
 	base, stop = p.serve()
-	ctx = browserContext(t)
+	ctx = withInstantScroll(t, browserContext(t)) // see newLiveTab
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live')`)
@@ -341,7 +343,7 @@ func TestReloadPreservesComposerDraft(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
 	p.run("comment", "add", "widget.contract.base", "--as", "human", "--body", "seed thread")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	// Open the panel on the base claim and type a comment WITHOUT submitting it.
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip[data-claim-id="widget.contract.base"]').click()`, nil))
@@ -371,7 +373,7 @@ func TestReloadPreservesComposerDraft(t *testing.T) {
 func TestReloadPreservesReplyDraft(t *testing.T) {
 	p := newProject(t)
 	tid := p.seedComment("human", "parent thread")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	// Open the panel and type a reply to the seeded thread WITHOUT submitting.
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip').click()`, nil))
@@ -400,7 +402,7 @@ func TestReloadPreservesReplyDraft(t *testing.T) {
 func TestReloadPreservesEditDraft(t *testing.T) {
 	p := newProject(t)
 	tid := p.seedComment("human", "original body")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)

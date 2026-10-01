@@ -129,6 +129,20 @@ type citePolicy = Citations
 type bodyPolicy struct {
 	img  imagePolicy
 	cite citePolicy
+
+	// document is DOCUMENT MODE (NIT-204): the one surface on which "#" and
+	// "##" are headings rather than literal text. A claim card sits inside
+	// viewer chrome that owns h1 and h2, so a claim body refuses them (see
+	// atxHeading); a brief IS the page it is shown on, so its own title and
+	// sections are its h1 and h2. Like the two capabilities above, the zero
+	// value is the refusal: only RenderDocument sets it, so no claim path can
+	// acquire it by forgetting a field.
+	document bool
+	// title, when non-nil, receives the raw text of the first level-1 heading
+	// the block scan emits. It is a pointer for the reason imagePolicy.refs is:
+	// the policy is copied by value into every container the scan opens. Only
+	// DocumentTitle sets it.
+	title *string
 }
 
 // match reports whether the "[" at text[i] opens a citation marker this claim

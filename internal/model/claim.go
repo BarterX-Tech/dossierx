@@ -231,35 +231,22 @@ type Claim struct {
 	// Edges. rests_on is the one claim-to-claim edge: the required
 	// dependency chain, and the drift baseline a locked claim is checked
 	// against. It is a list of claim ids, or the stated absence
-	// {none: true, reason} (NIT-24). The retired governed_by edge (NIT-29)
-	// and the retired mirrors key have no field and no shadow key: a claim
-	// file that still carries either fails strict decode.
+	// {none: true, reason} (NIT-24). The retired governed_by edge (NIT-29),
+	// the retired mirrors key, the retired migrated_from note (NIT-191) and
+	// the retired tracks list (NIT-184) have no field and no shadow key: a
+	// claim file that still carries any of them fails strict decode.
 	RestsOn RestsOn `yaml:"rests_on,omitempty"`
 
 	// Sources is the evidence this claim rests on, cited from Body by "[n]"
 	// markers matching each entry's Ref. See model.Source for the whole
-	// rationale; the short version is that MigratedFrom below records WHICH
-	// sources a claim came from and this records WHAT they were, which is the
-	// difference between a comment and something the engine can check.
+	// rationale; the short version is that a citation records WHAT a claim
+	// rests on in a form the engine can check, not a comment about it.
 	//
 	// Optional and additive: a claim without sources serializes byte-for-byte
 	// as it did before this field existed (the `omitempty` tag is
 	// load-bearing, exactly as it is for Comments), and every source-* lint
 	// is a no-op on it.
 	Sources []Source `yaml:"sources,omitempty"`
-
-	// Tracks is this claim's membership in cross-cutting concerns — the
-	// second axis, orthogonal to Module. See model.TrackRef and
-	// model.TrackRole for why membership is not an edge and why the
-	// owns/cites pair is what keeps it from being tagging.
-	//
-	// Optional and additive in the same sense as Sources: a corpus that
-	// declares no tracks behaves exactly as it did before this field
-	// existed. Module is untouched by it — a claim keeps exactly one module,
-	// and track membership never gates locking.
-	Tracks []TrackRef `yaml:"tracks,omitempty"`
-
-	MigratedFrom string `yaml:"migrated_from,omitempty"`
 
 	// Order is an optional, author-set hint for the VIEWER's per-group
 	// claim sequence (internal/render's orderClaims): claims with Order set

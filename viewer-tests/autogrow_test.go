@@ -94,7 +94,7 @@ func growMultilineDraft(t *testing.T, ctx context.Context, sel string) int {
 func TestReloadRestoredComposerDraftIsNotClipped(t *testing.T) {
 	p := newProject(t)
 	p.seedComment("human", "seed thread")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)

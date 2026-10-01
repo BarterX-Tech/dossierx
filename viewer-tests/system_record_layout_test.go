@@ -26,7 +26,7 @@ func TestClaimBodyUsesAvailableCardWidth(t *testing.T) {
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1600, 900),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 		chromedp.WaitVisible(".claim-body", chromedp.ByQuery),
 	)
 	assertClaimBodyUsesCardWidth(t, ctx, "desktop")

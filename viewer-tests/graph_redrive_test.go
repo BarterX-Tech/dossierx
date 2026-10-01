@@ -172,8 +172,8 @@ func TestGraphDeepLinkOnLoadOpensAndRestoresThePane(t *testing.T) {
 	// The reading view's own half of the same hash still landed: opening the
 	// pane on load must not cost the reader the claim they were sent to.
 	t.Run("the reading view honoured its half too", func(t *testing.T) {
-		pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2`)
-		if !evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`) {
+		pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)').length === 2`)
+		if !evalBool(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`) {
 			t.Fatal("the deep link's reading-view target was lost: the second module must be the visible one")
 		}
 	})

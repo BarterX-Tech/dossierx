@@ -52,6 +52,20 @@ func standardFiles() map[string]string {
 	}
 }
 
+// briefFlow is a draft brief, id widget.flow, with no thread yet: a brief's
+// threads are recorded in the comment digest by the write that adds them, so
+// a thread typed into a fixture would be (rightly) refused as
+// comment_digest_drift in this ledger-covered project.
+const briefFlow = "---\nsummary: The widget flow.\nstatus: draft\nrests_on:\n  - widget.contract.one\n---\n# Flow\n\nText.\n"
+
+// admissionFiles is standardFiles plus that brief, the target of the brief
+// routes (NIT-198) in the admission matrix; snapshotClaims watches its file.
+func admissionFiles() map[string]string {
+	files := standardFiles()
+	files["briefs/widget/flow.md"] = briefFlow
+	return files
+}
+
 // startServer writes a project, starts a real 127.0.0.1 listener serving it,
 // and returns the server plus its base URL (http://127.0.0.1:<port>) and the
 // project root. A real listener (not httptest) is used so the admission Host/
@@ -213,10 +227,21 @@ func doWithClient(client *http.Client, method, url, body string, mods ...reqMod)
 
 // --- claim-file byte-identity ------------------------------------------------
 
+// snapshotClaims reads every authored file a comment write can touch: the
+// claims and, when the project has one, the briefs tree (a brief's threads
+// live in its own frontmatter, NIT-198).
 func snapshotClaims(t *testing.T, root string) map[string][]byte {
 	t.Helper()
-	dir := filepath.Join(root, "claims")
 	snap := map[string][]byte{}
+	snapshotAuthoredTree(t, filepath.Join(root, "claims"), snap)
+	if _, err := os.Stat(filepath.Join(root, "briefs")); err == nil {
+		snapshotAuthoredTree(t, filepath.Join(root, "briefs"), snap)
+	}
+	return snap
+}
+
+func snapshotAuthoredTree(t *testing.T, dir string, snap map[string][]byte) {
+	t.Helper()
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -232,9 +257,8 @@ func snapshotClaims(t *testing.T, root string) map[string][]byte {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("snapshot claims: %v", err)
+		t.Fatalf("snapshot %s: %v", dir, err)
 	}
-	return snap
 }
 
 func assertClaimsUnchanged(t *testing.T, before map[string][]byte, root string) {
@@ -279,6 +303,14 @@ func mutatingEndpoints() []mutatingEndpoint {
 		{"reopen", http.MethodPost, "/api/claims/widget.contract.locked/comments/c-aaaaaa/reopen", `{}`, true},
 		{"edit", http.MethodPatch, "/api/claims/widget.contract.locked/comments/c-aaaaaa", `{"body":"x"}`, true},
 		{"delete", http.MethodDelete, "/api/claims/widget.contract.locked/comments/c-aaaaaa", ``, false},
+		// The brief routes (NIT-198). Every row here is refused by admission
+		// before a handler runs, so c-aaaaaa need not exist on the brief.
+		{"brief add", http.MethodPost, "/api/briefs/widget.flow/comments", `{"body":"x"}`, true},
+		{"brief reply", http.MethodPost, "/api/briefs/widget.flow/comments/c-aaaaaa/replies", `{"body":"x"}`, true},
+		{"brief resolve", http.MethodPost, "/api/briefs/widget.flow/comments/c-aaaaaa/resolve", `{}`, true},
+		{"brief reopen", http.MethodPost, "/api/briefs/widget.flow/comments/c-aaaaaa/reopen", `{}`, true},
+		{"brief edit", http.MethodPatch, "/api/briefs/widget.flow/comments/c-aaaaaa", `{"body":"x"}`, true},
+		{"brief delete", http.MethodDelete, "/api/briefs/widget.flow/comments/c-aaaaaa", ``, false},
 	}
 }
 
@@ -287,10 +319,10 @@ func mutatingEndpoints() []mutatingEndpoint {
 // =============================================================================
 
 func TestAdmission_RebindingHostRejected(t *testing.T) {
-	_, base, root := startServer(t, baseConfig, standardFiles())
+	_, base, root := startServer(t, baseConfig, admissionFiles())
 
 	// GET routes.
-	for _, path := range []string{"/", "/api/comments"} {
+	for _, path := range []string{"/", "/api/comments", "/api/briefs/widget.flow/comments"} {
 		before := snapshotClaims(t, root)
 		resp, _ := do(t, http.MethodGet, base+path, "", setHost("evil.com"))
 		if resp.StatusCode != http.StatusMisdirectedRequest {
@@ -319,7 +351,7 @@ func TestAdmission_RebindingHostRejected(t *testing.T) {
 // =============================================================================
 
 func TestAdmission_OriginRejected(t *testing.T) {
-	_, base, root := startServer(t, baseConfig, standardFiles())
+	_, base, root := startServer(t, baseConfig, admissionFiles())
 
 	cases := []struct {
 		name string
@@ -351,7 +383,7 @@ func TestAdmission_OriginRejected(t *testing.T) {
 // =============================================================================
 
 func TestAdmission_ContentTypeRejected(t *testing.T) {
-	_, base, root := startServer(t, baseConfig, standardFiles())
+	_, base, root := startServer(t, baseConfig, admissionFiles())
 
 	for _, ep := range mutatingEndpoints() {
 		if !ep.needsCT {
@@ -373,7 +405,7 @@ func TestAdmission_ContentTypeRejected(t *testing.T) {
 // =============================================================================
 
 func TestAdmission_SecFetchSiteRejected(t *testing.T) {
-	_, base, root := startServer(t, baseConfig, standardFiles())
+	_, base, root := startServer(t, baseConfig, admissionFiles())
 
 	// A mutating request that is otherwise fully allowed, rejected purely for
 	// its cross-site fetch metadata.
@@ -384,6 +416,11 @@ func TestAdmission_SecFetchSiteRejected(t *testing.T) {
 		t.Fatalf("POST add with Sec-Fetch-Site: cross-site: got %d, want 403", resp.StatusCode)
 	}
 	assertNoCORS(t, resp, "sec-fetch-site POST")
+	assertClaimsUnchanged(t, before, root)
+	resp, _ = do(t, http.MethodPost, base+"/api/briefs/widget.flow/comments", `{"body":"x"}`, mods...)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("POST brief add with Sec-Fetch-Site: cross-site: got %d, want 403", resp.StatusCode)
+	}
 	assertClaimsUnchanged(t, before, root)
 
 	// A GET is gated too when the header is present.

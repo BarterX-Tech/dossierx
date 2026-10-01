@@ -54,8 +54,6 @@
             ]
           },
           "Sources": null,
-          "Tracks": null,
-          "MigratedFrom": "",
           "Order": 0,
           "Emphasis": false,
           "ReviewPending": false,
@@ -92,8 +90,6 @@
             ]
           },
           "Sources": null,
-          "Tracks": null,
-          "MigratedFrom": "",
           "Order": 0,
           "Emphasis": false,
           "ReviewPending": false,
@@ -130,8 +126,6 @@
             "IDs": null
           },
           "Sources": null,
-          "Tracks": null,
-          "MigratedFrom": "",
           "Order": 0,
           "Emphasis": false,
           "ReviewPending": false,
@@ -168,8 +162,6 @@
             ]
           },
           "Sources": null,
-          "Tracks": null,
-          "MigratedFrom": "",
           "Order": 0,
           "Emphasis": false,
           "ReviewPending": false,
@@ -198,7 +190,7 @@
     },
     "panel.contract.api": {
       "subject": "claim",
-      "hash": "679690e24ed2d3386d189aa08489b638b3511536112ad228fd039ab811bcfeab",
+      "hash": "37dd48b87f8058bb8dbb0fd7d4d585a19245b5dfafbdbd1fbf0fb9b5a38a78fb",
       "at": "2026-09-24T15:43:17.811047Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -226,8 +218,6 @@
           ]
         },
         "Sources": null,
-        "Tracks": null,
-        "MigratedFrom": "",
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,
@@ -238,7 +228,7 @@
     },
     "panel.contract.behavior": {
       "subject": "claim",
-      "hash": "82be35afabd744d2c3f68f545e07ee9dc3b4608219118ca7a64157b48184b11f",
+      "hash": "8259e190eed2ad498a493c1ceb8693339ced072a17815f801be2ec1b0ec8b6de",
       "at": "2026-09-24T15:43:17.968345Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -266,8 +256,6 @@
           ]
         },
         "Sources": null,
-        "Tracks": null,
-        "MigratedFrom": "",
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,
@@ -278,7 +266,7 @@
     },
     "panel.internals.mockup": {
       "subject": "claim",
-      "hash": "17d437c903c03e978e8d8df6a993fac0fbdd2c0c42bb0c0132e1bf6ab8deada2",
+      "hash": "83a07699b2815717f51476904551380dfdd45c0d19f258e73ab716746d1f109e",
       "at": "2026-09-24T15:43:18.126907Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -304,8 +292,6 @@
           "IDs": null
         },
         "Sources": null,
-        "Tracks": null,
-        "MigratedFrom": "",
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,
@@ -316,7 +302,7 @@
     },
     "panel.internals.state": {
       "subject": "claim",
-      "hash": "76b4c6f1fb33ca84c12bd14b6dd8154c5e9ad8d8fad036f4aa7db4cd64b00f08",
+      "hash": "034e362457f12a59fabb4618d25fe8a96aa12215447ac3bbbb9766b15aff088e",
       "at": "2026-09-24T15:43:18.284312Z",
       "actor": "nitinkhanna",
       "reason": "fixture re-lock after the rests_on shape change",
@@ -344,8 +330,6 @@
           ]
         },
         "Sources": null,
-        "Tracks": null,
-        "MigratedFrom": "",
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,
@@ -358,7 +342,7 @@
     },
     "panel.internals.verification": {
       "subject": "claim",
-      "hash": "9d9bfd1a78a0d128065205aac25e019e50925be790f53dbb7de7389abf73e66b",
+      "hash": "0583309931cb3bf80885a6dd64e6412a87458991c2ba3911e90374603b5fddea",
       "at": "2026-09-25T18:57:08.931196204Z",
       "actor": "unknown",
       "reason": "release cleanup for v0.7.21: the body named the retired build_role and build-order artifact; that sentence is removed",
@@ -386,8 +370,6 @@
           ]
         },
         "Sources": null,
-        "Tracks": null,
-        "MigratedFrom": "",
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": false,
@@ -429,13 +411,6 @@
           ]
         },
         "Sources": null,
-        "Tracks": [
-          {
-            "ID": "checkout",
-            "Role": ""
-          }
-        ],
-        "MigratedFrom": "",
         "Order": 0,
         "Emphasis": false,
         "ReviewPending": true,

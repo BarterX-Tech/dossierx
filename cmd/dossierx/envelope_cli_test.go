@@ -112,14 +112,6 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	// The track leaves need a project that declares one: "track show" and
-	// "track status" REFUSE an id the config does not carry, on purpose (see
-	// cliout.CodeUnknownTrack), so the fixture above cannot produce the success
-	// envelope this test is about. It is a second config rather than a widening
-	// of the shared fixture because every prose golden in check_parity_test.go
-	// is taken against that one.
-	trackCfg, _ := writeTrackFixture(t)
-
 	// One invocation per leaf, chosen to SUCCEED against the fixture project so
 	// what is being asserted is the envelope, not an error envelope.
 	for _, args := range [][]string{
@@ -127,7 +119,6 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "claim", "show", "widget.contract.overview"},
 		{"--config", cfgPath, "claim", "list"},
 		{"--config", cfgPath, "claim", "list", "--review-pending"},
-		{"--config", cfgPath, "claim", "list", "--migrated"},
 		{"--config", cfgPath, "claim", "new", "widget.contract.fresh", "--summary", "Fixture claim used by the engine test corpus.", "--body", "a new fact", "--rests-on-none-reason", "fixture"},
 		{"--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
 		{"--config", cfgPath, "claim", "unlock", "widget.contract.overview", "--reason", "approved", "--dry-run"},
@@ -138,9 +129,6 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "comment", "list", "widget.contract.overview"},
 		{"--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "agent", "--body", "a note"},
 		{"--config", cfgPath, "comment", "reply", "widget.contract.overview", "c-000000", "--dry-run"},
-		{"--config", trackCfg, "track", "list"},
-		{"--config", trackCfg, "track", "show", "guest-checkout"},
-		{"--config", trackCfg, "track", "status", "guest-checkout"},
 		{"--config", cfgPath, "skills", "export", filepath.Join(root, "skills-out")},
 		{"version"},
 	} {

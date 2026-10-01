@@ -61,7 +61,6 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 	"steps":             {hashed: true, mutate: func(c *model.Claim) { c.Steps = []string{"step one", "step two"} }},
 	"rests_on":          {hashed: true, mutate: func(c *model.Claim) { c.RestsOn = model.RestsOnIDs("widget.contract.elsewhere") }},
 	"scope":             {hashed: true, mutate: func(c *model.Claim) { c.Scope = model.ScopeProject }},
-	"migrated_from":     {hashed: true, mutate: func(c *model.Claim) { c.MigratedFrom = "docs/other.html" }},
 
 	// sources: SIGNED, and this field is close to the reason the hash is a
 	// deny-list. A claim's evidence is the part a reader re-validates months
@@ -73,15 +72,6 @@ var claimFieldDecisions = map[string]claimFieldDecision{
 		c.Sources = []model.Source{{Ref: 1, Kind: model.SourceKindExternal, Title: "A different page", URL: "https://example.invalid/other", AccessedOn: "2026-02-02"}}
 	}},
 
-	// tracks: SIGNED. Membership is author-declared, not engine-managed —
-	// nothing in the engine writes it, so signing it can never make routine
-	// bookkeeping look like tampering (the sole reason the three exclusions
-	// below are excluded). Moving a locked claim out of the track a reviewer
-	// approved it under, or promoting it to that track's owner, changes what
-	// the ledger certified.
-	"tracks": {hashed: true, mutate: func(c *model.Claim) {
-		c.Tracks = []model.TrackRef{{ID: "some-other-track", Role: model.TrackRoleCites}}
-	}},
 	"order":       {hashed: true, mutate: func(c *model.Claim) { c.Order = 99 }},
 	"emphasis":    {hashed: true, mutate: func(c *model.Claim) { c.Emphasis = false }},
 	"audit_notes": {hashed: true, mutate: func(c *model.Claim) { c.AuditNotes = []string{"a fabricated audit note"} }},
@@ -117,8 +107,6 @@ func fullyPopulatedClaim() model.Claim {
 			{Ref: 1, Kind: model.SourceKindExternal, Title: "Vendor API reference", URL: "https://example.invalid/api", AccessedOn: "2026-01-01", Supports: "the approved sentence"},
 			{Ref: 2, Kind: model.SourceKindInternal, Title: "Requirement record", Path: "records/requirements.jsonl", RecordID: "REQ-001", SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 		},
-		Tracks:        []model.TrackRef{{ID: "widget-track", Role: model.TrackRoleOwns}},
-		MigratedFrom:  "docs/legacy.html",
 		Order:         3,
 		Emphasis:      true,
 		ReviewPending: true,
@@ -260,7 +248,6 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 		"section":           func(c *model.Claim) { c.Section = "somewhere else entirely" },
 		"order":             func(c *model.Claim) { c.Order = 1000 },
 		"emphasis":          func(c *model.Claim) { c.Emphasis = false },
-		"migrated_from":     func(c *model.Claim) { c.MigratedFrom = "somewhere/else.html" },
 		"audit_notes":       func(c *model.Claim) { c.AuditNotes = []string{"a note nobody wrote"} },
 	}
 
@@ -602,7 +589,7 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 }
 
 // lockedClaimHashNoOptionalFields is LockedClaimHash for a claim carrying
-// neither sources nor tracks — the shape EVERY claim in every project that
+// no sources — the shape EVERY claim in every project that
 // predates those fields has on disk. It is written as a literal, not
 // recomputed, for the same reason contentHashNoRawHTML in lock_test.go is: it
 // is the only thing standing between an edit to the hashing rules and every
@@ -610,8 +597,8 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // claim at once.
 //
 // Its value was confirmed against pre-change code by the ledger records
-// committed under testdata/: those hashes were computed before sources and
-// tracks existed, and TestCommittedFixtureViewersAreNotStale re-validates
+// committed under testdata/: those hashes were computed before sources
+// existed, and TestCommittedFixtureViewersAreNotStale re-validates
 // them through the current hasher on every run. That fixture is the real
 // proof; this constant is the fast, local statement of it.
 //
@@ -619,34 +606,42 @@ func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
 // (NIT-29), build_role (NIT-32) and mirrors all left model.Claim with no
 // shadow key, so every locked claim re-locks once on upgrade, with no
 // migration tooling by decision.
-const lockedClaimHashNoOptionalFields = "3baf7120328a942236d60021f11a941503eba8d6cfc5150e97874c4d14002748"
+//
+// v0.7.22 moves it once more, by decision (Nitin, NIT-191): migrated_from
+// left model.Claim with no shadow key, and since it was hashed even when
+// empty, every locked claim re-locks once on upgrade.
+//
+// tracks (NIT-184) left in the same release and does NOT move it: it sat in
+// lockedClaimHashOmitWhenEmpty, so its empty form wrote nothing, and only a
+// claim that carried tracks re-locks.
+const lockedClaimHashNoOptionalFields = "ee97989608983731f633b34418f1f24eeb54758c2a43345bb0715c896b44e3e1"
 
-// TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty pins both halves of
+// TestLockedClaimHashOmitsSourcesOnlyWhenEmpty pins both halves of
 // the lockedClaimHashOmitWhenEmpty gate, because each half guards a different
 // failure — the same two-sided shape as
 // TestContentHash_RawHTMLIsHashedOnlyWhenPresent.
 //
-//   - A claim carrying NEITHER field must hash exactly as it did before the
-//     fields existed. Without the gate, this hash writes a "sources=l0:[]"
+//   - A claim carrying no sources must hash exactly as it did before the
+//     field existed. Without the gate, this hash writes a "sources=l0:[]"
 //     line for every claim, so merely adding the field to the schema would
 //     move every locked claim's hash and the first `check` after upgrading
 //     would report lock-content-drift across the whole project — a gate
 //     crying tamper about a release note.
 //
-//   - A claim that CARRIES either field must be signed in full, and must
-//     re-hash when it is edited or removed. Provenance and membership are
-//     part of what a human approved; a citation that can be swapped after
+//   - A claim that CARRIES sources must be signed in full, and must
+//     re-hash when they are edited or removed. Provenance is part of what a
+//     human approved; a citation that can be swapped after
 //     approval with nothing noticing is the exact hole issue #49 was filed
 //     about.
-func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
+func TestLockedClaimHashOmitsSourcesOnlyWhenEmpty(t *testing.T) {
 	base := model.Claim{
 		ID: "widget.contract.a", Facet: "contract", Module: "widget",
 		Body: "the claim body",
 	}
 
 	if got := LockedClaimHash(base); got != lockedClaimHashNoOptionalFields {
-		t.Fatalf("LockedClaimHash of a claim with no sources and no tracks moved:\n got %s\nwant %s\n"+
-			"These fields must only be hashed when non-empty; hashing them unconditionally re-hashes\n"+
+		t.Fatalf("LockedClaimHash of a claim with no sources moved:\n got %s\nwant %s\n"+
+			"The field must only be hashed when non-empty; hashing them unconditionally re-hashes\n"+
 			"every claim in every existing project and reports drift on every locked one.", got, lockedClaimHashNoOptionalFields)
 	}
 
@@ -655,9 +650,8 @@ func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
 	// take the untouched path rather than merely happen to.
 	empty := base
 	empty.Sources = []model.Source{}
-	empty.Tracks = []model.TrackRef{}
 	if got := LockedClaimHash(empty); got != lockedClaimHashNoOptionalFields {
-		t.Errorf("LockedClaimHash with explicitly empty sources/tracks = %s, want the unchanged %s", got, lockedClaimHashNoOptionalFields)
+		t.Errorf("LockedClaimHash with explicitly empty sources = %s, want the unchanged %s", got, lockedClaimHashNoOptionalFields)
 	}
 	withSummary := base
 	withSummary.Summary = "one line about the claim"
@@ -665,24 +659,12 @@ func TestLockedClaimHashOmitsSourcesAndTracksOnlyWhenEmpty(t *testing.T) {
 		t.Fatal("a present summary must move LockedClaimHash")
 	}
 
-	// Gaining either field must move the hash, and the two must move it
-	// independently — a claim that gains a track must not hash like one that
-	// gained a source.
+	// Gaining sources must move the hash.
 	withSource := base
 	withSource.Sources = []model.Source{{Ref: 1, Kind: model.SourceKindExternal, Title: "A page", URL: "https://example.invalid/a", AccessedOn: "2026-01-01"}}
 	sourceHash := LockedClaimHash(withSource)
 	if sourceHash == lockedClaimHashNoOptionalFields {
 		t.Error("adding sources to a claim left LockedClaimHash unchanged: the evidence behind a locked claim would not be signed")
-	}
-
-	withTrack := base
-	withTrack.Tracks = []model.TrackRef{{ID: "some-track", Role: model.TrackRoleCites}}
-	trackHash := LockedClaimHash(withTrack)
-	if trackHash == lockedClaimHashNoOptionalFields {
-		t.Error("adding tracks to a claim left LockedClaimHash unchanged: membership would not be signed")
-	}
-	if sourceHash == trackHash {
-		t.Error("a claim that gained a source hashes identically to one that gained a track")
 	}
 
 	// Editing a source that is already there must move the hash — the whole

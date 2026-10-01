@@ -500,6 +500,9 @@ func TestFormatDocumentsEveryLedgerRule(t *testing.T) {
 	for _, rel := range []string{
 		filepath.Join("internal", "lock", "audit.go"),
 		filepath.Join("internal", "check", "ledger.go"),
+		// A brief's two integrity findings (NIT-205) ride in ledger_findings
+		// beside the claim ledger's, so they are rows of the same table.
+		filepath.Join("internal", "briefs", "lockstate.go"),
 	} {
 		for _, m := range ruleConst.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
 			rules[m[1]] = rel
@@ -523,7 +526,7 @@ func TestFormatDocumentsEveryLedgerRule(t *testing.T) {
 	// pointedly does not".
 	for _, rule := range formatFindingsTableRules(t, format) {
 		if _, declared := rules[rule]; !declared {
-			t.Errorf("FORMAT.md's findings table documents the ledger rule %q, but no Rule* constant in internal/lock/audit.go or internal/check/ledger.go declares it — the table promises a gate that does not exist", rule)
+			t.Errorf("FORMAT.md's findings table documents the ledger rule %q, but no Rule* constant in internal/lock/audit.go, internal/check/ledger.go or internal/briefs/lockstate.go declares it — the table promises a gate that does not exist", rule)
 		}
 	}
 }
@@ -853,6 +856,9 @@ func TestREADMENamesEveryLedgerRule(t *testing.T) {
 	for _, rel := range []string{
 		filepath.Join("internal", "lock", "audit.go"),
 		filepath.Join("internal", "check", "ledger.go"),
+		// A brief's two integrity findings (NIT-205) ride in ledger_findings
+		// beside the claim ledger's, so they are rows of the same table.
+		filepath.Join("internal", "briefs", "lockstate.go"),
 	} {
 		for _, m := range ruleConst.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
 			rules[m[1]] = rel

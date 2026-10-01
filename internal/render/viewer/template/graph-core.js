@@ -44,9 +44,8 @@
   //   edgeKey(edge)                       -> "from|type|to"
   //
   // Scope, representatives and edges (design section 3):
-  //   scopeFilter(nodes, moduleScope, facetScope, trackScope)
+  //   scopeFilter(nodes, moduleScope, facetScope)
   //                                       -> [node]
-  //   trackRole(node, trackId)            -> "owns" | "cites" | ""
   //   representatives(nodes, granularity, expandedGroups)
   //                                       -> {repByClaim, repNodes}
   //   aggregateEdges(edges, repByClaim, enabledTypes)
@@ -239,74 +238,19 @@
   // Scope and the representative-node rule (design section 3)
   // ------------------------------------------------------------------
 
-  // trackRole answers "what is this claim's relationship to the track named
-  // id?", and is the ONE place the payload's per-node `tracks` list is read.
-  //
-  //   "owns"   the claim is the track's own statement — the feature-level
-  //            sentence that belongs to no single module (model.TrackRoleOwns).
-  //            A claim owns at most one track, which track-multi-owner
-  //            enforces; a track normally has exactly one owner, which nothing
-  //            enforces, so a caller counting owners must not assume one.
-  //   "cites"  the claim participates without belonging: the track references
-  //            it and its own module keeps guaranteeing it.
-  //   ""       not a member at all.
-  //
-  // The empty string is the only "not a member" answer, so a caller gets one
-  // answer to one question rather than having to ask twice.
-  //
-  // ANYTHING THAT IS NOT LITERALLY "owns" READS AS cites, which mirrors
-  // model.TrackRef.EffectiveRole exactly: an unset role MEANS cites, because
-  // citing adds a reference while owning makes an exclusivity assertion, and
-  // an assertion that strong is typed out rather than fallen into. Go already
-  // resolves the role before it reaches the wire, so a payload never carries
-  // the unset form — this is what keeps a hand-edited or truncated one from
-  // promoting a claim to owner by accident.
-  function trackRole(node, trackID) {
-    var want = asString(trackID);
-    if (want === '') {
-      return '';
-    }
-    var list = asArray((node || {}).tracks);
-    for (var i = 0; i < list.length; i++) {
-      var m = list[i] || {};
-      if (asString(m.id) !== want) {
-        continue;
-      }
-      return asString(m.role) === 'owns' ? 'owns' : 'cites';
-    }
-    return '';
-  }
-
-  // scopeFilter narrows the claim set the whole pane operates on, along THREE
+  // scopeFilter narrows the claim set the whole pane operates on, along TWO
   // INDEPENDENT AXES that compose as an INTERSECTION.
   //
   //   moduleScope  ""  every module   |  "<m>"  only claims whose module is <m>
   //   facetScope   ""  every facet    |  "<f>"  only claims whose facet is <f>
-  //   trackScope   ""  every claim    |  "<t>"  only claims in track <t>, in
-  //                                             EITHER role — owned and cited
-  //                                             alike
   //
   // A claim is in scope when
   //
   //     (moduleScope === "" || claim.module === moduleScope)
   //       && (facetScope === "" || claim.facet === facetScope)
-  //       && (trackScope === "" || trackRole(claim, trackScope) !== "")
   //
-  // so all three empty is the whole project, and any combination is legal.
-  // Neither axis constrains another and none has to be chosen first.
-  //
-  // THE TRACK AXIS IS A SET MEMBERSHIP, NOT A FIELD MATCH, and that is the one
-  // way it differs from its two neighbours. Module and facet are one-to-one:
-  // exactly one value per claim, so equality answers it. A claim may cite any
-  // number of tracks, so the test is "is it in this set", and the ROLE it
-  // holds there never narrows the result — a track's subgraph is its owned
-  // claim AND everything it cites, which is the whole point of looking at one.
-  // Which of those a node is, is a drawing question the pane answers with
-  // trackRole; it is not a second filter.
-  //
-  // Membership still is not an edge. Nothing here walks it, nothing joins the
-  // scc() set, and no gap rule counts it — see model.TrackRef's doc comment
-  // for why a set has no direction to run in a circle.
+  // so both empty is the whole project, and any combination is legal.
+  // Neither axis constrains the other and neither has to be chosen first.
   //
   // THE EMPTY STRING IS THE ONLY "ALL" SENTINEL, and that is what makes this
   // total rather than merely defensive: asString(null), asString(undefined), a
@@ -329,12 +273,11 @@
   // The returned array holds the SAME node objects, not copies: nothing here
   // mutates a payload node, and the pane's redraw path runs on every control
   // change.
-  function scopeFilter(nodes, moduleScope, facetScope, trackScope) {
+  function scopeFilter(nodes, moduleScope, facetScope) {
     var list = asArray(nodes);
     var wantModule = asString(moduleScope);
     var wantFacet = asString(facetScope);
-    var wantTrack = asString(trackScope);
-    if (wantModule === '' && wantFacet === '' && wantTrack === '') {
+    if (wantModule === '' && wantFacet === '') {
       return list.slice();
     }
     var out = [];
@@ -344,9 +287,6 @@
         continue;
       }
       if (wantFacet !== '' && asString(n.facet) !== wantFacet) {
-        continue;
-      }
-      if (wantTrack !== '' && trackRole(n, wantTrack) === '') {
         continue;
       }
       out.push(list[i]);
@@ -1326,8 +1266,6 @@
   //
   //   md  scope: module   "" for every module, else the module name
   //   fc  scope: facet    "" for every facet, else the facet name
-  //   tk  scope: track    "" for every claim, else the track id — EMITTED
-  //                       ONLY WHEN IT CARRIES A SELECTION, see below
   //   gr  granularity     "claims" | "module" | "facet"
   //   ov  overlay         one of OVERLAYS
   //   ty  edge types      a subset of TYPE_LETTERS, positional against EDGE_TYPES
@@ -1342,19 +1280,6 @@
   // has never been released, and decodeState ignores unknown keys, so a hash
   // carrying the old key decodes to the default whole-project scope rather
   // than to anything half-understood.
-  //
-  // WHY `tk` IS THE ONE CONDITIONAL KEY. Every other key is always written,
-  // because for several of them an absent key and an empty value are genuinely
-  // different states — "no edge types enabled" and "no groups expanded" only
-  // round-trip losslessly because `ty=` and `ex=` are written empty. For the
-  // track axis they are the SAME state: "" is both the default and the only
-  // empty value, so writing it changes nothing a reader or a decoder can
-  // observe. What writing it WOULD change is every hash in every project that
-  // has no tracks at all — tracks are optional, and an optional feature nobody
-  // enabled must not lengthen the links they share. So the key appears exactly
-  // when a track is selected, and a track-less viewer produces the identical
-  // string it produced before this axis existed. encodeState remains a
-  // function of meaning alone: the same state always yields the same string.
 
   // OVERLAYS is the closed set: five overlays plus "none". Anything else
   // decodes to "none" rather than leaving the pane in a state it cannot draw
@@ -1383,7 +1308,6 @@
     return {
       scopeModule: '',
       scopeFacet: '',
-      scopeTrack: '',
       granularity: 'claims',
       overlay: 'none',
       types: EDGE_TYPES.slice(),
@@ -1449,8 +1373,6 @@
         s.scopeModule === undefined || s.scopeModule === null ? d.scopeModule : asString(s.scopeModule),
       scopeFacet:
         s.scopeFacet === undefined || s.scopeFacet === null ? d.scopeFacet : asString(s.scopeFacet),
-      scopeTrack:
-        s.scopeTrack === undefined || s.scopeTrack === null ? d.scopeTrack : asString(s.scopeTrack),
       granularity: normalizeGranularity(s.granularity === undefined ? d.granularity : s.granularity),
       overlay: normalizeOverlay(s.overlay === undefined ? d.overlay : s.overlay),
       types: normalizeTypes(s.types === undefined ? d.types : s.types),
@@ -1478,7 +1400,6 @@
     return (
       'md=' + enc(s.scopeModule) +
       '&fc=' + enc(s.scopeFacet) +
-      (s.scopeTrack === '' ? '' : '&tk=' + enc(s.scopeTrack)) +
       '&gr=' + enc(s.granularity) +
       '&ov=' + enc(s.overlay) +
       '&ty=' + letters +
@@ -1514,8 +1435,6 @@
         out.scopeModule = dec(val);
       } else if (key === 'fc') {
         out.scopeFacet = dec(val);
-      } else if (key === 'tk') {
-        out.scopeTrack = dec(val);
       } else if (key === 'gr') {
         out.granularity = normalizeGranularity(dec(val));
       } else if (key === 'ov') {
@@ -1565,7 +1484,6 @@
     edgeKey: edgeKey,
 
     scopeFilter: scopeFilter,
-    trackRole: trackRole,
     representatives: representatives,
     aggregateEdges: aggregateEdges,
     degrees: degrees,

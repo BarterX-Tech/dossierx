@@ -280,52 +280,7 @@ func TestCLI_ClaimShowReportsBothEdgeDirections(t *testing.T) {
 // is asserted in tests/, which execs a real process — see this file's package
 // doc comment.
 
-// ---------------------------------------------------------------------
-// claim list --migrated — successor to "coverage"
-//
-// "coverage" printed a ratio and nothing else. The replacement prints the same
-// ratio AND names the claims in it, which is what a caller actually wanted the
-// ratio for.
-// ---------------------------------------------------------------------
-
-func TestCLI_ClaimListMigratedReportsTheRatioAndTheClaims(t *testing.T) {
-	root := t.TempDir()
-	claimsDir := filepath.Join(root, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims: %v", err)
-	}
-	cfgPath := filepath.Join(root, "project.config.yaml")
-	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
-	lockFixtureConstitution(t, cfgPath)
-	migrated := "id: widget.contract.migrated\nfacet: contract\nmodule: widget\nstatus: draft\n" +
-		"body: |\n  migrated fixture.\nmigrated_from: docs/tabs/widget.html\n" +
-		"rests_on:\n  none: true\n  reason: fixture\n"
-	fresh := "id: widget.contract.fresh\nfacet: contract\nmodule: widget\nstatus: draft\n" +
-		"body: |\n  new fixture, never migrated.\n" +
-		"rests_on:\n  none: true\n  reason: fixture\n"
-	if err := os.WriteFile(filepath.Join(claimsDir, "migrated.yaml"), []byte(migrated), 0o644); err != nil {
-		t.Fatalf("write migrated claim: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(claimsDir, "fresh.yaml"), []byte(fresh), 0o644); err != nil {
-		t.Fatalf("write fresh claim: %v", err)
-	}
-
-	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--migrated")
-	if err != nil {
-		t.Fatalf("claim list --migrated: %v", err)
-	}
-	if !strings.Contains(out, "claim list: 1 of 2 claim(s) (50.0%)") {
-		t.Fatalf("expected a 1-of-2 (50.0%%) summary, got: %s", out)
-	}
-	if !strings.Contains(out, "widget.contract.migrated") {
-		t.Fatalf("expected the migrated claim to be NAMED, not just counted, got: %s", out)
-	}
-	if strings.Contains(out, "widget.contract.fresh") {
-		t.Fatalf("--migrated must exclude claims with no migrated_from, got: %s", out)
-	}
-}
-
-func TestCLI_ClaimListMigratedEmptyClaimsDir(t *testing.T) {
+func TestCLI_ClaimListEmptyClaimsDir(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
@@ -335,9 +290,9 @@ func TestCLI_ClaimListMigratedEmptyClaimsDir(t *testing.T) {
 	writeProjectConfigFile(t, cfgPath, "schema_version: 1\nfacets:\n  - contract\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n")
 	lockFixtureConstitution(t, cfgPath)
 
-	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--migrated")
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list")
 	if err != nil {
-		t.Fatalf("claim list --migrated: %v", err)
+		t.Fatalf("claim list: %v", err)
 	}
 	if !strings.Contains(out, "claim list: 0 of 0 claim(s) (0.0%)") {
 		t.Fatalf("expected the zero-total case to report 0.0%% without dividing by zero, got: %s", out)

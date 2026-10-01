@@ -30,6 +30,7 @@ import (
 
 	"html"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
@@ -163,6 +164,16 @@ type shellData struct {
 	// doc comment makes the same point at length.)
 	GraphPayload template.JS
 
+	// BriefsPayload is the briefs payload (NIT-204) — every brief, rendered in
+	// document mode, with its counts against the caps — injected into
+	// <script type="application/json" id="dossierx-briefs">. It is safe by the
+	// same mechanism as GraphPayload: encoding/json's default HTML escaping on
+	// the whole document, body HTML included. EMPTY FOR A PROJECT WITH NO
+	// BRIEFS, and shell.html emits the element only when it is not, so such a
+	// project's viewer is byte-identical to one rendered before briefs existed.
+	// Nothing in the viewer reads it yet; NIT-197 builds the UI.
+	BriefsPayload template.JS
+
 	// GraphCoreJS and GraphUIJS are the pane's two script files, injected in
 	// that order (core exports the namespace ui consumes) after the shell's
 	// own inline runtime.
@@ -194,16 +205,22 @@ type shellData struct {
 	// have. The client threshold in viewer-runtime.js must stay in lockstep.
 	SoftMount bool
 
-	// Tracks is the project's declared cross-cutting tracks, one section each,
-	// rendered after every module section and listed after every module in the
-	// sidebar. NIL FOR A PROJECT THAT DECLARES NONE, and shell.html guards
-	// every byte of track markup on that — a corpus with no tracks must render
-	// exactly as it did before the axis existed. See track_view.go.
-	Tracks []TrackSection
-
-	// Constitution is the project roof, pinned above Modules. Always present
-	// as a nav target; Present is false when the file is absent (NIT-11).
+	// Constitution is the project roof, listed above Modules. Its section is
+	// always rendered (reachable by hash); Present is false when the file is
+	// absent (NIT-11). The sidebar entry shows only when there is something
+	// under it: the file or a project claim (NIT-196).
 	Constitution ConstitutionView
+
+	// Home is the landing page (NIT-196), built from ModuleGroups, so it is
+	// filled wherever ModuleGroups is (buildEagerShellData, and lazily for a
+	// project shell).
+	Home HomeView
+
+	// Briefs is the Briefs sidebar tree and one page per brief (NIT-197),
+	// built beside ModuleGroups. Empty for a project with no briefs, and
+	// shell.html emits every brief element only when it is not, so such a
+	// project's viewer is byte-identical to one rendered before briefs.
+	Briefs BriefsView
 }
 
 // ConstitutionView is the thin A1/A2 roof surface: The file | Project claims.
@@ -244,6 +261,9 @@ type Group struct {
 	// viewer header reads the module-level sums, not live DOM cards.
 	ClaimCount  int
 	LockedCount int
+	// search is this facet's claims as the sidebar search reads them (see
+	// ModuleGroup.Search). Unexported: only buildModuleGroups reads it.
+	search string
 	// ModuleLabel is a display-cased version of Module, used for the
 	// sec-label heading shown once per module run.
 	ModuleLabel string
@@ -316,6 +336,14 @@ type ModuleGroup struct {
 	ClaimCount  int
 	LockedCount int
 	FacetCount  int
+	// Search is what the sidebar search matches this module's row against
+	// (NIT-197): its label, then every claim's title, summary and id,
+	// lowercased. The row's own text is only the label, so without this the
+	// search box's "claims" would find no claim. It is emitted once per module
+	// as a data-search attribute, so the page carries each claim's summary a
+	// second time; that is the cost of searching claims without a script
+	// walking every (possibly soft-mounted) card.
+	Search string
 }
 
 // buildModuleGroups folds buildGroups' flat, facet-level Groups into the
@@ -358,6 +386,13 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 		out[i].ClaimCount = claimCount
 		out[i].LockedCount = lockedCount
 		out[i].FacetCount = len(out[i].Facets)
+		parts := []string{strings.ToLower(out[i].ModuleLabel)}
+		for _, f := range out[i].Facets {
+			if f.search != "" {
+				parts = append(parts, f.search)
+			}
+		}
+		out[i].Search = strings.Join(parts, " ")
 	}
 
 	return out
@@ -397,22 +432,58 @@ const ungroupedModuleName = "ungrouped"
 // final template execution, so a future fourth input or grouping level only
 // has to touch the stage it belongs to.
 func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
-	return renderAt(cat, cfg, time.Now().UTC())
+	return RenderWith(cat, cfg, Extras{})
+}
+
+// Extras is what the viewer renders beside the claim catalog: inputs that are
+// not claims and so have no place on catalog.Catalog. It exists for briefs
+// (NIT-204) and holds nothing else.
+//
+// WHY NOT A CATALOG FIELD, when readiness and conformance are catalog fields.
+// Those are projections OF CLAIMS; a brief is not one, and the coupling rule is
+// that a claim never learns about briefs. There is a dependency reason too:
+// internal/briefs imports internal/render/markdown (a brief's images and title
+// are read by the renderer's own block scan), and internal/catalog is on the
+// list of packages render must never be imported by, directly or through a
+// neighbor. Handing the set to the renderer beside the catalog keeps both true.
+//
+// The zero value renders exactly what Render always rendered.
+type Extras struct {
+	Briefs *briefs.Set
+	// BriefReview is every brief's lock and review state (NIT-205), read by
+	// the caller against the same claims and lock store it rendered from. Nil
+	// renders every brief as a draft with nothing pending.
+	BriefReview *briefs.Evaluation
+}
+
+// RenderWith is Render with the non-claim inputs supplied. Like Render it puts
+// no budget on the claims; the briefs payload alone is charged to a budget of
+// its own (unboundedBriefsPayloadBytes), so an oversized one is refused with
+// the capacity error rather than served whole.
+func RenderWith(cat *catalog.Catalog, cfg *config.Config, x Extras) (string, error) {
+	return renderBoundedAt(cat, cfg, x, time.Now().UTC(), 0)
 }
 
 func renderAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time) (string, error) {
-	return renderBoundedAt(cat, cfg, generatedAt, 0)
+	return renderBoundedAt(cat, cfg, Extras{}, generatedAt, 0)
 }
 
 // RenderBounded caps the generated viewer while preserving the shared renderer.
 func RenderBounded(cat *catalog.Catalog, cfg *config.Config, maxBytes int) (string, error) {
+	return RenderBoundedWith(cat, cfg, maxBytes, Extras{})
+}
+
+// RenderBoundedWith is RenderBounded with the non-claim inputs supplied. Every
+// byte they add to the viewer is charged against the same budget the claims'
+// are (see briefsPayloadJSONWithBudget).
+func RenderBoundedWith(cat *catalog.Catalog, cfg *config.Config, maxBytes int, x Extras) (string, error) {
 	if maxBytes <= 0 {
 		return "", fmt.Errorf("render: max bytes must be positive")
 	}
-	return renderBoundedAt(cat, cfg, time.Now().UTC(), maxBytes)
+	return renderBoundedAt(cat, cfg, x, time.Now().UTC(), maxBytes)
 }
 
-func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time, maxBytes int) (string, error) {
+func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, x Extras, generatedAt time.Time, maxBytes int) (string, error) {
 	if cat == nil {
 		cat = &catalog.Catalog{}
 	}
@@ -432,15 +503,38 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 	// comments for why this is a no-op for a project that has never
 	// called "dossierx implink set" and has no claim any other claim rests
 	// on.
-	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), codeLinksGated(cfg), buildDependedByLookup(cat), buildTargetStatusLookup(cat))
+	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), codeLinksGated(cfg), buildDependedByLookup(cat), buildTargetStatusLookup(cat), buildBriefRelationsLookup(cat, cfg, x.Briefs, x.BriefReview))
 	// Rebind mockup.html's "mockupHTML" func with the project's
 	// mockup_modules allowlist so its defense-in-depth gate (DX-AUD-08) can
 	// verify module membership; the default binding always escapes.
 	attachMockupOverride(tmpl.partials, cfg)
 
 	header := generatedHeader(generatedAt)
-	if maxBytes > 0 && len(header) >= maxBytes {
-		return "", viewerCapacityError(maxBytes)
+	// A bounded render's budget is the whole static viewer, and the viewer is
+	// index.html plus the brief images copied beside it (BriefAssets, written
+	// by check): the images are charged first, so the page itself gets what
+	// they leave. An unbounded render is serve's, which copies nothing.
+	reserved := len(header)
+	var images []BriefAsset
+	var imageBytes int64
+	if maxBytes > 0 {
+		images = BriefAssets(cfg, x.Briefs)
+		for _, a := range images {
+			imageBytes += a.Bytes
+		}
+		if int64(reserved)+imageBytes >= int64(maxBytes) {
+			return "", briefImagesOverBound(images, imageBytes, maxBytes, true)
+		}
+		reserved += int(imageBytes)
+	}
+	// capacity is the refusal for a bounded render that ran out: when brief
+	// images took part of the bound, the refusal names them, since shrinking
+	// them is a recovery the page's own content does not offer.
+	capacity := func() error {
+		if imageBytes > 0 {
+			return briefImagesOverBound(images, imageBytes, maxBytes, false)
+		}
+		return capacityError(maxBytes)
 	}
 	inputs := shellInputs{
 		cat:                      cat,
@@ -452,6 +546,9 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 		systemRecordJS:           tmpl.systemRecord,
 		viewerRuntimeJS:          tmpl.viewerRuntime,
 		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
+		briefs:                   x.Briefs,
+		briefReview:              x.BriefReview,
+		briefsBudget:             unboundedBriefsBudget(maxBytes),
 		generatedAt:              generatedAt,
 	}
 
@@ -470,12 +567,12 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 		if maxBytes > 0 {
 			// The embedded shell emits every dynamic projection. Charging them
 			// against the output budget is therefore exact lower-bound containment.
-			outputBudget = &renderByteBudget{remaining: maxBytes - len(header), exceeded: conformance.ErrCapacityExceeded}
+			outputBudget = &renderByteBudget{remaining: maxBytes - reserved, exceeded: conformance.ErrCapacityExceeded}
 		}
 		eager, err := buildEagerShellData(inputs, tmpl.partials, outputBudget)
 		if err != nil {
 			if errors.Is(err, conformance.ErrCapacityExceeded) {
-				return "", viewerCapacityError(maxBytes)
+				return "", capacity()
 			}
 			return "", err
 		}
@@ -485,11 +582,11 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 	var out bytes.Buffer
 	var dst io.Writer = &out
 	if maxBytes > 0 {
-		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - len(header)}
+		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - reserved}
 	}
 	if err := tmpl.shell.Execute(dst, data); err != nil {
 		if errors.Is(err, conformance.ErrCapacityExceeded) {
-			return "", viewerCapacityError(maxBytes)
+			return "", capacity()
 		}
 		if errors.Is(err, ErrIntermediateCapacityExceeded) {
 			return "", renderIntermediateCapacityError()
@@ -502,6 +599,32 @@ func renderBoundedAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.
 
 func viewerCapacityError(maxBytes int) error {
 	return fmt.Errorf("%w: viewer requires more than %d bytes", conformance.ErrCapacityExceeded, maxBytes)
+}
+
+// unboundedBriefsPayloadBytes is the ceiling on the briefs payload in a render
+// that has no budget (maxBytes 0). It is the output cap a bounded render
+// (check, serve with a conformance report) holds the WHOLE viewer to, so a
+// briefs payload that path would refuse for its size alone is refused here
+// too. Claims in that render stay unbudgeted, exactly as before briefs existed.
+const unboundedBriefsPayloadBytes = conformance.MaxOutputBytes
+
+// unboundedBriefsBudget is the briefs-only budget for a render without one,
+// and nil for a bounded render, whose shared budget charges the briefs.
+func unboundedBriefsBudget(maxBytes int) *renderByteBudget {
+	if maxBytes > 0 {
+		return nil
+	}
+	return &renderByteBudget{remaining: unboundedBriefsPayloadBytes, exceeded: conformance.ErrCapacityExceeded}
+}
+
+// capacityError names the budget a render ran out of. In a bounded render it
+// is the viewer's output cap; in an unbounded one the only budget is the
+// briefs payload's own, so that is the one that ran out.
+func capacityError(maxBytes int) error {
+	if maxBytes > 0 {
+		return viewerCapacityError(maxBytes)
+	}
+	return fmt.Errorf("%w: briefs payload requires more than %d bytes", conformance.ErrCapacityExceeded, unboundedBriefsPayloadBytes)
 }
 
 const maxBoundedRenderIntermediateBytes = 128 << 20
@@ -776,6 +899,20 @@ type shellInputs struct {
 	conformanceStatusGuardJS []byte
 	graphPayload             template.JS
 
+	// briefs is Extras.Briefs; briefsPayload is its viewer payload, encoded and
+	// charged by briefsPayloadJSONWithBudget, empty for a project with no
+	// briefs.
+	briefs        *briefs.Set
+	briefReview   *briefs.Evaluation
+	briefsPayload template.JS
+
+	// briefsBudget, when set, is the budget the briefs payload alone is
+	// charged to instead of the shared one: an unbounded render (RenderWith,
+	// serve without a conformance report) charges nothing for its claims,
+	// and still refuses a briefs payload past unboundedBriefsPayloadBytes.
+	// Nil on a bounded render, whose shared budget already covers briefs.
+	briefsBudget *renderByteBudget
+
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
 }
@@ -812,6 +949,7 @@ func buildShellStaticData(in shellInputs) shellData {
 		GeneratedAt:              in.generatedAt.UTC().Format(time.RFC3339),
 		GraphCSS:                 template.CSS(in.graphCSS),
 		GraphPayload:             in.graphPayload,
+		BriefsPayload:            in.briefsPayload,
 		GraphCoreJS:              template.JS(in.graphCoreJS),
 		GraphUIJS:                template.JS(in.graphUIJS),
 		SystemRecordJS:           template.JS(in.systemRecordJS),
@@ -819,11 +957,7 @@ func buildShellStaticData(in shellInputs) shellData {
 		ConformanceStatusGuardJS: template.JS(in.conformanceStatusGuardJS),
 		ModuleGroups:             nil,
 		SoftMount:                claimCount >= softMountClaimThreshold,
-		// Built from the SAME renderedByID the module groups read, so a claim
-		// a track owns is rendered exactly once no matter how many sections
-		// point at it — the property newGroup's own lookup exists to hold.
-		Tracks:       nil,
-		Constitution: buildConstitutionView(in.cat, cfg, in.renderedByID),
+		Constitution:             buildConstitutionView(in.cat, cfg, in.renderedByID),
 	}
 }
 
@@ -984,43 +1118,6 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 	return groups
 }
 
-// stripDuplicateClaimIDs returns one already-rendered claim with every element
-// id it carries removed, for use as a NON-CANONICAL copy: the same claim is
-// also rendered somewhere else on the page, and that copy keeps the ids.
-//
-// Tracks render the claims they own inline while their modules keep
-// guaranteeing them. A claim id may appear only once in a valid document.
-//
-// TWO KINDS OF ID, BOTH FROM THE SAME PLACE THAT WROTE THEM. The root
-// <section>'s ` id="<claim-id>"` is matched with its leading space and its
-// closing quote, so the .k header's data-claim-id and title — which are not
-// preceded by a space before `id="` and are not document-unique anyway — are
-// untouched and survive on every copy, exactly as they did before. The source
-// footer's row ids are enumerated from the claim's own Sources through
-// components.ClaimSourceAnchorID rather than pattern-matched, so this function
-// cannot disagree with the function that emitted them.
-//
-// The consequence for the duplicate copy is a degraded, never wrong, landing:
-// its citation markers still name the canonical copy's rows, so a reader
-// clicking one is taken to the same evidence in the claim's own module.
-//
-// Claim ids are constrained to [A-Za-z0-9_.-] (internal/lint's id-shape lint),
-// none of which html/template escapes in a double-quoted attribute value, so
-// the literal match is exact; components refuses to emit a source anchor at all
-// for an id outside that set (see ClaimSourceAnchorPrefix), so an unlinted
-// claim has nothing here to miss.
-func stripDuplicateClaimIDs(h template.HTML, c model.Claim) template.HTML {
-	s := strings.Replace(string(h), ` id="`+c.ID+`"`, "", 1)
-	for _, src := range c.Sources {
-		id := components.ClaimSourceAnchorID(c, src.Ref)
-		if id == "" {
-			continue
-		}
-		s = strings.Replace(s, ` id="`+id+`"`, "", 1)
-	}
-	return template.HTML(s)
-}
-
 // newMembershipPredicates builds the knownModule/knownFacet predicates used
 // by buildGroups to decide whether a claim's module and facet belong to the
 // project's declared taxonomy. Lookup sets are built once so the returned
@@ -1140,7 +1237,9 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 	}
 	allLocked := len(claims) > 0
 	lockedCount := 0
+	search := make([]string, 0, len(claims))
 	for _, c := range claims {
+		search = append(search, strings.ToLower(strings.Join([]string{components.ClaimLabel(c.ID), strings.TrimSpace(c.Summary), c.ID}, " ")))
 		if c.Status == model.StatusLocked {
 			lockedCount++
 		} else {
@@ -1167,6 +1266,7 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 		AllLocked:   allLocked,
 		ClaimCount:  len(claims),
 		LockedCount: lockedCount,
+		search:      strings.Join(search, " "),
 		ModuleLabel: displayCase(module),
 		TabLabel:    displayCase(tabSource),
 	}

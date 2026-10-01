@@ -115,7 +115,7 @@ func TestFileURLHidesEmptyChips(t *testing.T) {
 
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible(`.comment-chip[data-claim-id="widget.contract.base"]`, chromedp.ByQuery),
 	)
 
@@ -154,7 +154,7 @@ func TestFileURLHidesEmptyChips(t *testing.T) {
 func TestEmptyChipsStayRevealedAcrossReload(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	pollTrue(t, ctx, `(function(){
 		var c = document.querySelector('.comment-chip[data-claim-id="widget.contract.base"]');

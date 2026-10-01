@@ -86,17 +86,18 @@ func longBodyClaim(id, facet string, paragraphs int) string {
 // Helpers
 // ---------------------------------------------------------------------
 
-// serveAndOpenLive starts serve for p, opens a tab, and waits until the live
+// serveAndOpenLive starts serve for p, opens a tab at hash (the page the test
+// reads — the viewer opens on Home without one, NIT-196), and waits until the live
 // runtime is mounted (comments-live), the SSE handler is wired
 // (comments-livereload — the synchronous attach decision), AND the stream has
 // actually connected (comments-sse-open). Only after comments-sse-open is a
 // subsequent claim change guaranteed to be delivered as a reload.
-func serveAndOpenLive(t *testing.T, p *project) context.Context {
+func serveAndOpenLive(t *testing.T, p *project, hash string) context.Context {
 	t.Helper()
 	base, _ := p.serve()
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+hash),
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live')`)
@@ -120,7 +121,7 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
 	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	// Switch to the SECOND facet (design). Its subtab click records the facet in
 	// the hash, which is what the restore-view path re-derives after a reload.
@@ -140,7 +141,7 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 	// The active module-section is NOT hidden and the active (design) facet is
 	// still the visible one: the reload restored the view rather than resetting to
 	// the first facet or deep-linking away.
-	if evalBool(t, ctx, `document.querySelector('.module-section:not(.constitution-section)').hidden`) {
+	if evalBool(t, ctx, `document.querySelector('.module-section:not(.constitution-section):not(.home-section)').hidden`) {
 		t.Fatal("active module-section must not be hidden after a reload")
 	}
 	if !evalBool(t, ctx, facetVisibleExpr("widget-internals")) {
@@ -172,10 +173,10 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 	p := newProjectRaw(t, twoModuleConfig)
 	p.writeClaim("widget.yaml", twoModuleClaim("widget.contract.overview", "widget"))
 	p.writeClaim("gadget.yaml", twoModuleClaim("gadget.contract.overview", "gadget"))
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
-	// On load: first module shown, second hidden.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	// Opened on the first module: it is shown, the second hidden.
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 
 	// External change -> reload (a fresh card in gadget proves the swap ran).
 	p.writeClaim("gadget2.yaml", twoModuleClaim("gadget.contract.extra", "gadget"))
@@ -184,8 +185,8 @@ func TestReloadDelegatedTabStillSwitchesModules(t *testing.T) {
 	// After the reload, click the SECOND sidebar tab. Its listener is delegated on
 	// document (the swapped <nav> buttons carry none), so a working switch proves
 	// delegation survived the fragment swap.
-	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab:not(.constitution-tab)')[1].click();`, nil))
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.system-nav-group .sec-tab')[1].click();`, nil))
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 }
 
 // ---------------------------------------------------------------------
@@ -210,7 +211,7 @@ func TestReloadPreservesScrollPosition(t *testing.T) {
 	// bumps it to "2", a deterministic signal that sits in the card footer (below
 	// any reasonable scroll line, so nothing above the fold moves).
 	p.run("comment", "add", "widget.contract.tall", "--as", "human", "--body", "seed")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 	desktopViewport(t, ctx)
 
 	// Confirm the reader-visible scroller from computed overflow + range, then
@@ -290,7 +291,7 @@ func TestReloadNewClaimResolvesViaClaimToFacet(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfig)
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
 	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	// Default view: contract facet visible, design hidden.
 	pollTrue(t, ctx, facetVisibleExpr("widget-contract"))
@@ -321,7 +322,7 @@ func TestReloadSecondFacetChipOpensThread(t *testing.T) {
 	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
 	p.writeClaim("des.yaml", facetClaim("widget.internals.thing", "internals"))
 	p.run("comment", "add", "widget.internals.thing", "--as", "human", "--body", "design discussion")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-internals"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, facetVisibleExpr("widget-internals"))
@@ -343,7 +344,7 @@ func TestReloadSecondFacetChipOpensThread(t *testing.T) {
 func TestReloadOpenPanelSurvives(t *testing.T) {
 	p := newProject(t) // single module/facet, claim widget.contract.overview
 	tid := p.seedComment("human", "root thread")
-	ctx := serveAndOpenLive(t, p)
+	ctx := serveAndOpenLive(t, p, widgetPage)
 
 	// Open the panel on the seeded claim; its thread shows by data-thread-id.
 	runCDP(t, ctx, chromedp.Click(".comment-chip", chromedp.ByQuery))

@@ -28,7 +28,7 @@ What it does not do is also stated: a code link proves a pointer exists, not tha
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 24 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Surface** | the CLI: 26 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
 | **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
@@ -42,7 +42,7 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.21`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.22`,
    then run `dossierx version` and show me the output.
 2. If `project.config.yaml` and the claims directory do not exist yet,
    propose a title and the modules, write `facets: [contract, internals]`
@@ -56,13 +56,12 @@ Set up DossierX in this repository.
    skills/instructions directory this harness actually reads. Run it AFTER
    step 2, never before: the export finds the project root through
    `project.config.yaml`, and only a rooted export maintains its section in
-   an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md`
-   under the root — run rootless it still exits 0, and nothing later in this
-   message exports again. Load what it wrote and follow it: those guides,
+   an `AGENTS.md` that already exists — run rootless it still exits 0, and
+   nothing later in this message exports again. Load what it wrote and follow it: those guides,
    not this message, are the contract.
 4. ASK ME before installing the git pre-commit hook. My answer decides the
    hook alone, never CI — CI is the authority either way. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.21/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.22/scripts/install-git-hook.sh
    to a file, show me what it does, run `sh install-git-hook.sh --yes`, then
    add the CI workflow as well. If I say no, skip the hook and
    add the CI workflow alone, and tell me so. Either answer ends with the
@@ -125,7 +124,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Twenty-four leaf commands under nine nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty-six leaf commands under nine nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, bounded projections, code-link scan and the ledger gate
@@ -134,10 +133,10 @@ check                    lint, bounded projections, code-link scan and the ledge
                          --staged    judge the git index — what the commit will actually
                                      contain — instead of the worktree, writes nothing
 
+brief        list · show · lock · unlock · reaudit   the briefs beside the claims; a brief by path or id (see FORMAT.md)
 claim        show · list · new · lock · unlock · flag · reaudit · link · recover-approved-content
 comment      inbox · list · add · reply
 constitution show · lock             the project-root constitution.yaml
-track        list · show · status
 manifest     show · list             module harness file; --isolation / --integration
 
 serve                    the human's viewer + comment API
@@ -145,7 +144,7 @@ skills export [dir]      write the embedded agent skills into a project
 version                  version, commit, build date (also --version)
 ```
 
-`track` answers whether a user feature assembled across modules is finished (`track status`); it gates nothing. What to implement next is locked claims, module `depends_on`, and claim `rests_on`.
+What to implement next is locked claims, module `depends_on`, and claim `rests_on`.
 
 Every subcommand takes the global `--config` (a path to `project.config.yaml`; when omitted, DossierX searches upward from the current directory the way `git` finds `.git`) and `--format json|text`.
 
@@ -217,6 +216,11 @@ The gate names each disagreement:
 | `comment-digest-missing` | the store is **there** but a claim holding a *standing* approval has no entry in it — the map was emptied rather than the file deleted, which is cheaper to miss in a diff. Every approval records the claim's comment digest in the same act it records the approval, so a standing record with no entry is a statement about the store. Restore the file from version control, or `git add` it if this is the commit that updated it — do **not** run a comment op to re-create the entry, which records whatever the claim says now |
 | `comment-digest-unrecorded` | in a ledger-covered project, a claim **holding comment threads** with no entry beside them in the digest store. The map was protected against being emptied wholesale, not against losing one key: hand-forge a thread as `resolved`, then drop that claim's key, and `comment-ledger-drift` had nothing to compare against — the claim locked, and the next ordinary command re-adopted the forged block as truth. An edit smaller than the one it was catching cleared the gate the whole review loop rests on. The predicate is the threads themselves, which is what survives the tamper: the single code path that writes a thread records the claim's digest in the same act, so threads with no entry means either the entry was removed or the threads were never written by the engine. Deliberately silent where evidence is honestly absent — an uncovered project, an absent store (`comment-digest-absent` says that once), and a claim with no threads at all. **`claim lock` and every comment op refuse this state** (`integrity_failed` / `comment_digest_drift`): an approval records the claim's comment digest in the same act, so locking here would manufacture the very evidence whose absence is the finding |
 | `comment-digest-abandoned` | a digest entry that recorded review history whose **claim id is no longer in the project** — the rename launder: delete a claim's `comments:` block *and* change its `id:` in one edit and every rule that starts from the claim went quiet, because the old entry is the only thing the tamper could not reach. Silent for an entry that recorded no threads, and for a claim whose record an honest `unlock` released |
+| `brief-content-drift` | a **locked brief**'s summary, `rests_on` or body no longer matches what `brief lock` approved, or an image it references changed or joined or left the set (`claim_id` is the brief's path). The approved text is on the record, and the brief's page in the viewer shows the edit against it (Changes / Approved / Current); restore the file from version control or, on the human's yes to the edit, `brief unlock` → fix → `brief lock` — never a lock to make the finding go away |
+| `brief-dependency-drift` | a **locked brief**'s `rests_on` claim moved since the brief's baseline (`claim_id` is the brief's path). The brief is `review_pending`; its page shows one banner per changed claim with that claim's wording then and now. A warning: `check` still passes, and claim locking is not blocked. Confirm in a thread; on the human's yes, `brief reaudit --confirm` |
+| `brief-unrecorded` | a brief says `status: locked` with no standing approval record — none, or one an unlock released. A hand-typed status approves nothing. When an older dossierx rewrote the store and dropped every brief record (version `4`, no `briefs` map), the finding says to restore the store from before that write, **not** to re-lock |
+| `brief-orphan` | a `draft` brief still holding a *standing* approval record — `locked` flipped to `draft` by hand, freeing the brief for edits nobody approved (`brief unlock` releases the record first) |
+| `brief-abandoned` | a standing brief approval whose **brief file was deleted or renamed**. Unlock first, then delete |
 | `store-gitignored` | a path the engine writes under `build/ledger` or `build/code-links` is **matched by `.gitignore` and not in the index** — the ordinary `build/` pattern a Gradle, CMake or Node template ships. The approval would never reach the repository: a collaborator or CI clones a project with no ledger, `check` fails there with `lock-ledger-absent`, and every flag vanishes on the next clone. Checked per FILE with `git check-ignore --no-index` (a directory check goes green the moment one file under it is force-added), one finding per path. A path that is ignored but already tracked is a `warnings[]` line, not a finding. The recovery is the replacement block under [Where DossierX writes](#where-dossierx-writes), or `build_dir` pointed at a directory the pattern does not match. `claim lock`, `claim flag` and `claim reaudit --confirm` refuse the same state with `error.code: store_gitignored` (`--dry-run` previews it as the `stores_are_tracked` precondition), and refuse too when the project is inside a git work tree and git cannot answer; `check`, `check --validate` and `check --staged` then report `data.gitignore_check` instead of a verdict and exit 0 |
 ### Where DossierX writes
 
@@ -225,7 +229,7 @@ Every file the engine generates lives under one directory, `build_dir` (default 
 | Kind | Path | Committed |
 |---|---|---|
 | code links, per module | `build/code-links/<module>.json` | yes |
-| lock ledger (claim approvals and the constitution's lock record) | `build/ledger/lock-store.json` | yes |
+| lock ledger (claim approvals, the constitution's lock record, brief approvals) | `build/ledger/lock-store.json` | yes |
 | comment digest | `build/ledger/comment-digest.json` | yes |
 | flag store | `build/ledger/flag-store.json` | yes |
 | catalog | `build/catalog/catalog.json` | no, regenerated by `check` |
@@ -353,14 +357,11 @@ sources:                         # optional: the evidence, cited from body as [n
     title: Widget specification
     url: https://example.com/widget-spec
     accessed_on: 2026-08-15      # what makes an external citation falsifiable
-tracks:                          # optional: cross-cutting membership
-  - id: widget-setup
-    role: cites                  # owns | cites
 ```
 
-Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project claim), a `status`, a required one-line plain-text `summary`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) and a required `rests_on` — a list of claim ids, or `{none: true, reason}` for a claim that rests on nothing. Module claims also carry a `facet` and a `module`; project claims carry neither. Claims name other claims they `rests_on`, forming a graph the engine walks and validates; the constitution is never a target. The full schema is in [FORMAT.md](FORMAT.md). A claim file carrying a retired field (`governed_by`, `build_role`, `mirrors`) fails to load; the `dossierx-upgrading` skill folds it.
+Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project claim), a `status`, a required one-line plain-text `summary`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) and a required `rests_on` — a list of claim ids, or `{none: true, reason}` for a claim that rests on nothing. Module claims also carry a `facet` and a `module`; project claims carry neither. Claims name other claims they `rests_on`, forming a graph the engine walks and validates; the constitution is never a target. The full schema is in [FORMAT.md](FORMAT.md). A claim file carrying a retired field (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks`) fails to load; the `dossierx-upgrading` skill folds it.
 
-**Sources and tracks** are the two optional axes, both added in v0.6.0 and both no-ops for a project that does not use them. `sources` carries a claim's evidence *inside* the claim — cited from the body with `[n]` markers, anchored by an access date when the source is a page that can change under you and by a content hash when it is a file the engine can read, and signed by the lock ledger so a citation cannot be rewritten after approval. `tracks` is a second ownership axis: `module` answers "who guarantees this?", and a track answers "what does the user get, and is it finished?" — a feature assembled from claims across many modules, with `dossierx track status <id>` reporting whether every claim it owns and cites is locked.
+**Sources** are optional, added in v0.6.0 and a no-op for a project that does not use them. `sources` carries a claim's evidence *inside* the claim — cited from the body with `[n]` markers, anchored by an access date when the source is a page that can change under you and by a content hash when it is a file the engine can read, and signed by the lock ledger so a citation cannot be rewritten after approval.
 
 **`check` is the pipeline.** One command runs lint → catalog/readiness projection → conformance evaluation → bounded viewer projection and generated writes → code-link scan → the ledger gate → the code-link gate, and stops at the first failure. The code-link gate applies once `source_dirs` is set: every locked module claim must carry a link in source (project claims, and a claim declaring `embodiment: {mode: none, reason}`, are exempt), and a claim with `steps:` must be tagged on every step, or `check` exits 1 (`unlinked_claims`, `stopped_at: links`) after the viewer was regenerated. `--validate` is the read-only form for the authoring loop. A project with no `embodiment` declarations retains the established lint and ledger checks and does not build a catalog or viewer in memory. Once any claim declares `embodiment`, validation also evaluates its named set/scalar checks and the bounded catalog/readiness and viewer projections in memory so those three views agree, while still writing nothing — no claim files, no lock store, no `build/catalog/catalog.json`, no conformance status and no viewer. A compare declaration is implementation-ready only when all of its checks match. With optional `conformance.blocking: true`, any owed, mismatch, or uncheckable check fails `check`; this is a checker gate only and does not approve, lock, unlock, or change dependency readiness. Plain `check` still writes the inspectable conformance outputs before returning that failure, while `--validate` and `--staged` remain write-free. It does not reconcile `review_pending` or scan source for code links. Run plain `check` before trusting what is on disk.
 
@@ -381,7 +382,6 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | `modules` | []string | yes | The non-empty, deduplicated list of module names this project documents. |
 | `claims_dir` | string | yes | Directory of claim YAML files, resolved relative to `project.config.yaml`'s own directory (never the process's current working directory). |
 | `build_dir` | string | no | Where every generated file goes — the three ledger stores, code-link records, the catalog and the viewer (default `build`, resolved relative to the config). It may not be the config's own directory, and may not sit inside `claims_dir` or contain it. The ledger stores under it are committed; see [Where DossierX writes](#where-dossierx-writes). |
-| `tracks` | list | no | The registry of cross-cutting features claims may join: each entry an `id` and a `title`, with an optional one-line `summary`. Ids must be unique. A claim naming an undeclared track fails `track-unknown`. Omitted, there are no tracks and the viewer shows no Tracks group. |
 | `conformance.observations` | string | no | One literal, project-owned normalized observation JSON file, resolved relative to the config and required to stay outside `build_dir`. DossierX reads it only when a claim declares `embodiment`; it never runs an adapter. |
 | `conformance.blocking` | bool | no | Defaults to `false`. When true, any owed, mismatch, or uncheckable named check makes `check` fail after write-mode outputs are generated; approval and locking remain unchanged. |
 | `title` | string | no | The viewer's display name — used in `<title>`, the header, and the sidebar heading. Defaults to a generic fallback when unset. |
@@ -393,22 +393,23 @@ Every claim has an `id` (`module.facet.slug`, or `project.<slug>` for a project 
 | `max_claim_body_chars` | int | no | Project-wide ceiling on `body` + `steps` + `rows` cells, counted as Unicode code points. Omitted, the default is **2000**. `check` fails with `body-oversize` when a claim is over, and `claim lock` refuses. `raw_html` is exempt. Values below 1 are refused at config load. |
 | `max_claim_summary_chars` | int | no | Project-wide ceiling on `summary`, counted as Unicode code points. Omitted, the default is **200**. `check` fails with `summary-oversize` when over. Values below 1 are refused at config load. |
 | `max_claims_per_module` | int | no | Project-wide ceiling on how many claims one module may hold. Omitted, the default is **10**. `check` fails with `module-claim-cap` when a module is over, and `claim lock` refuses any claim in that module. Raise this number to override; there is no per-module override. Values below 1 are refused at config load. |
+| `briefs_dir` | string | no | The briefs tree (default `briefs`, beside `project.config.yaml`): `briefs/<folder>/<slug>.md` markdown documents plus the images they reference, one folder level, every name in `[a-z0-9-]`. Absent is no briefs, and a project with none sees no change. It may not be the config's own directory or overlap `claims_dir`, `project_claims_dir` or `build_dir`. See [FORMAT.md](FORMAT.md#briefs). |
+| `max_brief_words` · `max_brief_images` · `max_brief_image_bytes` · `max_briefs_per_folder` · `max_briefs` | int | no | The brief caps: **2000** words per brief, **3** images per brief at **1048576** bytes each, **12** briefs per folder, **60** in total (images count toward neither of the last two). `check` fails with `brief-word-cap`, `brief-image-cap`, `brief-folder-cap` or `brief-total-cap` when one is exceeded. Raising one is the human's call. Values below 1 are refused at config load. |
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
 ## The skills
 
-DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the nine nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (write, find, and move claims through their lifecycle), `dossierx-modules` (work one module at a time through `manifest show`, draft `manifest.yaml`, and recover from every cap), `dossierx-constitution` (draft and keep the roof, and author project claims), `dossierx-comments` (run review threads, and when to comment versus `flag`), `dossierx-code-links` (implement from a locked module and ground the code in the claims it implements), and `dossierx-upgrading` (fold a corpus across a release that changed the format). See [`skills/`](skills/) for what each covers.
+DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the nine nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (write, find, and move claims through their lifecycle), `dossierx-modules` (work one module at a time through `manifest show`, draft `manifest.yaml`, and recover from every cap), `dossierx-constitution` (draft and keep the roof, and author project claims), `dossierx-briefs` (write, lock and keep the briefs beside the claims, feature briefs included), `dossierx-comments` (run review threads, and when to comment versus `flag`), `dossierx-code-links` (implement from a locked module and ground the code in the claims it implements), and `dossierx-upgrading` (fold a corpus across a release that changed the format). See [`skills/`](skills/) for what each covers.
 
-`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. It also removes a retired bundle — a `dossierx-*` directory the tree's previous `dossierx-skills.lock` listed that this release no longer ships, such as `dossierx-build-order` — and never touches a directory whose name does not start with `dossierx`; `dossierx skills export --check` refuses `skills_drift` with `data.retired[]` for any such directory still on disk. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md` under the root, while a rootless one exits 0 having written the bundles and dropped the guide beside them instead, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
+`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. It also removes a retired bundle — a `dossierx-*` directory the tree's previous `dossierx-skills.lock` listed that this release no longer ships, such as `dossierx-build-order` — and the `docs/dossierx-agent-guide.md` releases up to v0.7.21 wrote (with `docs/` when nothing else is in it), and never touches a directory whose name does not start with `dossierx` or any other file under `docs/`; `dossierx skills export --check` refuses `skills_drift` with `data.retired[]` for any such directory or guide still on disk. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists, while a rootless one exits 0 having written only the bundles, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 
-The skills are one source written in three forms, because no two agent harnesses read the same file:
+The skills are one source written in two forms, because no two agent harnesses read the same file. DossierX writes nothing under `docs/`; a harness with no skill loader, or a human, reads the exported `SKILL.md` files directly — they are plain markdown.
 
 | Form | Where | Notes |
 | --- | --- | --- |
 | `SKILL.md` tree | the `[dir]` you name; otherwise every skills tree the repo already has — `.claude/skills` if `.claude/` exists and `.agents/skills` if `.agents/` exists — each with its own `dossierx-skills.lock` | verbatim bundles, frontmatter intact |
-| `AGENTS.md` section | an existing `AGENTS.md` only — never created | marker-delimited and idempotent; carries the router only, since this text is resident on every turn |
-| `dossierx-agent-guide.md` | `docs/` under the project root; `[dir]` itself when there is no project to root it in | always written — all seven bundles inline, self-contained, no loader or plugin needed |
+| `AGENTS.md` section | an existing `AGENTS.md` only — never created | marker-delimited and idempotent; carries the router only, since this text is resident on every turn, and links each companion to its `SKILL.md` in the tree this export wrote |
 
-Both derived forms are regenerated by re-running the export, so they are committed artifacts like the ledger: re-export to pick up a new release, and commit the result.
+Both forms are regenerated by re-running the export, so they are committed artifacts like the ledger: re-export to pick up a new release, and commit the result.
 
 ## Scope
 

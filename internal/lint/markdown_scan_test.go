@@ -49,6 +49,13 @@ func TestMDScanBlocks_Recognizers(t *testing.T) {
 			unclosedFences: []int{3},
 		},
 		{
+			// The opener's following line is past the end, the one index the
+			// closer table holds no slot for.
+			name:           "an opener on the last line is unclosed",
+			source:         "before\n\n```go",
+			unclosedFences: []int{3},
+		},
+		{
 			name:   "a backslash defuses a fence marker, so there is no opener to leave unclosed",
 			source: "\\```not a fence",
 		},

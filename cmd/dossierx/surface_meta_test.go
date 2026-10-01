@@ -208,18 +208,25 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsTwentyFourLeavesUnderEightNouns treats the leaf count.
+// TestSurfaceIsTwentySixLeavesUnderNineNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
+		// 9 -> 8 and 24 -> 21 when tracks were retired and the track noun
+		// went with them (NIT-184). 8 -> 9 and 21 -> 23 with the brief noun
+		// and its two read-only leaves, list and show (NIT-204). 23 -> 26
+		// with its write side, lock, unlock and reaudit (NIT-205).
 		"nouns":    9,
-		"commands": 24,
+		"commands": 26,
 		// 36 -> 37 with NIT-10's shared-context-budget (the shared half of
 		// the manifest show --isolation view). 37 -> 36 when lock policy 0
-		// was retired and rest-on-locked went with it.
-		"lint_rules": 36,
+		// was retired and rest-on-locked went with it. 36 -> 35 when
+		// migrated_from was retired and supersede went with it (NIT-191).
+		// 35 -> 30 when tracks were retired with their five track-* lints
+		// (NIT-184).
+		"lint_rules": 30,
 		// 50 -> 51 with the code-link gate (issue #78): `unlinked_claims` is
 		// a new refusal `check` emits, documented in the router's table.
 		// 51 -> 52 with `skills export --check` (issue #78 Phase 1A):
@@ -228,9 +235,26 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		// NIT-7's manifest harness together: the doctrine hub's
 		// `dependency_not_locked` is deleted (NIT-23) and `view_too_large`
 		// is added (`manifest show --isolation` over the 16384-byte view
-		// cap), landing at 50.
-		"error_codes": 50,
-		"http_routes": 14,
+		// cap), landing at 50. 50 -> 49 when tracks were retired and
+		// `unknown_track` went with them (NIT-184). 49 -> 50 with
+		// `brief_not_found`, `brief show`'s refusal for a path or id that
+		// names no brief (NIT-204). 50 -> 51 with `comment_open`, `brief
+		// lock` and `brief reaudit` refusing a brief with an open thread
+		// (NIT-205). 51 -> 52 with `store_too_new`, a store from a newer
+		// dossierx refused rather than read and re-saved (NIT-205).
+		"error_codes": 52,
+		// The brief rule set (NIT-204), a registry of its own beside
+		// lint.Registry: brief-shape, brief-frontmatter, the four caps, and
+		// the two rests_on rules. 8 -> 10 with the two that read a locked
+		// brief's baselines, brief-rests-on-missing and brief-dependency-drift
+		// (NIT-205).
+		"brief_rules": 10,
+		// 14 -> 15 with GET /brief-assets/{folder}/{name}, serve's answer
+		// for a brief page's images (NIT-197). 15 -> 23 with the seven
+		// /api/briefs/{id}/comments routes, the claim comment routes' twins
+		// plus a per-brief list, and the /api/briefs/ catch-all that answers
+		// the JSON brief_not_found for anything they do not match (NIT-198).
+		"http_routes": 23,
 	}
 	for name, expected := range want {
 		if got := doc.Counts[name]; got != expected {

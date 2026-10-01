@@ -188,7 +188,7 @@ func TestThreeFacetTabStripPaintsTheSelectedFacetAndACountPerFacet(t *testing.T)
 			ctx := browserContextFor(t, browser)
 			runCDP(t, ctx,
 				chromedp.EmulateViewport(1280, 900, chromedp.EmulateScale(1)),
-				chromedp.Navigate(url),
+				chromedp.Navigate(url+widgetPage),
 			)
 			pollTrue(t, ctx, `document.readyState === 'complete'`)
 			waitVisible(t, ctx, ".sub-nav .subtab")

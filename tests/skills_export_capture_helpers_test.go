@@ -13,10 +13,9 @@
 // the `name:` key rather than to correct the arithmetic.
 //
 // WHY A CAPTURE AND NOT A SOURCE READ. cmd/dossierx/skills_embed.go's
-// buildAgentGuide and buildAgentsSection both run rewriteWikilinks over the
-// bundle bodies and splice/concatenate them into two documents that appear in
-// no SKILL.md at all: docs/dossierx-agent-guide.md, and a marker-delimited
-// section spliced into the client's own AGENTS.md — the file that file's own
+// buildAgentsSection runs rewriteSkillLinks over the router's body and splices
+// it into a document that appears in no SKILL.md at all: a marker-delimited
+// section in the client's own AGENTS.md — the file that file's own
 // comment says "is loaded on every single turn in every single conversation
 // in the repo". A gate that reads skills/*/SKILL.md is auditing the source;
 // this captures the transform's OUTPUT, the bytes a client's repository
@@ -24,7 +23,7 @@
 //
 // It runs the REAL, COMPILED "dossierx" binary end to end (reusing
 // cli_test.go's binPath/run harness) rather than calling
-// buildAgentGuide/buildAgentsSection/exportSkills directly — those are
+// buildAgentsSection/exportSkills directly — those are
 // unexported in cmd/dossierx and, more to the point, calling them directly
 // would be auditing the source's OWN idea of its output, the exact
 // distinction this capture exists to avoid collapsing. The capture reads
@@ -59,15 +58,14 @@ const (
 	skillsExportAgentsBeginMarker = "<!-- BEGIN dossierx skills -->"
 	skillsExportAgentsEndMarker   = "<!-- END dossierx skills -->"
 
-	// skillsExportAgentGuidePath is a literal copy of
-	// cmd/dossierx/skills_embed.go's unexported agentGuidePath constant, for
-	// the same reason as the two markers above: it is the exact link target
-	// buildAgentsSection writes for each companion's index bullet
-	// ("- [`name`](docs/dossierx-agent-guide.md#name) — description"), and
-	// TestCaptureSkillsExport_AllThreeFormsPresent needs that exact string to
+	// skillsExportTreeHref is the tree the fixture's export writes
+	// (.claude/skills, because the fixture has a .claude/), as the AGENTS.md
+	// section links it. Each companion's index bullet is
+	// "- [`name`](.claude/skills/name/SKILL.md) — description", and
+	// TestCaptureSkillsExport_BothFormsPresent needs that exact string to
 	// tell "the companion was indexed" apart from "the companion's name
 	// merely appears somewhere in the router's own prose".
-	skillsExportAgentGuidePath = "docs/dossierx-agent-guide.md"
+	skillsExportTreeHref = ".claude/skills"
 )
 
 // SkillsExportCapture is export-output.json: everything a client's repository
@@ -77,26 +75,21 @@ type SkillsExportCapture struct {
 	// SkillTree is the verbatim SKILL.md tree (Form 1), keyed by its path
 	// relative to the export target directory (e.g.
 	// "dossierx-claims/SKILL.md"). This form is copied byte for byte from the
-	// embedded bundles with NO wikilink rewrite, so it is the baseline the
-	// other two forms are a transform OF.
+	// embedded bundles with NO link rewrite, so it is the baseline the
+	// AGENTS.md section is a transform OF.
 	SkillTree map[string]string `json:"skill_tree"`
-
-	// AgentGuide is docs/dossierx-agent-guide.md in full (Form 3): every
-	// bundle concatenated, wikilinks rewritten to in-document anchors. Always
-	// present — this form is written unconditionally.
-	AgentGuide string `json:"agent_guide"`
 
 	// AgentsMDSection is exactly the text between the BEGIN/END markers
 	// spliced into the client's AGENTS.md (Form 2) — the router's body, with
-	// its wikilinks rewritten to point at AgentGuide, plus the companion
+	// its sibling links rewritten to point into SkillTree, plus the companion
 	// index. Empty when the fixture's AGENTS.md did not exist (this
 	// capture's fixture always creates one, so in practice it never is).
 	AgentsMDSection string `json:"agents_md_section"`
 }
 
 // captureSkillsExport runs `dossierx skills export` against projectRoot —
-// which must already have a .claude/ directory and an AGENTS.md, so all
-// three forms actually fire, per exportSkillForms's detection rules in
+// which must already have a .claude/ directory and an AGENTS.md, so both
+// forms actually fire, per exportSkillForms's detection rules in
 // cmd/dossierx/skills_embed.go — and reads every written file back.
 func captureSkillsExport(t *testing.T, projectRoot string) SkillsExportCapture {
 	t.Helper()
@@ -132,12 +125,6 @@ func captureSkillsExport(t *testing.T, projectRoot string) SkillsExportCapture {
 		t.Fatalf("captured no files under %s; skills export did not write the tree the fixture expected", treeDir)
 	}
 
-	guidePath := filepath.Join(projectRoot, "docs", "dossierx-agent-guide.md")
-	guide, err := os.ReadFile(guidePath)
-	if err != nil {
-		t.Fatalf("read exported agent guide %s: %v", guidePath, err)
-	}
-
 	agentsPath := filepath.Join(projectRoot, "AGENTS.md")
 	agentsMD, err := os.ReadFile(agentsPath)
 	if err != nil {
@@ -150,7 +137,6 @@ func captureSkillsExport(t *testing.T, projectRoot string) SkillsExportCapture {
 
 	return SkillsExportCapture{
 		SkillTree:       tree,
-		AgentGuide:      string(guide),
 		AgentsMDSection: section,
 	}
 }
@@ -172,7 +158,7 @@ func extractAgentsSection(agentsMD string) (string, error) {
 
 // firstBodyLine returns the first non-blank line of raw's markdown body,
 // after its YAML frontmatter. raw is a verbatim SkillTree entry (Form 1,
-// untouched by rewriteWikilinks), so this is exactly the heading line a
+// untouched by rewriteSkillLinks), so this is exactly the heading line a
 // companion's SKILL.md opens with — used as a distinctive fingerprint for
 // "this companion's body was inlined in full" that doesn't require
 // hardcoding each companion's heading text by hand and re-syncing it every

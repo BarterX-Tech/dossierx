@@ -28,7 +28,10 @@ package check
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
@@ -54,6 +57,25 @@ import (
 // store, which makes lock.Audit report every locked claim as unapproved. The
 // gate fails closed, loudly, and says which of the two stores failed.
 const RuleLedgerUnreadable = "lock-ledger-unreadable"
+
+// storeTooNewLead opens the lock-ledger-unreadable message for a store written
+// by a newer dossierx (lock.ErrStoreTooNew, digest.ErrStoreTooNew), whose
+// recovery is the opposite of a corrupt store's: upgrade the binary, never
+// restore the store. StoreTooNew keys on it, so the envelope hint can say so
+// without a second rule name.
+const storeTooNewLead = "a ledger store was written by a newer dossierx than this one"
+
+// StoreTooNew reports whether findings hold the lock-ledger-unreadable finding
+// for a store written by a newer dossierx — the store_too_new condition as
+// check reports it — so the caller's hint says upgrade, not restore.
+func StoreTooNew(findings []lock.Finding) bool {
+	for _, f := range findings {
+		if f.Rule == RuleLedgerUnreadable && strings.HasPrefix(f.Message, storeTooNewLead) {
+			return true
+		}
+	}
+	return false
+}
 
 // RuleStoreGitignored is the project-scoped finding for an engine-written path
 // under the build directory that .gitignore matches and the index does not
@@ -204,6 +226,16 @@ type ledgerInputs struct {
 	// that nothing it judges comes from the working tree.
 	constitution constitution.Verdict
 
+	// briefs is the project's briefs tree (NIT-204) as the SAME tree holds it —
+	// disk for Run and Status, the index for StatusStaged — for the reason
+	// constitution rides here: a registered lint sees only claims and config,
+	// and --staged must judge nothing from the working tree. Its rule findings
+	// join lint_findings; its lock lifecycle is read against store beside it
+	// (briefEvaluation), whose two integrity findings and the briefs' comment
+	// digest rules join the ledger gate (briefLedgerFindings); and the render
+	// beside the catalog draws the viewer's briefs payload from both.
+	briefs *briefs.Set
+
 	// THERE ARE NO HISTORY FIELDS HERE ANY MORE, and that is deliberate. This
 	// struct used to carry scopeFindings, parentFindings and scopeNote — refusals
 	// and one advisory produced by comparing the commit under judgement against
@@ -254,7 +286,83 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 	}
 
 	in.constitution = constitution.EvaluateAt(cfg.ConstitutionPath(), constitutionRecord(in.store))
+	in.briefs = briefs.Load(cfg)
 	return in
+}
+
+// lintFindings is the lint step's whole finding list: the roof's findings, the
+// claim rules' (lint.RunAll), then the brief rules' (briefs.Set.Findings). The
+// brief findings are in the list an agent already branches on, keyed by `lint`,
+// but they are never lint.Registry's and never reach `claim lock`, which runs
+// lint.RunAll alone: brief state does not gate a claim.
+func lintFindings(claims []model.Claim, cfg *config.Config, in ledgerInputs) []lint.Finding {
+	cfg.BriefTree = briefTree(in.briefs)
+	findings := lint.RunAll(claims, cfg)
+	findings = append(findings, in.briefs.FindingsWith(claims, briefEvaluation(claims, in))...)
+	return withConstitutionFindings(in.constitution, findings)
+}
+
+// briefTree is each parsed brief's judged bytes, keyed the way an internal
+// source path is spelled (config-relative, slash form). source-internal-drift
+// reads this instead of the worktree so --staged hashes the index blob.
+func briefTree(set *briefs.Set) map[string][]byte {
+	if set == nil || len(set.Briefs) == 0 {
+		return nil
+	}
+	out := make(map[string][]byte, len(set.Briefs))
+	for _, b := range set.Briefs {
+		out[b.Path] = []byte(b.Content)
+	}
+	return out
+}
+
+// briefEvaluation reads every brief's lock lifecycle (NIT-205) against the
+// claims and the lock store of the SAME tree — disk, or the index under
+// --staged. A nil store (unreadable) makes every locked brief unrecorded: there
+// is no evidence any of them was approved, as for a claim.
+func briefEvaluation(claims []model.Claim, in ledgerInputs) *briefs.Evaluation {
+	return briefs.Evaluate(in.briefs, claims, in.store)
+}
+
+// briefLedgerFindings is the briefs' half of the ledger gate: the two integrity
+// findings of a brief's lock (brief-content-drift, brief-unrecorded), and the
+// comment-digest rules over the briefs' threads, under the claims' rule names —
+// comment-ledger-drift for a thread block that no longer matches its recorded
+// digest, comment-digest-unrecorded for threads with no entry in a
+// ledger-covered project. The claim is named by the brief's PATH, which can
+// never be a claim id.
+//
+// It runs whether or not the tree holds a brief: a project whose last brief was
+// deleted is exactly the one brief-abandoned and the abandoned-digest rule
+// below exist for.
+func briefLedgerFindings(claims []model.Claim, in ledgerInputs) []lock.Finding {
+	if in.briefs == nil {
+		return nil
+	}
+	findings := briefEvaluation(claims, in).Integrity
+	if in.digests == nil {
+		return findings
+	}
+	findings = append(findings, abandonedBriefDigests(in)...)
+	covered := in.store.LedgerCovered() && in.digests.FileExists()
+	for _, b := range in.briefs.Briefs {
+		recorded, known := in.digests.BriefDigest(b.ID)
+		switch {
+		case known && recorded != digest.BriefCommentsDigest(b.ID, b.Comments):
+			findings = append(findings, lock.Finding{
+				Rule:    lock.RuleCommentLedgerDrift,
+				ClaimID: b.Path,
+				Message: fmt.Sprintf("%s's comments block does not match the digest recorded at the last comment operation on it, so a review thread was edited or deleted outside dossierx. Comments are engine-managed: restore %s (or %s, if a commit carried the brief without it) from version control — they are written as a pair and agree only as a pair.", b.Path, b.Path, config.CommentDigestDisplayPath),
+			})
+		case !known && covered && len(b.Comments) > 0:
+			findings = append(findings, lock.Finding{
+				Rule:    lock.RuleCommentDigestUnrecorded,
+				ClaimID: b.Path,
+				Message: fmt.Sprintf("%s carries %d comment thread(s) but %s has no entry for it, in a project covered by the lock ledger; the only code path that writes a brief's thread records its digest in the same act, so either the entry was removed or the threads were not written by dossierx. Restore %s from version control, or the brief's comments block if that is what was forged.", b.Path, len(b.Comments), config.CommentDigestDisplayPath, config.CommentDigestDisplayPath),
+			})
+		}
+	}
+	return findings
 }
 
 // constitutionRecord is the store's roof record, or nil for an unreadable or
@@ -356,7 +464,16 @@ func withConstitutionFindings(v constitution.Verdict, findings []lint.Finding) [
 func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	var findings []lock.Finding
 
-	if in.storeErr != nil {
+	lockTooNew := errors.Is(in.storeErr, lock.ErrStoreTooNew)
+	switch {
+	case lockTooNew:
+		findings = append(findings, lock.Finding{
+			Rule: RuleLedgerUnreadable,
+			Message: fmt.Sprintf(
+				"%s: %v. No other ledger rule is evaluated on this run, because every one of them reads that store. The store is not damaged: do not restore, edit or re-lock it.",
+				storeTooNewLead, in.storeErr),
+		})
+	case in.storeErr != nil:
 		findings = append(findings, lock.Finding{
 			Rule: RuleLedgerUnreadable,
 			Message: fmt.Sprintf(
@@ -364,13 +481,29 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 				in.storeErr),
 		})
 	}
-	if in.digestErr != nil {
+	switch {
+	case errors.Is(in.digestErr, digest.ErrStoreTooNew):
+		findings = append(findings, lock.Finding{
+			Rule: RuleLedgerUnreadable,
+			Message: fmt.Sprintf(
+				"%s: %v. Comment-thread drift is NOT being checked on this run. The store is not damaged: do not restore or edit it.",
+				storeTooNewLead, in.digestErr),
+		})
+	case in.digestErr != nil:
 		findings = append(findings, lock.Finding{
 			Rule: RuleLedgerUnreadable,
 			Message: fmt.Sprintf(
 				"the comment digest store could not be read: %v. Comment-thread drift is NOT being checked on this run — restore the file from version control.",
 				in.digestErr),
 		})
+	}
+	if lockTooNew {
+		// A lock store this binary refuses to read is not missing evidence:
+		// it is evidence a newer binary can read. Judging the claims against a
+		// nil store would report every locked claim and brief as unapproved —
+		// statements about approvals nobody here read — and bury the one
+		// finding whose recovery is right. The gate still refuses.
+		return findings
 	}
 
 	if f, ok := commentDigestAbsent(claims, in); ok {
@@ -382,6 +515,7 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
+	findings = append(findings, briefLedgerFindings(claims, in)...)
 	// Leftover build-order artifacts and "build-order" ledger rows from before
 	// v0.7.21 are never read: lock.Audit filters on SubjectClaim, and nothing
 	// here opens build/build-order/. TestLeftoverBuildOrderArtifactsAreIgnored
@@ -497,4 +631,39 @@ func commentDigestAbsent(claims []model.Claim, in ledgerInputs) (lock.Finding, b
 			"this project has a lock ledger but no comment digest store (%s), so comment-thread drift is not being checked AT ALL on this run — for any of its %d claim(s). The engine writes that file the moment a project acquires a lock ledger, so its absence means it was deleted (which is how an edited-away review thread stops being reported, and it stays quiet even when the last thread went with it) or it is not part of this commit. Restore it from version control, or git add it if this commit is the one that created it. Do not re-create it by running a comment op: a re-created store records whatever the claims say NOW as the truth, which is exactly what a deletion was for.",
 			config.CommentDigestDisplayPath, len(claims)),
 	}, true
+}
+
+// abandonedBriefDigests is comment-digest-abandoned for briefs — the rename
+// launder's brief twin. A digest entry that recorded review threads, for a
+// brief no longer in the tree, is the one piece of evidence a rename (copy the
+// brief without its comments block, delete the original) cannot reach. Silent
+// for the two accounted-for departures the claim rule is silent for: an entry
+// that recorded no thread, and a brief whose approval record an honest unlock
+// released. The claim is named by the path the id stands for.
+func abandonedBriefDigests(in ledgerInputs) []lock.Finding {
+	present := make(map[string]bool, len(in.briefs.Briefs))
+	for _, b := range in.briefs.Briefs {
+		present[b.ID] = true
+	}
+	ids := make([]string, 0, len(in.digests.Briefs))
+	for id := range in.digests.Briefs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	var out []lock.Finding
+	for _, id := range ids {
+		if present[id] || in.digests.Briefs[id] == digest.BriefCommentsDigest(id, nil) {
+			continue
+		}
+		if rec, ok := in.store.BriefRecordFor(id); ok && rec.Released() {
+			continue
+		}
+		where := briefs.PathOf(in.briefs, id)
+		out = append(out, lock.Finding{
+			Rule:    RuleCommentDigestAbandoned,
+			ClaimID: where,
+			Message: fmt.Sprintf("%s records comment threads for the brief %s, which is no longer in the project: its file was deleted or renamed — and copying a brief to a new name without its comments block is how an open review thread disappears with nothing reported against the brief that replaces it. Restore the brief from version control; to remove a brief with a review history, unlock it first (if it is locked) so the removal is on the record.", config.CommentDigestDisplayPath, where),
+		})
+	}
+	return out
 }

@@ -76,7 +76,6 @@ func claimWriteFixture(t *testing.T, root string) string {
 	base := "id: widget.contract.retry-policy\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 		"summary: Retry three times with backoff.\n" +
 		"body: |\n  requests retry three times with backoff.\n" +
-		"migrated_from: docs/tabs/widget.html\n" +
 		"rests_on:\n  none: true\n  reason: fixture claim\n"
 	if err := os.WriteFile(filepath.Join(claimsDir, "retry.yaml"), []byte(base), 0o644); err != nil {
 		t.Fatalf("write base claim: %v", err)
@@ -115,9 +114,6 @@ func TestEnvelope_ClaimShowAnswersEverythingDepsAndImplinkStatusDid(t *testing.T
 	}
 	if data.Status != "draft" || data.Locked || data.ReviewPending {
 		t.Fatalf("lifecycle drift: %+v", data)
-	}
-	if data.MigratedFrom != "docs/tabs/widget.html" {
-		t.Fatalf("expected the migrated_from note carried, got %+v", data)
 	}
 	// BOTH edge directions in one call. The incoming half is the whole reason
 	// this replaced "deps" rather than being a rename of it.
@@ -235,13 +231,13 @@ func TestEnvelope_ClaimListFilters(t *testing.T) {
 		t.Fatalf("unfiltered list drift: %+v", all)
 	}
 
-	// --migrated: the retired "coverage" verb's ratio, plus the names.
-	migrated := listData("--migrated")
-	if migrated.Count != 1 || migrated.Total != 2 || migrated.PercentOfTotal != 50 {
-		t.Fatalf("expected 1 of 2 (50%%) migrated, got %+v", migrated)
+	// --match narrows to one: the ratio is reported against the whole corpus.
+	matched := listData("--match", "retry policy")
+	if matched.Count != 1 || matched.Total != 2 || matched.PercentOfTotal != 50 {
+		t.Fatalf("expected 1 of 2 (50%%) matched, got %+v", matched)
 	}
-	if migrated.Claims[0].ClaimID != "widget.contract.retry-policy" {
-		t.Fatalf("expected the migrated claim named, got %+v", migrated.Claims)
+	if matched.Claims[0].ClaimID != "widget.contract.retry-policy" {
+		t.Fatalf("expected the matched claim named, got %+v", matched.Claims)
 	}
 
 	// --review-pending: the retired "stale" verb.
@@ -259,8 +255,8 @@ func TestEnvelope_ClaimListFilters(t *testing.T) {
 
 	// The echoed filters: an agent showing a human "here are the 3" has to be
 	// able to say WHICH 3 without re-deriving it from its own call site.
-	echoed := listData("--migrated", "--facet", "contract")
-	if !echoed.Filters.Migrated || echoed.Filters.Facet != "contract" || echoed.Filters.ReviewPending {
+	echoed := listData("--drifted", "--facet", "contract")
+	if !echoed.Filters.Drifted || echoed.Filters.Facet != "contract" || echoed.Filters.ReviewPending {
 		t.Fatalf("filters must be echoed exactly as applied, got %+v", echoed.Filters)
 	}
 }

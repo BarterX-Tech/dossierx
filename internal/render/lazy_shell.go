@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"html/template"
 	"sync"
 
@@ -24,12 +23,17 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	}
 	in.graphPayload = graphPayload
 
+	rendered := renderBriefs(in.briefs, in.cat, in.cfg)
+	briefsPayload, err := briefsPayloadJSON(in.briefs, rendered, in.briefReview, in.briefsBudgetOr(budget))
+	if err != nil {
+		return shellData{}, err
+	}
+	in.briefsPayload = briefsPayload
+
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
-	data.Tracks, err = buildTrackSectionsWithBudget(in.cat, in.cfg, renderedByID, budget)
-	if err != nil {
-		return shellData{}, fmt.Errorf("render: track sections: %w", err)
-	}
+	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups, homeBriefWaitingOf(in.briefs, rendered, in.briefReview))
+	data.Briefs = buildBriefsView(in.briefs, rendered, in.cat, in.cfg, in.briefReview)
 	return data, nil
 }
 
@@ -53,12 +57,24 @@ func (d *lazyShellData) ModuleGroups() ([]ModuleGroup, error) {
 	return d.projection.moduleGroups()
 }
 
-func (d *lazyShellData) Tracks() ([]TrackSection, error) {
-	return d.projection.trackSections()
+func (d *lazyShellData) Home() (HomeView, error) {
+	return d.projection.home()
+}
+
+// Briefs is the brief tree and pages (NIT-197), built only if a project shell
+// references them.
+func (d *lazyShellData) Briefs() (BriefsView, error) {
+	return d.projection.briefsView(), nil
 }
 
 func (d *lazyShellData) GraphPayload() (template.JS, error) {
 	return d.projection.graphPayloadJSON()
+}
+
+// BriefsPayload is computed only if a project shell references it, like every
+// other corpus-sized projection here.
+func (d *lazyShellData) BriefsPayload() (template.JS, error) {
+	return d.projection.briefsPayloadJSON()
 }
 
 type lazyShellProjection struct {
@@ -74,13 +90,53 @@ type lazyShellProjection struct {
 	groups     []ModuleGroup
 	groupsErr  error
 
-	tracksOnce sync.Once
-	tracks     []TrackSection
-	tracksErr  error
-
 	graphOnce sync.Once
 	graph     template.JS
 	graphErr  error
+
+	briefsOnce sync.Once
+	briefs     template.JS
+	briefsErr  error
+
+	homeOnce sync.Once
+	homeView HomeView
+	homeErr  error
+
+	renderedOnce sync.Once
+	rendered     map[string]renderedBrief
+
+	briefsViewOnce sync.Once
+	briefsViewVal  BriefsView
+}
+
+// renderedBriefs renders every brief body once, shared by the payload and the
+// pages.
+func (p *lazyShellProjection) renderedBriefs() map[string]renderedBrief {
+	p.renderedOnce.Do(func() {
+		p.rendered = renderBriefs(p.in.briefs, p.in.cat, p.in.cfg)
+	})
+	return p.rendered
+}
+
+func (p *lazyShellProjection) briefsView() BriefsView {
+	p.briefsViewOnce.Do(func() {
+		p.briefsViewVal = buildBriefsView(p.in.briefs, p.renderedBriefs(), p.in.cat, p.in.cfg, p.in.briefReview)
+	})
+	return p.briefsViewVal
+}
+
+// home builds the Home projection once per render: a shell references .Home
+// several times, and each build reads constitution.yaml and the lock store.
+func (p *lazyShellProjection) home() (HomeView, error) {
+	p.homeOnce.Do(func() {
+		groups, err := p.moduleGroups()
+		if err != nil {
+			p.homeErr = err
+			return
+		}
+		p.homeView = buildHomeView(p.in.cat, p.in.cfg, groups, homeBriefWaitingOf(p.in.briefs, p.renderedBriefs(), p.in.briefReview))
+	})
+	return p.homeView, p.homeErr
 }
 
 func (p *lazyShellProjection) renderedClaims() (map[string]template.HTML, error) {
@@ -102,21 +158,26 @@ func (p *lazyShellProjection) moduleGroups() ([]ModuleGroup, error) {
 	return p.groups, p.groupsErr
 }
 
-func (p *lazyShellProjection) trackSections() ([]TrackSection, error) {
-	p.tracksOnce.Do(func() {
-		rendered, err := p.renderedClaims()
-		if err != nil {
-			p.tracksErr = err
-			return
-		}
-		p.tracks, p.tracksErr = buildTrackSectionsWithBudget(p.in.cat, p.in.cfg, rendered, p.budget)
-	})
-	return p.tracks, p.tracksErr
-}
-
 func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {
 	p.graphOnce.Do(func() {
 		p.graph, p.graphErr = graphPayloadJSONWithBudget(p.in.cat, p.in.cfg, p.in.generatedAt, p.budget)
 	})
 	return p.graph, p.graphErr
+}
+
+func (p *lazyShellProjection) briefsPayloadJSON() (template.JS, error) {
+	p.briefsOnce.Do(func() {
+		p.briefs, p.briefsErr = briefsPayloadJSON(p.in.briefs, p.renderedBriefs(), p.in.briefReview, p.in.briefsBudgetOr(p.budget))
+	})
+	return p.briefs, p.briefsErr
+}
+
+// briefsBudgetOr is the budget the briefs payload is charged to: its own when
+// the render set one (an unbounded render; see shellInputs.briefsBudget),
+// otherwise the shared budget every other projection is charged to.
+func (in *shellInputs) briefsBudgetOr(shared *renderByteBudget) *renderByteBudget {
+	if in.briefsBudget != nil {
+		return in.briefsBudget
+	}
+	return shared
 }

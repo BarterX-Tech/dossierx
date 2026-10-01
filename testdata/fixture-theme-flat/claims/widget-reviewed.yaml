@@ -9,8 +9,6 @@ body: |
   This claim is locked and carries an open comment thread, which is what puts
   it in `review_pending` and renders the `.claim-review-pending` marker the
   parity probe reads.
-tracks:
-  - id: checkout
 rests_on:
   - panel.contract.api
 comments:

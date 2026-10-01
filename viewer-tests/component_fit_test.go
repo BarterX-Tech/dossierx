@@ -75,9 +75,6 @@ facets:
 modules:
   - widget
   - gadget
-tracks:
-  - id: review
-    title: Review track
 claims_dir: claims
 max_claim_body_chars: 20000
 `
@@ -90,9 +87,6 @@ facet: contract
 module: widget
 status: draft
 summary: Fixture claim used by the viewer test suite.
-tracks:
-  - id: review
-    role: owns
 body: |
   the widget orientation claim.
 rests_on:
@@ -138,7 +132,7 @@ func TestSoftMountLockMetricUsesCatalogAttrs(t *testing.T) {
 		t.Fatal("soft-mount render must stamp catalog counts and defer cards into templates")
 	}
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.Navigate(url))
+	runCDP(t, ctx, chromedp.Navigate(url+widgetPage))
 	pollTrue(t, ctx, `!!(document.querySelector('.module-section#widget') && document.querySelector('.system-record-head__metric'))`)
 	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '30' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '3'`) {
 		t.Fatal("soft-mounted module must stamp catalog lock counts on the section")
@@ -218,12 +212,46 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	}
 }
 
+// Closing the phone drawer returns focus to its opener and re-applies it
+// for two frames, because Chrome drops focus onto <body> once the drawer's
+// node is hidden. Those re-applies must not take back focus the reader has
+// moved in the meantime: they did, and TestGroup02MobileNavigationAndFacetSheet's
+// Enter on #navToggle, sent within those frames, opened the drawer from
+// #mobileSearchToggle instead, so Escape returned focus there (a flake in
+// about one run in twelve, found by logging focus events). Here the newer
+// focus comes in the same task as the close, so the old re-apply always won.
+func TestDrawerFocusRestoreYieldsToANewerFocus(t *testing.T) {
+	p := group02NavigationProject(t)
+	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()+widgetPage))
+	pollTrue(t, ctx, `!!document.querySelector('.mobile-app-bar')`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
+	pollTrue(t, ctx, `document.body.classList.contains('nav-open')`)
+	evalVoid(t, ctx, `(function(){
+		document.getElementById('navDrawerClose').click();
+		document.getElementById('navToggle').focus();
+		window.__afterFrames = null;
+		requestAnimationFrame(function(){ requestAnimationFrame(function(){ requestAnimationFrame(function(){
+			window.__afterFrames = document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : 'none';
+		}); }); });
+	})()`)
+	pollTrue(t, ctx, `window.__afterFrames !== null`)
+	if got := evalString(t, ctx, `window.__afterFrames`); got != "navToggle" {
+		t.Fatalf("focus three frames after the drawer closed = %q, want navToggle: the close's re-apply took it back", got)
+	}
+	// A close with nothing newer still lands on the opener.
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
+	pollTrue(t, ctx, `document.body.classList.contains('nav-open')`)
+	runCDP(t, ctx, chromedp.KeyEvent(kb.Escape))
+	pollTrue(t, ctx, `!document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('mobileSearchToggle')`)
+}
+
 func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 	p := group02NavigationProject(t)
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(390, 844),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 	)
 	pollTrue(t, ctx, `!!(document.querySelector('.mobile-app-bar') && document.querySelector('.facet-toc-trigger'))`)
 	runCDP(t, ctx, chromedp.Evaluate(`window.dossierxPositionStatusStrip()`, nil))
@@ -299,22 +327,25 @@ func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('navSearch')`)
-	requireAll(t, ctx, "mobile drawer must keep collapsed Tracks and the graph utility above its fixed footer theme control", `
+	// NIT-196 moved the graph utility out of the footer into the scrolling
+	// nav, after the Modules group; the footer keeps only the theme control.
+	requireAll(t, ctx, "mobile drawer must keep the graph utility above its fixed footer theme control", `
 		var footer = document.querySelector('.sidebar-footer');
-		var utilities = footer && footer.querySelector('.nav-utilities');
-		var tracks = document.querySelectorAll('.system-nav-group')[1];
+		var scroll = document.querySelector('#nav > .sidebar-nav-scroll');
+		var utilities = scroll && scroll.querySelector(':scope > .nav-utilities');
 		var sidebar = document.querySelector('.sidebar');
 	`, [][2]string{
 		{"drawer width is 328px", `getComputedStyle(sidebar).width === '328px'`},
 		{"the drawer close control exists", `!!document.getElementById('navDrawerClose')`},
 		{"the sidebar footer exists", `footer`},
 		{"the footer does not shrink", `getComputedStyle(footer).flexShrink === '0'`},
-		{"the utilities row exists", `utilities`},
+		{"the footer holds no graph utility", `!footer.querySelector('.nav-utilities, [data-dxg-open]')`},
+		{"the utilities row exists in the scrolling nav", `utilities`},
+		{"the utilities row follows the Modules group", `utilities.previousElementSibling && utilities.previousElementSibling.classList.contains('system-nav-groups')`},
+		{"the utilities row sits above the footer", `utilities.getBoundingClientRect().bottom <= footer.getBoundingClientRect().top + 0.5`},
 		{"the utilities row has one action", `utilities.children.length === 1`},
 		{"the first action is #dxgOpen", `utilities.children[0].id === 'dxgOpen'`},
 		{"the first action is 40px tall", `getComputedStyle(utilities.children[0]).height === '40px'`},
-		{"a Tracks group exists", `tracks`},
-		{"the Tracks group is collapsed", `!tracks.open`},
 	})
 	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('navDrawerClose').focus(); document.getElementById('navDrawerClose').click()`, nil))
 	pollTrue(t, ctx, `!document.body.classList.contains('nav-open')`)
@@ -370,9 +401,9 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 1024, chromedp.EmulateScale(1)),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 	)
-	pollTrue(t, ctx, `!!document.querySelector('.sidebar-footer .nav-utilities')`)
+	pollTrue(t, ctx, `!!document.querySelector('#nav > .sidebar-nav-scroll > .nav-utilities') && !document.getElementById('widget').hidden`)
 	runCDP(t, ctx, chromedp.Click(`.theme-control [data-theme-choice="light"]`, chromedp.ByQuery))
 	if !evalBool(t, ctx, `(function(){
 		var header = document.querySelector('.sidebar-header');
@@ -420,21 +451,41 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 		t.Fatal("desktop facet footer must retain its generated freshness phrase and Paper caption")
 	}
 	if !evalBool(t, ctx, `(function(){
+		// NIT-196: the scrolling nav reads search, then the site nav (Home,
+		// Constitution), then the Modules group — open because a module is
+		// the current page — then the Claims graph utility; the footer holds
+		// only the Light/Dark theme control.
 		var nav = document.getElementById('nav');
 		var scroll = nav.querySelector(':scope > .sidebar-nav-scroll');
 		var footer = nav.querySelector(':scope > .sidebar-footer');
-		var utilities = footer && footer.querySelector(':scope > .nav-utilities');
+		var kids = scroll ? Array.prototype.map.call(scroll.children, function (c) { return c.className; }) : [];
+		var site = scroll && scroll.querySelector(':scope > .site-nav');
+		var siteItems = site ? site.querySelectorAll(':scope > .sec-tab.site-nav__item') : [];
+		var utilities = scroll && scroll.querySelector(':scope > .nav-utilities');
 		var choices = footer && footer.querySelectorAll('.theme-control [data-theme-choice]');
 		var groups = scroll && scroll.querySelectorAll('.system-nav-group');
 		return scroll && footer && getComputedStyle(footer).flexShrink === '0' &&
+		  kids.join('|') === 'nav-search|site-nav|system-nav-groups|nav-utilities' &&
+		  siteItems.length === 2 && siteItems[0].classList.contains('home-tab') && siteItems[0].dataset.target === '#_home' &&
+		  siteItems[1].classList.contains('constitution-tab') && siteItems[1].dataset.target === '#constitution' &&
 		  utilities && utilities.children.length === 1 && utilities.children[0].id === 'dxgOpen' &&
-		  getComputedStyle(utilities.children[0]).height === '30px' &&
-		  groups && groups.length === 2 && groups[0].open && !groups[1].open &&
-		  !scroll.querySelector('[data-dxg-open]') &&
+		  getComputedStyle(utilities.children[0]).height === '34px' &&
+		  groups && groups.length === 1 && groups[0].open &&
+		  footer.children.length === 1 && footer.children[0].classList.contains('theme-control') &&
+		  !footer.querySelector('[data-dxg-open]') &&
 		  choices && choices.length === 2 && choices[0].dataset.themeChoice === 'light' && choices[1].dataset.themeChoice === 'dark' &&
 		  !footer.querySelector('[data-theme-choice="system"]');
 	})()`) {
-		t.Fatal("desktop navigation must match Paper's collapsed Tracks, graph-only footer, and Light/Dark-only control")
+		t.Fatalf("desktop navigation must match the NIT-196 sidebar: search, Home + Constitution site nav, open Modules group, Claims graph utility, then a theme-only footer with Light/Dark only: %s", evalString(t, ctx, `JSON.stringify((function(){
+			var nav = document.getElementById('nav');
+			var scroll = nav.querySelector(':scope > .sidebar-nav-scroll');
+			var footer = nav.querySelector(':scope > .sidebar-footer');
+			var g = scroll && scroll.querySelector('.system-nav-group');
+			var u = document.getElementById('dxgOpen');
+			return {scroll: scroll ? Array.prototype.map.call(scroll.children, function (c) { return c.className; }) : null,
+			  footer: footer ? Array.prototype.map.call(footer.children, function (c) { return c.className; }) : null,
+			  groupOpen: g && g.open, graphHeight: u && getComputedStyle(u).height};
+		})())`))
 	}
 	runCDP(t, ctx, chromedp.Click(`.theme-control [data-theme-choice="dark"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, `(function(){
@@ -458,7 +509,7 @@ func TestGroup02DesktopNavigationStructureAndKeyboardActions(t *testing.T) {
 	pollTrue(t, ctx, `!document.getElementById('gadget').hidden && document.querySelector('.sec-tab[data-target="#gadget"]').classList.contains('on')`)
 
 	// Claims graph is a button, not a reading tab. Enter opens it, focus moves
-	// into the pane, and Escape returns to the exact footer trigger.
+	// into the pane, and Escape returns to the exact nav trigger.
 	runCDP(t, ctx, chromedp.SendKeys("#dxgOpen", "\n", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.body.classList.contains('dxg-open') && !!document.activeElement.closest('#dxgPane')`)
 	runCDP(t, ctx, chromedp.KeyEvent(kb.Escape))
@@ -472,7 +523,7 @@ func TestLiveFreshnessRetainsTimestampAndCaption(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 1024, chromedp.EmulateScale(1)),
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live') && !!document.querySelector('.freshness-footer__live:not([hidden])')`)
 	if !evalBool(t, ctx, `(function(){
@@ -515,7 +566,7 @@ rests_on:
   reason: viewer-test fixture, not backed by any doctrine claim
 `)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()))
+	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()+widgetPage))
 	pollTrue(t, ctx, `!!document.getElementById('widget.contract.locked')`)
 	if !evalBool(t, ctx, `(function () {
 		var card = document.getElementById('widget.contract.locked');
@@ -533,7 +584,7 @@ func TestReadyConformanceRendersAsClaimFooterDoor(t *testing.T) {
 	p.writeClaim("overview.yaml", conformanceClaimYAML)
 	writeConformanceObservation(t, p, `["blocked","ready"]`)
 	ctx := browserContext(t)
-	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()))
+	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()+widgetPage))
 	pollTrue(t, ctx, `!!document.querySelector('.claim-footer > .claim-conformance-door')`)
 	if !evalBool(t, ctx, `(function(){
 		var footer = document.querySelector('.claim-footer');
@@ -609,7 +660,7 @@ func TestPhone390SoftMountSmoke(t *testing.T) {
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(390, 844, chromedp.EmulateScale(1)),
-		chromedp.Navigate(p.renderStatic()),
+		chromedp.Navigate(p.renderStatic()+widgetPage),
 	)
 	pollTrue(t, ctx, `window.innerWidth === 390`)
 	if !evalBool(t, ctx, `getComputedStyle(document.getElementById('sidebar')).transform !== 'none'`) {
@@ -630,7 +681,7 @@ func TestPhone390SoftMountSmoke(t *testing.T) {
 		t.Fatal("390px blocker-only strip must never show its findings body in place")
 	}
 
-	runCDP(t, ctx, chromedp.Navigate(ready.renderStatic()))
+	runCDP(t, ctx, chromedp.Navigate(ready.renderStatic()+widgetPage))
 	pollTrue(t, ctx, `!!document.querySelector('.claim-conformance')`)
 	if evalBool(t, ctx, `(function(){
 		var panel = document.querySelector('.claim-conformance');

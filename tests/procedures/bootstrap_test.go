@@ -7,17 +7,16 @@
 // used to run at step 2, BEFORE step 3 created project.config.yaml. The export
 // resolves its project root from the config; with no config there is no root,
 // and by the export's own contract a rootless export writes NO AGENTS.md
-// section (it cannot find the file) and drops the generic guide beside the
-// bundles instead of at docs/dossierx-agent-guide.md. Nothing later in the
-// bootstrap re-ran the export, and the export exits 0 both ways, so no step
-// ever failed — a repo bootstrapped by the book ended with an uninstructed
-// AGENTS.md and no guide under the root, silently, forever.
+// section (it cannot find the file). Nothing later in the bootstrap re-ran the
+// export, and the export exits 0 both ways, so no step ever failed — a repo
+// bootstrapped by the book ended with an uninstructed AGENTS.md, silently,
+// forever.
 //
 // The fixed sequence creates the config at step 2 and exports at step 3, so
-// the export runs rooted and both artifacts land. This scenario replays that
+// the export runs rooted and the section lands. This scenario replays that
 // order and asserts the terminal postconditions: after the whole documented
-// sequence, the AGENTS.md section and the agent guide exist under the project
-// root. It asserts the postcondition, not the mechanism, so it stays green
+// sequence, the AGENTS.md section exists, every link in AGENTS.md resolves,
+// and DossierX has created nothing under docs/ (NIT-195). It asserts the postcondition, not the mechanism, so it stays green
 // under any future fix shape that reaches the same terminal state — and goes
 // red again if the steps are ever swapped back (the postconditions, not the
 // anchors, are what catch that: a rootless export still exits 0).
@@ -26,10 +25,16 @@ package procedures
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 )
 
-func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
+// relativeLinkPattern captures the target of every markdown link in a file;
+// URLs and in-page anchors are filtered out by the caller.
+var relativeLinkPattern = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+
+func TestBootstrap_ExportOrderStillReachesAgentsMD(t *testing.T) {
 	f := newBareFixture(t)
 
 	requireDocAnchor(t, "skills/dossierx/SKILL.md",
@@ -69,7 +74,7 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 
 	// Step 3, exactly as documented and exactly where documented: AFTER the
 	// config exists ("after step 2, never before"), so the export runs rooted
-	// and maintains the AGENTS.md section and the guide under the root.
+	// and maintains the AGENTS.md section.
 	export := f.Run("dossierx skills export .claude/skills", nil)
 	f.DocumentedSuccess(export, "bootstrap step 3: the export, ordered after the config so it finds the project root")
 
@@ -107,8 +112,8 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 	// they change no state this scenario could assert on.
 
 	// THE TERMINAL POSTCONDITION — what a by-the-book bootstrap must leave
-	// behind in a repo that has an AGENTS.md. Two independent findings, each
-	// reported on its own so the report says which half is missing:
+	// behind in a repo that has an AGENTS.md. Independent findings, each
+	// reported on its own so the report says which part is missing:
 	//
 	// (a) The AGENTS.md section. Asserted as "the file changed from its
 	//     pre-existing bytes" rather than by grepping for the marker comment,
@@ -125,10 +130,21 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 		t.Errorf("FINDING — after the whole documented bootstrap, the pre-existing AGENTS.md is byte-for-byte untouched: the export ran with no project root and wrote no section, and nothing in the sequence ever exports again. The always-on harness this repo uses never learns DossierX exists.")
 	}
 
-	// (b) The guide, at the path the AGENTS.md section links it by and the only
-	//     path the export's own contract writes it to when a root exists.
-	guide := filepath.Join(f.root, "docs", "dossierx-agent-guide.md")
-	if _, err := os.Stat(guide); err != nil {
-		t.Errorf("FINDING — after the whole documented bootstrap, %s does not exist under the project root (%v): a rootless export dropped the guide beside the skill bundles instead, where nothing documented ever looks for it.", filepath.Join("docs", "dossierx-agent-guide.md"), err)
+	// (b) Every relative link in AGENTS.md resolves from the project root: the
+	//     section links each companion skill to the bundle step 3 wrote.
+	for _, m := range relativeLinkPattern.FindAllStringSubmatch(string(after), -1) {
+		target := m[1]
+		if strings.Contains(target, "://") || strings.HasPrefix(target, "#") {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(f.root, filepath.FromSlash(target))); err != nil {
+			t.Errorf("FINDING — after the whole documented bootstrap, AGENTS.md links %q, which does not exist under the project root (%v).", target, err)
+		}
+	}
+
+	// (c) DossierX writes nothing under a project's docs/ (NIT-195): a repo
+	//     that had no docs/ before the bootstrap has none after it.
+	if _, err := os.Stat(filepath.Join(f.root, "docs")); !os.IsNotExist(err) {
+		t.Errorf("FINDING — after the whole documented bootstrap, docs/ exists under the project root (stat err=%v); DossierX must create nothing there.", err)
 	}
 }

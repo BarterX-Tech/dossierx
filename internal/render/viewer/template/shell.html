@@ -55,12 +55,15 @@
     <symbol id="dx-icon-list-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/></symbol>
     <symbol id="dx-icon-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
     <symbol id="dx-icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="dx-icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="dx-icon-landmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18v-7"/><path d="M11.12 2.198a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949z"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M3 22h18"/><path d="M6 18v-7"/></symbol>
+    <symbol id="dx-icon-layout-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
     <symbol id="dx-icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   </svg>
   <div class="layout">
     <header class="mobile-app-bar" aria-label="Viewer controls">
       <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg></button>
-      <span class="mobile-app-bar__wordmark">{{.Title}}</span>
+      <a class="mobile-app-bar__wordmark home-link" href="#_home">{{.Title}}</a>
       <button id="mobileSearchToggle" class="mobile-app-bar__search" type="button" aria-controls="navSearch" aria-label="Search modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg></button>
       <button id="mobileThemeToggle" class="mobile-theme-toggle" type="button" data-theme-toggle aria-label="Use dark theme" title="Use dark theme"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg></button>
     </header>
@@ -69,59 +72,88 @@
       <div class="sidebar-header">
         <div class="top">
           <div class="logo"><span></span></div>
-          <h1>{{.Title}}</h1>
+          <h1><a class="home-link" href="#_home">{{.Title}}</a></h1>
           <button id="navDrawerClose" class="nav-drawer-close" type="button" aria-label="Close modules"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
         </div>
 {{if .Eyebrow}}        <div class="eyebrow">{{.Eyebrow}}</div>{{end}}
       </div>
       <nav id="nav">
         <div class="sidebar-nav-scroll">
-          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg><input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules"></div>
-<!-- The Constitution pin (NIT-27): the project roof, above every module and
-             outside the module/track groups on purpose — it is not a module, so it
-             is not a group member, and .system-nav-group:first-child stays Modules. -->
-          <div class="constitution-pin">
-            <button class="sec-tab constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><span class="sec-tab__label">Constitution</span><span class="sec-tab__meta">PROJECT — NOT A MODULE</span></button>
+          <div class="nav-search"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-search"/></svg>{{if .Briefs.Present}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search claims and briefs" aria-label="Search claims and briefs">{{else}}<input id="navSearch" type="search" autocomplete="off" placeholder="Search modules" aria-label="Search modules">{{end}}</div>
+<!-- The site nav (NIT-196): Home, then the Constitution pin (NIT-27), then
+             the Modules group, then the Claims graph below a hairline. Home and
+             Constitution sit outside .system-nav-groups on purpose: neither is
+             a module, so .system-nav-group:first-child stays Modules and the
+             module search never hides them. The Modules group is open only
+             while a module is the current page (viewer-runtime.js
+             syncNavGroups). The Constitution entry is hidden only when there is
+             nothing under it: no constitution.yaml and no project claims.
+             Features (NIT-201) and Briefs (NIT-197) join .system-nav-groups
+             after Modules when the project holds them. -->
+          <div class="site-nav">
+            <button class="sec-tab site-nav__item home-tab" data-target="#_home"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-home"/></svg><span class="sec-tab__label">Home</span></button>
+{{if or .Home.Constitution.Present .Home.Constitution.ProjectClaims}}            <button class="sec-tab site-nav__item constitution-tab" data-target="#constitution" data-default-target="#constitution-file"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-landmark"/></svg><span class="sec-tab__label">Constitution</span>{{if .Home.Constitution.Locked}}<svg class="dx-icon dx-icon--lock site-nav__lock" aria-label="Locked" role="img"><use href="#dx-icon-lock"/></svg>{{end}}</button>{{end}}
           </div>
           <div class="system-nav-groups">
           <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
+            <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-layout-grid"/></svg><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .ModuleGroups}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}" data-search="{{.Search}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}}<svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}<span class="sec-tab__count">{{.ClaimCount}}</span></button>
 {{- end}}
             </div>
-          </details>{{if .Tracks}}
-<!-- The Tracks group. It is guarded on .Tracks and the guard opens on
-             the same line as the module loop's closing action, with no newline
-             between them, so a project that declares no track emits not one
-             byte here — the zero-cost contract
-             tests/fixture_staleness_test.go holds this file to. Keep them on
-             one line: a newline before the guard is a newline in the output of
-             every project that has no tracks.
-             Tracks come AFTER every module because the module axis is the one
-             a reader navigates by default: a claim has exactly one module and
-             that is who guarantees it, while a track is the second, optional
-             view over the same claims. The buttons are ordinary .sec-tab
-             elements — a track section is a .module-section to all the
-             show/hide machinery below, deliberately (see track_view.go). -->
-          <details class="system-nav-group">
-            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
-            <div class="system-nav-group__body">
-{{- range .Tracks}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
+          </details><!-- The Features entry (NIT-201, Paper B4): features/, one row per feature
+     ordered by file name without .md, each with its brief's lock and review mark
+     (render.briefMark) in the slot a brief row uses. Before Briefs, which leaves features/ out, so a feature is
+     listed once. Its star is drawn inline for the reason the Briefs icon is.
+     The comment hugs the closing tag, so a project with no feature gains not
+     even a newline. -->{{with .Briefs}}{{if .Features}}
+          <details class="system-nav-group feature-nav">
+            <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><span>Features</span><span class="system-nav-group__count">{{len .Features}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
+            <div class="system-nav-group__body feature-nav__body">
+{{- range .Features}}
+                <button class="sec-tab brief-nav__row feature-nav__row" data-target="#{{.ID}}" data-search="{{.Search}}"><span class="brief-nav__label" title="{{.Title}}">{{.NavLabel}}</span><span class="brief-mark" data-mark="{{.Mark}}" role="img" aria-label="{{.MarkLabel}}" title="{{.MarkLabel}}">{{if eq .Mark "locked"}}<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</span></button>
 {{- end}}
             </div>
-          </details>{{end}}
+          </details>{{end}}{{end}}<!-- The Briefs group (NIT-197): a disclosure like Modules, so clicking it
+     only opens it. "All briefs" first, then one row per folder (features/ is
+     left out: those briefs are features), each opening to its briefs. Only
+     the current route's group is open, and only the current brief's folder
+     (viewer-runtime.js syncNavGroups). Each brief carries one state mark in a
+     fixed slot; the legend sits above the theme control. The comment hugs
+     the closing tag so a project with no briefs gains not even a newline.
+     Its icon is drawn inline, not from the sprite: the sprite sits outside the
+     two subtrees a live reload swaps, so a symbol added with the first brief
+     would stay missing until a full reload. -->{{with .Briefs}}{{if .Folders}}
+          <details class="system-nav-group brief-nav">
+            <summary class="system-nav-group__toggle"><svg class="dx-icon site-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7"/><path d="M9 16h5"/></svg><span>Briefs</span><span class="system-nav-group__count">{{.Total}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
+            <div class="system-nav-group__body brief-nav__body">
+                <button class="sec-tab brief-nav__all" data-target="#{{.IndexID}}"><span class="brief-nav__label">All briefs</span></button>
+{{- range .Folders}}
+                <details class="brief-folder" data-folder="{{.Name}}">
+                  <summary class="brief-folder__toggle"><svg class="dx-icon brief-folder__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg><span class="brief-folder__label">{{.Label}}</span><span class="brief-folder__count">{{.Count}}</span></summary>
+{{- range .Pages}}
+                  <button class="sec-tab brief-nav__row" data-target="#{{.ID}}" data-search="{{.Search}}"><span class="brief-nav__label" title="{{.Title}}">{{.NavLabel}}</span><span class="brief-mark" data-mark="{{.Mark}}" role="img" aria-label="{{.MarkLabel}}" title="{{.MarkLabel}}">{{if eq .Mark "locked"}}<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</span></button>
+{{- end}}
+                </details>
+{{- end}}
+            </div>
+          </details>{{end}}{{end}}
           </div>
-        </div>
-        <div class="sidebar-footer">
-          <div class="nav-utilities" aria-label="Viewer tools">
 <!-- The graph trigger deliberately does NOT carry class sec-tab: graph-ui.js
                owns it, while viewer-runtime.js owns reading-view selection. It
                remains inside #nav so live fragment swaps replace it safely. -->
-            <button id="dxgOpen" class="nav-utility" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
+          <div class="nav-utilities" aria-label="Viewer tools">
+            <button id="dxgOpen" class="nav-utility site-nav__item" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon site-nav__icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg><span>Claims graph</span></button>
           </div>
+        </div>
+        <div class="sidebar-footer">{{if .Briefs.Present}}
+          <ul class="brief-legend" aria-label="Brief marks">
+            <li><span class="brief-mark" data-mark="edited" aria-hidden="true"></span>edited</li>
+            <li><span class="brief-mark" data-mark="review" aria-hidden="true"></span>review</li>
+            <li><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>open thread</li>
+            <li><span class="brief-mark" data-mark="draft" aria-hidden="true"></span>draft</li>
+          </ul>{{end}}
           <div class="theme-control desktop-theme-control" role="group" aria-label="Color theme">
           <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
           <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
@@ -154,59 +186,18 @@
 {{end}}
 {{else}}
         <p class="claims-empty">No claims.</p>
-{{end}}{{if .Tracks}}
-<!-- Track sections, siblings of the module sections and switched by the
-           same machinery: each carries .module-section (what a sidebar tab
-           reveals) and holds exactly one .claim-group (what a deep link
-           resolves to), so every lookup map, hash rule and fragment-swap
-           re-init below picks them up by query with nothing new to maintain.
-           A track has no facets, hence no .sub-nav and exactly one group.
-           The claims a track OWNS render as whole cards; the ones it CITES
-           render as pointer rows inside .CitedHTML and never as bodies — a
-           second copy of a claim's prose is the drift this tool exists to
-           catch. The owned cards' element ids were stripped on the way in
-           (render.stripDuplicateClaimIDs): the id-bearing copy stays in the
-           claim's own module, because its module is still what guarantees it.
-           Guarded and hugged to the preceding action for the same reason the
-           sidebar group is — a project with no tracks must render byte for
-           byte as it did before this existed. -->
-{{range .Tracks}}
-        <section class="module-section track-section" id="{{.ID}}" hidden>
-          <header class="track-head">
-            <h2 class="track-title">{{.Title}}</h2>
-            <span class="pill {{.StateClass}}">{{.StateLabel}}</span>
-{{if .Summary}}<p class="track-summary">{{.Summary}}</p>{{end}}
-          </header>
-{{/* Tracks follow the same SoftMount gate as module facets. Soft-mounting
-     tracks while SoftMount is off leaves the frozen theme-parity baseline
-     with a live hidden <pre> (owned claim fenced block) that the current
-     render would keep inside a <template>, which makes the screenshot
-     fenced-box lists disagree. When SoftMount is on, deferring the track
-     copy until visit is still correct. An HTML comment here would leave a
-     spaces-only line after html/template strips it. */}}
-          <section class="claim-group" id="{{.ClaimsID}}" hidden{{if $.SoftMount}} data-dossierx-surface="{{.ClaimsID}}"{{end}}>
-{{if $.SoftMount}}            <div class="claim-group-host" data-dossierx-surface-host></div>
-            <template class="dossierx-surface-template">
-{{range .OwnedClaims}}{{.}}
-{{end}}
-            </template>
-{{else}}{{range .OwnedClaims}}{{.}}
-{{end}}{{end}}{{if .CitedHTML}}<h4 class="cited-claims-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
-{{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
-          </section>
-        </section>
-{{end}}{{end}}<!-- The Constitution section (NIT-27): The file | Project claims. It sits
-     LAST in the content area, after every module and track, so the first
+{{end}}<!-- The Constitution section (NIT-27): The file | Project claims. It sits
+     LAST in the content area, after every module, so the first
      .module-section — the default reading view, and what the measurement tests
      read — is always the first module. Its two canvases start hidden like every
-     facet canvas. The comment hugs the track guard's closing action on purpose:
-     html/template strips it but keeps a newline of its own, and the no-tracks
-     byte contract (track_view_test.go) counts those newlines. -->
+     facet canvas. The comment hugs the preceding action on purpose:
+     html/template strips it but keeps a newline of its own, and the committed
+     fixture viewers count those newlines. -->
         <section class="module-section constitution-section" id="constitution" hidden>
           <header class="constitution-head">
             <p class="constitution-kicker">PROJECT — NOT A MODULE</p>
             <h2>Constitution</h2>
-            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Constitution.Status}} · {{.Constitution.Status}}{{end}}</p>
+            <p class="constitution-meter">{{.Constitution.Words}} of {{.Constitution.WordCap}} words{{if .Home.Constitution.Label}} · {{.Home.Constitution.MeterLabel}}{{end}}</p>
           </header>
           <div class="sub-nav">
             <button class="subtab" data-target="#constitution-file">The file</button>
@@ -220,7 +211,113 @@
 {{end}}{{else}}<p class="claims-empty">No project claims.</p>{{end}}
           </section>
         </section>
-    </main>
+<!-- Home (NIT-196): what is waiting on the human, then one tile per
+     section. Its id is _home: render.slugify never emits an underscore, so
+     no module section can share it. It sits after the Constitution for the same reason the
+     Constitution sits after the modules — the first .module-section stays the
+     first module — and it is the page the viewer opens on
+     (viewer-runtime.js resolve). It holds no .claim-group, so no facet TOC,
+     status strip or module header attaches to it. Every card and tile is a
+     link to the page it summarises; the counts come from render/home_view.go.
+     A card at 0 is not rendered; with none left the row is one line. The
+     "last check" <time> is empty here: viewer-runtime.js (localizeHomeCheck)
+     fills it from the sidebar's data-generated-at, the render stamp the
+     freshness footer already reads. A stamp inside <main> would make every
+     live-reload fragment differ from the page it came from. -->
+        <section class="module-section home-section" id="_home" hidden aria-labelledby="homeTitle">
+          <header class="home-head">
+            <p class="home-kicker">HOME · <span class="home-wide">last check</span><span class="home-narrow">checked</span> <time class="home-checked"></time></p>
+            <h2 id="homeTitle" class="home-title">{{.Title}}</h2>
+{{if .Eyebrow}}            <p class="home-eyebrow">{{.Eyebrow}}</p>
+{{end}}          </header>
+{{with .Home}}{{if .Cards}}          <section class="home-waiting" aria-labelledby="homeWaitingTitle">
+            <div class="home-waiting__head"><h3 id="homeWaitingTitle">Waiting on you</h3><span class="home-waiting__meta"><span class="home-wide">{{.Summary}}</span><span class="home-narrow">{{.SummaryShort}}</span></span></div>
+            <div class="home-cards">
+{{range .Cards}}              <a class="home-card" data-kind="{{.Kind}}" href="#{{.Target}}">
+                <span class="home-card__count">{{.Count}}</span>
+                <span class="home-card__label home-wide">{{.Label}}</span>
+                <span class="home-card__label home-narrow">{{.ShortLabel}}</span>
+                <span class="home-card__detail home-wide">{{.Detail}}</span>
+                <span class="home-card__detail home-narrow">{{.Short}}</span>
+                <span class="home-card__action home-wide">{{.Action}} →</span>
+              </a>
+{{end}}            </div>
+          </section>
+{{else}}          <div class="home-clear">
+            <span class="home-clear__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-check"/></svg></span>
+            <span class="home-clear__text"><strong>Nothing waiting on you</strong><span>No edits since approval, nothing to re-read, no open threads and no draft claims.</span></span>
+          </div>
+{{end}}          <div class="home-tiles">
+{{if .Constitution.Present}}            <a class="home-tile" data-tile="constitution" href="#constitution">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-landmark"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><span class="home-tile__title">Constitution</span><span class="home-pill home-wide" data-state="{{.Constitution.State}}">{{.Constitution.Label}}</span></span>
+                <span class="home-tile__desc home-wide">From constitution.yaml.{{if .Constitution.ProjectClaims}} {{.Constitution.ProjectClaims}} project {{if eq .Constitution.ProjectClaims 1}}claim rests{{else}}claims rest{{end}} on it.{{end}}</span>
+                <span class="home-stats home-wide">{{range .Constitution.Stats}}<span class="home-stat"><span class="home-stat__count">{{.Count}}</span><span class="home-stat__label">{{.Label}}</span></span>{{end}}</span>
+                <span class="home-tile__line home-narrow">{{.Constitution.Line}}</span>
+              </span>
+              <span class="home-pill home-narrow" data-state="{{.Constitution.State}}">{{.Constitution.ShortLabel}}</span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </a>
+{{end}}{{if .Modules.Modules}}            <a class="home-tile" data-tile="modules" href="#{{.Modules.FirstModuleID}}">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon"><use href="#dx-icon-layout-grid"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><span class="home-tile__title">Modules</span><span class="home-tile__count home-wide">{{.Modules.Modules}}</span></span>
+                <span class="home-tile__desc home-wide">Who owns what. Every claim lives in exactly one.</span>
+                <span class="home-progress">
+                  <span class="home-progress__text"><span>{{.Modules.Line}}</span><span class="home-progress__pct home-wide">{{.Modules.Percent}}%</span></span>
+                  <span class="home-progress__bar"><span class="home-progress__fill" style="width: {{.Modules.Percent}}%"></span></span>
+                </span>
+              </span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </a>
+{{end}}{{with $.Briefs.FeaturesTile}}{{if .Count}}            <div class="home-tile home-tile--features" data-tile="features">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><a class="home-tile__title home-tile__link" href="#{{.FirstID}}">Features</a><span class="home-tile__count home-wide">{{.Count}}</span></span>
+                <span class="home-tile__desc home-wide">What people can do, and which claims each one rests on.</span>
+                <span class="home-features home-wide">{{range .Rows}}<a class="home-feature" href="#{{.ID}}"><span class="home-feature__title">{{.Title}}</span><span class="home-feature__state" data-state="{{.State}}">{{.State}}</span></a>{{end}}</span>
+                <span class="home-tile__line home-narrow">{{.Line}}</span>
+              </span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </div>
+{{end}}{{end}}{{with $.Briefs.BriefsTile}}{{if .Count}}            <a class="home-tile" data-tile="briefs" href="#_briefs">
+              <span class="home-tile__icon" aria-hidden="true"><svg class="dx-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7"/><path d="M9 16h5"/></svg></span>
+              <span class="home-tile__main">
+                <span class="home-tile__head"><span class="home-tile__title">Briefs</span><span class="home-tile__count home-wide">{{.Count}}</span></span>
+                <span class="home-tile__desc home-wide">Design, voice, rationale — everything that is not a claim.</span>
+                <span class="home-briefs-cap home-wide{{if .OverTotal}} home-briefs-cap--over{{end}}">{{.Headline}}{{if .FeaturesNote}}, {{.FeaturesNote}}{{end}}{{if .OverTotal}} <span class="briefs-index-rule">brief-total-cap</span>{{end}}</span>
+                <span class="home-briefs home-wide">{{range .Folders}}<span class="home-brief-folder{{if .Over}} home-brief-folder--over{{end}}"><span class="home-brief-folder__label">{{.Label}}</span><span class="home-brief-folder__count">{{.Count}}</span></span>{{end}}</span>
+                <span class="home-tile__line home-narrow">{{.Line}}</span>
+              </span>
+              <svg class="dx-icon home-tile__chevron home-narrow" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+            </a>
+{{end}}{{end}}          </div>
+{{end}}        </section>
+<!-- Briefs (NIT-197 / NIT-203): the "All briefs" index, then one page per brief,
+     features/ included (its briefs are not in the Briefs tree, but a link to
+     one resolves). Each page is a .module-section with no .claim-group, as
+     Home is, so no module header or claim TOC attaches to it; system-record.js
+     builds its "On this page" rail from the body's section headings. The
+     title is the page's h2 and the body's headings sit below it
+     (render.briefBodyOutline). The index renders only with a tree to index;
+     a features/-only project gets its pages and nothing else. The comment hugs the
+     preceding action so a project with no briefs gains not even a newline. -->{{with .Briefs}}{{if .Folders}}
+        <section class="module-section briefs-index-section" id="{{.IndexID}}" hidden aria-labelledby="briefsIndexTitle">
+          <header class="brief-head">
+            <p class="brief-kicker"><span class="brief-kicker__word">Briefs</span></p>
+            <h2 id="briefsIndexTitle" class="brief-title">All briefs</h2>
+            <p class="briefs-index-meter{{if .Index.OverTotal}} briefs-index-meter--over{{end}}">{{.Index.Headline}}{{if .Index.OverTotal}} <span class="briefs-index-rule">brief-total-cap</span>{{end}}</p>
+{{if .Index.States}}            <p class="briefs-index-states">{{.Index.States}}</p>
+{{end}}          </header>
+{{range .Index.Folders}}          <details class="briefs-index-folder"{{if .Open}} open{{end}} data-folder="{{.Name}}">
+            <summary class="briefs-index-folder__toggle"><svg class="dx-icon briefs-index-folder__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg><h3 class="briefs-index-folder__name">{{.Label}}</h3><span class="briefs-index-folder__count{{if .Over}} briefs-index-folder__count--over{{end}}">{{.Pair}}</span>{{if .Over}}<span class="briefs-index-rule">brief-folder-cap</span>{{end}}<span class="briefs-index-folder__dots" aria-hidden="true">{{range .Marks}}<span class="brief-mark" data-mark="{{.}}"></span>{{end}}</span></summary>
+            <ul>
+{{range .Pages}}              <li><a href="#{{.ID}}">{{.Title}}</a>{{.Pill}}{{if .OpenThreads}}<span class="briefs-index__threads"><span class="brief-mark" data-mark="thread" aria-hidden="true"></span>{{.OpenThreadsLabel}}</span>{{end}}{{if .Summary}}<span class="briefs-index__summary">{{.Summary}}</span>{{end}}</li>
+{{end}}            </ul>
+          </details>
+{{end}}        </section>
+{{end}}{{range .Folders}}{{range .Pages}}{{template "briefPage" .}}{{end}}{{end}}{{range .Features}}{{template "briefPage" .}}{{end}}{{end}}    </main>
 
 <!-- The Issues view (04-issues-screen.md) — lane L8a. The screen's own
        chrome: breadcrumb, title/subtitle, scope segmented control, the
@@ -434,7 +531,15 @@
        these bytes exist. Do not add escaping here and do not remove it there. -->
   <script type="application/json" id="dossierx-graph">{{.GraphPayload}}</script>
 
-{{if .ConformanceStatusGuardJS}}  <script>{{.ConformanceStatusGuardJS}}</script>
+<!-- The briefs payload (NIT-204): every brief beside the claims, rendered in
+       document mode, with its counts against the caps. Data only — no pane
+       reads it yet (NIT-197). Emitted only when the project holds a brief, so
+       a project with none renders byte-identically to before briefs existed.
+       Safe by the graph payload's mechanism: encoding/json's default HTML
+       escaping, applied before these bytes exist. The comment is stripped by
+       html/template and the conditional follows it on the same line, so the
+       no-briefs output gains not even a newline. -->{{if .BriefsPayload}}  <script type="application/json" id="dossierx-briefs">{{.BriefsPayload}}</script>
+{{end}}{{if .ConformanceStatusGuardJS}}  <script>{{.ConformanceStatusGuardJS}}</script>
 {{end}}  <script>{{.ViewerRuntimeJS}}</script>
 
 <!-- The graph pane's two client files, in dependency order: graph-core.js
@@ -449,3 +554,55 @@
   <script>{{.GraphUIJS}}</script>
 </body>
 </html>
+{{define "briefPage"}}        <section class="module-section brief-section" id="{{.ID}}" hidden data-brief-path="{{.Path}}" data-brief-id="{{.BriefID}}" data-open-threads="{{.OpenThreads}}" data-threads="{{.Threads}}" data-lock-state="{{.LockState}}"{{if .ReviewPending}} data-review-pending="true"{{end}} aria-labelledby="{{.ID}}_title"{{if .Feature}} data-feature{{end}}>
+          <header class="brief-head">
+            <p class="brief-kicker">{{if .Feature}}<span class="brief-kicker__word">Feature</span>{{else}}<span class="brief-kicker__word">Brief</span> · <span class="brief-kicker__word">{{.FolderLabel}}</span>{{end}}<span class="brief-kicker__path"> · {{.Path}}</span></p>
+            <div class="brief-title-row"><h2 class="brief-title" id="{{.ID}}_title">{{.Title}}</h2><span class="brief-wide">{{.Pill}}</span></div>
+{{if .Summary}}            <p class="brief-lede">{{.Summary}}</p>
+{{end}}            <div class="brief-meta-row"><span class="brief-narrow">{{.PillShort}}</span><p class="brief-meta"><span class="brief-wide">{{if not .Feature}}{{with .Approval}}Approved <time class="brief-date" datetime="{{.At}}" data-date-form="long">{{.Long}}</time>{{with .Reason}} · <span class="brief-meta__reason">“{{.}}”</span>{{end}} · {{end}}{{if eq .LockState "unrecorded"}}Not locked: no approval on record · {{end}}{{end}}{{.Meta}}</span><span class="brief-narrow">{{if and .Approval (not .Feature)}}{{with .Approval}}Approved <time class="brief-date" datetime="{{.At}}" data-date-form="short">{{.Short}}</time>{{end}}{{else}}{{.MetaShort}}{{end}}</span></p><span class="brief-toc-slot"></span></div>
+          </header>
+{{if .Review}}{{template "briefReview" .}}{{end}}{{if .Edit}}{{template "briefEdited" .}}{{else}}          <article class="brief-body">{{.Body}}</article>
+{{end}}{{with .Feature}}          <section class="brief-relations feature-made-of" aria-label="Claims this feature is made of">
+            <div class="brief-relations__head feature-made-of__head" data-toc-label="{{.ShortLabel}}"><span class="brief-relations__label"><span class="brief-wide">{{.Label}}</span><span class="brief-narrow">{{.ShortLabel}}</span></span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">rests_on, not an order</span></div>
+{{range .Groups}}            <p class="feature-made-of__module">{{.Label}}</p>
+            <ul class="brief-relations__list">{{.Rows}}</ul>
+{{else}}            <p class="feature-made-of__empty">{{.Empty}}</p>
+{{end}}          </section>
+{{end}}{{if or .RestsOnCount .CitedByCount}}          <section class="brief-relations" aria-label="Claims this brief rests on and is cited by">
+{{if .RestsOnCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.RestsOnLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">this brief explains them</span></div>
+            <ul class="brief-relations__list">{{.RestsOn}}</ul>
+{{end}}{{if .CitedByCount}}            <div class="brief-relations__head"><span class="brief-relations__label">{{.CitedByLabel}}</span><span class="brief-relations__rule" aria-hidden="true"></span><span class="brief-relations__note">uses it as evidence</span></div>
+            <ul class="brief-relations__list">{{.CitedBy}}</ul>
+{{end}}          </section>
+{{end}}          <div class="brief-comment-row"><button type="button" class="brief-comment" aria-controls="commentsPanel" aria-expanded="false"{{if not .Threads}} disabled{{end}}><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg>{{if .Review}}Confirm in a thread{{else if .Edit}}Approve or restore in a thread{{else}}Comment on this {{if .Feature}}feature{{else}}brief{{end}}{{end}}</button><p class="brief-comment-count"{{if not .OpenThreads}} hidden>{{else}}>{{.OpenThreadsLabel}}{{end}}</p><p class="brief-comment-note">Read only: comments are written through dossierx serve.</p></div>
+{{if .CommentsPanel}}          {{.CommentsPanel}}
+{{end}}        </section>
+{{end}}{{define "briefEdited"}}{{/* A brief edited since its approval (NIT-199, Paper B2): the banner, then
+     one card holding the view switch and the three views, Changes shown
+     (viewer-runtime.js syncBriefViews keeps the reader's choice across
+     briefs and reloads). Every view is engine-rendered markdown
+     (render.BriefDiff). With no approved text on the record, a note and the
+     file as it reads now stand in for the card. */}}{{with .Edit}}          <div class="brief-banner" role="note">
+            <p class="brief-banner__head"><span class="brief-banner__title">Edited after you approved it<span class="brief-wide">{{with .Headline}} · {{.}}{{end}}</span></span><code class="brief-banner__rule">brief-content-drift</code></p>
+            <p class="brief-banner__text"><span class="brief-wide">The file no longer matches the wording approved on {{with $.Approval}}<time class="brief-date" datetime="{{.At}}" data-date-form="long">{{.Long}}</time>{{else}}its approval{{end}}. Until it is settled, check fails. Say in a thread what should happen: on your yes the agent unlocks it, fixes it and locks it again, or restores the approved text from version control. Claim locking is not blocked.</span><span class="brief-narrow">{{.HeadlineSentence}}Check fails until it is settled. Claim locking is not blocked.</span></p>
+          </div>
+{{if .Retained}}          <div class="brief-compare" data-brief-view="changes">
+            <div class="brief-compare__bar"><p class="brief-compare__caption"><span data-caption-for="changes">Compared with the approved version, {{with $.Approval}}<time class="brief-date" datetime="{{.At}}" data-date-form="short">{{.Short}}</time>{{else}}its approval{{end}}</span><span data-caption-for="approved" hidden>The wording approved on {{with $.Approval}}<time class="brief-date" datetime="{{.At}}" data-date-form="short">{{.Short}}</time>{{else}}its approval{{end}}</span><span data-caption-for="current" hidden>The file as it is now · changed passages are marked</span></p><div class="brief-view-switch" role="group" aria-label="Which wording to show"><button type="button" class="brief-view-switch__seg" data-brief-view="changes" data-label="Changes" aria-pressed="true">Changes</button><button type="button" class="brief-view-switch__seg" data-brief-view="approved" data-label="Approved" aria-pressed="false">Approved</button><button type="button" class="brief-view-switch__seg" data-brief-view="current" data-label="Current" aria-pressed="false">Current</button></div></div>
+{{if $.Review}}            <p class="brief-compare__note brief-compare__note--agent">Updated by the agent since approval</p>
+{{end}}{{if .HasImages}}            <p class="brief-compare__note">The record keeps each image's fingerprint, not its bytes: every view draws the images as they are now.</p>
+{{end}}            <article class="brief-body brief-view" data-view="changes">{{.Changes}}{{if .HasOther}}<div class="brief-edit-other"><p class="brief-edit-other__head">{{if .NoPassageDiffers}}No passage differs{{else}}Also changed since approval{{end}}</p>{{with .SummaryWas}}<p>Summary, as approved: “{{.}}”</p>{{end}}{{with .RestsOnAdded}}<p>Rests on, added: {{range $i, $id := .}}{{if $i}}, {{end}}<code>{{$id}}</code>{{end}}</p>{{end}}{{with .RestsOnRemoved}}<p>Rests on, removed: {{range $i, $id := .}}{{if $i}}, {{end}}<code>{{$id}}</code>{{end}}</p>{{end}}{{with .ImagesChanged}}<p>Images, changed: {{range $i, $n := .}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}</p>{{end}}{{with .ImagesAdded}}<p>Images, added: {{range $i, $n := .}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}</p>{{end}}{{with .ImagesRemoved}}<p>Images, removed: {{range $i, $n := .}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}</p>{{end}}{{if .WhitespaceOnly}}<p>Only whitespace differs: the words read as approved, but the file's spacing (its trailing blank lines, say) changed, and the lock signs every byte.</p>{{end}}</div>{{end}}</article>
+            <article class="brief-body brief-view" data-view="approved" hidden>{{.Approved}}</article>
+            <article class="brief-body brief-view" data-view="current" hidden>{{.Current}}</article>
+          </div>
+{{else}}          <div class="brief-recover" role="note"><p class="brief-recover__head">The approved wording was not kept</p><p class="brief-recover__text">The lock store holds no approved text for this {{if $.Feature}}feature{{else}}brief{{end}}, so the viewer cannot show what changed; below is the file as it reads now. The approval of {{with $.Approval}}<time class="brief-date" datetime="{{.At}}" data-date-form="long">{{.Long}}</time>{{else}}its approval{{end}} still stands, and its wording is in version control: <code>git log -p -- {{$.RepoPath}}</code>{{if not $.RepoRelative}}, run from the project directory,{{end}} shows the version that was approved. Say in a thread what should happen: on your yes the agent restores that text, or unlocks the {{if $.Feature}}feature{{else}}brief{{end}}, fixes it and locks it again.</p></div>
+          <article class="brief-body">{{$.Body}}</article>
+{{end}}{{end}}{{end}}{{define "briefReview"}}{{/* A locked brief whose rests_on claim moved (NIT-200, Paper B3): one
+     banner per changed claim, stacked, each with that claim's wording
+     then and now. The page's Comment button is "Confirm in a thread",
+     NIT-198's existing .brief-comment delegate. */}}{{with .Review}}{{range .Claims}}          <div class="brief-banner brief-banner--review" role="note" data-claim-id="{{.ID}}">
+            <p class="brief-banner__head"><span class="brief-banner__title"><a href="#{{.Href}}">{{.ID}}</a>{{if .Missing}} is gone{{else}} changed after approval{{end}}<span class="brief-wide">{{with .Short}} · {{.}}{{end}}</span></span><code class="brief-banner__rule">{{if .Missing}}brief-rests-on-missing{{else}}brief-dependency-drift{{end}}</code></p>
+            <p class="brief-banner__text"><span class="brief-wide">{{if .Missing}}This claim was listed when the {{if $.Feature}}feature{{else}}brief{{end}} was approved and is not a claim now. Rest the {{if $.Feature}}feature{{else}}brief{{end}} on the claims it now reads, or restore the claim.{{else}}This claim moved after the {{if $.Feature}}feature{{else}}brief{{end}} was approved. Confirm in a thread that the {{if $.Feature}}feature{{else}}brief{{end}} still holds; on your yes the agent runs <code>dossierx brief reaudit --confirm</code>. Claim locking is not blocked.{{end}}</span><span class="brief-narrow">{{if .Missing}}The claim is gone.{{else}}Confirm in a thread. Claim locking is not blocked.{{end}}</span></p>
+{{if .Retained}}{{if .Diff}}            <div class="brief-review-diff">{{.Diff}}</div>
+{{end}}{{else}}            <p class="brief-review__unavailable">earlier wording not available</p>
+{{end}}          </div>
+{{end}}{{end}}{{end}}

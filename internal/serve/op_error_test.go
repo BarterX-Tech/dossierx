@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 )
@@ -95,5 +96,38 @@ func TestWriteOpError_UnsafeBodyMapsTo400(t *testing.T) {
 	}
 	if body.Error != "unsafe_body" {
 		t.Fatalf("error code = %q, want unsafe_body (body=%s)", body.Error, rec.Body.Bytes())
+	}
+}
+
+// TestWriteBriefOpError_TheBriefOnlyErrors pins the brief routes' own error
+// mapping (NIT-198 F6, F8), each wrapped as the brief ops return it. A brief
+// edited between the op's read and its write (comments.ErrBriefFileChanged,
+// which only a write racing the op can produce) is the 409 claim_file_changed
+// the viewer turns into "the brief changed on disk"; without it the viewer got
+// a raw 500. A frontmatter the engine cannot rewrite in place is the file's
+// fault, the 422 claim_not_serializable of its claim twin, with only the code
+// in the body. Every other error falls through to the claim routes' mapping.
+func TestWriteBriefOpError_TheBriefOnlyErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"edited mid-write", fmt.Errorf("%w (briefs/widget/flow.md)", comments.ErrBriefFileChanged), http.StatusConflict, "claim_file_changed"},
+		{"frontmatter not rewritable", fmt.Errorf("comments: briefs/widget/bare.md: %w: the file does not open with a --- frontmatter block", briefs.ErrFrontmatterNotRewritable), http.StatusUnprocessableEntity, "claim_not_serializable"},
+		{"no such brief", fmt.Errorf("comments: brief %q: %w", "widget.nope", comments.ErrBriefNotFound), http.StatusNotFound, "brief_not_found"},
+		{"a shared error", fmt.Errorf("comments: %w", comments.ErrRightsDenied), http.StatusForbidden, "rights_denied"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			(&Server{}).writeBriefOpError(rec, tc.err)
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d (body=%s)", rec.Code, tc.status, rec.Body.Bytes())
+			}
+			if got := strings.TrimSpace(rec.Body.String()); got != "{\n  \"error\": \""+tc.code+"\"\n}" {
+				t.Fatalf("body = %s, want only the code %s", got, tc.code)
+			}
+		})
 	}
 }

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
@@ -27,16 +29,45 @@ func runCDP(t *testing.T, ctx context.Context, actions ...chromedp.Action) {
 
 // pollTrue waits until a JavaScript boolean expression becomes true, failing the
 // test (with the expression) if it does not within the timeout.
+//
+// A poll chromedp addresses to a DESTROYED execution context is re-issued, and
+// nothing else is. chromedp.Poll runs in the execution context its Target has
+// recorded for the top frame, and the Target records contexts on a goroutine
+// of its own that trails the one delivering events and command replies. So
+// right after a navigation — chromedp.Navigate returns on the new document's
+// load event, read on the fast goroutine — the recorded context can still be
+// the previous document's, and the poll fails at once with "Cannot find
+// context with specified id" although the new document is loaded and its
+// context exists. Measured on the manifest-tab test under load: the browser
+// had created the new context and fired load before the poll, which failed
+// against the old one. That error says nothing about the page, only that
+// chromedp's bookkeeping had not caught up, and a poll re-issued once it has
+// is addressed to the current document. The condition is still required in
+// full, within the same 20-second deadline; every other error still fails.
 func pollTrue(t *testing.T, ctx context.Context, expr string) {
 	t.Helper()
-	var ok bool
-	err := chromedp.Run(ctx, chromedp.Poll(expr, &ok,
-		chromedp.WithPollingInterval(40*time.Millisecond),
-		chromedp.WithPollingTimeout(20*time.Second),
-	))
-	if err != nil {
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		var ok bool
+		err := chromedp.Run(ctx, chromedp.Poll(expr, &ok,
+			chromedp.WithPollingInterval(40*time.Millisecond),
+			chromedp.WithPollingTimeout(time.Until(deadline)),
+		))
+		if err == nil {
+			return
+		}
+		if isStaleExecutionContext(err) && time.Now().Before(deadline) {
+			continue
+		}
 		t.Fatalf("condition never became true within timeout:\n  %s\n  err: %v", expr, err)
 	}
+}
+
+// isStaleExecutionContext reports whether err is the protocol's refusal of an
+// execution context the browser has already destroyed (see pollTrue).
+func isStaleExecutionContext(err error) bool {
+	var cdpErr *cdproto.Error
+	return errors.As(err, &cdpErr) && cdpErr.Message == "Cannot find context with specified id"
 }
 
 // requireAll asserts a compound condition and, on failure, names EVERY clause
@@ -103,18 +134,26 @@ func waitVisible(t *testing.T, ctx context.Context, sel string) {
 	runCDP(t, ctx, chromedp.WaitVisible(sel, chromedp.ByQuery))
 }
 
-// newLiveTab starts serve for p, opens a fresh browser tab pointed at it, and
-// waits until the reachability probe has mounted the write controls
-// (body.comments-live). The chip is present and visible on return.
+// newLiveTab starts serve for p, opens a fresh browser tab on the widget
+// module's reading view (every caller's project holds widget, and the viewer
+// opens on Home without a hash), and waits until the reachability probe has
+// mounted the write controls (body.comments-live). The chip is present and
+// visible on return.
+//
+// The tab scrolls instantly (withInstantScroll). Landing on "#widget" and every
+// later module switch otherwise smooth-scroll the window (~25-50px at the
+// default headless viewport over ~60ms); a chromedp.Click reads its target's
+// box in one CDP round trip and presses in the next, so on a loaded runner the
+// press lands where the control was and the test reads the previous state.
 func newLiveTab(t *testing.T, p *project) context.Context {
 	t.Helper()
 	// ensureServe, not serve: a test may already have started the server to
 	// reach the HTTP API (resolveViaAPI) before opening a tab, and a second
 	// serve process on the same project directory would race the first.
 	base := p.ensureServe()
-	ctx := browserContext(t)
+	ctx := withInstantScroll(t, browserContext(t))
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live')`)
@@ -184,13 +223,13 @@ func withInstantScroll(t *testing.T, ctx context.Context) context.Context {
 func newLiveTabWithStatus(t *testing.T, p *project) context.Context {
 	t.Helper()
 	base := p.ensureServe()
-	ctx := browserContext(t)
+	ctx := withInstantScroll(t, browserContext(t))
 	runCDP(t, ctx, chromedp.ActionFunc(func(c context.Context) error {
 		_, err := page.AddScriptToEvaluateOnNewDocument(liveStatusProbeScript).Do(c)
 		return err
 	}))
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live') && window.__dxStatusApplied >= 1`)
@@ -236,9 +275,9 @@ func TestFileURLStaysReadOnly(t *testing.T) {
 	p.seedComment("human", "a baked thread")
 	url := p.renderStatic()
 
-	ctx := browserContext(t)
+	ctx := withInstantScroll(t, browserContext(t))
 	runCDP(t, ctx,
-		chromedp.Navigate(url),
+		chromedp.Navigate(url+widgetPage),
 		chromedp.WaitVisible(".comment-chip", chromedp.ByQuery),
 	)
 	// Open the panel; on file:// the probe cannot reach a server, so the panel is
@@ -463,16 +502,16 @@ func TestDelegatedTabNavigationSwitchesModules(t *testing.T) {
 	base, _ := p.serve()
 	ctx := browserContext(t)
 	runCDP(t, ctx,
-		chromedp.Navigate(base+"/"),
+		chromedp.Navigate(base+"/"+widgetPage),
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
 	)
-	// On load the first module is shown, the second hidden.
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	// Opened on the first module: it is shown, the second hidden.
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)').length === 2 && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 
 	// Click the SECOND sidebar tab. Its handler is bound by delegation on
 	// document (not on the button), so this exercises the delegated path.
-	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.sec-tab:not(.constitution-tab)')[1].click();`, nil))
-	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.track-section)')[1].hidden`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelectorAll('.system-nav-group .sec-tab')[1].click();`, nil))
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[0].hidden && !document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')[1].hidden`)
 }
 
 // ---------------------------------------------------------------------

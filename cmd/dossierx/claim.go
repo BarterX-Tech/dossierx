@@ -234,28 +234,6 @@ func claimSourceViews(sources []model.Source) []claimSourceView {
 	return out
 }
 
-// claimTrackView is one of a claim's track memberships, with the role resolved.
-//
-// Role is the EFFECTIVE role (model.TrackRef.EffectiveRole), never the raw
-// field. An omitted role means cites, and a payload that echoed the empty
-// string would make a consumer re-implement that default — which is the one
-// place it could be re-implemented differently from the engine.
-type claimTrackView struct {
-	TrackID string `json:"track_id"`
-	Role    string `json:"role"`
-}
-
-// claimTrackViews projects a claim's memberships into the payload shape, in
-// authored order — the same reasoning as claimSourceViews: the claim file's own
-// order is what a reader comparing the two will see, and it is total.
-func claimTrackViews(refs []model.TrackRef) []claimTrackView {
-	out := make([]claimTrackView, 0, len(refs))
-	for _, r := range refs {
-		out = append(out, claimTrackView{TrackID: r.ID, Role: string(r.EffectiveRole())})
-	}
-	return out
-}
-
 // claimEdgesData is a claim's graph position in BOTH directions. Outgoing edges
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
@@ -328,35 +306,26 @@ type claimShowData struct {
 	// to read a neighbor's contract; a show without the text sent the agent to
 	// the YAML file instead. Both keys are always present: a structured layout
 	// (table, steps) may carry an empty body.
-	Summary      string `json:"summary"`
-	Body         string `json:"body"`
-	Facet        string `json:"facet"`
-	Module       string `json:"module"`
-	Status       string `json:"status"`
-	Layout       string `json:"layout"`
-	Kind         string `json:"kind"`
-	Section      string `json:"section,omitempty"`
-	MigratedFrom string `json:"migrated_from,omitempty"`
-	SourcePath   string `json:"source_path"`
-	// Sources is the claim's own evidence — what it rests on, not where its
-	// text came from. It sits beside MigratedFrom deliberately, because
-	// MigratedFrom is the impoverished thing this replaces: a single free-text
-	// note saying WHICH registry a claim came out of, which a reader had to know
-	// how to open before they could verify one sentence. See model.Source.
+	Summary    string `json:"summary"`
+	Body       string `json:"body"`
+	Facet      string `json:"facet"`
+	Module     string `json:"module"`
+	Status     string `json:"status"`
+	Layout     string `json:"layout"`
+	Kind       string `json:"kind"`
+	Section    string `json:"section,omitempty"`
+	SourcePath string `json:"source_path"`
+	// Sources is the claim's own evidence: what it rests on, in a form the
+	// engine can check. It replaced migrated_from (retired in NIT-191), a
+	// single free-text note saying WHICH registry a claim came out of, which a
+	// reader had to know how to open before they could verify one sentence.
+	// See model.Source.
 	//
 	// It is always present, as [] for a claim with none, rather than omitted.
 	// The absent case and the empty case mean the same thing here — this claim
 	// cites nothing — and a consumer that has to test for null before ranging is
 	// being asked to encode a distinction the data does not make.
-	Sources []claimSourceView `json:"sources"`
-	// Tracks is this claim's membership in the cross-cutting axis, in either
-	// role. It is the inverse of "dossierx track show", and it is here because
-	// show is where an agent orients itself on one card: without it, a claim
-	// that OWNS a track — whose body is therefore a feature's own prose rather
-	// than one module's contract — reads here exactly like any other claim, and
-	// the agent about to unlock it cannot see that a track's completeness turns
-	// on it. Always present, as [] for a claim in no track.
-	Tracks        []claimTrackView     `json:"tracks"`
+	Sources       []claimSourceView    `json:"sources"`
 	Locked        bool                 `json:"locked"`
 	LockedAt      string               `json:"locked_at,omitempty"`
 	ReviewPending bool                 `json:"review_pending"`
@@ -621,10 +590,8 @@ func newClaimShowCmd() *cobra.Command {
 				Layout:        string(claim.Layout),
 				Kind:          string(claim.EffectiveKind()),
 				Section:       claim.Section,
-				MigratedFrom:  claim.MigratedFrom,
 				SourcePath:    claim.SourcePath,
 				Sources:       claimSourceViews(claim.Sources),
-				Tracks:        claimTrackViews(claim.Tracks),
 				Locked:        claim.Status == model.StatusLocked,
 				LockedAt:      lockedAt,
 				ReviewPending: assessment.ReviewPending,
@@ -740,9 +707,6 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 			fmt.Fprintf(out, "    does not support: %s\n", s.DoesNotSupport)
 		}
 	}
-	for _, tr := range d.Tracks {
-		fmt.Fprintf(out, "  track:              %s (%s)\n", tr.TrackID, tr.Role)
-	}
 	fmt.Fprintf(out, "  comments:           %d thread(s), %d open, %d reply(ies)\n",
 		d.Comments.Threads, d.Comments.Open, d.Comments.Replies)
 	for _, tid := range d.Comments.OpenThreadIDs {
@@ -782,7 +746,6 @@ type claimListEntry struct {
 	Status        string               `json:"status"`
 	ReviewPending bool                 `json:"review_pending"`
 	Readiness     readiness.Assessment `json:"readiness"`
-	MigratedFrom  string               `json:"migrated_from,omitempty"`
 	Drifted       bool                 `json:"drifted"`
 	OpenThreads   int                  `json:"open_threads"`
 	// Sources is the COUNT of this claim's citations, not the citations.
@@ -795,7 +758,7 @@ type claimListEntry struct {
 	// claim.
 	//
 	// No matching --sources FILTER is added. Every existing filter here replaces
-	// a verb v0.3.0 retired (stale, coverage) or resolves a card for a human;
+	// a verb v0.3.0 retired (stale) or resolves a card for a human;
 	// "claims with no citations" is not a lifecycle state, nothing gates on it,
 	// and a filter nothing acts on is surface that has to be maintained forever.
 	// The count is on every row, so a caller that wants that set has it already.
@@ -816,7 +779,6 @@ type claimListEntry struct {
 // bookkeeping the envelope should carry.
 type claimListFilters struct {
 	ReviewPending bool   `json:"review_pending"`
-	Migrated      bool   `json:"migrated"`
 	Drifted       bool   `json:"drifted"`
 	Facet         string `json:"facet,omitempty"`
 	Module        string `json:"module,omitempty"`
@@ -825,9 +787,7 @@ type claimListFilters struct {
 
 // claimListData is "dossierx claim list"'s machine payload. Total is the
 // unfiltered claim count and PercentOfTotal the share that survived, which is
-// what makes this a strict superset of the retired "coverage" verb:
-// "claim list --migrated" answers "what fraction of claims carry
-// migrated_from" AND names them, where coverage only ever printed the ratio.
+// what lets every filter report its share of the corpus as well as its rows.
 type claimListData struct {
 	Count          int              `json:"count"`
 	Total          int              `json:"total"`
@@ -837,11 +797,11 @@ type claimListData struct {
 }
 
 func newClaimListCmd() *cobra.Command {
-	var reviewPending, migrated, drifted bool
+	var reviewPending, drifted bool
 	var facet, module, match string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List claims, optionally filtered by review state, migration note, code drift, facet, module, or a fuzzy --match",
+		Short: "List claims, optionally filtered by review state, code drift, facet, module, or a fuzzy --match",
 		Args:  cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			cfg, claims, err := loadConfigAndClaims()
@@ -905,9 +865,6 @@ func newClaimListCmd() *cobra.Command {
 				if reviewPending && !assessment.ReviewPending {
 					continue
 				}
-				if migrated && c.MigratedFrom == "" {
-					continue
-				}
 				if drifted && !driftedIDs[c.ID] {
 					continue
 				}
@@ -932,7 +889,6 @@ func newClaimListCmd() *cobra.Command {
 					Status:        string(c.Status),
 					ReviewPending: assessment.ReviewPending,
 					Readiness:     assessment,
-					MigratedFrom:  c.MigratedFrom,
 					Drifted:       driftedIDs[c.ID],
 					OpenThreads:   len(c.OpenThreadIDs()),
 					Sources:       len(c.Sources),
@@ -962,7 +918,6 @@ func newClaimListCmd() *cobra.Command {
 				PercentOfTotal: pct,
 				Filters: claimListFilters{
 					ReviewPending: reviewPending,
-					Migrated:      migrated,
 					Drifted:       drifted,
 					Facet:         facet,
 					Module:        module,
@@ -978,7 +933,6 @@ func newClaimListCmd() *cobra.Command {
 		}),
 	}
 	cmd.Flags().BoolVar(&reviewPending, "review-pending", false, "only claims currently flagged review_pending (replaces the retired \"stale\" verb)")
-	cmd.Flags().BoolVar(&migrated, "migrated", false, "only claims carrying a migrated_from note (replaces the retired \"coverage\" verb)")
 	cmd.Flags().BoolVar(&drifted, "drifted", false, "only claims with at least one implementation link whose file changed since it was linked")
 	cmd.Flags().StringVar(&facet, "facet", "", "only claims in this facet")
 	cmd.Flags().StringVar(&module, "module", "", "only claims in this module")
@@ -1007,9 +961,6 @@ func writeClaimListText(cmd *cobra.Command, d claimListData) {
 		// column of zeroes a reader learns to skip past.
 		if e.Sources > 0 {
 			flags = append(flags, fmt.Sprintf("sources=%d", e.Sources))
-		}
-		if e.MigratedFrom != "" {
-			flags = append(flags, "migrated_from="+e.MigratedFrom)
 		}
 		suffix := ""
 		if len(flags) > 0 {

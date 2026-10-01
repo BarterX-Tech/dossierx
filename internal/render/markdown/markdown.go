@@ -21,6 +21,11 @@
 //     ceiling, images always OFF, used by a layout:table claim's own rows
 //     cells.
 //
+// A fourth, RenderDocument(body string, assets AssetPrefix), is DOCUMENT MODE
+// for a brief (NIT-204): the claim-body ceiling with "#" and "##" allowed as
+// headings and images read from the brief's own folder instead of an assets/
+// directory. It serves no claim; see markdown_document.go.
+//
 // A GFM pipe-table cell embedded inside a body rendered by RenderClaimBody
 // is a fourth case worth naming here because it is easy to get wrong by
 // analogy with RenderInline: it goes through the same inline-only renderer,
@@ -81,7 +86,11 @@
 //     followed by "---" is a paragraph and then a rule, never an <h2>.
 //   - ATX headings at levels 3 to 6 only. "#" and "##" are reserved for the
 //     viewer's own chrome and render as literal text (markdown-sanity reports
-//     them), as does a run of seven or more.
+//     them), as does a run of seven or more. The one exception is DOCUMENT
+//     MODE — RenderDocument, a brief's body (NIT-204) — where levels 1 and 2
+//     are headings too, because a brief is the whole page it is shown on
+//     rather than a card inside viewer chrome. Every claim entry point keeps
+//     refusing them.
 //   - GFM pipe tables — a header row, a REQUIRED delimiter row that sets each
 //     column's alignment, and zero or more body rows, becoming a real
 //     <table class="md-table"> whose cells carry a fixed-literal alignment
@@ -273,10 +282,16 @@ func fenceCloses(line string, openLen int) bool {
 // pass. It changes no rendered output: the early rejection fires exactly in
 // the cases the old walk would have reported closed=false.
 func closerRuns(lines []string) []int {
-	// One extra slot so scanFence can index start+1 for the last line.
-	suffixMax := make([]int, len(lines)+1)
+	// No slot past the last line: the suffix after it is empty, so its
+	// value is 0, and scanFence treats index len(lines) that way. A
+	// len(lines)+1 size is the arithmetic CodeQL flags as a possible
+	// overflow (go/allocation-size-overflow).
+	suffixMax := make([]int, len(lines))
 	for j := len(lines) - 1; j >= 0; j-- {
-		best := suffixMax[j+1]
+		best := 0
+		if j+1 < len(lines) {
+			best = suffixMax[j+1]
+		}
 		n := leadingSpaces(lines[j])
 		if run := backtickRun(lines[j], n); run > best && strings.TrimSpace(lines[j][n+run:]) == "" {
 			best = run
@@ -297,7 +312,7 @@ func closerRuns(lines []string) []int {
 // is what makes "this opener never closes" an O(1) answer instead of a walk
 // to the end of the document (see closerRuns).
 func scanFence(lines []string, closers []int, start, indent, openLen int) (content string, closeIdx int, closed bool) {
-	if closers[start+1] < openLen {
+	if start+1 >= len(closers) || closers[start+1] < openLen {
 		return "", start, false
 	}
 	var body []string
@@ -381,7 +396,10 @@ func thematicBreak(trimmed string) bool {
 // --- ATX headings ---------------------------------------------------------
 
 // atxHeading recognizes "### text" through "###### text" — levels 3 to 6 and
-// nothing else — returning the level and the heading's inline text.
+// nothing else — returning the level and the heading's inline text. With
+// document true (DOCUMENT MODE, a brief's body: see bodyPolicy.document) it
+// recognizes levels 1 to 6; that is the only difference, and every other rule
+// below holds in both modes.
 //
 // LEVELS 1 AND 2 ARE RESERVED for the viewer's own chrome, so "# x" and "## x"
 // return ok=false and fall through to ordinary paragraph handling: the hashes
@@ -397,7 +415,7 @@ func thematicBreak(trimmed string) bool {
 // paragraph without a blank line before it, and its text runs the full inline
 // pass — code spans, escapes and links today, plus whatever else renderInline
 // grows, since it is the same single scan.
-func atxHeading(trimmed string) (level int, text string, ok bool) {
+func atxHeading(trimmed string, document bool) (level int, text string, ok bool) {
 	n := 0
 	for n < len(trimmed) && trimmed[n] == '#' {
 		n++
@@ -410,7 +428,11 @@ func atxHeading(trimmed string) (level int, text string, ok bool) {
 	if n < len(trimmed) && trimmed[n] != ' ' && trimmed[n] != '\t' {
 		return 0, "", false
 	}
-	if n < 3 || n > 6 {
+	lowest := 3
+	if document {
+		lowest = 1
+	}
+	if n < lowest || n > 6 {
 		return 0, "", false
 	}
 	return n, trimClosingHashes(strings.TrimSpace(trimmed[n:])), true
@@ -1021,9 +1043,12 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, pol bodyP
 				b.WriteString("<hr>")
 				continue
 			}
-			if level, text, ok := atxHeading(trimmed); ok {
+			if level, text, ok := atxHeading(trimmed, pol.document); ok {
 				flushParagraph()
 				flushList()
+				if level == 1 && pol.title != nil && *pol.title == "" {
+					*pol.title = text
+				}
 				tag := "h" + strconv.Itoa(level)
 				b.WriteString("<" + tag + ">")
 				b.WriteString(renderInline(text, nil, pol))

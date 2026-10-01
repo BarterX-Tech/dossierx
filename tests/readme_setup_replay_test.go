@@ -18,8 +18,7 @@
 // "Where the gate runs" section says of CI: "If you adopt only one of the two,
 // adopt this one." Second: the block ordered the skills export BEFORE the step
 // that writes project.config.yaml, so the export ran rootless — exit 0, no
-// AGENTS.md section maintained, the agent guide dropped beside the bundles —
-// and nothing later in the block exported again; the postcondition test at the
+// AGENTS.md section maintained — and nothing later in the block exported again; the postcondition test at the
 // bottom judges the order by the state it leaves behind.
 //
 // WHAT IS REPLAYED AND WHAT IS SUBSTITUTED. The steps run in order, against a
@@ -462,7 +461,7 @@ func TestPasteBlockNoToHookEndsWithCI(t *testing.T) {
 // discipline as requireCIPostconditionStated: the postcondition is README's
 // own, stated in the paste block's step ordering rationale ("only a rooted
 // export maintains its section in an `AGENTS.md` that already exists") and in
-// the three-forms table ("an existing `AGENTS.md` only — never created"). If
+// the forms table ("an existing `AGENTS.md` only — never created"). If
 // both statements vanish, the test below would be enforcing a sentence nobody
 // wrote.
 func requireRootedExportPostconditionStated(t *testing.T) {
@@ -479,13 +478,12 @@ func requireRootedExportPostconditionStated(t *testing.T) {
 // block and asserts the terminal state the export's ORDER is responsible for.
 // The export resolves its project root from `project.config.yaml`; run before
 // the config exists it exits 0 all the same, maintains no section in the
-// repository's existing AGENTS.md, drops `dossierx-agent-guide.md` beside the
-// bundles instead of at docs/, and nothing later in the block exports again —
+// repository's existing AGENTS.md, and nothing later in the block exports again —
 // so a harness that reads AGENTS.md is never taught DossierX at all, silently.
 // The replay follows whatever order the document gives (see replayPasteBlock),
 // which is what lets this test judge the order by its consequences: with the
-// export ordered before the config, both assertions below go red; ordered
-// after, both hold. tests/procedures/bootstrap_test.go pins the same
+// export ordered before the config, the AGENTS.md assertion goes red; ordered
+// after, it holds. tests/procedures/bootstrap_test.go pins the same
 // postconditions for the router skill's bootstrap — the same procedure's other
 // home — and this test exists because that one covered only that home while
 // README's block still carried the defective order.
@@ -501,10 +499,6 @@ func TestPasteBlockExportRunsRootedAndTeachesTheHarness(t *testing.T) {
 		t.Errorf("after the whole paste-block transcript, the pre-existing AGENTS.md is byte-for-byte untouched: the export ran with no project root to find (or never ran), wrote no section, and nothing in the block exports again. A harness that reads AGENTS.md is never taught DossierX — order the export AFTER the step that writes project.config.yaml")
 	}
 
-	guide := filepath.Join(consumer, "docs", "dossierx-agent-guide.md")
-	if _, err := os.Stat(guide); err != nil {
-		t.Errorf("after the whole paste-block transcript, docs/dossierx-agent-guide.md does not exist under the project root (%v): a rootless export drops the guide beside the skill bundles instead, where nothing documented ever looks for it — order the export AFTER the step that writes project.config.yaml", err)
-	}
 }
 
 // ---------------------------------------------------------------------------

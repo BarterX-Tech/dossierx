@@ -40,7 +40,7 @@ const (
 //
 // This type exists because provenance that lives outside the claim is
 // provenance nothing can check. Before it, a claim could record WHICH
-// sources it came from — in MigratedFrom, a single free-text string — but
+// sources it came from — in a single free-text note, since retired — but
 // not WHAT they were: a reader had to know which external registry to open,
 // and in which directory, before they could verify one sentence. Worse, a
 // sidecar file beside the claim is invisible to the lock ledger, so the

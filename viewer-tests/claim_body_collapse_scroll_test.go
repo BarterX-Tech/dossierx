@@ -38,7 +38,7 @@ func TestCollapsingAClaimBodyKeepsTheCardInView(t *testing.T) {
 			}
 			ctx := browserContext(t)
 			runCDP(t, ctx, chromedp.EmulateViewport(tier.w, tier.h),
-				chromedp.Navigate(p.renderStatic()),
+				chromedp.Navigate(p.renderStatic()+widgetPage),
 				chromedp.WaitVisible(".claim-body-disclosure__toggle:not([hidden])", chromedp.ByQuery))
 
 			// Case 1: the card's top has been pushed above the sticky line.

@@ -206,6 +206,14 @@
      proved light-dark() does not track this engine's explicit Dark toggle,
      only the OS. Engine-owned: not in ThemeTokenAllowlist. */
   --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
+  /* The soft hairline between rows inside a card (B1's relation rows): a
+     step lighter than --border. Its own token because dark needs its own
+     value, #1E2530, which no mix of the dark tokens reaches. */
+  --hairline-soft: #EEF1F5;
+  /* The B2 view switch (NIT-199): its track and its selected segment. */
+  --segment-track: #E3E7ED;
+  --segment-on: #FFFFFF;
+  --edit-banner-bg: rgb(158 59 54 / 8%);
 
   /* TYPE AND SPACING. Declared here, consumed by the screen lanes. Before
      this block every size, leading and tracking in this file was a literal in
@@ -295,6 +303,11 @@
        a --border/--paper mix cannot reach — see the :root declaration's
        comment above for why this is its own engine-owned property. */
     --issues-scope-trough: #080B10;
+    --hairline-soft: #1E2530;
+    /* The B2 view switch (NIT-199): its track and its selected segment. */
+    --segment-track: #1B212B;
+    --segment-on: #38424F;
+    --edit-banner-bg: rgb(236 138 131 / 10%);
   }
 }
 
@@ -370,6 +383,11 @@
        edge, so explicit Light puts it back to nothing. */
     --sheet-hairline: transparent;
     --issues-scope-trough: color-mix(in srgb, var(--border) 55%, var(--paper));
+    --hairline-soft: #EEF1F5;
+    /* The B2 view switch (NIT-199): its track and its selected segment. */
+    --segment-track: #E3E7ED;
+    --segment-on: #FFFFFF;
+    --edit-banner-bg: rgb(158 59 54 / 8%);
   }
 }
 
@@ -412,6 +430,11 @@
        a --border/--paper mix cannot reach — see the :root declaration's
        comment above for why this is its own engine-owned property. */
     --issues-scope-trough: #080B10;
+    --hairline-soft: #1E2530;
+    /* The B2 view switch (NIT-199): its track and its selected segment. */
+    --segment-track: #1B212B;
+    --segment-on: #38424F;
+    --edit-banner-bg: rgb(236 138 131 / 10%);
   }
 }
 
@@ -2237,6 +2260,203 @@ th {
   content: none;
 }
 
+/* The BRIEFS group (NIT-202, Paper board B5 "Claim card — briefs in
+   relationships"). Derived at render time — components.go's writeBriefsGroup —
+   and drawn after the fixed directions: a document glyph in the arrow slot,
+   the label and count, then "derived · the claim itself stores none of
+   these"; two sub-groups ("Explained by", "Cited as evidence"), each a
+   relationship list indented 19px. A desktop row is four columns — folder
+   (96px), linked title, state (130px, right-ranged) and the lock badge
+   (58px) — with no dot; the phone tier below turns it into the ordinary
+   mobile relationship row. Values are the board's computed styles. */
+.claim-relationship-direction + .claim-relationship-direction--briefs {
+  margin-top: 19px;
+}
+
+/* The group is its own inline-size container: the four desktop lanes reserve
+   ~314px beside the title, so a narrow panel — a phone, and also the 520 to
+   ~700px range where the viewport is past the phone tier but the panel is
+   not wide — would squeeze the title to a sliver. Below a 560px group width
+   the rows take the two-line mobile relationship row instead (the
+   @container rule after the desktop rules). */
+.claim-relationship-direction--briefs {
+  container: brief-group / inline-size;
+}
+
+.claim-relationship-direction--briefs > .claim-relationship-direction-head {
+  margin-bottom: 12px;
+}
+
+.claim-brief-icon {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.claim-brief-derived {
+  padding-left: 6px;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.claim-brief-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.claim-brief-subgroup + .claim-brief-subgroup {
+  margin-top: 8px;
+  padding-top: 6px;
+}
+
+.claim-brief-subhead {
+  padding-left: 19px;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* padding-top: 0 undoes .claim-edges' 0.35rem, which pushed each
+   sub-head's first row 5.6px below the board's 8px (7px on a phone). */
+.claim-footer-panel .claim-relationship-list.claim-brief-list {
+  gap: 8px;
+  padding-top: 0;
+}
+
+.claim-footer-panel .claim-brief-list > li.claim-brief {
+  align-items: center;
+}
+
+.claim-brief > .claim-relationship-dot {
+  display: none;
+}
+
+.claim-brief-folder {
+  order: -1;
+  flex: 0 0 96px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 14px;
+}
+
+.claim-brief-ref {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--link);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 18px;
+  text-decoration: none;
+}
+
+a.claim-brief-ref:hover {
+  text-decoration: underline;
+}
+
+.claim-brief-ref--missing {
+  color: var(--faint);
+}
+
+.claim-brief-state {
+  flex: 0 0 130px;
+  text-align: right;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.claim-brief-state--pin {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.claim-brief-state--pending,
+.claim-brief-state--drift {
+  color: var(--status-draft);
+  font-weight: 500;
+}
+
+.claim-brief-sep {
+  display: none;
+}
+
+/* The two-line row (board B5 MOBILE, Page 1 board 05 "relationships open"):
+   dot and linked title on line one; "Folder · state" and the badge,
+   right-ranged, on line two, indented a further 15px. The separator is
+   --faint even when the state after it is amber, as the board draws it. */
+@container brief-group (max-width: 560px) {
+  .claim-footer-panel .claim-brief-list > li.claim-brief {
+    flex-wrap: wrap;
+    align-items: baseline;
+    row-gap: 3px;
+    column-gap: 8px;
+  }
+
+  .claim-brief > .claim-relationship-dot {
+    display: block;
+    margin-top: 6px;
+    align-self: flex-start;
+  }
+
+  .claim-brief-list .claim-brief-ref {
+    flex: 1 1 0;
+    line-height: 20px;
+    font-weight: 500;
+  }
+
+  .claim-brief > .claim-relationship-line2 {
+    display: flex;
+    align-items: baseline;
+    column-gap: 4px;
+    flex: 1 1 100%;
+    padding-left: 15px;
+  }
+
+  .claim-brief .claim-brief-folder {
+    order: 0;
+    flex: 0 1 auto;
+    line-height: 16px;
+  }
+
+  .claim-brief .claim-brief-state {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .claim-brief .claim-brief-state--pending {
+    color: var(--status-draft);
+    font-weight: 500;
+  }
+
+  .claim-brief .claim-brief-sep {
+    display: inline;
+    color: var(--faint);
+    font-weight: 400;
+  }
+
+  .claim-brief .claim-relationship-badge {
+    flex: 0 0 auto;
+    width: max-content;
+    margin-left: auto;
+    letter-spacing: 0.06em;
+  }
+}
+
 /* Deep-link auto-open (decision C9). Landing on #<claim-id> — from the
    sidebar, from a claim-ref cross-link, or from a pasted URL — must not show
    the reader a collapsed footer, because the edge they followed the link for
@@ -2247,9 +2467,9 @@ th {
    attribute for it (the two the server does write are the drifted-file and
    the locked+review_pending signals); and doing it in JS would not survive
    the static file:// export, which is the case this has to work in.
-   .claim is the root <section> of every partial. render.stripDuplicateClaimIDs
-   removes id= from a track's inline copy of a claim, so at most ONE element
-   on the page can ever match :target — the rule cannot fan out.
+   .claim is the root <section> of every partial, and each claim is rendered
+   once, so at most ONE element on the page can ever match :target — the rule
+   cannot fan out.
 
    THIRD RETRY FIX (verifier item 2) simplified this considerably. Under the
    previous nested-panel structure, revealing a closed door's content meant
@@ -2287,7 +2507,7 @@ th {
 }
 
 /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
-   rests_on/depended-on-by/migrated_from/review_pending/
+   rests_on/depended-on-by/review_pending/
    implemented-in fact is its own <li>, stacked vertically rather than
    wrapped inline, so a card with many edges reads as a scannable list
    instead of a run-on line. Browser UA <ul> margin/padding/list-style is
@@ -4889,17 +5109,12 @@ body.shell-body {
    padding that compensated for it, are both gone: the shipping row is flush
    (.sec-tab `border: 0` plus `padding: 7px 10px` further down). Because
    .sec-tab.on outranks .sec-tab, that orphaned padding-left survived and
-   pushed the SELECTED label 8px right of every other row, in the module rail
-   and in the Tracks list alike. Paper 4A-0 keeps selected and unselected on
+   pushed the SELECTED label 8px right of every other row in the module rail. Paper 4A-0 keeps selected and unselected on
    one 10px lane and marks selection with ground and weight only. */
 .sec-tab.on {
   color: var(--ink);
   background: var(--accent-bg);
 }
-
-/* .nav-group-label (the caption over the Tracks run) is gone: the sidebar
-   groups modules and tracks in .system-nav-group <details> (shell.html), and
-   nothing has emitted the class since the system-record redesign. */
 
 /* Secondary horizontal facet tab strip inside a module's content area,
    ported verbatim (selector + declarations) from the reference docs
@@ -4945,129 +5160,6 @@ body.shell-body {
 .claim-group-host,
 [data-dossierx-surface-host] {
   display: contents;
-}
-
-/* Tracks retain a label before their cited-claim appendix. Reading View no
-   longer repeats model.Claim.Section as headings between claim cards. */
-.cited-claims-heading {
-  margin: 1.75rem 0 0.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: var(--faint);
-}
-
-/* Only a cited-claim appendix label at the start of a track drops the
-   leading rule. */
-.claim-group > .cited-claims-heading:first-child,
-.claim-group > .claim-group-host:first-child > .cited-claims-heading:first-child,
-.claim-group > [data-dossierx-surface-host]:first-child > .cited-claims-heading:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-/* ---- track sections (render/track_view.go) ---------------------------
-
-   A track section is a .module-section in every way the show/hide machinery
-   can see, so it needs no layout rules of its own — only a head, because a
-   track states something a module never has to: what it is for, and how far
-   along it is. The .sub-nav a multi-facet module would carry has no analogue
-   here (a track has no facets), which is why this head sits directly against
-   the claim group with the same 16px gap .sub-nav leaves behind it. */
-.track-head {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
-  margin: 0 0 16px;
-}
-
-.track-title {
-  font-size: 17px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  color: var(--ink);
-}
-
-/* The completion pill is one of the existing .pill family and takes no new
-   token; only its margin is corrected here, since .pill's own margin-bottom
-   is tuned for sitting inline beside a claim label rather than under a
-   heading. It REPORTS and gates nothing — see trackCompletion. */
-.track-head > .pill {
-  margin-bottom: 0;
-}
-
-.track-summary {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-/* track-cites is the list of claims a track cites but does not own: pointers,
-   never bodies (see components/tracks.go). It is styled as a list of rows
-   rather than as cards precisely so it cannot be mistaken for the owned
-   claims above it — the visual difference IS the statement that these live
-   somewhere else.
-
-   Specificity note, the same one .claim-edges makes: the .claim-ref-prefix
-   and .claim-ref-label spans are styled under .claim-edges, which does not
-   scope this list, so both tiers are re-declared below. Rather than widening
-   those selectors — which would silently restyle every footer — the track
-   list states its own, and the two stay independently readable. */
-.track-cites {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.track-cite {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-
-.track-cite:last-child {
-  border-bottom: 0;
-}
-
-.track-cite a.claim-ref {
-  color: var(--link);
-  text-decoration: none;
-}
-
-.track-cite a.claim-ref:hover,
-.track-cite a.claim-ref:focus-visible {
-  text-decoration: underline;
-}
-
-.track-cite .claim-ref-prefix {
-  color: var(--faint);
-  font-weight: 400;
-}
-
-.track-cite .claim-ref-label {
-  font-weight: 500;
-}
-
-.track-cite .claim-ref-raw {
-  font-family: var(--font-mono);
-  font-size: 0.95em;
-  font-weight: 400;
-}
-
-/* The pill is pushed to the trailing edge so a column of rows reads as two
-   columns — what the claim is on the left, what state it is in on the right —
-   which is the scan a reader does on a track page. */
-.track-cite > .pill {
-  margin-left: auto;
-  margin-bottom: 0;
-  flex: none;
 }
 
 @media (max-width: 860px) {
@@ -6407,17 +6499,6 @@ body.shell-body {
 
 .claim { scroll-margin-top: 72px; }
 
-.cited-claims-heading {
-  margin: 34px 0 12px;
-  padding-top: 20px;
-  border-top-color: var(--border);
-  color: var(--faint);
-  font-size: 10px;
-  letter-spacing: .105em;
-}
-
-.cited-claims-heading:first-child { margin-top: 0; }
-
 /* The claim card's radius is a per-component literal, not --radius: 12px is
    off the engine's radius token and off Paper's own 4/8/999 scale, and
    docs/design/screens/07a-claim-draft-not-yet-approved.md open decision D4
@@ -6828,8 +6909,7 @@ code {
 }
 
 .claim-edges a,
-.claim-source-title,
-.track-cite a.claim-ref {
+.claim-source-title {
   color: var(--link);
   overflow-wrap: anywhere;
   text-underline-offset: 2px;
@@ -6879,35 +6959,6 @@ code {
   background: transparent;
   color: var(--faint);
 }
-
-.track-head {
-  margin: 0 0 24px;
-  padding: 38px 0 23px;
-  border-bottom: 1px solid var(--border-strong, #aab5c7);
-}
-
-.track-title {
-  margin-bottom: 9px;
-  font-size: clamp(28px, 4vw, 42px);
-  font-weight: 560;
-  letter-spacing: -.04em;
-  line-height: 1.06;
-}
-
-.track-summary {
-  max-width: 680px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.track-cite {
-  min-height: 43px;
-  padding: 10px 0;
-  border-bottom-color: var(--border);
-  font-size: 13px;
-}
-
-.track-cite > .pill { margin-left: auto; }
 
 /* 14 §4.1 (node 43Y-0): the board's -8px 0 24px shadow supersedes this layer's
    pre-revamp -14px 0 34px; border is --border-strong (D14.2's rail is
@@ -6994,7 +7045,7 @@ code {
    Seven live control groups (the board's five plus the pre-13 Granularity
    and Highlight-overlay axes, 13 §4.2's own comment: "neither control
    exists on any board") do not fit one 54px row at 1440 — measured via
-   probe at 1440/scoped state: two rows, module+facet+track+granularity+
+   probe at 1440/scoped state: two rows, module+facet+granularity+
    overlay filling the first, relations+view the second. Raised as a spec
    amendment against §3 rather than shipped silently; block padding is still
    sized so EACH row lands at the
@@ -7497,7 +7548,7 @@ code {
     scroll-snap-align: none;
   }
 
-  /* M5 — MODULE / FACET / TRACK eyebrows dropped; the select values name
+  /* M5 — MODULE / FACET eyebrows dropped; the select values name
      themselves. Granularity and Highlight overlay steer the canvas the
      same way VIEW does, and the canvas is gone (M1), so their eyebrows and
      their controls drop for the identical reason M4 drops VIEW — "this
@@ -7944,9 +7995,6 @@ code {
      extend either — there is deliberately no tablet-tier (521-860px) footer
      override, because .claim-footer's own flex-wrap already reflows the
      strip at that width with no special-casing. */
-  .track-head { padding-top: 28px; }
-  .track-title { font-size: 31px; }
-  .track-cite { align-items: flex-start; }
 }
 
 /* This container is RETIRED for the same reason as the footer half of the
@@ -8073,10 +8121,8 @@ code {
      .content-area, not just the card — 02 §3 gives the module head
      "padding: 14px 16px" and the claim-controls row the same 16px inline
      inset, with content width 390 - 32 = 358px. Restore it on every
-     .content-area child that is not the full-bleed card: the module head,
-     and a track's cited-claim appendix label. */
-  .system-record-head,
-  .cited-claims-heading {
+     .content-area child that is not the full-bleed card: the module head. */
+  .system-record-head {
     padding-inline: 16px;
   }
 
@@ -8289,6 +8335,48 @@ code {
     margin-left: auto;
     padding-left: 0;
     letter-spacing: 0.06em;
+  }
+
+  /* The BRIEFS group on a phone (NIT-202, board B5 MOBILE): the ordinary
+     mobile relationship row — dot and linked title on line one, then
+     "Folder · state" and the lock badge on line two — so the dot returns
+     and the folder leaves its desktop column for line two. That row shape
+     is keyed to the group's own width, not the viewport — see the
+     @container rule beside the desktop block — so it is not repeated here.
+     What this block owns is the head: the head's note and the sub-heads'
+     notes drop to the bare words, and the spacing tightens to the board's
+     mobile values. */
+  .claim-relationship-direction + .claim-relationship-direction--briefs {
+    margin-top: 13px;
+  }
+
+  .claim-relationship-direction--briefs > .claim-relationship-direction-head {
+    margin-bottom: 7px;
+  }
+
+  .claim-brief-derived {
+    padding-left: 0;
+    font-size: 11px;
+    line-height: 14px;
+    font-style: italic;
+  }
+
+  .claim-brief-derived-note,
+  .claim-brief-subhead-note {
+    display: none;
+  }
+
+  .claim-brief-subgroup {
+    gap: 7px;
+  }
+
+  .claim-brief-subgroup + .claim-brief-subgroup {
+    margin-top: 7px;
+    padding-top: 4px;
+  }
+
+  .claim-footer-panel .claim-relationship-list.claim-brief-list {
+    gap: 7px;
   }
 
   /* M10 — source row: ref column narrows 26px -> 22px. */
@@ -9208,11 +9296,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   min-height: 0;
   padding: 10px 8px 6px;
   color: var(--faint);
-}
-/* Paper 4X-0: TRACKS carries 18px of head space against the module list
-   above it, where MODULES (3P-0) carries 10px. */
-.system-nav-group + .system-nav-group .system-nav-group__toggle {
-  padding-top: 18px;
 }
 .system-nav-group__count {
   min-width: auto;
@@ -10222,6 +10305,1475 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   }
 }
 
+
+/* ---- Home and the site nav (NIT-196) -------------------------------------
+   Paper file "DossierX Viewer — Design Exploration", page Release 0.7.22,
+   group B0. Home is a .module-section with no .claim-group: the header, the
+   "Waiting on you" cards and the section tiles. One DOM serves every width;
+   .home-wide and .home-narrow pick the desktop or phone copy at the same
+   860px line the sidebar drawer uses, so neither is measured in JS.
+
+   The card colours are the state colours the rest of the viewer already
+   uses: edited is --warn, review is --status-draft, an open thread is
+   --link, drafts are --muted. No new token. */
+
+.site-nav { margin-top: 10px; }
+.site-nav__item,
+.nav-utilities #dxgOpen {
+  gap: 10px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.site-nav__item.on { font-weight: 600; }
+.site-nav__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--muted);
+}
+.sec-tab.on .site-nav__icon { color: var(--link); }
+.site-nav__lock {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  margin-left: auto;
+  color: var(--locked-confirmation);
+}
+/* The Modules group reads as one more site-nav row: sentence case, the
+   count ranged right, no box. Its module list opens under it on a guide
+   line, and only while a module is the current page (syncNavGroups). */
+.system-nav-groups { margin-top: 0; }
+.system-nav-groups .system-nav-group {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.system-nav-groups .system-nav-group__toggle {
+  gap: 10px;
+  margin: 1px 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font: 500 14px/18px var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.system-nav-groups .system-nav-group__count {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  text-align: right;
+}
+.system-nav-groups .system-nav-group__chevron { display: none; }
+.system-nav-groups .system-nav-group__body {
+  margin: 2px 0 4px 17px;
+  padding: 0 0 0 8px;
+  border-top: 0;
+  border-left: 1px solid var(--border);
+}
+.nav-utilities {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 0;
+  background: linear-gradient(var(--border), var(--border)) 10px 0 / calc(100% - 20px) 1px no-repeat;
+}
+.nav-utilities #dxgOpen {
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+}
+/* Desktop only: B0 draws every site-nav row, the Modules header included,
+   at 34px with a 2px gap, and the Claims graph 12px under its hairline. The
+   phone drawer keeps its own taller touch rows (the <=860px rules). */
+@media screen and (min-width: 861px) {
+  .site-nav,
+  .system-nav-groups { display: flex; flex-direction: column; gap: 2px; }
+  .site-nav { margin-top: 16px; padding-bottom: 2px; }
+  .site-nav .sec-tab,
+  .system-nav-groups .system-nav-group__toggle,
+  .nav-utilities #dxgOpen {
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+  }
+  .nav-utilities { margin-top: 12px; padding-top: 13px; }
+}
+.home-link {
+  color: inherit;
+  text-decoration: none;
+}
+.home-link:hover { text-decoration: underline; }
+
+.home-section {
+  max-width: 1028px;
+  padding: 40px 0 48px;
+}
+@media screen and (min-width: 1181px) {
+  /* Home carries no facet TOC, so it does not reserve the TOC rail's 282px:
+     its content runs the design's 1028px between equal gutters. */
+  .content-area:has(> .home-section:not([hidden])) { padding: 0 72px 80px; }
+}
+.home-narrow { display: none; }
+.home-head { margin: 0 0 28px; }
+.home-kicker {
+  margin: 0 0 8px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  letter-spacing: .06em;
+}
+.home-title {
+  margin: 0;
+  color: var(--ink);
+  font: 600 40px/46px var(--font-sans);
+  letter-spacing: -.02em;
+}
+.home-eyebrow {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 19px/30px var(--font-serif);
+}
+
+.home-waiting { margin: 0 0 28px; }
+.home-waiting__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.home-waiting__head h3 {
+  margin: 0;
+  color: var(--ink);
+  font: 600 18px/24px var(--font-sans);
+}
+.home-waiting__meta {
+  color: var(--faint);
+  font: 13px/18px var(--font-sans);
+}
+.home-cards {
+  display: flex;
+  gap: 16px;
+}
+.home-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  text-decoration: none;
+}
+.home-card:hover { border-color: var(--border-strong); }
+.home-card__count {
+  font: 600 32px/38px var(--font-sans);
+  letter-spacing: -.02em;
+  color: var(--muted);
+}
+.home-card[data-kind="edited"] .home-card__count { color: var(--warn); }
+.home-card[data-kind="review"] .home-card__count { color: var(--status-draft); }
+.home-card[data-kind="thread"] .home-card__count { color: var(--link); }
+.home-card__label { font: 600 14px/19px var(--font-sans); }
+.home-card__detail {
+  flex: 1 1 auto;
+  color: var(--faint);
+  font: 12.5px/18px var(--font-sans);
+}
+.home-card__action {
+  padding-top: 10px;
+  color: var(--link);
+  font: 500 13px/16px var(--font-sans);
+}
+
+.home-clear {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 28px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+.home-clear__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--locked-confirmation);
+}
+.home-clear__icon .dx-icon { width: 16px; height: 16px; }
+.home-clear__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+.home-clear__text strong {
+  color: var(--ink);
+  font: 600 18px/24px var(--font-sans);
+}
+
+.home-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+/* Desktop: the icon sits in the title row and everything under it runs the
+   tile's full width, so .home-tile__main dissolves into the tile's grid. The
+   phone rule below turns the tile back into an icon | text | chevron row. */
+.home-tile {
+  flex: 1 1 400px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-content: start;
+  column-gap: 10px;
+  row-gap: 14px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  text-decoration: none;
+}
+.home-tile:hover { border-color: var(--border-strong); }
+.home-tile__icon {
+  display: flex;
+  padding-top: 1px;
+  color: var(--ink);
+}
+.home-tile__icon .dx-icon { width: 18px; height: 18px; }
+.home-tile__main { display: contents; }
+.home-tile__head { grid-column: 2; }
+.home-tile__desc,
+.home-stats,
+.home-progress { grid-column: 1 / -1; }
+.home-tile__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.home-tile__title { font: 600 16px/20px var(--font-sans); }
+.home-tile__count {
+  margin-left: auto;
+  color: var(--faint);
+  font: 12px/16px var(--font-mono);
+}
+.home-pill {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--locked-confirmation);
+  font: 600 10.5px/14px var(--font-sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.home-pill[data-state="draft"],
+.home-pill[data-state="unrecorded"] {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+.home-pill[data-state="edited"],
+.home-pill[data-state="unreadable"] {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+/* The phone row carries its own pill beside the chevron (B0 mobile boards);
+   the title-line one is the desktop copy. */
+.home-tile > .home-pill {
+  flex-shrink: 0;
+  margin-left: 0;
+}
+.home-tile__desc {
+  color: var(--muted);
+  font: 13px/19px var(--font-sans);
+}
+.home-stats {
+  display: flex;
+  gap: 28px;
+}
+.home-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-stat__count { font: 600 24px/28px var(--font-sans); }
+.home-stat__label {
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+.home-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.home-progress__text {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 13px/16px var(--font-sans);
+}
+.home-progress__pct {
+  color: var(--faint);
+  font: 11px/16px var(--font-mono);
+}
+.home-progress__bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.home-progress__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--locked-confirmation);
+}
+
+@media (max-width: 860px) {
+  /* The phone reading ground is the card colour edge to edge; Home's cards
+     and tile list sit on --paper instead, as B0's mobile boards draw them.
+     Every value below is read off the MOBILE LIGHT board. */
+  .content-area:has(> .home-section:not([hidden])) { background: var(--paper); }
+  .home-section { padding-top: 14px; }
+  .home-wide { display: none; }
+  .home-narrow { display: inline; }
+  .home-head {
+    margin: 0 -16px 16px;
+    padding: 0 16px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .home-kicker { margin-bottom: 5px; letter-spacing: .08em; text-transform: uppercase; }
+  .home-title { font-size: 28px; line-height: 34px; }
+  .home-eyebrow { margin-top: 5px; font-size: 16px; line-height: 24px; }
+  .home-waiting { margin-bottom: 14px; }
+  .home-waiting__head { gap: 8px; margin-bottom: 10px; }
+  .home-waiting__head h3 { font-size: 16px; line-height: 20px; }
+  .home-waiting__meta { font-size: 12px; line-height: 16px; }
+  .home-cards { flex-wrap: wrap; gap: 10px; }
+  .home-card { flex: 1 1 calc(50% - 5px); gap: 4px; padding: 14px; }
+  .home-card__count { font-size: 26px; line-height: 30px; }
+  .home-card__label { font-size: 13.5px; line-height: 18px; }
+  .home-card__detail { flex: none; font-size: 12px; line-height: 16px; }
+  .home-tiles {
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-bg);
+  }
+  .home-tile {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .home-tile + .home-tile { border-top: 1px solid var(--code-bg); }
+  .home-tile__main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .home-tile__title { font-size: 15px; line-height: 20px; }
+  .home-pill { padding: 2px 7px; font-size: 10px; }
+  .home-tile__line,
+  .home-progress__text {
+    color: var(--faint);
+    font: 12px/16px var(--font-sans);
+  }
+  .home-progress { gap: 6px; margin-top: 4px; }
+  .home-progress__bar { height: 4px; }
+  .home-tile__chevron {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    color: var(--faint);
+  }
+}
+
+@media (max-width: 520px) {
+  /* .content-area drops its inline gutter at this width for full-bleed
+     claim cards; Home is not one, so it keeps the 16px gutter itself. */
+  .home-section { padding-inline: 16px; }
+}
+
+/* ---- Briefs: the sidebar tree and the brief page (NIT-197) ---------------
+   Paper file "DossierX Viewer — Design Exploration", page Release 0.7.22,
+   group B1: "B1 · Brief page — locked" and its MOBILE LIGHT, DARK and MOBILE
+   DARK boards. Every size, colour and gap below is read off those boards'
+   computed styles; the colours are the viewer's existing tokens, which the
+   boards' own tokens map onto one for one (locked is --locked-confirmation on
+   --accent-bg, draft is --status-draft on --status-draft-bg, the row
+   selection is --nav-selection-bg). No new token, so dark mode is the token
+   blocks' job, not this section's. */
+
+/* The Briefs group opens under its toggle on the same guide line as Modules,
+   one step further in (B1: margin-left 18px, padding-left 10px). */
+.system-nav-groups .brief-nav .brief-nav__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 4px 18px;
+  padding: 0 0 0 10px;
+}
+.brief-folder { margin: 0; }
+.brief-folder > summary { list-style: none; }
+.brief-folder > summary::-webkit-details-marker { display: none; }
+.brief-folder__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  border-radius: 6px;
+  color: var(--muted);
+  font: 13px/16px var(--font-sans);
+  cursor: pointer;
+}
+.brief-folder__toggle:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); color: var(--ink); }
+.brief-folder__chevron {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  color: var(--faint);
+  stroke-width: 3;
+  transition: transform 120ms ease-out;
+}
+.brief-folder[open] > .brief-folder__toggle .brief-folder__chevron { transform: rotate(90deg); }
+.brief-folder__label { flex: 1 1 auto; min-width: 0; }
+.brief-folder__count {
+  width: 18px;
+  flex: 0 0 18px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  text-align: right;
+}
+#nav .brief-nav .brief-nav__row,
+#nav .brief-nav .brief-nav__all {
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 10px 0 22px;
+  color: var(--muted);
+  font: 13.5px/18px var(--font-sans);
+  text-align: left;
+}
+#nav .brief-nav .brief-nav__all { height: 28px; min-height: 28px; padding-left: 6px; font-size: 13px; line-height: 16px; }
+#nav .brief-nav .brief-nav__row.on,
+#nav .feature-nav .brief-nav__row.on,
+#nav .brief-nav .brief-nav__all.on {
+  color: var(--link);
+  font-weight: 600;
+}
+.brief-nav__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brief-nav__row .brief-mark { margin-left: auto; }
+
+/* The group that holds the current row reads as current (B1 HRP-0/HRQ-0):
+   its heading, icon and count in the accent, the label at 600. One rule for
+   every group, so Modules gets it on a module page as Briefs does on a brief. */
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle,
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle .site-nav__icon,
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle .system-nav-group__count {
+  color: var(--link);
+}
+.system-nav-groups .system-nav-group:has(.sec-tab.on) > .system-nav-group__toggle { font-weight: 600; }
+
+/* One mark per brief, in a fixed 18px slot so the marks form one lane.
+   Locked is the padlock; every other state is an 8px dot. Draft is the
+   hollow dot. thread is an open comment thread (NIT-198); edited and review
+   are drawn here for the legend and for the tickets that raise them
+   (NIT-199, NIT-200). */
+.brief-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 18px;
+  flex: 0 0 18px;
+}
+.brief-mark::before {
+  content: "";
+  box-sizing: border-box;
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.brief-mark[data-mark="locked"]::before { content: none; }
+.brief-mark[data-mark="draft"]::before { border: 1.5px solid var(--faint); }
+.brief-mark[data-mark="edited"]::before { background: var(--warn); }
+.brief-mark[data-mark="review"]::before { background: var(--status-draft); }
+.brief-mark[data-mark="thread"]::before { background: var(--link); }
+.brief-mark .dx-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--locked-confirmation);
+  stroke-width: 2.4;
+}
+
+.brief-legend {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.brief-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font: 12px/16px var(--font-sans);
+}
+/* The legend's mark takes its dot's own size, so the dot is what is measured. */
+.brief-legend .brief-mark { width: auto; flex: 0 0 auto; }
+
+/* The page. It is a .module-section with no .claim-group, like Home. */
+.brief-wide { display: contents; }
+.brief-narrow { display: none; }
+.brief-section,
+.briefs-index-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 760px;
+  padding: 36px 0 48px;
+}
+.brief-section[hidden],
+.briefs-index-section[hidden] { display: none; }
+@media screen and (min-width: 1181px) {
+  /* B1's main column is 928px between the 268px sidebar and the 244px "On
+     this page" rail, with 84px either side of a 760px reading column. */
+  .content-area:has(> .brief-section:not([hidden])),
+  .content-area:has(> .briefs-index-section:not([hidden])) { padding: 0 244px 0 84px; }
+}
+.brief-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+.brief-kicker {
+  margin: 0;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  letter-spacing: .06em;
+}
+.brief-kicker__word { text-transform: uppercase; }
+.brief-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.brief-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font: 600 28px/34px var(--font-sans);
+  letter-spacing: -.02em;
+}
+.brief-head .brief-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 24px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--locked-confirmation);
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.brief-head .brief-pill.pv {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+.brief-head .brief-pill .dx-icon { width: 12px; height: 12px; stroke-width: 2.4; }
+.brief-lede {
+  margin: 0;
+  color: var(--muted);
+  font: 18px/28px var(--font-serif);
+}
+.brief-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brief-meta {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--faint);
+  font: 13px/18px var(--font-sans);
+}
+.brief-toc-slot:empty { display: none; }
+
+.brief-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 32px 40px 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font: 17px/28px var(--font-serif);
+}
+.brief-body > * { margin: 0; }
+/* The body's outline sits under the page's h2 title (briefBodyOutline): a
+   "##" section is an h3, drawn at B1's 20/26 section size. */
+.brief-body h3 {
+  color: var(--ink);
+  font: 600 20px/26px var(--font-sans);
+  letter-spacing: -.01em;
+  scroll-margin-top: 24px;
+}
+.brief-body > h3:not(:first-child) { padding-top: 10px; }
+.brief-body h4,
+.brief-body h5,
+.brief-body h6 {
+  color: var(--ink);
+  font: 600 17px/24px var(--font-sans);
+}
+.brief-body ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+.brief-body ul > li {
+  display: flex;
+  gap: 12px;
+}
+.brief-body ul > li::before {
+  content: "–";
+  flex: 0 0 14px;
+  color: var(--faint);
+}
+.brief-body ol { padding-left: 26px; }
+.brief-body code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  font: .88em/1 var(--font-mono);
+}
+.brief-body pre {
+  overflow-x: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  font: 13px/20px var(--font-mono);
+}
+.brief-body pre code { padding: 0; background: transparent; font: inherit; }
+.brief-body blockquote {
+  padding-left: 16px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
+}
+.brief-body a { color: var(--link); }
+/* A brief figure: the image in the board's figure frame. */
+.brief-body img.md-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+}
+
+.brief-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 28px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.brief-relations__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brief-relations__list + .brief-relations__head { padding-top: 14px; }
+.brief-relations__label {
+  color: var(--muted);
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.brief-relations__rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+.brief-relations__note {
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+.brief-relations__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A row is B1's three lanes: the lifecycle badge in a 64px slot, the claim's
+   title, and its module · facet in a 92px column on the right. The row is
+   writeRelationshipRow's own markup (dot, link, then the meta and badge in
+   one span), so the lanes are placed by grid column, not by source order. */
+.brief-relations .brief-relation {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) minmax(92px, auto);
+  align-items: center;
+  column-gap: 12px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.brief-relations .brief-relation:last-child { border-bottom: 0; }
+.brief-relations .claim-relationship-dot { display: none; }
+.brief-relations .claim-relationship-line2 { display: contents; }
+.brief-relations .claim-relationship-badge {
+  grid-row: 1;
+  grid-column: 1;
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--locked-confirmation);
+  font: 600 10.5px/14px var(--font-sans);
+  letter-spacing: .06em;
+}
+.brief-relations .claim-relationship-badge--draft {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+.brief-relations .brief-relation .claim-ref {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  color: var(--link);
+  font: 14px/18px var(--font-sans);
+  text-decoration: none;
+}
+.brief-relations .brief-relation .claim-ref:hover { text-decoration: underline; }
+.brief-relations .claim-relationship-meta {
+  grid-row: 1;
+  grid-column: 3;
+  color: var(--faint);
+  font: 12px/14px var(--font-sans);
+  text-align: right;
+}
+
+/* The page-foot Comment row is the phone's; the desktop one is in the
+   rail's Threads block. Both open the comment rail on the brief (NIT-198).
+   In a static build a brief with no thread has nothing to open, so its
+   buttons are disabled and drawn so, and a line beside each says why in
+   words a phone can read (a title would be hover-only); system-record.js's
+   syncBriefThreads hides that line under dossierx serve. */
+.brief-comment-row { display: none; }
+.brief-comment:disabled,
+.facet-toc__comment:disabled {
+  border-color: var(--border);
+  background: var(--code-bg);
+  color: var(--faint);
+  cursor: not-allowed;
+}
+.brief-comment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font: 500 14px/18px var(--font-sans);
+}
+.brief-comment .dx-icon { width: 15px; height: 15px; stroke-width: 2.2; }
+/* The open count the Threads block shows on the rail, carried by the
+   page-foot row where the rail is not drawn (NIT-198). */
+.brief-comment-count {
+  margin: 0;
+  color: var(--link);
+  font: 500 13px/18px var(--font-sans);
+}
+.brief-comment-note,
+.facet-toc__threads-later {
+  margin: 0;
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+/* A brief with no section heading gets no rail (system-record.js), so on a
+   wide screen its Comment row comes forward to the page foot instead. */
+.brief-section[data-no-sections] .brief-comment-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* ---- A brief edited since its approval (NIT-199) ------------------------
+   Paper file "DossierX Viewer — Design Exploration", page Release 0.7.22,
+   group B2. The pill and the sidebar mark take the blocked colour; the
+   banner is a tinted card with a 3px rule; the three views share one card
+   whose bar holds the caption and the switch. The passages are the claim
+   viewer's own (.claim-edit-passage--removed / --added / --current), placed
+   at B2's 10px inset. */
+.brief-head .brief-pill.brief-pill--edited {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.brief-head .brief-pill.brief-pill--review {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+}
+.brief-review-diff {
+  margin-top: 4px;
+}
+.brief-review-diff .claim-edit-passage--removed,
+.brief-review-diff .claim-edit-passage--added { padding: 7px 10px 7px 23px; }
+.brief-review-diff .claim-edit-passage--removed::before,
+.brief-review-diff .claim-edit-passage--added::before { left: 10px; }
+.brief-review-diff .claim-edit-passage + .claim-edit-passage { margin-top: 0; }
+.brief-review-diff > .claim-edit-passage--removed + .claim-edit-passage--added { margin-top: -12px; }
+.brief-review__unavailable {
+  margin: 0;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+.brief-relation-changed {
+  color: var(--status-draft);
+  font: 500 12px/16px var(--font-sans);
+}
+.brief-meta time { font: inherit; }
+.brief-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  background: var(--edit-banner-bg);
+}
+/* After the base shorthand: border-left-color alone loses to
+   `border-left: 3px solid var(--warn)` at the same specificity. */
+.brief-banner.brief-banner--review {
+  border-left: 3px solid var(--status-draft);
+  background: var(--status-draft-bg);
+}
+.brief-banner--review .brief-banner__title,
+.brief-banner--review .brief-banner__title a {
+  color: var(--status-draft);
+}
+.brief-banner--review .brief-banner__title a:hover { text-decoration: underline; }
+.brief-banner > p { margin: 0; }
+.brief-banner__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brief-banner__title {
+  flex: 1 1 auto;
+  color: var(--warn);
+  font: 600 15px/20px var(--font-sans);
+}
+.brief-banner__rule {
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+}
+.brief-banner__text {
+  color: var(--ink);
+  font: 14px/21px var(--font-sans);
+}
+.brief-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 40px 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+/* A view is a brief body inside the card: the body's type and rhythm, not
+   its frame. */
+.brief-compare > .brief-body {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.brief-compare > .brief-body[hidden] { display: none; }
+.brief-compare__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.brief-compare__caption {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--faint);
+  font: 13px/18px var(--font-sans);
+}
+.brief-compare__caption [hidden] { display: none; }
+.brief-view-switch {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--segment-track);
+}
+.brief-view-switch__seg {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: 400 13px/16px var(--font-sans);
+}
+.brief-view-switch__seg[aria-pressed="true"] {
+  background: var(--segment-on);
+  color: var(--ink);
+  font-weight: 500;
+}
+/* A segment is as wide as its label at the pressed weight whether it is
+   pressed or not, so the switch does not shift by a pixel as the pressed
+   segment moves: the hidden second row is the label at 500. */
+.brief-view-switch__seg {
+  display: inline-grid;
+  justify-items: center;
+}
+.brief-view-switch__seg::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
+}
+.brief-compare__note {
+  margin: 0;
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+/* An image the page cannot show (no longer referenced, or its file gone) is
+   named instead of drawn broken. */
+.brief-img-absent {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+/* The redline: the removed passage above the added one, 2px apart, the rule
+   and the text 10px in. */
+.brief-view .claim-edit-passage--removed,
+.brief-view .claim-edit-passage--added { padding: 7px 10px 7px 23px; }
+.brief-view .claim-edit-passage--removed::before,
+.brief-view .claim-edit-passage--added::before { left: 10px; }
+.brief-view .claim-edit-passage + .claim-edit-passage { margin-top: 0; }
+.brief-view > .claim-edit-passage--removed + .claim-edit-passage--added { margin-top: -12px; }
+.brief-view .claim-edit-passage > * { margin: 0; }
+.brief-view .claim-edit-passage > * + * { margin-top: 14px; }
+/* A struck passage's image is struck too: dimmed, so the approved figure
+   does not read as the current one. */
+.brief-view .claim-edit-passage--removed img.md-img { opacity: .55; }
+/* Current: a thin blocked rule and a caption under the passage, the prose
+   in ink (B2 CURRENT view). */
+.brief-view .brief-passage--current { padding: 0 0 0 14px; }
+.brief-view .brief-passage--current::before { width: 2px; background: var(--warn); }
+.brief-view .brief-passage--current > .brief-passage__caption {
+  margin-top: 2px;
+  color: var(--warn);
+  font: 12px/16px var(--font-sans);
+}
+.brief-edit-other {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline-soft);
+  color: var(--muted);
+  font: 14px/21px var(--font-sans);
+}
+.brief-edit-other > p { margin: 0; }
+.brief-edit-other > .brief-edit-other__head {
+  color: var(--faint);
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.brief-recover {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.brief-recover > p { margin: 0; }
+.brief-recover__head { color: var(--ink); font: 600 14px/20px var(--font-sans); }
+.brief-recover__text { color: var(--muted); font: 14px/21px var(--font-sans); }
+.brief-recover code,
+.brief-edit-other code { font: 12.5px/1 var(--font-mono); }
+/* "Approve or restore in a thread" is the edited brief's one action, at
+   every width (B2 draws it at the phone's page foot). */
+.brief-section[data-lock-state="edited"] .brief-comment-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* The "On this page" rail is the facet panel (system-record.js renderToc)
+   with a brief's ## headings for rows and a Threads block under them. */
+@media screen and (min-width: 1181px) {
+  /* The >=1181px rail: B1 starts it 36px down the viewport, level with the
+     kicker. The 861-1180px popover and the phone sheet keep their own
+     geometry. */
+  .facet-toc[data-kind="brief"] { padding-top: 36px; top: 0; height: 100vh; max-height: 100vh; }
+}
+@media (max-width: 1180px) {
+  /* The Threads block is a rail feature; the popover and the sheet have no
+     room for it, so below the rail's tier the page-foot Comment row stands
+     in for it (the phone draws it; 861-1180px takes the same row, left
+     aligned as a brief with no rail has it). */
+  .facet-toc .facet-toc__threads { display: none; }
+  .brief-comment-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+.facet-toc[data-kind="brief"] .facet-toc__list { flex: 0 0 auto; margin-top: 4px; padding-bottom: 0; }
+.facet-toc[data-kind="brief"] .facet-toc__item { align-items: center; min-height: 30px; margin-bottom: 4px; padding: 6px 8px; }
+.facet-toc[data-kind="brief"] .facet-toc__item > strong { font: 400 14px/18px var(--font-sans); }
+.facet-toc[data-kind="brief"] .facet-toc__item.on > strong { color: var(--link); font-weight: 600; }
+.facet-toc[data-kind="brief"] .facet-toc__blocker-count { display: none; }
+.facet-toc[data-kind="brief"] .freshness-footer { display: none; }
+/* B1: 16px under the last row's 4px gap, so the rule sits 20px below it. */
+.facet-toc__threads {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 20px 0 4px;
+  padding: 18px 8px 0;
+  border-top: 1px solid var(--border);
+}
+.facet-toc__threads-head {
+  margin: 0;
+  color: var(--faint);
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.facet-toc__threads-note {
+  margin: 0;
+  color: var(--muted);
+  font: 13px/19px var(--font-sans);
+}
+.facet-toc__comment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font: 500 13px/16px var(--font-sans);
+}
+.facet-toc__comment .dx-icon { width: 13px; height: 13px; stroke-width: 2.2; }
+
+/* B6 · Briefs index — folders and caps. Tokens match Home tiles and the
+   brief page (B0/B1): --ink/--muted/--faint, 16/20 folder titles, 14/19
+   row titles, 12/16 mono counts, 10px card radius. */
+.briefs-index-meter {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+.briefs-index-meter--over,
+.briefs-index-folder__count--over,
+.home-briefs-cap--over,
+.home-brief-folder--over .home-brief-folder__count { color: var(--warn); }
+.briefs-index-rule {
+  color: var(--warn);
+  font: 500 11px/16px var(--font-mono);
+}
+.briefs-index-states {
+  margin: 4px 0 0;
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+}
+.briefs-index-folder {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+.briefs-index-folder + .briefs-index-folder { margin-top: 12px; }
+.briefs-index-folder__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  list-style: none;
+  cursor: pointer;
+}
+.briefs-index-folder__toggle::-webkit-details-marker { display: none; }
+.briefs-index-folder__chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--faint);
+  transition: transform .15s ease;
+}
+.briefs-index-folder[open] > .briefs-index-folder__toggle .briefs-index-folder__chevron { transform: rotate(90deg); }
+.briefs-index-folder__name {
+  margin: 0;
+  color: var(--ink);
+  font: 600 16px/20px var(--font-sans);
+}
+.briefs-index-folder__count { margin-left: auto; color: var(--faint); font: 12px/16px var(--font-mono); }
+.briefs-index-folder__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.briefs-index-folder[open] > .briefs-index-folder__toggle .briefs-index-folder__dots { display: none; }
+.briefs-index-folder ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 16px 8px;
+  list-style: none;
+}
+.briefs-index-folder li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 12px 0;
+}
+.briefs-index-folder li + li { border-top: 1px solid var(--hairline-soft); }
+.briefs-index-folder a { color: var(--link); font: 500 14px/19px var(--font-sans); text-decoration: none; }
+.briefs-index-folder .brief-pill { margin-left: auto; }
+.briefs-index__summary {
+  flex: 1 0 100%;
+  color: var(--muted);
+  font: 13px/19px var(--font-sans);
+}
+.briefs-index-folder li > .briefs-index__threads {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--link);
+  font: 500 12px/16px var(--font-sans);
+}
+.briefs-index__threads .brief-mark { width: auto; flex: 0 0 auto; }
+
+@media (max-width: 860px) {
+  /* B1 MOBILE LIGHT: the header runs edge to edge on --paper under a
+     hairline; the body and the relations are cards on --paper beneath it. */
+  .content-area:has(> .brief-section:not([hidden])),
+  .content-area:has(> .briefs-index-section:not([hidden])) { background: var(--paper); }
+  .brief-wide { display: none; }
+  .brief-narrow { display: contents; }
+  /* The fixed 52px app bar: a hash that opens the page must not scroll its
+     kicker under the bar (the browser's own fragment scroll aligns the
+     section's top with the viewport's). */
+  .brief-section,
+  .briefs-index-section { gap: 12px; max-width: none; padding: 0 0 28px; scroll-margin-top: 52px; }
+  .brief-head {
+    margin: 0 -16px 4px;
+    padding: 14px 16px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brief-kicker { letter-spacing: .08em; }
+  .brief-kicker__path { display: none; }
+  .brief-title { font-size: 24px; line-height: 30px; }
+  .brief-lede { font-size: 16px; line-height: 25px; }
+  .brief-meta-row { padding-top: 4px; }
+  .brief-head .brief-pill { gap: 5px; padding: 0 9px; font-size: 10.5px; }
+  .brief-head .brief-pill .dx-icon { width: 11px; height: 11px; }
+  .brief-meta { font-size: 12px; line-height: 16px; }
+  .brief-meta-row .facet-toc-trigger {
+    height: 26px;
+    margin: 0;
+    padding: 0 9px;
+    border-radius: 7px;
+    background: var(--card-bg);
+    font: 500 12px/16px var(--font-sans);
+  }
+  .brief-body {
+    gap: 12px;
+    padding: 20px 18px 22px;
+    border-radius: 10px;
+    font-size: 16px;
+    line-height: 26px;
+  }
+  .brief-body h3 { font-size: 18px; line-height: 24px; letter-spacing: 0; }
+  .brief-body > h3:not(:first-child) { padding-top: 6px; }
+  .brief-relations { gap: 6px; padding: 16px 18px 10px; border-radius: 10px; }
+  .brief-relations__rule,
+  .brief-relations__note { display: none; }
+  .brief-relations__list + .brief-relations__head { padding-top: 8px; }
+  .brief-relations .brief-relation {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 10px 0;
+  }
+  .brief-relations .brief-relation .claim-ref { font-size: 14px; line-height: 19px; }
+  .brief-relations .claim-relationship-line2 {
+    display: flex;
+    gap: 0;
+    padding-left: 0;
+    color: var(--faint);
+    font: 12px/16px var(--font-sans);
+  }
+  .brief-relations .claim-relationship-meta { flex: 0 1 auto; min-width: 0; text-align: left; font: inherit; }
+  .brief-relations .claim-relationship-badge {
+    order: 0;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--faint);
+    font: inherit;
+    letter-spacing: 0;
+    text-transform: lowercase;
+  }
+  .brief-relations .claim-relationship-badge::before { content: " · "; white-space: pre; }
+  .brief-relations .claim-relationship-badge--draft { color: var(--status-draft); }
+  .brief-comment-row,
+  .brief-section[data-no-sections] .brief-comment-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .brief-comment-note,
+  .brief-comment-count { text-align: center; }
+
+  /* B2 MOBILE: the banner and the card at the phone's 10px radius; the
+     switch spans the card's width above the body, and the caption goes. */
+  .brief-banner { gap: 6px; padding: 14px 16px; border-radius: 10px; }
+  .brief-banner__title { font-size: 14px; line-height: 19px; }
+  .brief-banner__rule { display: none; }
+  .brief-banner__text { font-size: 13px; line-height: 19px; }
+  .brief-compare { gap: 12px; padding: 14px 16px 20px; border-radius: 10px; }
+  .brief-compare__bar { padding-bottom: 0; border-bottom: 0; }
+  .brief-compare__caption { display: none; }
+  .brief-view-switch { flex: 1 1 auto; }
+  .brief-view-switch__seg { flex: 1 1 0; padding: 5px 0; text-align: center; }
+  .brief-view .claim-edit-passage--removed,
+  .brief-view .claim-edit-passage--added { padding: 6px 8px 6px 19px; font-size: 15px; line-height: 24px; }
+  .brief-view .claim-edit-passage--removed::before,
+  .brief-view .claim-edit-passage--added::before { left: 8px; top: 6px; bottom: 6px; }
+  .brief-view > .claim-edit-passage--removed + .claim-edit-passage--added { margin-top: -10px; }
+  .brief-view .brief-passage--current { padding-left: 12px; }
+  .brief-recover { border-radius: 10px; }
+  .brief-section[data-lock-state="edited"] .brief-comment-row { align-items: stretch; }
+
+  /* Every row in the phone drawer's tree is a 44px tap target. */
+  #nav .brief-nav .brief-nav__row,
+  #nav .brief-nav .brief-nav__all,
+  .brief-folder__toggle { height: auto; min-height: 44px; }
+}
+
+@media (max-width: 520px) {
+  /* .content-area drops its inline gutter at this width; a brief page keeps
+     the board's 16px. */
+  .brief-section,
+  .briefs-index-section { padding-inline: 16px; }
+}
+
+
+/* ---- Features: the sidebar entry, the Made of list, the Home tile ---------
+   NIT-201. Paper file "DossierX Viewer — Design Exploration", page Release
+   0.7.22, group B4 ("B4 · Feature brief — locked" and its MOBILE LIGHT, DARK
+   and MOBILE DARK boards) and B0's Features tile. A feature page is the brief
+   page above; only what B4 adds is here. Colours are the existing tokens, so
+   dark mode is the token blocks' job. */
+
+/* The Features rows hang off a guide line under the entry (B4: margin-left
+   18px, padding-left 10px, a 1px border rule), 30px tall, 10px inset. */
+.system-nav-groups .feature-nav .feature-nav__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 4px 18px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--border);
+}
+#nav .feature-nav .brief-nav__row {
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  color: var(--muted);
+  font: 13.5px/18px var(--font-sans);
+  text-align: left;
+}
+
+/* Made of: the relations card with a module label over each module's rows
+   (B4: 22px 28px 16px, 4px apart; the label 12/14 at 600 in --faint, 8px
+   above it). The rows are the Rests on rows NIT-197 draws. */
+.feature-made-of { gap: 4px; padding-bottom: 16px; }
+.feature-made-of__head { padding-bottom: 6px; scroll-margin-top: 24px; }
+.feature-made-of__module {
+  margin: 0;
+  padding: 8px 0 2px;
+  color: var(--faint);
+  font: 600 12px/14px var(--font-sans);
+}
+.feature-made-of__empty {
+  margin: 0;
+  color: var(--muted);
+  font: 14px/20px var(--font-sans);
+}
+
+/* Home's Features tile (B0): the title is the tile's link, stretched over
+   the whole tile, and each row is its own link above it. */
+.home-tile--features { position: relative; }
+.home-tile__link { color: inherit; text-decoration: none; }
+.home-tile__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.home-features {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+}
+.home-feature {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border-top: 1px solid var(--hairline-soft);
+  color: var(--ink);
+  text-decoration: none;
+}
+.home-feature:hover .home-feature__title { color: var(--link); }
+.home-feature__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: 13.5px/18px var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-feature__state {
+  flex: 0 0 84px;
+  color: var(--faint);
+  font: 12px/16px var(--font-sans);
+  text-align: right;
+}
+.home-feature__state[data-state="locked"] { color: var(--locked-confirmation); font-weight: 500; }
+.home-feature__state[data-state="review"] { color: var(--status-draft); font-weight: 500; }
+.home-feature__state[data-state="edited"] { color: var(--warn); font-weight: 500; }
+
+.home-briefs-cap {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font: 13px/18px var(--font-sans);
+}
+.home-briefs {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+}
+.home-brief-folder {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  border-top: 1px solid var(--hairline-soft);
+}
+.home-brief-folder__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: 13.5px/18px var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-brief-folder__count {
+  color: var(--faint);
+  font: 12px/16px var(--font-mono);
+}
+
+@media (max-width: 860px) {
+  /* B4 MOBILE LIGHT: the Made of card is 14px 16px 6px, its module labels
+     12/16 in --muted, 10px above. */
+  .feature-made-of { gap: 0; padding: 14px 16px 6px; }
+  .feature-made-of__head { padding-bottom: 4px; }
+  .feature-made-of__module { padding-top: 10px; color: var(--muted); line-height: 16px; }
+  .home-features,
+  .home-briefs,
+  .home-briefs-cap { display: none; }
+  /* Every row in the phone drawer's Features entry is a 44px tap target. */
+  #nav .feature-nav .brief-nav__row { height: auto; min-height: 44px; }
+}
 
 @media print {
   :root { color-scheme: light; }

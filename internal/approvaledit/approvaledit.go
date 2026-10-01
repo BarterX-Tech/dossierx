@@ -144,32 +144,7 @@ func Compute(claims []model.Claim, store *lock.Store) map[string]Change {
 		}
 		if approved, retained := store.ApprovedContent(c.ID); retained {
 			change.ContentRetained = true
-			// Passages, then the words inside them, then rendered. See
-			// internal/textdiff's package comment for why the unit is a
-			// passage and not a line, and render.go for why the marking has
-			// to happen before the markdown renderer runs rather than after.
-			for _, h := range textdiff.MarkWords(textdiff.Blocks(approved.Body, c.Body)) {
-				rendered, changed := renderHunk(h)
-				if strings.TrimSpace(rendered) == "" {
-					// A passage that is nothing but blank lines carries the
-					// spacing between two others and renders to nothing. It
-					// round-trips, which is why textdiff keeps it, and it
-					// would draw an empty block, which is why this drops it.
-					continue
-				}
-				change.Hunks = append(change.Hunks, Hunk{Op: string(h.Op), HTML: rendered, Changed: changed})
-				if h.Op == textdiff.OpRemove {
-					change.ChangedPassages++
-				}
-			}
-			// An addition with no removal facing it is a passage that
-			// differs too — counted here rather than in the loop so a
-			// remove/add pair stays ONE passage that differs.
-			for i, h := range change.Hunks {
-				if h.Op == "add" && (i == 0 || change.Hunks[i-1].Op != "remove") {
-					change.ChangedPassages++
-				}
-			}
+			change.Hunks, change.ChangedPassages = Passages(approved.Body, c.Body, claimBody)
 			for _, name := range lock.SignedFieldsDiffering(approved, c) {
 				if name == "body" {
 					continue
@@ -185,4 +160,45 @@ func Compute(claims []model.Claim, store *lock.Store) map[string]Change {
 		return nil
 	}
 	return out
+}
+
+// Passages is the passage-by-passage difference from before to after,
+// rendered with render: passages (textdiff.Blocks), then the words inside
+// each replaced pair (textdiff.MarkWords), then each passage through the
+// renderer with its moved words marked (RenderPassageWith). It returns the
+// hunks and how many passages differ, counted as a reader counts them — a
+// removal and the addition that replaces it are ONE passage that differs.
+//
+// It is the one diff both viewers of an approval use: a claim's (Compute,
+// claim mode) and a brief's (internal/render, document mode). Its cost is
+// textdiff's — bounded by MaxBlocks and MaxMarkWords — plus one or two
+// renders of each passage.
+func Passages(before, after string, render RenderFunc) (hunks []Hunk, changed int) {
+	// Passages, then the words inside them, then rendered. See
+	// internal/textdiff's package comment for why the unit is a passage and
+	// not a line, and render.go for why the marking has to happen before the
+	// markdown renderer runs rather than after.
+	for _, h := range textdiff.MarkWords(textdiff.Blocks(before, after)) {
+		rendered, words := RenderPassageWith(h, render)
+		if strings.TrimSpace(rendered) == "" {
+			// A passage that is nothing but blank lines carries the spacing
+			// between two others and renders to nothing. It round-trips,
+			// which is why textdiff keeps it, and it would draw an empty
+			// block, which is why this drops it.
+			continue
+		}
+		hunks = append(hunks, Hunk{Op: string(h.Op), HTML: rendered, Changed: words})
+		if h.Op == textdiff.OpRemove {
+			changed++
+		}
+	}
+	// An addition with no removal facing it is a passage that differs too —
+	// counted here rather than in the loop so a remove/add pair stays ONE
+	// passage that differs.
+	for i, h := range hunks {
+		if h.Op == "add" && (i == 0 || hunks[i-1].Op != "remove") {
+			changed++
+		}
+	}
+	return hunks, changed
 }

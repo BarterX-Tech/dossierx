@@ -340,7 +340,7 @@ func TestGraphTriggerIsNotASecTab(t *testing.T) {
 	}
 
 	// Paper's Group 02 navigation puts graph access in the fixed utility
-	// footer, after the scrollable module/track disclosures rather than above
+	// footer, after the scrollable module disclosures rather than above
 	// them. It must still live inside #nav so a live fragment swap replaces it.
 	utilitiesAt := strings.Index(nav, `class="nav-utilities"`)
 	groupsAt := strings.Index(nav, `class="system-nav-groups"`)

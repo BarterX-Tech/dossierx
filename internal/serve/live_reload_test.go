@@ -6,11 +6,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 
@@ -181,6 +186,101 @@ func TestSSE_ObservationOnlyWriteRefreshesConformance(t *testing.T) {
 	}
 }
 
+// TestSSE_BriefEditDeliversChangedAndRerenders is live reload for briefs
+// (NIT-204): the watcher fingerprints briefs_dir beside claims_dir, so creating
+// the tree under a running serve, and then editing a brief in it, each deliver a
+// changed and a page carrying the new brief. The project starts with NO briefs/
+// directory, which is the case a watcher that treated a missing tree as a scan
+// error would never recover from.
+func TestSSE_BriefEditDeliversChangedAndRerenders(t *testing.T) {
+	_, base, root := startServerFast(t, standardFiles())
+	resp, before := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || strings.Contains(string(before), "dossierx-briefs") {
+		t.Fatalf("a project with no briefs must carry no briefs payload: %d", resp.StatusCode)
+	}
+	events, cancel := sseClient(t, base)
+	defer cancel()
+
+	brief := filepath.Join(root, "briefs", "widget", "flow.md")
+	writeFile(t, brief, "---\nsummary: First summary.\n---\n# Widget flow\n")
+	waitChanged(t, events, 3*time.Second)
+	resp, after := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), `id="dossierx-briefs"`) || !strings.Contains(string(after), "First summary.") {
+		t.Fatalf("a new brief must reach the page: %d", resp.StatusCode)
+	}
+
+	writeFile(t, brief, "---\nsummary: Second summary, edited.\n---\n# Widget flow\n")
+	waitChanged(t, events, 3*time.Second)
+	resp, after = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), "Second summary, edited.") || strings.Contains(string(after), "First summary.") {
+		t.Fatalf("an edited brief must reach the page: %d", resp.StatusCode)
+	}
+}
+
+// TestSSE_UnreadableBriefFolderKeepsClaimReload pins that a read error inside
+// briefs_dir is isolated to the briefs tree: with a brief folder, or briefs_dir
+// itself, unreadable, a claim edit still delivers a changed and a page carrying
+// the edit. The watcher used to fail its whole scan on the brief tree's error
+// and keep its previous fingerprint forever, so no claim edit reloaded the page
+// until the tree became readable again.
+func TestSSE_UnreadableBriefFolderKeepsClaimReload(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX permissions enforced: an unreadable directory is still readable on Windows and to root")
+	}
+	for _, tc := range []struct {
+		name       string
+		unreadable string // slash path under the project root made mode 000
+		reported   string // what the status verdict must carry about it
+	}{
+		{name: "a brief folder", unreadable: "briefs/secret", reported: `briefs/secret/`},
+		{name: "briefs_dir itself", unreadable: "briefs", reported: `briefs_dir could not be read`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := standardFiles()
+			files["briefs/widget/flow.md"] = "---\nsummary: A brief.\n---\n# Widget flow\n"
+			files["briefs/secret/plan.md"] = "---\nsummary: Behind a locked door.\n---\nText.\n"
+			_, base, root := startServerFast(t, files)
+			events, cancel := sseClient(t, base)
+			defer cancel()
+
+			locked := filepath.Join(root, filepath.FromSlash(tc.unreadable))
+			if err := os.Chmod(locked, 0o000); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Chmod(locked, 0o755) }) //nolint:errcheck // best-effort restore for TempDir cleanup
+			// The tree turning unreadable is itself a change to the briefs
+			// tree; let that event land (or not) before the claim edit,
+			// without asserting on it — what this test pins is the claim edit.
+			select {
+			case <-events:
+			case <-time.After(time.Second):
+			}
+
+			const marker = "edited while a brief folder is unreadable."
+			writeFile(t, filepath.Join(root, "claims", "one.yaml"),
+				strings.Replace(draftClaim("widget.contract.one"), "a draft claim.", marker, 1))
+			waitChanged(t, events, 3*time.Second)
+			deadline := time.Now().Add(3 * time.Second)
+			for {
+				resp, page := do(t, http.MethodGet, base+"/", "")
+				if resp.StatusCode == http.StatusOK && strings.Contains(string(page), marker) {
+					// And the unreadable entry is reported, not silently
+					// watched around: the status verdict carries its
+					// brief-shape finding.
+					if _, status := do(t, http.MethodGet, base+"/api/status", ""); !strings.Contains(string(status), tc.reported) {
+						t.Fatalf("the status verdict must report the unreadable %s (%q): %s", tc.unreadable, tc.reported, status)
+					}
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("a claim edit must reach the page while %s is unreadable: %d", tc.unreadable, resp.StatusCode)
+				}
+				time.Sleep(fastPoll)
+			}
+		})
+	}
+}
+
 // A *.tmp-* file appearing then vanishing (the atomic-writer scratch pattern)
 // delivers no event at all.
 func TestSSE_TmpFileDeliversNoChanged(t *testing.T) {
@@ -266,5 +366,64 @@ func TestServe_RefusesWhenOutputsInsideClaimsTree(t *testing.T) {
 	armConstitution(t, cfg)
 	if !strings.Contains(err.Error(), "claims_dir") || !strings.Contains(err.Error(), "build_dir") {
 		t.Fatalf("refusal = %v, want it to name both claims_dir and build_dir", err)
+	}
+}
+
+// TestSSE_BriefReauditClearsReviewPending is NIT-200: brief reaudit --confirm
+// writes only the lock store. Serve must watch that file so the banners
+// leave the live page without a brief-file edit.
+func TestSSE_BriefReauditClearsReviewPending(t *testing.T) {
+	files := map[string]string{
+		"claims/one.yaml":       "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\nbody: |\n  now wording.\nrests_on:\n  none: true\n  reason: fixture\n",
+		"briefs/widget/flow.md": "---\nsummary: The widget flow.\nstatus: locked\nrests_on:\n  - widget.contract.one\n---\n# Flow\n\nText.\n",
+	}
+	_, base, root := startServerFast(t, files)
+	cfg, err := config.LoadConfig(filepath.Join(root, "project.config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := briefs.Load(cfg)
+	if len(set.Briefs) != 1 {
+		t.Fatalf("briefs = %d, want 1", len(set.Briefs))
+	}
+	b := set.Briefs[0]
+	claims, err := loader.LoadClaims(cfg.ClaimsDir)
+	if err != nil || len(claims) != 1 {
+		t.Fatalf("load claims: %v n=%d", err, len(claims))
+	}
+	then := claims[0]
+	then.Body = "then wording."
+	store, err := lock.LoadStore(cfg.LockStorePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, receipts, _ := briefs.Baselines(b, []model.Claim{then})
+	lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{
+		Path: b.Path, Hash: b.LockHash, At: "2026-09-18T10:00:00Z", Reason: "flow approved",
+		Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: b.RestsOn, Markdown: b.Body},
+		Baselines: hashes, Receipts: receipts,
+	})
+	events, cancel := sseClient(t, base)
+	defer cancel()
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	waitChanged(t, events, 3*time.Second)
+	resp, page := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(page), `data-review-pending="true"`) {
+		t.Fatalf("pending brief must draw the B3 banner after the lock store lands: %d", resp.StatusCode)
+	}
+
+	hashes, receipts, _ = briefs.Baselines(b, claims)
+	if !lock.RecordBriefReaudit(store, b.ID, hashes, receipts, b.ImageDigests(), lock.Approval{Actor: "human", Reason: "still holds"}, []string{"widget.contract.one"}) {
+		t.Fatal("reaudit did not find the standing record")
+	}
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	waitChanged(t, events, 3*time.Second)
+	resp, page = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || strings.Contains(string(page), `data-review-pending="true"`) {
+		t.Fatalf("reaudit must drop the banners without a brief-file edit: %d", resp.StatusCode)
 	}
 }

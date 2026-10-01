@@ -3,7 +3,7 @@
 // citation marker in the body lands on.
 //
 // WHY PROVENANCE IS FOOTER METADATA AND NOT BODY PROSE. A source is a fact
-// ABOUT the claim, in the same family as rests_on and migrated_from — it is
+// ABOUT the claim, in the same family as rests_on — it is
 // authored in the claim's YAML, signed by the lock hash, and checked by the
 // source-* lints. Writing it into the body instead would put it beyond every
 // one of those: nothing could tell a citation from a sentence, so nothing
@@ -363,11 +363,6 @@ func writeInternalSource(b *strings.Builder, s model.Source) {
 // control, because a truncation whose "show more" cannot run would hide a
 // citation's stated limit behind a button that does nothing. Evidence is the
 // point; the clamp is the convenience.
-//
-// The control carries NO id, and must not gain one: a claim is rendered a
-// second time inside any track that owns it, and render.stripDuplicateClaimIDs
-// removes only the ids it knows how to enumerate. Its handle on the note it
-// governs is DOM position, which survives being copied.
 func writeSourceNote(b *strings.Builder, label, text string) {
 	if text == "" {
 		return

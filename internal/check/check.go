@@ -47,6 +47,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
 	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -93,11 +94,14 @@ func removeStaleConformanceStatus(cfg *config.Config) error {
 // step the run stopped before reaching, so a formatter can reproduce the
 // fail-fast CLI output by emitting only the segments that are present.
 type Result struct {
-	// LintFindings is lint.RunAll's output verbatim, in Registry order — the
-	// order the terminal prints them (a mixed error/warning run interleaves by
-	// registry, not by severity, so this full slice, not the split ones below,
-	// is what a byte-identical printer must iterate). LintErrors and
-	// LintWarnings are its severity partition (each preserving Registry order):
+	// LintFindings is every finding the lint step reports, in the order the
+	// terminal prints them (see lintFindings): the constitution's findings
+	// first, then lint.RunAll's claim findings verbatim in Registry order, then
+	// the brief rule set's findings (briefs.Set.Findings: by rule, then by
+	// path). A mixed error/warning run interleaves by that order, not by
+	// severity, so this full slice, not the split ones below, is what a
+	// byte-identical printer must iterate. LintErrors and LintWarnings are
+	// its severity partition (each preserving that order):
 	// LintErrors is every finding that is NOT SeverityWarning — matching the
 	// exit-code count reportLintFindings uses — and its length drives the
 	// fail-fast lint error. Always populated (lint is the first step).
@@ -143,6 +147,10 @@ type Result struct {
 	// conformance, catalog, or render according to ConformanceFailurePhase.
 	ConformanceCapacityExceeded bool
 	ConformanceFailurePhase     string
+	// BriefImagesOverBound narrows a render capacity refusal: brief images
+	// took part of the viewer's bound (render.ErrBriefImagesOverBound), so the
+	// recovery the hint names is shrinking or removing them.
+	BriefImagesOverBound bool
 
 	// Readiness is the exact snapshot used for catalog/viewer capacity grading.
 	// Serve projects this same map instead of re-reading stores after Status.
@@ -214,7 +222,11 @@ type Result struct {
 	// ("open comments: module %q: %d"). ImplinkStatusStdout/Stderr are the
 	// impl-link status reporter's stdout and stderr lines respectively,
 	// already formatted.
-	OpenComments        map[string]int
+	OpenComments map[string]int
+	// OpenBriefComments maps a brief's path -> its open-thread count (NIT-205),
+	// beside OpenComments rather than inside it: OpenComments is keyed by
+	// module, and a brief belongs to none.
+	OpenBriefComments   map[string]int
 	ImplinkStatusStdout []string
 	ImplinkStatusStderr []string
 	NextSteps           []string
@@ -252,7 +264,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
 	res.Constitution = inputs.constitution
-	res.LintFindings = withConstitutionFindings(inputs.constitution, lint.RunAll(claims, cfg))
+	res.LintFindings = lintFindings(claims, cfg, inputs)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -350,10 +362,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: inputs.briefs, BriefReview: briefEvaluation(claims, inputs)})
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+			res.BriefImagesOverBound = errors.Is(renderErr, render.ErrBriefImagesOverBound)
 			res.ConformanceFailurePhase = "render"
 			return res, fmt.Errorf("render: %w", renderErr)
 		}
@@ -389,6 +402,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			return res, err
 		}
 		res.ConformancePath = statusPath
+		if err := writeBriefAssets(cfg, inputs.briefs, filepath.Dir(renderPath)); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", err)
+		}
 		if err := atomicfile.Write(renderPath, viewerData, 0o644); err != nil {
 			res.RenderError = err.Error()
 			res.ConformanceFailurePhase = "render"
@@ -409,10 +427,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.ConformanceFailurePhase = "catalog"
 			return res, fmt.Errorf("catalog: %w", encodeErr)
 		}
-		html, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+		html, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: inputs.briefs, BriefReview: briefEvaluation(claims, inputs)})
 		if renderErr != nil {
 			res.RenderError = renderErr.Error()
 			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+			res.BriefImagesOverBound = errors.Is(renderErr, render.ErrBriefImagesOverBound)
 			res.ConformanceFailurePhase = "render"
 			return res, fmt.Errorf("render: %w", renderErr)
 		}
@@ -445,6 +464,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 			res.RenderError = err.Error()
 			res.ConformanceFailurePhase = "render"
 			return res, fmt.Errorf("render: create output dir: %w", err)
+		}
+		if err := writeBriefAssets(cfg, inputs.briefs, filepath.Dir(renderPath)); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", err)
 		}
 		if err := atomicfile.Write(renderPath, viewerData, 0o644); err != nil {
 			res.RenderError = err.Error()
@@ -553,6 +577,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// exactly as check's RunE tail produced it.
 	res.OK = true
 	res.OpenComments = openCommentCounts(claims)
+	res.OpenBriefComments = openBriefCommentCounts(gateInputs.briefs)
 	stdout, stderr, implinkHints := implinkStatus(cfg, claims)
 	res.ImplinkStatusStdout = stdout
 	res.ImplinkStatusStderr = stderr
@@ -653,7 +678,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 	}
 
 	res.Constitution = in.constitution
-	res.LintFindings = withConstitutionFindings(in.constitution, lint.RunAll(claims, cfg))
+	res.LintFindings = lintFindings(claims, cfg, in)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -711,7 +736,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 			return res
 		}
 		res.Readiness = readiness.Compute(claims, in.store, in.flags)
-		return finishStatus(res, claims, cfg)
+		return finishStatus(res, claims, cfg, in.briefs)
 	}
 	cat, buildErr := catalog.Build(claims, cfg)
 	if buildErr != nil {
@@ -735,15 +760,16 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, readObser
 		return res
 	}
 
-	_, renderErr := render.RenderBounded(cat, cfg, conformance.MaxOutputBytes)
+	_, renderErr := render.RenderBoundedWith(cat, cfg, conformance.MaxOutputBytes, render.Extras{Briefs: in.briefs, BriefReview: briefEvaluation(claims, in)})
 	if renderErr != nil {
 		res.RenderError = renderErr.Error()
 		res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+		res.BriefImagesOverBound = errors.Is(renderErr, render.ErrBriefImagesOverBound)
 		res.ConformanceFailurePhase = "render"
 		return res
 	}
 
-	return finishStatus(res, claims, cfg)
+	return finishStatus(res, claims, cfg, in.briefs)
 }
 
 func conformanceBlockingEnabled(cfg *config.Config) bool {
@@ -757,9 +783,10 @@ func conformanceBlockingChecks(report *conformance.Report) int {
 	return report.Summary.Owed + report.Summary.Mismatch + report.Summary.Uncheckable
 }
 
-func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
+func finishStatus(res Result, claims []model.Claim, cfg *config.Config, set *briefs.Set) Result {
 	res.OK = true
 	res.OpenComments = openCommentCounts(claims)
+	res.OpenBriefComments = openBriefCommentCounts(set)
 	// The impl-link hints come from the READ-ONLY implink.Status (drift/unlinked),
 	// the same source Run's nextSteps uses — NOT implink.Scan, which is the
 	// mutating reconcile and stays out of the memory-only status path.
@@ -778,6 +805,24 @@ func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	// runs is answerable from the one tree in front of it, so there is no longer
 	// a state in which the gate looked at less than it claims to.
 	return res
+}
+
+// openBriefCommentCounts maps each brief with an open thread to how many it
+// has, by path; nil when none has one.
+func openBriefCommentCounts(set *briefs.Set) map[string]int {
+	if set.Empty() {
+		return nil
+	}
+	var counts map[string]int
+	for _, b := range set.Briefs {
+		if n := b.OpenThreads(); n > 0 {
+			if counts == nil {
+				counts = map[string]int{}
+			}
+			counts[b.Path] = n
+		}
+	}
+	return counts
 }
 
 // openCommentCounts returns module -> number of open comment threads across

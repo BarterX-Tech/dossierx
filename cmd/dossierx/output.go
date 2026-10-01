@@ -23,6 +23,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -189,7 +190,7 @@ func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error
 }
 
 // requireSubcommand is the RunE every NOUN carries — the command groups (claim,
-// comment, constitution, manifest, track, skills) that exist only to hold leaves and do
+// comment, constitution, manifest, skills) that exist only to hold leaves and do
 // no work of their own.
 //
 // Without it, cobra's default for a parent with no Run/RunE is to print its help
@@ -405,6 +406,13 @@ func usageErrorForCLI(err error) *cliout.Error {
 // cliout.ExitCode for why the three we have are enough now that error.code
 // carries the detail.
 func errorForCLI(err error) *cliout.Error {
+	// A store from a newer dossierx outranks whatever code the call site
+	// attached (most wrap a store load as write_failed): the one thing to do
+	// is upgrade this binary, and no other code says so.
+	if errors.Is(err, lock.ErrStoreTooNew) || errors.Is(err, digest.ErrStoreTooNew) {
+		return &cliout.Error{Code: cliout.CodeStoreTooNew, Message: err.Error(),
+			Hint: "upgrade dossierx to the release that wrote this store (dossierx version names this one); do not edit or restore the store to make an older binary read it"}
+	}
 	if e := cliout.As(err); e != nil {
 		return e
 	}
@@ -511,7 +519,8 @@ func exitStatusFor(err error) int {
 // before --reason is looked at.
 //
 // The keys are cmd/dossierx/main.go's claim lock, claim unlock and claim
-// reaudit, and cmd/dossierx/claim_recover.go's claim recover-approved-content.
+// reaudit, cmd/dossierx/claim_recover.go's claim recover-approved-content, and
+// cmd/dossierx/brief_lock.go's brief lock, brief unlock and brief reaudit.
 // constitution.go's constitution lock is the fifth caller and has no entry, so
 // it gets no hint; a caller without an entry is handled below rather than left
 // to print the old wrong shape.
@@ -520,6 +529,9 @@ var reasonInvocations = map[string]string{
 	"claim recover-approved-content": "dossierx claim recover-approved-content",
 	"claim unlock":                   "dossierx claim unlock <id>",
 	"claim reaudit":                  "dossierx claim reaudit <id> --confirm",
+	"brief lock":                     "dossierx brief lock <path-or-id>",
+	"brief unlock":                   "dossierx brief unlock <path-or-id>",
+	"brief reaudit":                  "dossierx brief reaudit <path-or-id> --confirm",
 }
 
 func requireReason(verb, reason string) error {

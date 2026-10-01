@@ -1,7 +1,7 @@
 // skills_export_capture_test.go covers skills_export_capture.go: that the
 // capture actually reads back what `dossierx skills export` writes, and that
-// the wikilink transform did its job — no raw "[[name]]" survives into either
-// derived document.
+// the link transform did its job — no raw "[[name]]" or sibling link survives
+// into the AGENTS.md section.
 //
 // TestCaptureSkillsExport_G1Capture is the reusable entry point: run with
 // -skills-export-capture-out set, it writes export-output.json for a gate
@@ -40,9 +40,9 @@ var rawWikilinkPattern = regexp.MustCompile(`\[\[[^\]\n]+\]\]`)
 //
 // It has two jobs, and they pull in opposite directions, which is why one
 // pattern serves both. In the VERBATIM tree the link must be there and must
-// resolve to a bundle that ships. In either DERIVED form it must be gone,
-// because "one directory up, then sideways" reaches nothing from a single
-// concatenated guide or from a section spliced into a repo-root AGENTS.md.
+// resolve to a bundle that ships. In the DERIVED AGENTS.md section it must be
+// gone, because "one directory up, then sideways" reaches nothing from a
+// section spliced into a repo-root AGENTS.md.
 // Matching on the shape rather than on the six embedded names is deliberate,
 // for the same reason rawWikilinkPattern is broad: rewriteSkillLinks
 // (cmd/dossierx/skills_embed.go) only retargets names it actually loaded, so a
@@ -52,7 +52,7 @@ var siblingSkillLinkPattern = regexp.MustCompile(`\]\(\.\./([^/)\n]+)/SKILL\.md\
 
 var skillsExportCaptureOut = flag.String("skills-export-capture-out", "", "write the captured `dossierx skills export` output (surfaces.yaml's `agent-skills` surface) to this path as export-output.json")
 
-// The seven bundles this repo ships, in their embedded directory names. Kept
+// The eight bundles this repo ships, in their embedded directory names. Kept
 // as a local literal (rather than importing skills.Order from package tests,
 // which has no dependency on the skills module) so this test has no coupling
 // beyond what captureSkillsExport already has to the compiled binary's
@@ -62,6 +62,7 @@ var wantSkillsExportNames = []string{
 	"dossierx-claims",
 	"dossierx-modules",
 	"dossierx-constitution",
+	"dossierx-briefs",
 	"dossierx-comments",
 	"dossierx-code-links",
 	"dossierx-upgrading",
@@ -70,8 +71,7 @@ var wantSkillsExportNames = []string{
 // newSkillsExportFixture builds a project with every harness `skills export`
 // detects: a .claude/ directory (so the verbatim tree is written) and an
 // existing AGENTS.md (so the spliced section is written), plus a
-// project.config.yaml so the generic guide lands at its documented path
-// rather than beside an explicit directory argument.
+// project.config.yaml so the export is rooted and maintains that section.
 func newSkillsExportFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -85,7 +85,7 @@ func newSkillsExportFixture(t *testing.T) string {
 	return root
 }
 
-func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
+func TestCaptureSkillsExport_BothFormsPresent(t *testing.T) {
 	root := newSkillsExportFixture(t)
 	capture := captureSkillsExport(t, root)
 
@@ -100,41 +100,6 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 		}
 	}
 
-	for _, name := range wantSkillsExportNames {
-		if !strings.Contains(capture.AgentGuide, `<a id="`+name+`"></a>`) {
-			t.Errorf("agent guide capture missing an anchor for %s", name)
-		}
-	}
-	// No leaked YAML frontmatter: buildAgentGuide always opens with a fixed
-	// "# DossierX — agent guide" preamble (cmd/dossierx/skills_embed.go), so
-	// checking HasPrefix(TrimSpace(guide), "---") can never observe a real
-	// leak — it tests the preamble, not any bundle's body. The place a leak
-	// would actually show up is right after each bundle's own anchor: that is
-	// where parseSkillDoc's stripped Body gets concatenated in, so if
-	// parseSkillDoc ever stopped stripping frontmatter, the untouched
-	// "---\nname: ...\n" block would appear there instead of the bundle's
-	// real first heading.
-	for _, name := range wantSkillsExportNames {
-		anchor := "<a id=\"" + name + "\"></a>\n\n"
-		idx := strings.Index(capture.AgentGuide, anchor)
-		if idx < 0 {
-			// NOT "already reported by the anchor-presence check above": that
-			// check above uses a SHORTER needle (`<a id="name"></a>`, no
-			// trailing blank line), so a formatting change that removes just
-			// the blank line after the anchor would pass the presence check
-			// while this longer needle stops matching — and this is the ONLY
-			// place that actually looks for leaked frontmatter, so silently
-			// skipping it here would disable the one guard against exactly
-			// that regression. Fail loudly instead: a check that cannot run
-			// is a failure, never a silent pass (CLAUDE.md).
-			t.Fatalf("%s: could not find anchor+blank-line %q in agent guide capture; the frontmatter-leak check below cannot run. Got:\n%s", name, anchor, capture.AgentGuide)
-		}
-		remainder := capture.AgentGuide[idx+len(anchor):]
-		if strings.HasPrefix(remainder, "---") {
-			t.Errorf("%s: agent guide capture has leaked YAML frontmatter right after its anchor, got:\n%s", name, remainder[:min(200, len(remainder))])
-		}
-	}
-
 	if !strings.HasPrefix(capture.AgentsMDSection, skillsExportAgentsBeginMarker) {
 		t.Errorf("AGENTS.md section capture does not start with the BEGIN marker, got:\n%s", capture.AgentsMDSection)
 	}
@@ -142,8 +107,8 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 		t.Errorf("AGENTS.md section capture does not end with the END marker, got:\n%s", capture.AgentsMDSection)
 	}
 	// The router only: the AGENTS.md section budget is tight (loaded every
-	// turn), so it must carry the router and point at the guide for the rest
-	// rather than inlining every companion skill.
+	// turn), so it must carry the router and link the exported bundles for the
+	// rest rather than inlining every companion skill.
 	//
 	// A bare strings.Contains(section, name) here is vacuous: the router's
 	// OWN body already names every companion skill in its prose — its "Which
@@ -153,7 +118,7 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 	// companion's body in full instead of indexing it. Two more specific
 	// checks close both gaps:
 	//   - the exact link buildAgentsSection's index loop writes
-	//     ("](docs/dossierx-agent-guide.md#name)") must be present, which
+	//     ("](.claude/skills/name/SKILL.md)") must be present, which
 	//     only that loop produces (the router names its companions as plain
 	//     code spans and links to none of them, so nothing in its body can
 	//     supply this literal) — this catches the index loop being skipped or
@@ -162,9 +127,9 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 	//     from SkillTree) must be ABSENT — this catches the companion being
 	//     inlined in full instead of merely indexed.
 	for _, name := range wantSkillsExportNames[1:] {
-		wantLink := "](" + skillsExportAgentGuidePath + "#" + name + ")"
+		wantLink := "](" + skillsExportTreeHref + "/" + name + "/SKILL.md)"
 		if !strings.Contains(capture.AgentsMDSection, wantLink) {
-			t.Errorf("AGENTS.md section capture should index companion skill %s as a link into the guide (%q), got:\n%s", name, wantLink, capture.AgentsMDSection)
+			t.Errorf("AGENTS.md section capture should index companion skill %s as a link to its exported bundle (%q), got:\n%s", name, wantLink, capture.AgentsMDSection)
 		}
 
 		raw, ok := capture.SkillTree[name+"/SKILL.md"]
@@ -179,9 +144,9 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 }
 
 // The whole reason this capture exists rather than a source read: no raw
-// "[[text]]" wikilink syntax may survive into either derived document. A
-// literal bracket pair reaching a client's AGENTS.md or agent guide means
-// rewriteWikilinks silently failed to resolve a real cross-reference.
+// "[[text]]" wikilink syntax may survive into the derived AGENTS.md section. A
+// literal bracket pair reaching a client's AGENTS.md means a cross-reference
+// was never resolved.
 //
 // This asserts against rawWikilinkPattern (ANY "[[...]]" pair), not against
 // the six known bundle names. The finding this closes: rewriteWikilinks
@@ -192,9 +157,9 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 // shape: "a link to a bundle that does not exist is left as literal
 // [[text]]" — a typo'd or renamed cross-reference, which by definition is
 // NOT one of the names being rewritten and so never matches a name-scoped
-// needle. Three mutations, each confirmed to leave a name-scoped assertion
-// green while a raw bracket pair reaches AgentGuide, prove this needle is the
-// one that has to be broad:
+// needle. Three mutations, each of which leaves a name-scoped assertion
+// green while a raw bracket pair reaches the output, show why this needle has
+// to be broad:
 //   - inserting "See [[dossierx-claimz]]" (a typo) into a bundle's SKILL.md;
 //   - inserting "See [[claims-router]]" (a plausible but nonexistent name);
 //   - renaming the loaded name "dossierx-build-order" (a bundle since
@@ -203,23 +168,16 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 //     "[[dossierx-build-order]]" reference, simulating a rename regression
 //     that leaves one cross-reference stale.
 //
-// All three leave a literal "[[" + "]]" pair in AgentGuide; none of them is
+// All three leave a literal "[[" + "]]" pair in the output; none of them is
 // reachable through wantSkillsExportNames because none of the three needles
 // is a name rewriteWikilinks was ever going to rewrite in the first place.
 func TestCaptureSkillsExport_NoRawWikilinksSurvive(t *testing.T) {
 	root := newSkillsExportFixture(t)
 	capture := captureSkillsExport(t, root)
 
-	if m := rawWikilinkPattern.FindString(capture.AgentGuide); m != "" {
-		t.Errorf("agent guide capture still contains raw wikilink %q; rewriteWikilinks did not resolve it", m)
-	}
-
 	// The AGENTS.md section carries the ROUTER's body only (see
-	// buildAgentsSection's doc comment), and the router's own SKILL.md has no
-	// cross-reference of its own to retarget — so the meaningful place to prove
-	// the rewrite ran is the guide (checked above), not this section. What IS
-	// worth pinning here is that whatever cross-reference syntax the router's
-	// body might one day gain does not leak through unrewritten either.
+	// buildAgentsSection's doc comment). Whatever cross-reference syntax the
+	// router's body gains must not leak through unrewritten.
 	if m := rawWikilinkPattern.FindString(capture.AgentsMDSection); m != "" {
 		t.Errorf("AGENTS.md section capture contains raw wikilink %q; rewriteSkillLinks did not resolve it", m)
 	}
@@ -227,20 +185,14 @@ func TestCaptureSkillsExport_NoRawWikilinksSurvive(t *testing.T) {
 	// The SIBLING-LINK half, which is the shape the bundles actually use. A
 	// bundle spells a cross-reference as "](../<name>/SKILL.md)" — a link that
 	// resolves in the exported TREE, the one form nothing rewrites. That target
-	// is meaningless in either derived form: the guide is a single concatenated
-	// document and the AGENTS.md section sits at the client's repo root, and
-	// neither has a sibling directory to reach. So a surviving "](../" in either
+	// is meaningless in the AGENTS.md section, which sits at the client's repo
+	// root with no sibling directory to reach. So a surviving "](../" there
 	// is the same defect a surviving "[[" is, and it is checked the same broad
 	// way — on the SHAPE, not on the six names — because rewriteSkillLinks only
 	// retargets names it loaded, so a typo'd or renamed target is precisely what
 	// a name-scoped needle cannot see.
-	for _, form := range []struct{ what, text string }{
-		{"agent guide", capture.AgentGuide},
-		{"AGENTS.md section", capture.AgentsMDSection},
-	} {
-		if m := siblingSkillLinkPattern.FindString(form.text); m != "" {
-			t.Errorf("%s capture still contains sibling skill link %q, which resolves to nothing in that form; rewriteSkillLinks did not retarget it", form.what, m)
-		}
+	if m := siblingSkillLinkPattern.FindString(capture.AgentsMDSection); m != "" {
+		t.Errorf("AGENTS.md section capture still contains sibling skill link %q, which resolves to nothing there; rewriteSkillLinks did not retarget it", m)
 	}
 
 	// Form 1 is a byte-for-byte copy of the embedded bundle, so if the sources
@@ -278,7 +230,7 @@ func TestCaptureSkillsExport_NoRawWikilinksSurvive(t *testing.T) {
 // it runs the export against a fresh fixture and writes the full capture to
 // -skills-export-capture-out. With the flag unset (the default `go test`
 // invocation, and every CI run of this suite) it writes nothing, but still
-// performs a self-contained export and asserts that all three forms exist and
+// performs a self-contained export and asserts that both forms exist and
 // contain no unresolved cross-reference syntax.
 //
 // The check below keys off PRESENCE (flag.CommandLine.Visit), not VALUE
@@ -313,22 +265,17 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 			if _, ok := capture.SkillTree[name+"/SKILL.md"]; !ok {
 				t.Errorf("flagless capture missing %s/SKILL.md", name)
 			}
-			if !strings.Contains(capture.AgentGuide, `<a id="`+name+`"></a>`) {
-				t.Errorf("flagless capture agent guide missing %s anchor", name)
-			}
 		}
-		for _, form := range []struct{ name, body string }{{"agent guide", capture.AgentGuide}, {"AGENTS.md section", capture.AgentsMDSection}} {
-			if match := rawWikilinkPattern.FindString(form.body); match != "" {
-				t.Errorf("flagless %s contains unresolved wikilink %q", form.name, match)
-			}
-			if match := siblingSkillLinkPattern.FindString(form.body); match != "" {
-				t.Errorf("flagless %s contains unresolved sibling skill link %q", form.name, match)
-			}
+		if match := rawWikilinkPattern.FindString(capture.AgentsMDSection); match != "" {
+			t.Errorf("flagless AGENTS.md section contains unresolved wikilink %q", match)
+		}
+		if match := siblingSkillLinkPattern.FindString(capture.AgentsMDSection); match != "" {
+			t.Errorf("flagless AGENTS.md section contains unresolved sibling skill link %q", match)
 		}
 		if !strings.HasPrefix(capture.AgentsMDSection, skillsExportAgentsBeginMarker) || !strings.HasSuffix(strings.TrimRight(capture.AgentsMDSection, "\n"), skillsExportAgentsEndMarker) {
 			t.Fatalf("flagless AGENTS.md capture does not preserve its exact marker boundaries:\n%s", capture.AgentsMDSection)
 		}
-		t.Log("no capture-output flag: verified all three exported forms locally")
+		t.Log("no capture-output flag: verified both exported forms locally")
 		return
 	}
 	if *skillsExportCaptureOut == "" {
@@ -359,11 +306,10 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 // This is not formatting taste, it is whether the evidence can be read at all.
 // json.MarshalIndent indents the OBJECT; it cannot break a string value, so a
 // document holding its newlines as "\n" escapes marshals to a single physical
-// line however the object around it is indented. The agent guide is every
-// bundle concatenated — the last capture put it on one line roughly 25,000
-// tokens long, above what any single read returns, and a line-based reader
-// cannot open part of a line. That surface's answer recorded, in those words,
-// that it read two of the three forms and could not say what was in the third.
+// line however the object around it is indented. A since-retired form (every
+// bundle concatenated) once came out as one line roughly 25,000 tokens long,
+// above what any single read returns, and a line-based reader cannot open part
+// of a line. That surface's answer recorded that it could not say what was in it.
 // A gate whose own evidence file is unopenable is a gate that reports "could
 // not check" for a surface nobody chose to skip.
 //
@@ -374,7 +320,6 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 // which is the correct consequence of the evidence changing.
 type skillsExportCaptureDoc struct {
 	SkillTree       map[string][]string `json:"skill_tree"`
-	AgentGuide      []string            `json:"agent_guide"`
 	AgentsMDSection []string            `json:"agents_md_section"`
 }
 
@@ -388,7 +333,6 @@ type skillsExportCaptureDoc struct {
 func readableCapture(c SkillsExportCapture) skillsExportCaptureDoc {
 	doc := skillsExportCaptureDoc{
 		SkillTree:       make(map[string][]string, len(c.SkillTree)),
-		AgentGuide:      strings.Split(c.AgentGuide, "\n"),
 		AgentsMDSection: strings.Split(c.AgentsMDSection, "\n"),
 	}
 	for path, body := range c.SkillTree {
@@ -448,7 +392,7 @@ func TestCaptureSkillsExport_G1Capture_RequiresNonEmptyValueWhenFlagGiven(t *tes
 		if code != 0 {
 			t.Fatalf("expected exit 0 when the flag is not given at all, got exit %d:\n%s", code, out)
 		}
-		if strings.Contains(out, "--- SKIP") || !strings.Contains(out, "--- PASS: TestCaptureSkillsExport_G1Capture") || !strings.Contains(out, "verified all three exported forms locally") {
+		if strings.Contains(out, "--- SKIP") || !strings.Contains(out, "--- PASS: TestCaptureSkillsExport_G1Capture") || !strings.Contains(out, "verified both exported forms locally") {
 			t.Errorf("expected the flagless entrypoint to run and pass local assertions, got:\n%s", out)
 		}
 	})

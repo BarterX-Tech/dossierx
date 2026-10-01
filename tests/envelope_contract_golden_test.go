@@ -166,6 +166,62 @@ func envFresh(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
+// envBriefs is envFresh plus one brief resting on the fixture claim, so the
+// brief noun's two leaves answer with a populated payload: an empty list pins
+// only that it is empty (see envHumanThreadReplied for the same argument).
+func envBriefs(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	writeFixtureProject(t, dir, "widget")
+	p := filepath.Join(dir, "briefs", "widget", "flow.md")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatalf("mkdir briefs: %v", err)
+	}
+	brief := "---\nsummary: How the widget flow reads end to end.\nrests_on:\n  - widget.contract.overview\n---\n# Widget flow\n\nOne paragraph.\n"
+	if err := os.WriteFile(p, []byte(brief), 0o644); err != nil {
+		t.Fatalf("write brief: %v", err)
+	}
+	return nil
+}
+
+// envBriefLocked is envBriefs after the human locked the brief (NIT-205): its
+// status is locked and the lock store holds its record and one baseline.
+func envBriefLocked(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBriefs(t, dir)
+	envMustRun(t, dir, "brief", "lock", "briefs/widget/flow.md", "--reason", "fixture approval")
+	return nil
+}
+
+// envBriefDrifted is envBriefLocked after the claim the brief rests on was
+// rewritten, so the brief is review_pending with one changed claim — the only
+// state in which changed_claims is populated.
+func envBriefDrifted(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBriefLocked(t, dir)
+	p := filepath.Join(dir, "claims", "overview.yaml")
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	edited := strings.Replace(string(raw), "fixture claim for CLI tests.", "fixture claim for CLI tests, rewritten.", 1)
+	if edited == string(raw) {
+		t.Fatalf("the claim body to rewrite was not found:\n%s", raw)
+	}
+	if err := os.WriteFile(p, []byte(edited), 0o644); err != nil {
+		t.Fatalf("write claim: %v", err)
+	}
+	return nil
+}
+
+// envBriefOpenThread is envBriefs with a human's open thread on the brief, the
+// state brief lock refuses as comment_open.
+func envBriefOpenThread(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBriefs(t, dir)
+	envMustRun(t, dir, "comment", "add", "briefs/widget/flow.md", "--as", "human", "--body", "is this flow still right?")
+	return nil
+}
+
 // envRemovedTheme pins migration failures across every check mode.
 func envRemovedTheme(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -258,56 +314,6 @@ func envEditedSinceApproval(t *testing.T, dir string) map[string]string {
 	}
 	if err := os.WriteFile(storePath, out, 0o644); err != nil {
 		t.Fatal(err)
-	}
-	return nil
-}
-
-// envTracked is a project that has adopted the SECOND axis: two declared
-// tracks, one of them assembled from a claim it owns plus two it cites — one of
-// those in another module and still draft.
-//
-// It exists because the track payloads' whole contract lives inside lists, and
-// this file says so in its own header: an empty list is honest about the
-// invocation and silent about the type. A track fixture with nothing in it would
-// pin `owned_claims:[]` and hold nothing about what an entry in that list looks
-// like. The cross-module draft citation is what makes `blocking` non-empty for
-// the same reason.
-func envTracked(t *testing.T, dir string) map[string]string {
-	t.Helper()
-	claimsDir := filepath.Join(dir, "claims")
-	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
-		t.Fatalf("mkdir claims dir: %v", err)
-	}
-	cfg := "schema_version: 1\n" +
-		"facets:\n  - contract\n  - internals\n" +
-		"modules:\n  - checkout\n  - payments\n" +
-		"claims_dir: claims\n" +
-		"tracks:\n" +
-		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
-		"  - id: refunds\n    title: Refunds\n"
-	writeProjectConfigFile(t, filepath.Join(dir, "project.config.yaml"), cfg)
-	lockFixtureConstitution(t, dir)
-	claims := map[string]string{
-		"owned.yaml": "id: checkout.contract.guest-flow\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a guest completes a purchase without creating an account.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
-			"rests_on:\n  none: true\n  reason: fixture claim\n",
-		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
-			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a guest session expires after thirty minutes.\n" +
-			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
-			"rests_on:\n  none: true\n  reason: fixture claim\n",
-		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
-			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\nsummary: Fixture claim used by the engine test corpus.\n" +
-			"body: |\n  a card is captured at authorization time.\n" +
-			"tracks:\n  - id: guest-checkout\n" +
-			"rests_on:\n  none: true\n  reason: fixture claim\n",
-	}
-	for name, body := range claims {
-		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
 	}
 	return nil
 }
@@ -445,6 +451,22 @@ func envMustRun(t *testing.T, dir string, args ...string) string {
 // but "serve", so a twentieth leaf cannot arrive with no envelope pinned.
 func envelopeCases() []envelopeCase {
 	return []envelopeCase{
+		{"brief list / one brief", envBriefs, []string{"brief", "list"}},
+		{"brief list / only the briefs awaiting review", envBriefs, []string{"brief", "list", "--review-pending"}},
+		{"brief show / by path", envBriefs, []string{"brief", "show", "briefs/widget/flow.md"}},
+		{"brief show / a path no brief is at", envBriefs, []string{"brief", "show", "briefs/widget/ghost.md"}},
+		{"brief show / review_pending, one rests_on claim changed", envBriefDrifted, []string{"brief", "show", "briefs/widget/flow.md"}},
+		{"brief lock / preview", envBriefs, []string{"brief", "lock", "briefs/widget/flow.md", "--dry-run", "--reason", "approved"}},
+		{"brief lock / a draft brief", envBriefs, []string{"brief", "lock", "briefs/widget/flow.md", "--reason", "approved"}},
+		{"brief lock / locked and unchanged", envBriefLocked, []string{"brief", "lock", "briefs/widget/flow.md", "--reason", "again"}},
+		{"brief lock / an open thread on the brief", envBriefOpenThread, []string{"brief", "lock", "briefs/widget/flow.md", "--reason", "approved"}},
+		{"brief unlock / a locked brief", envBriefLocked, []string{"brief", "unlock", "briefs/widget/flow.md", "--reason", "rework"}},
+		{"brief unlock / a draft brief", envBriefs, []string{"brief", "unlock", "briefs/widget/flow.md", "--reason", "rework"}},
+		{"brief reaudit / preview of a changed claim", envBriefDrifted, []string{"brief", "reaudit", "briefs/widget/flow.md"}},
+		{"brief reaudit / confirmed", envBriefDrifted, []string{"brief", "reaudit", "briefs/widget/flow.md", "--confirm", "--reason", "the rewrite is fine"}},
+		{"brief reaudit / not review_pending", envBriefLocked, []string{"brief", "reaudit", "briefs/widget/flow.md", "--confirm", "--reason", "nothing moved"}},
+		{"comment inbox / a thread on a brief", envBriefOpenThread, []string{"comment", "inbox"}},
+
 		{"version / the verb", envNoProject, []string{"version"}},
 		{"version / the root flag", envNoProject, []string{"--version"}},
 
@@ -495,18 +517,6 @@ func envelopeCases() []envelopeCase {
 		{"comment add / a new thread", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "agent", "--body", "a note"}},
 		{"comment add / an actor that is neither role", envFresh, []string{"comment", "add", "widget.contract.overview", "--as", "robot", "--body", "a note"}},
 		{"comment reply / on the agent's own thread", envAgentThread, []string{"comment", "reply", "widget.contract.overview", "{thread}", "--as", "agent", "--body", "checked, it holds"}},
-
-		// The track leaves, against a project that has adopted the axis and one
-		// that has not. Both matter: the adopted project is where the lists have
-		// entries to pin, and the unadopted one is where "count:0 at exit 0" is
-		// pinned as a SUCCESS — a corpus that never declared a track must behave
-		// exactly as it did before the axis existed.
-		{"track list / two declared tracks", envTracked, []string{"track", "list"}},
-		{"track list / a project that declares none", envFresh, []string{"track", "list"}},
-		{"track show / one owned claim and two cited", envTracked, []string{"track", "show", "guest-checkout"}},
-		{"track show / a track nothing has joined", envTracked, []string{"track", "show", "refunds"}},
-		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
-		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
 
 		{"manifest show / one module file", envFresh, []string{"manifest", "show", "widget"}},
 		{"manifest show / isolation", envFresh, []string{"manifest", "show", "widget", "--isolation"}},

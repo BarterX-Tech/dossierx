@@ -85,25 +85,28 @@ project.config.yaml that can be raised: raising it is **the human's decision, ne
 you think a raise is right, ask, say what it costs (a bigger module no longer fits its 6144-byte
 isolation budget, and every reader pays for the extra context), and **wait for an explicit yes**.
 Never raise a value in the same change that hits the cap, and never pad, merge or cram to fit.
+**The first step for every cap is moving what is not a claim to a brief** — design, voice, rationale,
+research (the sorting step in `dossierx-claims`; `dossierx-briefs` writes it) — before you split or
+trim what remains. A claim that only says what the module owns is deleted, its useful part going to the manifest `summary`.
 
 | cap | refusal | default recovery | config value |
 |---|---|---|---|
-| 10 claims per module, drafts included | `module-claim-cap` on every claim of the module | retire a claim the rubric in `dossierx-claims` would not keep, or split the module | `max_claims_per_module` |
+| 10 claims per module, drafts included | `module-claim-cap` on every claim of the module | move what is not a claim to a brief, then retire a claim the rubric in `dossierx-claims` would not keep, then split the module | `max_claims_per_module` |
 | summary: one plain line, 200 characters | `summary-required` / `summary-oversize` | rewrite it as one standalone assertion; if it will not fit, it is two claims | `max_claim_summary_chars` |
-| `body` + `steps` + `rows` cells: 2000 characters (`raw_html` exempt) | `body-oversize` | cut the walkthrough, move evidence to `sources`, or split into two facts | `max_claim_body_chars` |
+| `body` + `steps` + `rows` cells: 2000 characters (`raw_html` exempt) | `body-oversize` | move the rationale to a brief and the evidence to `sources`, cut the walkthrough, or split into two facts | `max_claim_body_chars` |
 | manifest: 4096 bytes, summary 280 | `module-manifest` | trim the summary to the why; drop ids nobody pins | none |
-| isolation, module part: 6144 bytes | `view_too_large` from `manifest show --isolation`; plain `check` reports the same overflow | shorten claim summaries or the manifest, or split the module | none |
+| isolation, module part: 6144 bytes | `view_too_large` from `manifest show --isolation`; `module-manifest` from `check` and `claim lock` on that module | shorten claim summaries or the manifest, or split the module | none |
 | isolation, shared part: 10240 bytes | `shared-context-budget` on the project claim that crosses it (project-wide if the constitution alone does) | shorten project claim summaries, retire project claims, or trim the constitution | none |
 | constitution: 800 words (warning from 720) | `CONSTITUTION_OVER_CAP` / `constitution-near-cap` | trim it with the human — `dossierx-constitution` | none |
 
-Characters are Unicode code points. The lint caps block `check` and `claim lock` like any ERROR;
-`view_too_large` refuses only the view. Caps apply to drafts and locked claims alike, so a locked
+Characters are Unicode code points. Every cap but the view itself blocks `check` and `claim lock`
+like any ERROR. Caps apply to drafts and locked claims alike, so a locked
 claim can start failing when a sibling draft pushes the module over.
 
 **The summary cap counts characters; the isolation budget counts bytes.** A CJK or accented
 character is two to four bytes, so ten claims whose summaries each pass the 200-character cap can
-still overflow the module's 6144-byte part of the view. Plain `check` reports that overflow for the
-module, not only `manifest show --isolation`. Recover the same loud way: shorten summaries, trim the
+still overflow the module's 6144-byte part of the view. `check` reports that overflow as `module-manifest`
+on the module, so it blocks locking there too, not only `manifest show --isolation`. Recover the same loud way: shorten summaries, trim the
 manifest, or split the module. Do not switch a summary to ASCII to squeeze under the byte count;
 write it in the language the project uses.
 
@@ -112,4 +115,5 @@ write it in the language the project uses.
 module's ids. Drafts move freely. A **locked** claim's id changes when it moves, so it is
 `claim unlock` → re-author under the new id → `claim lock` with the human's approval, the old file deleted
 only once unlocked, and every `rests_on` and manifest id naming the old id updated in the same pass.
-**Retiring** a draft is deleting its file; a locked one is unlocked first, with the human's yes.
+**Retiring** a claim follows "Deleting or renaming a claim" in `dossierx-claims`: a draft carrying
+a comment thread cannot simply be deleted, and every edge naming it is fixed in the same change.
