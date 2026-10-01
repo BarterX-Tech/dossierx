@@ -107,7 +107,10 @@ var commentsPanelTmpl = template.Must(
 // split into the open ones shown inline and the resolved ones tucked into the
 // <details> collapse.
 type commentsPanelView struct {
-	ClaimID  string
+	ClaimID string
+	// BriefID is set, and ClaimID empty, for a brief's panel
+	// (BriefCommentsPanelHTML): the panel is then keyed data-brief-id.
+	BriefID  string
 	Open     []model.Comment
 	Resolved []model.Comment
 }
@@ -118,14 +121,35 @@ type commentsPanelView struct {
 // is surfaced to the reader rather than silently swallowed into the collapse.
 func newCommentsPanelView(c model.Claim) commentsPanelView {
 	v := commentsPanelView{ClaimID: c.ID}
-	for _, cm := range c.Comments {
+	v.split(c.Comments)
+	return v
+}
+
+func (v *commentsPanelView) split(cs []model.Comment) {
+	for _, cm := range cs {
 		if cm.Status == model.CommentStatusResolved {
 			v.Resolved = append(v.Resolved, cm)
 		} else {
 			v.Open = append(v.Open, cm)
 		}
 	}
-	return v
+}
+
+// BriefCommentsPanelHTML bakes a brief's threads into its page (NIT-198) the
+// way a claim's are baked after its footer: the same comments.html panel,
+// hidden, read by the viewer's rail when no comment API answers (a static
+// build), keyed data-brief-id. A brief with no thread gets none.
+func BriefCommentsPanelHTML(briefID string, cs []model.Comment) template.HTML {
+	if len(cs) == 0 {
+		return ""
+	}
+	v := commentsPanelView{BriefID: briefID}
+	v.split(cs)
+	var b strings.Builder
+	if err := commentsPanelTmpl.Execute(&b, v); err != nil {
+		return ""
+	}
+	return template.HTML(b.String()) //nolint:gosec // comments.html auto-escapes; bodies go through markdown.Render
 }
 
 // Load parses the default embedded partial for every known layout and
@@ -447,7 +471,7 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // single-source-of-truth rule (see rests_on's own doc comment) exists to
 // rule out.
 func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
-	return EdgesHTMLWithCodeLinks(c, files, false, dependedBy, targetStatuses)
+	return EdgesHTMLWithCodeLinks(c, files, false, dependedBy, targetStatuses, BriefRelations{})
 }
 
 // EdgesHTMLWithCodeLinks is EdgesHTMLWithLinks for a project that check's
@@ -460,8 +484,14 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 // chip never says "No relationships" over a gap `dossierx check` exits 1
 // on. Neither row exists for an ungated project: with no `source_dirs`
 // there is no gate, and a claim nobody linked is not a claim in breach.
-func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated bool, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
-	links := 0
+//
+// briefs is the derived BRIEFS group (NIT-202): the briefs whose rests_on
+// names this claim and the briefs this claim's internal sources pin. Like
+// dependedBy it is never authored on the claim — internal/render builds it
+// fresh each pass (buildBriefsExplainingLookup, buildBriefsCitedLookup) —
+// and its rows count toward the relationships chip.
+func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated bool, dependedBy []string, targetStatuses map[string]TargetStatus, briefs BriefRelations) template.HTML {
+	links := briefs.Len()
 
 	// The R09.4 direction blocks, built independently of the "extra" facts
 	// below so their fixed order — RESTS ON, DEPENDED ON BY — never depends
@@ -632,6 +662,7 @@ func EdgesHTMLWithCodeLinks(c model.Claim, files []implink.ViewFile, linksGated 
 		// count omits the element.
 		writeRelationshipDirection(&b, "down", "RESTS ON", len(c.RestsOn.IDs), restsOnBody.String(), restsOnHas)
 		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
+		writeBriefsGroup(&b, briefs)
 
 		if extra.Len() > 0 {
 			b.WriteString(`<ul class="claim-edges claim-edges-extra">`)
@@ -758,6 +789,10 @@ func writeRelationshipDirection(b *strings.Builder, arrow, label string, count i
 // and turns into a real flex row at 520px, where R-I.2 stacks them together
 // as the relationship row's mobile "line two".
 func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
+	writeRelationshipRowNoted(b, liClass, targetID, fromModule, fromFacet, targetStatuses, "")
+}
+
+func writeRelationshipRowNoted(b *strings.Builder, liClass, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus, changed string) {
 	st, known := targetStatuses[targetID]
 	b.WriteString(`<li class="`)
 	b.WriteString(liClass)
@@ -770,6 +805,11 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 	writeClaimRef(b, targetID, fromModule, fromFacet, nil, false)
 	b.WriteString(`<span class="claim-relationship-line2">`)
 	writeRelationshipMeta(b, targetID)
+	if changed != "" {
+		b.WriteString(`<span class="brief-relation-changed">`)
+		b.WriteString(html.EscapeString(changed))
+		b.WriteString(`</span>`)
+	}
 	if known {
 		b.WriteString(`<span class="claim-relationship-badge claim-relationship-badge--`)
 		b.WriteString(lifecycleModifier(st))
@@ -779,6 +819,204 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 	}
 	b.WriteString(`</span>`)
 	b.WriteString(`</li>`)
+}
+
+// BriefRow is one row of a claim's derived BRIEFS group (NIT-202, Paper
+// board B5). Every field is read from the briefs tree and the claim's own
+// sources at render time; nothing here is ever written to a claim.
+//
+// ID is the brief's <folder>.<slug>, and empty for a cited path under
+// briefs_dir that names no brief the tree holds: that row keeps its place
+// (the claim still cites it, and the Sources panel still lists it) but has
+// no link and no lock state, because there is no brief to link or read.
+type BriefRow struct {
+	ID     string
+	Path   string
+	Folder string
+	Slug   string
+	Title  string
+	// Anchor is the id of the brief's page section, taken from the brief
+	// page's own anchor map (internal/render's briefAnchors) rather than
+	// recomputed: a second brief spelling the same brief-<folder>-<slug>
+	// takes a -2 suffix there, and a row that rebuilt the plain id would
+	// open the first brief instead of its own. Empty means no link.
+	Anchor string
+	// Locked is the brief's frontmatter status (NIT-204); NIT-205's lock
+	// store is what will put a record behind it.
+	Locked bool
+	// ReviewPending is the brief's review state from briefs.Evaluate
+	// (NIT-200 fills it at the render boundary). The row already draws
+	// "review pending" in amber when it is true.
+	ReviewPending bool
+	// Pin is the sha256 this claim's source records for the brief — cited
+	// rows only. PinOutOfDate is true when source-internal-drift reports
+	// that source: the brief no longer hashes to the pin, the pin is
+	// missing, or the file cannot be read.
+	Pin          string
+	PinOutOfDate bool
+}
+
+// BriefRelations is a claim's whole derived BRIEFS group: the briefs that
+// explain it (their rests_on names it) and the briefs it cites as evidence
+// (its internal sources pin them). The zero value renders nothing.
+type BriefRelations struct {
+	ExplainedBy     []BriefRow
+	CitedAsEvidence []BriefRow
+}
+
+// Len is the group's row count, which the relationships chip includes.
+func (r BriefRelations) Len() int { return len(r.ExplainedBy) + len(r.CitedAsEvidence) }
+
+// briefDocIconHTML is the BRIEFS group's head icon — the board's document
+// glyph, stroked in currentColor so it takes the head's --faint in both
+// themes. The other directions draw a Unicode arrow in this slot.
+const briefDocIconHTML = `<svg class="claim-brief-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg>`
+
+// writeBriefsGroup writes the BRIEFS group after R09.4's fixed directions,
+// and nothing at all when the claim has no brief row — the group is shown
+// only when it has rows. The head says "derived" because no claim stores a
+// link to a brief; the two sub-groups say which way each row was derived,
+// since they move differently (a change to this claim sends the explaining
+// briefs to review; re-locking a cited brief breaks this claim's pin).
+//
+// The rows reuse the relationship row's parts (.claim-relationship-dot,
+// .claim-relationship-line2, .claim-relationship-badge), so on a phone a
+// brief row is the ordinary mobile relationship row: dot and linked title on
+// line one, "Folder · state" and the lock badge on line two. On desktop the
+// folder takes a fixed first column instead and the dot is not drawn, as the
+// board draws it (see style.css's .claim-brief rules).
+func writeBriefsGroup(b *strings.Builder, briefs BriefRelations) {
+	n := briefs.Len()
+	if n == 0 {
+		return
+	}
+	b.WriteString(`<div class="claim-relationship-direction claim-relationship-direction--briefs">`)
+	b.WriteString(`<div class="claim-relationship-direction-head"><span class="claim-relationship-arrow" aria-hidden="true">`)
+	b.WriteString(briefDocIconHTML)
+	b.WriteString(`</span><span class="claim-relationship-direction-label">BRIEFS</span><span class="claim-relationship-direction-count">`)
+	b.WriteString(strconv.Itoa(n))
+	b.WriteString(`</span><span class="claim-brief-derived">derived<span class="claim-brief-derived-note"> · the claim itself stores none of these</span></span></div>`)
+	writeBriefSubgroup(b, "Explained by", " · their rests_on names this claim", briefs.ExplainedBy, false)
+	writeBriefSubgroup(b, "Cited as evidence", " · this claim's sources pin them", briefs.CitedAsEvidence, true)
+	b.WriteString(`</div>`)
+}
+
+func writeBriefSubgroup(b *strings.Builder, label, note string, rows []BriefRow, cited bool) {
+	if len(rows) == 0 {
+		return
+	}
+	b.WriteString(`<div class="claim-brief-subgroup`)
+	if cited {
+		b.WriteString(` claim-brief-subgroup--cited`)
+	} else {
+		b.WriteString(` claim-brief-subgroup--explained`)
+	}
+	b.WriteString(`"><div class="claim-brief-subhead">`)
+	b.WriteString(label)
+	b.WriteString(`<span class="claim-brief-subhead-note">`)
+	b.WriteString(html.EscapeString(note))
+	b.WriteString(`</span></div><ul class="claim-edges claim-relationship-list claim-brief-list">`)
+	for _, r := range rows {
+		writeBriefRow(b, r, cited)
+	}
+	b.WriteString(`</ul></div>`)
+}
+
+// writeBriefRow writes one brief row. The state slot is the board's third
+// column: "review pending" on an explaining brief whose review is pending,
+// "pinned <12 hex>" on a cited brief whose pin still holds, and "pin out of
+// date" in amber on one source-internal-drift reports. It is always emitted,
+// empty when there is nothing to say, so the desktop columns stay in lanes.
+func writeBriefRow(b *strings.Builder, r BriefRow, cited bool) {
+	known := r.ID != ""
+	linked := known && r.Anchor != ""
+	b.WriteString(`<li class="claim-brief claim-relationship`)
+	if r.PinOutOfDate {
+		b.WriteString(` claim-brief--pin-out-of-date`)
+	}
+	b.WriteString(`"`)
+	if known {
+		b.WriteString(` data-brief-id="`)
+		b.WriteString(html.EscapeString(r.ID))
+		b.WriteString(`"`)
+	}
+	b.WriteString(`>`)
+	if known {
+		b.WriteString(`<span class="claim-relationship-dot claim-relationship-dot--`)
+		b.WriteString(briefDotModifier(r))
+		b.WriteString(`" aria-hidden="true"></span>`)
+	}
+	switch {
+	case linked:
+		b.WriteString(`<a class="claim-brief-ref" href="#`)
+		b.WriteString(html.EscapeString(r.Anchor))
+		b.WriteString(`" title="`)
+		b.WriteString(html.EscapeString(r.Path))
+		b.WriteString(`">`)
+		b.WriteString(html.EscapeString(r.Title))
+		b.WriteString(`</a>`)
+	case known:
+		// A brief with no page id to link to (a caller with no anchor map).
+		b.WriteString(`<span class="claim-brief-ref">`)
+		b.WriteString(html.EscapeString(r.Title))
+		b.WriteString(`</span>`)
+	default:
+		b.WriteString(`<span class="claim-brief-ref claim-brief-ref--missing" title="no brief at this path">`)
+		b.WriteString(html.EscapeString(r.Title))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`<span class="claim-relationship-line2"><span class="claim-brief-folder">`)
+	b.WriteString(html.EscapeString(DisplayCase(r.Folder)))
+	b.WriteString(`</span>`)
+
+	var state, mod, hover string
+	switch {
+	case cited && r.PinOutOfDate:
+		state, mod, hover = "pin out of date", "drift", r.Pin
+	case cited:
+		state, mod, hover = "pinned "+shortHash(strings.ToLower(strings.TrimSpace(r.Pin))), "pin", r.Pin
+	case r.ReviewPending:
+		state, mod = "review pending", "pending"
+	}
+	b.WriteString(`<span class="claim-brief-state`)
+	if mod != "" {
+		b.WriteString(` claim-brief-state--`)
+		b.WriteString(mod)
+	}
+	b.WriteString(`"`)
+	if hover != "" {
+		b.WriteString(` title="`)
+		b.WriteString(html.EscapeString(hover))
+		b.WriteString(`"`)
+	}
+	b.WriteString(`>`)
+	if state != "" {
+		b.WriteString(`<span class="claim-brief-sep" aria-hidden="true">· </span>`)
+		b.WriteString(html.EscapeString(state))
+	}
+	b.WriteString(`</span>`)
+	if known {
+		badge := "draft"
+		if r.Locked {
+			badge = "locked"
+		}
+		b.WriteString(`<span class="claim-relationship-badge claim-relationship-badge--`)
+		b.WriteString(badge)
+		b.WriteString(`">`)
+		b.WriteString(strings.ToUpper(badge))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</span></li>`)
+}
+
+// briefDotModifier is the mobile row's dot: the lock hue for a locked brief
+// with nothing pending, the draft hue for a draft or a review-pending one
+// (the board draws the review-pending brief's dot amber).
+func briefDotModifier(r BriefRow) string {
+	if r.Locked && !r.ReviewPending {
+		return "locked"
+	}
+	return "draft"
 }
 
 // writeRelationshipMeta writes 05 §4.10's "module · facet" meta column for a

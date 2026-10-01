@@ -8,7 +8,8 @@ description: >-
   claim schema and id grammar, dossierx claim new, the read-only authoring loop
   (dossierx check --validate), dossierx claim show and list, citing evidence with
   sources and [n] markers, how to write a claim worth keeping (one fact, a summary
-  that stands alone, contract vs internals, choosing rests_on), the three
+  that stands alone, contract vs internals, choosing rests_on) and which
+  statements are briefs instead (design, voice, rationale, research), the three
   review_pending triggers, and the rule a locked claim hangs off — draft claims
   are free; body-only meaning drift is claim flag, and every other edit is unlock, fix, lock.
   Load the DossierX router skill first; it carries the envelope, the exit
@@ -36,13 +37,37 @@ the five rules are there and are not repeated here.
 
 ## Is this worth a claim? — and how to write one
 
+**First, what kind of statement is this?** If it says how the product should look, sound or feel,
+why a choice was made, or what was learned — design, voice, rationale, research — it is not a
+claim: write a brief (load **[`dossierx-briefs`](../dossierx-briefs/SKILL.md)**). If it says what
+the product does — a guarantee about UI behaviour is what the product does — apply the three questions.
+
 Write a claim only when all three are **yes**: (1) would a competent engineer reading the code be
 surprised by it? (2) if it were wrong, would another module or a locked promise break? (3) is it
-invisible from any single file? Never: language semantics, framework defaults, restating what the
-code says, step-by-step narration of one function, or anything the constitution already states. The
-caps (10 claims, 200-character summary, 2,000-character body) are the backstop; this rubric is what
-makes a module converge on ten claims rather than ten longer ones. A cap finding is never a reason to
-pad or merge — see **[`dossierx-modules`](../dossierx-modules/SKILL.md)** for what to do instead.
+invisible from any single file?
+Never: language semantics, framework defaults, restating what the code says, step-by-step narration
+of one function, anything the constitution already states, statements about the module or its own
+claims, or anything that needs an image to make sense. A hard UI guarantee that lives in one
+component file fails (3) and becomes a brief — that cost is accepted. **If it fails, write a
+brief: load `dossierx-briefs`.** Red flags that it is not a claim: a body opening with "This
+module…", something no one can falsify, a list of examples, something that changes weekly, a
+restatement of another claim.
+
+| the content is… | its home |
+|---|---|
+| a boundary guarantee another module may rely on: a data shape, an error it will see | a `contract` claim |
+| how this module keeps its promises | an `internals` claim |
+| law every module builds toward; a project-wide fact with no module | the constitution, or a `project.<slug>` claim (`dossierx-constitution`) |
+| how it looks, sounds or feels; why; what was learned; what a feature is for the user | a brief — a feature is a brief in `briefs/features/` (`dossierx-briefs`) |
+| a question, or a disagreement with a claim's wording | a comment on that claim (`dossierx-comments`) |
+| a token value: a colour, a spacing step, a font size | code, never a claim or a brief |
+
+What a module owns, does not own, or routes to has no row: the manifest's `summary` and `depends_on`
+carry the useful part and the rest is discarded — but a guarantee of absence another module relies on
+is an ordinary claim. **Before writing UI, copy, design or rationale, run `dossierx brief list`**
+and read what applies. The caps (10 claims, 200-character summary, 2,000-character body) are the
+backstop; this rubric is what makes a module converge on ten claims rather than ten longer ones. A cap
+finding is never a reason to pad or merge — **[`dossierx-modules`](../dossierx-modules/SKILL.md)**.
 
 **One fact per claim.** The human approves or rejects a claim as a unit, and a drifted dependency
 flags all of it. If the summary needs "and" to be true, it is two claims — or one of them is not worth
@@ -113,10 +138,9 @@ the id grammar, the body and `--summary` requirements and the required `rests_on
 it writes, then lints the project with the new claim in it — an `orphan` warning on a claim with no
 edges yet is a warning, not a refusal.
 
-`--rests-on` / `--rests-on-none-reason` / `--section` / `--layout` are all
-available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks
-nothing else, so a claim written outside it reports success and is then invisible). After creation
-the claim is a **draft** — edit its file freely.
+`--rests-on` / `--rests-on-none-reason` / `--section` / `--layout` are all available at creation
+time; `--file` may only name a path **inside** `claims_dir` (the loader walks nothing else, so a claim
+written outside it reports success and is then invisible). After creation the claim is a **draft** — edit its file freely.
 
 The loop while authoring is `dossierx check --validate`: the same lint gate `check` drives, at the
 same severity, writing **nothing** — no claim files, no lock store, no `build/catalog/catalog.json`, no viewer.
@@ -128,12 +152,10 @@ you did not see is one you do not have — stop and say what is missing.
 ## Project claims, the constitution, and the reading order
 
 A `project.<slug>` claim (`project-claims/<slug>.yaml`) is an ordinary claim — this skill's rules
-apply — with no module, no facet and no cap. The constitution is not a claim at all. When to use
-which, and how the roof is drafted and locked: **[`dossierx-constitution`](../dossierx-constitution/SKILL.md)**.
-
-Orient one module at a time through `dossierx manifest show <module> --isolation`; never walk the
-claims tree or open claim files to orient yourself. The full reading order is in
-**[`dossierx-modules`](../dossierx-modules/SKILL.md)**. Other modules read `contract` only.
+apply — with no module, no facet and no cap. The constitution is not a claim at all; when to use
+which: **[`dossierx-constitution`](../dossierx-constitution/SKILL.md)**. Orient one module at a time
+through `dossierx manifest show <module> --isolation`; never walk the claims tree or open claim files
+to orient yourself. The reading order is in **[`dossierx-modules`](../dossierx-modules/SKILL.md)**. Other modules read `contract` only.
 
 ## Citing your evidence — `sources`
 
@@ -150,7 +172,10 @@ sources:
 An `external` source needs `url` **and** `accessed_on` — the date records what the page said on the
 day it was read. An `internal` source needs `path` (relative to `project.config.yaml`) **and**
 `sha256`, and may set `record_id` to pin one JSONL record (matched on its top-level `"id"`) rather
-than the whole file, which churns for reasons unrelated to your claim.
+than the whole file, which churns for reasons unrelated to your claim. An internal source on a
+**brief** (`briefs/<folder>/<slug>.md`) records the brief's content hash instead of the file's —
+the `content:` line of `dossierx brief show <path>` — so its status and its comment threads never
+drift your pin.
 
 Cite from `body` with `[n]`: *"frames arrive only while the stream is running [1]."* Markers are
 read **in prose only** — never inside a fenced block or an inline `` `code` `` span — and **only on
@@ -167,9 +192,7 @@ is `unlock → fix → lock`. But adding or correcting a citation never flips a 
 
 ## Finding the claim the human meant
 
-They will say "the retry card in contract". That is not an id, and guessing costs a `claim_not_found` — or worse, acts on the wrong claim. Run `dossierx claim list --match "retry" [--facet contract] [--module widget]`.
-
-Each row carries `claim_id`, `title`, `status`, `review_pending`, `drifted`, `open_threads` and a `score` — a ranked ladder over the id and derived title, so a confident hit sits well above a tie. **Name the winner and its title back to the human and wait** before running anything that writes.
+They will say "the retry card in contract". That is not an id, and guessing costs a `claim_not_found` — or worse, acts on the wrong claim. Run `dossierx claim list --match "retry" [--facet contract] [--module widget]`. Each row carries `claim_id`, `title`, `status`, `review_pending`, `drifted`, `open_threads` and a `score` — a ranked ladder over the id and derived title, so a confident hit sits well above a tie. **Name the winner and its title back to the human and wait** before running anything that writes.
 
 ## `dossierx claim show` — one call, the whole picture
 
@@ -181,10 +204,9 @@ A draft claim is yours. A locked claim is the human's. Body-only meaning drift i
 
 Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects` (locking records a content baseline; unlocking releases it and can flip dependents), get a yes, then run it. `--reason` carries their approval into the record — never fabricate one.
 
-The window between the two ends is not a steady state. If any source file carries a
-`dossierx-claim:` or `dossierx-step:` tag for that id, a plain `dossierx check` mid-edit fails with `implink_refused`
-and `claim is not locked (status "draft")` — the tag is fine, the claim is mid-edit. Finish the
-relock; never touch the tag or leave the claim unlocked to silence it.
+The window between the two ends is not a steady state: a plain `dossierx check` mid-edit fails
+`implink_refused` with `claim is not locked (status "draft")` on any `dossierx-claim:` / `dossierx-step:`
+tag for that id — the tag is fine, the claim is mid-edit. Finish the relock; never touch the tag or leave the claim unlocked to silence it.
 
 `dossierx claim lock` refuses on `lint_failed` (fix the findings), `unresolved_comments` (reply;
 the human clicks Resolve) and `already_locked` — re-locking would sign whatever the file now says and
@@ -212,9 +234,8 @@ information, better wording, a `rows` fix, a structural change — is unlock →
 
 When reaudit *is* right: run it bare first (a preview; writes nothing, renders the before/after as
 a diff), **show the human the diff and wait**, then `--confirm --reason "<their words>"`. On
-rejection do nothing — the claim stays `locked, review_pending`, and you never clear a flag by
-hand. Reaudit refuses a claim whose *only* trigger is an open thread: no diff to confirm, so
-resolve the conversation instead.
+rejection do nothing — the claim stays `locked, review_pending`, and you never clear a flag by hand.
+Reaudit refuses a claim whose *only* trigger is an open thread: no diff to confirm, so resolve the conversation instead.
 
 ## Integrity — the ledger sees hand edits
 
@@ -227,9 +248,8 @@ recovery is never "re-lock it so the hashes match" — that launders the edit. R
 control, or go unlock → fix → lock. CI is the authority; the hook is only fast feedback.
 
 The stores under `build/ledger/` are committed, never `.gitignore`d. `flag-store.json` has **no gate
-rule behind it**: lost, the claim still arrives `review_pending` with an empty `reaudit` diff, and
-confirming it clears the human's flag having applied nothing. Treat an empty diff on a flagged claim
-as a missing entry: **stop and say so**, do not confirm.
+rule behind it**: lost, a flagged claim arrives `review_pending` with an empty `reaudit` diff, and
+confirming it clears the human's flag having applied nothing — **stop and say so**, do not confirm.
 
 ## Portability
 

@@ -429,7 +429,7 @@
   // activeFacet returns null while no plain module section is visible (the
   // constitution section is active), so renderToc hides the TOC there.
   function activeFacet() {
-    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)'));
+    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section):not(.brief-section):not(.briefs-index-section)'));
     var module = modules.find(function (section) { return !section.hidden; });
     if (!module) { return null; }
     var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
@@ -437,6 +437,45 @@
     if (!group) { return null; }
     var tab = module.querySelector(':scope > .sub-nav .subtab[data-target="#' + group.id + '"]');
     return { module: module, view: group, label: tabLabel(tab) };
+  }
+
+  // activeBrief is the brief page on screen (NIT-197), or null. A brief has
+  // no facet and no claims; its "On this page" rail is this same panel,
+  // listing the body's ## headings instead of claims.
+  function activeBrief() {
+    return document.querySelector('.brief-section:not([hidden])');
+  }
+
+  function briefHeadings(section) {
+    // The body's section headings: "##" (and a stray "#") render as h3
+    // under the page's h2 title (render.briefBodyOutline). A heading inside a
+    // quote or a list is not a section, so only the body's own children count.
+    // A feature's Made of list (NIT-201) is the last row, as Paper B4 draws
+    // the rail: "Made of · 6 claims". An edited brief (NIT-199) shows one of
+    // three views in a card: its headings are the shown view's, including
+    // one inside a changed or added passage, and never one the Changes view
+    // strikes out.
+    if (!section) { return []; }
+    return Array.prototype.slice.call(section.querySelectorAll(
+      ':scope > .brief-body > h3, ' +
+      ':scope > .brief-compare > .brief-view:not([hidden]) > h3, ' +
+      ':scope > .brief-compare > .brief-view:not([hidden]) > .claim-edit-passage:not(.claim-edit-passage--removed) > h3, ' +
+      ':scope > .feature-made-of > .feature-made-of__head'));
+  }
+
+  // tocTarget is the element a TOC row stands for: a claim card, or on a
+  // brief page one of its headings.
+  function tocTarget(link) {
+    if (link.dataset.headingIndex !== undefined) {
+      return briefHeadings(activeBrief())[parseInt(link.dataset.headingIndex, 10)] || null;
+    }
+    return document.getElementById(link.dataset.claimTarget);
+  }
+
+  function landOnHeading(index) {
+    var heading = briefHeadings(activeBrief())[index];
+    if (heading) { heading.scrollIntoView({ block: 'start', behavior: 'instant' }); }
+    closeFacetToc();
   }
 
   function updateTocActive() {
@@ -450,12 +489,12 @@
     if (!links.length) { return; }
     var current = links[0];
     links.forEach(function (link) {
-      var claim = document.getElementById(link.dataset.claimTarget);
-      if (claim && claim.getBoundingClientRect().top <= 190) { current = link; }
+      var target = tocTarget(link);
+      if (target && target.getBoundingClientRect().top <= 190) { current = link; }
     });
     links.forEach(function (link) { link.classList.toggle('on', link === current); });
     var select = toc.querySelector('.facet-toc__select');
-    if (select) { select.value = current.dataset.claimTarget; }
+    if (select) { select.value = current.dataset.headingIndex !== undefined ? 'h:' + current.dataset.headingIndex : current.dataset.claimTarget; }
   }
 
   function renderToc() {
@@ -487,11 +526,21 @@
         : '';
       toc.innerHTML = '<div class="facet-toc__grabber" aria-hidden="true"></div><div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><span class="facet-toc__mobile-identity"><strong class="facet-toc__name">Claims</strong><span class="facet-toc__total"></span></span></span><button class="facet-toc__close" type="button" aria-label="Close facet panel"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
-        navigateToClaim(event.target.value);
+        var value = event.target.value;
+        if (value.indexOf('h:') === 0) { landOnHeading(parseInt(value.slice(2), 10)); return; }
+        navigateToClaim(value);
       });
       toc.querySelector('.facet-toc__close').addEventListener('click', closeFacetToc);
       document.body.appendChild(toc);
     }
+    var kicker = toc.querySelector('.facet-toc__identity > small');
+    var brief = activeBrief();
+    if (brief) { renderBriefToc(toc, brief, kicker); return; }
+    delete toc.dataset.kind;
+    toc.setAttribute('aria-label', 'Claims in this facet');
+    if (kicker) { kicker.textContent = 'On this facet'; }
+    var threads = toc.querySelector('.facet-toc__threads');
+    if (threads) { threads.remove(); }
     var active = activeFacet();
     if (!active) { toc.hidden = true; return; }
     toc.hidden = false;
@@ -535,6 +584,184 @@
     });
     updateTocActive();
     ensureFacetTocTrigger(active, claims.length);
+  }
+
+  // ------------------------------------------------------------------
+  // Threads on a brief (NIT-198). The brief's page carries its counts
+  // (data-open-threads, data-threads: internal/briefs' OpenThreads and the
+  // thread total, the numbers the payload's open_threads carries) from the
+  // render, so a live reload's fresh page brings fresh counts; the comment
+  // rail (viewer-runtime.js) also sets them the moment its threads load.
+  //
+  // The Comment buttons open the rail. Under dossierx serve
+  // (body.comments-live) they always do. In a static build there is
+  // nothing to write to, so a brief with threads opens them read-only, as
+  // a claim's chip does, and a brief with none has its button disabled.
+  // Either way a visible line says why (a title would be hover-only).
+  // ------------------------------------------------------------------
+  var BRIEF_READ_ONLY_LINE = 'Read only: comments are written through dossierx serve.';
+
+  function briefThreadState(page) {
+    var open = parseInt(page.getAttribute('data-open-threads'), 10) || 0;
+    var total = parseInt(page.getAttribute('data-threads'), 10) || 0;
+    var live = document.body.classList.contains('comments-live');
+    // A feature's page (NIT-201) speaks of a feature.
+    var noun = page.hasAttribute('data-feature') ? 'feature' : 'brief';
+    var edited = page.getAttribute('data-lock-state') === 'edited';
+    var pending = page.getAttribute('data-review-pending') === 'true';
+    // A static build has nothing to write to, so the note states the count
+    // and asks for nothing; the read-only line says why.
+    var note = open === 0 ? 'None open.' : open + ' open.';
+    var action = 'Comment';
+    if (live) {
+      // Same order as the page-foot Comment label: pending (Confirm in a
+      // thread) outranks edited when both hold.
+      if (pending) {
+        note = open === 0
+          ? 'To confirm the ' + noun + ' still holds, say so in a thread. On your yes the agent runs brief reaudit --confirm. Claim locking is not blocked.'
+          : 'Say in the thread whether the ' + noun + ' still holds.';
+        action = 'Start a thread';
+      } else if (edited) {
+        note = open === 0
+          ? 'To approve the new wording, say so in a thread. On your yes the agent unlocks, fixes and locks, or restores from version control.'
+          : 'Say in the thread what should happen to the new wording.';
+        action = 'Start a thread';
+      } else {
+        note += open === 0
+          ? ' Comment on the ' + noun + ' to ask the agent for a change.'
+          : ' Reply to or resolve ' + (open === 1 ? 'it' : 'them') + ' in the thread.';
+      }
+    }
+    return {
+      open: open,
+      total: total,
+      enabled: live || total > 0,
+      note: note,
+      action: action,
+      count: open === 0 ? '' : (open === 1 ? '1 open thread' : open + ' open threads'),
+      line: live ? '' : BRIEF_READ_ONLY_LINE
+    };
+  }
+
+  // briefRailOpenOn is true while the comment rail shows this brief
+  // (viewer-runtime.js's window.dossierxCommentRailBrief).
+  function briefRailOpenOn(id) {
+    return typeof window.dossierxCommentRailBrief === 'function' && !!id && window.dossierxCommentRailBrief() === id;
+  }
+
+  function setText(node, text) {
+    if (node && node.textContent !== text) { node.textContent = text; }
+  }
+
+  function syncBriefThreadsBlock(threads, page) {
+    var state = briefThreadState(page);
+    setText(threads.querySelector('.facet-toc__threads-note'), state.note);
+    var btn = threads.querySelector('.facet-toc__comment');
+    var label = btn.querySelector('.facet-toc__comment-label');
+    if (!label) {
+      label = document.createElement('span');
+      label.className = 'facet-toc__comment-label';
+      btn.appendChild(label);
+    }
+    Array.prototype.forEach.call(btn.childNodes, function (n) {
+      if (n.nodeType === 3) { n.textContent = ''; }
+    });
+    setText(label, state.action);
+    btn.disabled = !state.enabled;
+    var id = page.getAttribute('data-brief-id') || '';
+    btn.setAttribute('data-brief-id', id);
+    // The rail's button follows the page on screen, so whether it is
+    // "expanded" is whether the rail shows THIS brief, not the last one.
+    var expanded = String(briefRailOpenOn(id));
+    if (btn.getAttribute('aria-expanded') !== expanded) { btn.setAttribute('aria-expanded', expanded); }
+    var line = threads.querySelector('.facet-toc__threads-later');
+    setText(line, state.line);
+    line.hidden = !state.line;
+  }
+
+  // syncBriefThreads brings every brief's page-foot Comment row and the
+  // rail's Threads block in line with the counts and the serve state. It
+  // runs on every renderToc, when body.comments-live arrives, and from the
+  // comment rail when a brief's threads change
+  // (window.dossierxSyncBriefThreads).
+  function syncBriefThreads() {
+    document.querySelectorAll('.brief-section[data-brief-id]').forEach(function (page) {
+      var state = briefThreadState(page);
+      var btn = page.querySelector('.brief-comment');
+      if (btn && btn.disabled !== !state.enabled) { btn.disabled = !state.enabled; }
+      // Below the rail's width the Threads block is hidden, so the page-foot
+      // row carries the open count itself.
+      var count = page.querySelector('.brief-comment-count');
+      if (count) {
+        setText(count, state.count);
+        if (count.hidden !== !state.count) { count.hidden = !state.count; }
+      }
+      var line = page.querySelector('.brief-comment-note');
+      if (line) {
+        setText(line, state.line);
+        if (line.hidden !== !state.line) { line.hidden = !state.line; }
+      }
+    });
+    var brief = activeBrief();
+    var threads = document.querySelector('#systemFacetToc .facet-toc__threads');
+    if (brief && threads) { syncBriefThreadsBlock(threads, brief); }
+  }
+
+  // renderBriefToc fills the panel for a brief page (Paper B1, "On this
+  // page"): one row per ## heading in the body, then the Threads block
+  // (syncBriefThreads above).
+  function renderBriefToc(toc, brief, kicker) {
+    var headings = briefHeadings(brief);
+    // A brief with no section heading has nothing to put on this page's
+    // rail: no rail on a wide screen, no trigger and no sheet on a phone.
+    // The section says so, so the stylesheet can bring the page-foot Comment
+    // row forward in the rail's place.
+    brief.toggleAttribute('data-no-sections', headings.length === 0);
+    if (!headings.length) {
+      toc.hidden = true;
+      closeFacetToc(false);
+      var stale = brief.querySelector('.brief-toc-slot .facet-toc-trigger');
+      if (stale) { stale.remove(); }
+      return;
+    }
+    toc.hidden = false;
+    toc.dataset.kind = 'brief';
+    toc.setAttribute('aria-label', 'On this page');
+    if (kicker) { kicker.textContent = 'On this page'; }
+    toc.querySelector('.facet-toc__name').textContent = 'On this page';
+    toc.querySelector('.facet-toc__total').textContent = '';
+    var list = toc.querySelector('.facet-toc__list');
+    var select = toc.querySelector('.facet-toc__select');
+    list.replaceChildren();
+    select.replaceChildren();
+    headings.forEach(function (heading, index) {
+      var label = (heading.getAttribute('data-toc-label') || heading.textContent).replace(/\s+/g, ' ').trim();
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'facet-toc__item';
+      button.dataset.headingIndex = String(index);
+      var strong = document.createElement('strong');
+      strong.textContent = label;
+      var count = document.createElement('span');
+      count.className = 'facet-toc__blocker-count';
+      count.setAttribute('aria-hidden', 'true');
+      button.append(strong, count);
+      button.addEventListener('click', function () { landOnHeading(index); });
+      list.appendChild(button);
+      var option = document.createElement('option');
+      option.value = 'h:' + index;
+      option.textContent = label;
+      select.appendChild(option);
+    });
+    if (!toc.querySelector('.facet-toc__threads')) {
+      var threads = document.createElement('div');
+      threads.className = 'facet-toc__threads';
+      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note"></p><button type="button" class="facet-toc__comment" aria-controls="commentsPanel" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg><span class="facet-toc__comment-label">Comment</span></button><p class="facet-toc__threads-later"></p>';
+      list.insertAdjacentElement('afterend', threads);
+    }
+    syncBriefThreadsBlock(toc.querySelector('.facet-toc__threads'), brief);
+    updateTocActive();
+    ensureFacetTocTrigger({ module: brief, triggerHost: brief.querySelector('.brief-toc-slot'), triggerLabel: 'On this page' }, headings.length);
   }
 
   // ---------------------------------------------------------------------
@@ -701,8 +928,10 @@
     });
   }
 
+  // A brief page (NIT-197) passes its own host, the header's
+  // .brief-toc-slot, and its own label; a facet's host is its .sub-nav.
   function ensureFacetTocTrigger(active, count) {
-    var subNav = active.module.querySelector(':scope > .sub-nav');
+    var subNav = active.triggerHost || active.module.querySelector(':scope > .sub-nav');
     if (!subNav) { return; }
     var trigger = subNav.querySelector(':scope > .facet-toc-trigger');
     if (!trigger) {
@@ -715,7 +944,7 @@
       // is the closest sprite (its third stroke is full-width where Paper's is
       // short); an exact #dx-icon-list symbol would be the faithful
       // alternative if one is ever added to the sprite sheet.
-      trigger.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"></use></svg><span>On this facet</span><span class="facet-toc-trigger__count"></span>';
+      trigger.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"></use></svg><span>' + (active.triggerLabel || 'On this facet') + '</span><span class="facet-toc-trigger__count"></span>';
       trigger.addEventListener('click', function () {
         if (document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
         else { openFacetToc(trigger); }
@@ -742,7 +971,7 @@
     // directly (see bindFocusControl above).
     var focusState = isFocusOn() ? 'on' : 'off';
     var moduleSections = Array.prototype.slice.call(
-      document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section)')
+      document.querySelectorAll('.module-section:not(.constitution-section):not(.home-section):not(.brief-section):not(.briefs-index-section)')
     );
     var moduleCount = moduleSections.length;
     moduleSections.forEach(function (section, moduleIndex) {
@@ -902,6 +1131,7 @@
     }
     syncNavigation();
     renderToc();
+    syncBriefThreads();
     // enhanceTimestamp() runs after renderToc(): the freshness footer now
     // lives INSIDE the facet-toc panel renderToc creates (02 §3/§4.17,
     // "the right facet panel" — see the .freshness-footer move below), so
@@ -947,7 +1177,8 @@
   // body.comments-live (R10.5's "Live" signal) without this lane polling
   // for it or that lane calling back into this file.
   window.setInterval(enhanceTimestamp, 60000);
-  new MutationObserver(enhanceTimestamp).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  new MutationObserver(function () { enhanceTimestamp(); syncBriefThreads(); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  window.dossierxSyncBriefThreads = syncBriefThreads;
   window.dossierxEnhanceSystemRecord = enhance;
   enhance();
 })();

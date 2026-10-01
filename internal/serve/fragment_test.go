@@ -201,7 +201,7 @@ func startServerWarn(t *testing.T, cfgBody string, files map[string]string) (srv
 // writes with 403 read_only leaving claim files untouched, while (c) reads —
 // GET / and GET /api/fragment — keep working (read-ONLY, not offline).
 func TestViewerDegradation_HookLessOverride(t *testing.T) {
-	files := standardFiles()
+	files := admissionFiles()
 	files["viewer-override/shell.html"] = marklessShell
 
 	srv, base, root, warn := startServerWarn(t, overrideConfig, files)
@@ -212,6 +212,15 @@ func TestViewerDegradation_HookLessOverride(t *testing.T) {
 		`{"body":"should be refused"}`, allowedMutating(base)...)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("degraded POST: got %d, want 403 (body=%s)", resp.StatusCode, data)
+	}
+	assertErrorCode(t, data, "read_only")
+	assertClaimsUnchanged(t, before, root)
+	// A brief's thread is refused the same way (NIT-198), and its file too
+	// is left as it was.
+	resp, data = do(t, http.MethodPost, base+"/api/briefs/widget.flow/comments",
+		`{"body":"should be refused"}`, allowedMutating(base)...)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("degraded brief POST: got %d, want 403 (body=%s)", resp.StatusCode, data)
 	}
 	assertErrorCode(t, data, "read_only")
 	assertClaimsUnchanged(t, before, root)

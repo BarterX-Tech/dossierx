@@ -76,7 +76,8 @@ const (
 	// fetch and no script involved, which is exactly what connect-src 'self'
 	// was chosen to prevent. 'self' re-allows
 	// exactly one thing — an image from this origin, which means the
-	// allowlisted /claim-assets/ route in claim_assets.go and nothing else.
+	// allowlisted /claim-assets/ route in claim_assets.go and the brief-image
+	// route in brief_assets.go, and nothing else.
 	// The rest of the policy is unchanged; in particular the comment above
 	// about "no external assets, ever" still holds, because 'self' is not
 	// external.
@@ -272,7 +273,10 @@ func (s *Server) Serve(ctx context.Context) error {
 	// detected (the baseline reflects the pre-serve state). Then poll in the
 	// background until ctx is cancelled, feeding the render pipeline and the SSE
 	// hub on each debounced change.
-	extraFiles := []string(nil)
+	// The lock store is not under claims_dir or briefs_dir. A brief reaudit
+	// (NIT-200) writes only that file, and the page's review banners must
+	// clear without a brief-file edit.
+	extraFiles := []string{s.cfg.LockStorePath()}
 	if s.cfg.Conformance.Observations != "" {
 		extraFiles = append(extraFiles, s.cfg.Conformance.Observations)
 	}
@@ -393,10 +397,14 @@ func (s *Server) assertOutputsOutsideClaimsTree() error {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleRoot)
-	// The only route that reads a file off disk, and the only non-API route
+	// A route that reads a file off disk, and one of the two non-API routes
 	// besides the root document. It answers from a computed allowlist rather
 	// than from the filesystem — see claim_assets.go for the whole argument.
 	mux.HandleFunc(assetRoutePattern, s.handleClaimAsset)
+	// A brief's images (NIT-197), on the same terms: an allowlist computed
+	// from what the page references, never the path as spelled. See
+	// brief_assets.go.
+	mux.HandleFunc(briefAssetRoutePattern, s.handleBriefAsset)
 	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.HandleFunc("GET /api/fragment", s.handleFragment)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)
@@ -409,6 +417,20 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/claims/{id}/comments/{tid}/reopen", s.handleReopen)
 	mux.HandleFunc("PATCH /api/claims/{id}/comments/{tid}", s.handleEdit)
 	mux.HandleFunc("DELETE /api/claims/{id}/comments/{tid}", s.handleDelete)
+	// Threads on a brief (NIT-198), each the twin of the claim route above it,
+	// addressed by the brief's slash-free <folder>.<slug> id. GET lists one
+	// brief's threads: /api/comments stays the claims' list. See
+	// brief_comments.go.
+	mux.HandleFunc("GET /api/briefs/{id}/comments", s.handleListBriefComments)
+	mux.HandleFunc("POST /api/briefs/{id}/comments", s.handleBriefAddThread)
+	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/replies", s.handleBriefReply)
+	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/resolve", s.handleBriefResolve)
+	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/reopen", s.handleBriefReopen)
+	mux.HandleFunc("PATCH /api/briefs/{id}/comments/{tid}", s.handleBriefEdit)
+	mux.HandleFunc("DELETE /api/briefs/{id}/comments/{tid}", s.handleBriefDelete)
+	// Anything else under /api/briefs/ — a brief's path written unescaped
+	// among them — is the JSON brief_not_found, not the mux's text 404.
+	mux.HandleFunc("/api/briefs/", s.handleBriefRouteNotFound)
 	return mux
 }
 
@@ -430,7 +452,7 @@ func (s *Server) renderViewer() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serve: build catalog: %w", err)
 	}
-	assessment, approvedEdits, err := s.readinessFor(claims)
+	assessment, approvedEdits, store, err := s.readinessAndStoreFor(claims)
 	if err != nil {
 		return nil, fmt.Errorf("serve: readiness: %w", err)
 	}
@@ -447,7 +469,10 @@ func (s *Server) renderViewer() ([]byte, error) {
 	// the watcher fingerprints briefs_dir too, so a brief edit reaches the page
 	// the same way a claim edit does. A brief with a finding still renders; the
 	// status strip (check.Status) is where its findings are shown.
-	extras := render.Extras{Briefs: briefs.Load(s.cfg)}
+	// Their lock and review state (NIT-205) is read against the SAME store
+	// load readiness used, so the two cannot disagree about one request.
+	set := briefs.Load(s.cfg)
+	extras := render.Extras{Briefs: set, BriefReview: briefs.Evaluate(set, claims, store)}
 	var html string
 	if report != nil {
 		html, err = render.RenderBoundedWith(cat, s.cfg, conformance.MaxOutputBytes, extras)
@@ -469,15 +494,22 @@ func (s *Server) renderViewer() ([]byte, error) {
 // claims have an unapproved edit — one listing a row the other draws no panel
 // for. Sharing the load makes that disagreement unrepresentable.
 func (s *Server) readinessFor(claims []model.Claim) (assessments map[string]readiness.Assessment, approvedEdits map[string]approvaledit.Change, err error) {
-	store, err := lock.LoadStore(s.storePath())
+	assessments, approvedEdits, _, err = s.readinessAndStoreFor(claims)
+	return assessments, approvedEdits, err
+}
+
+// readinessAndStoreFor is readinessFor that also hands back the one store load
+// both projections were computed from, for the briefs' review state.
+func (s *Server) readinessAndStoreFor(claims []model.Claim) (assessments map[string]readiness.Assessment, approvedEdits map[string]approvaledit.Change, store *lock.Store, err error) {
+	store, err = lock.LoadStore(s.storePath())
 	if err != nil {
-		return nil, nil, fmt.Errorf("load lock store: %w", err)
+		return nil, nil, nil, fmt.Errorf("load lock store: %w", err)
 	}
 	flags, err := reaudit.LoadFlagStore(s.flagStorePath())
 	if err != nil {
-		return nil, nil, fmt.Errorf("load flag store: %w", err)
+		return nil, nil, nil, fmt.Errorf("load flag store: %w", err)
 	}
-	return readiness.Compute(claims, store, flags), approvaledit.Compute(claims, store), nil
+	return readiness.Compute(claims, store, flags), approvaledit.Compute(claims, store), store, nil
 }
 
 // disarmUngatedMockups returns claims with RawHTMLReviewed cleared on every

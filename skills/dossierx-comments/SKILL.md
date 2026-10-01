@@ -50,6 +50,12 @@ dossierx comment add   <claim-id> --as human|agent --body "..."
 dossierx comment reply <claim-id> <thread-id> --as human|agent --body "..."
 ```
 
+A **brief** takes threads too: pass its path (`briefs/<folder>/<slug>.md`), not its id, where a
+claim id goes. Same rights, same digest; the inbox lists its threads with `"kind": "brief"` and the
+path as `claim_id` (its `claims` count includes such briefs), and `check` prints
+`open comments: brief "<path>": N`. An open thread refuses `brief lock` and `brief reaudit --confirm`
+(`comment_open`); resolving it is the human's, in the served viewer's comment rail on the brief's page.
+
 `--as` is required on every mutating verb and records a **role**, not an identity. Never pass
 `--as human` for something you decided; the rights rule below keys off it, and mislabelling
 yourself is how an agent ends up approving its own work.
@@ -144,8 +150,8 @@ anyone who can curl it can already edit the claim YAML directly, so an API token
 lock rather than add one.
 
 So do not read "enforced" as "impossible", and never treat the viewer API as a second opinion on a
-`rights_denied` you just earned. **Curling `/api/claims/<id>/comments/<tid>/resolve` is forging the
-human's approval**, and the forgery is worse than a hand-edited claim because it leaves a record
+`rights_denied` you just earned. **Curling `/api/claims/<id>/comments/<tid>/resolve` (or a brief's
+`/api/briefs/<folder>.<slug>/comments/<tid>/resolve`) is forging the human's approval**, and the forgery is worse than a hand-edited claim because it leaves a record
 that says a human resolved it. Never "retry as human", on either surface.
 
 When a human opens a thread and you believe you have addressed it: reply — "addressed in

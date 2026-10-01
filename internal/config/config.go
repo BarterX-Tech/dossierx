@@ -208,6 +208,13 @@ type Config struct {
 	// same copy the constitution gate reads. Not a config field.
 	ConstitutionIndex *IndexedFile `yaml:"-"`
 
+	// BriefTree is briefs_dir files this run is judging, keyed by
+	// config-relative slash path ("briefs/folder/slug.md"). check sets it
+	// from the same Load / index tree the rest of the gate uses, so a cited
+	// brief's pin is hashed from those bytes and not a leftover worktree
+	// copy. Not a config field.
+	BriefTree map[string][]byte `yaml:"-"`
+
 	// BuildDir is the directory every runtime-generated file lives under —
 	// the code-links artifacts, the three ledger stores, the
 	// catalog and the viewer — one subdirectory per kind (see paths.go for the

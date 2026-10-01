@@ -1502,3 +1502,31 @@ func TestDisplayCase(t *testing.T) {
 		}
 	}
 }
+
+// TestBriefRowDrawsAPendingReviewAmberWithTheDraftDot pins the review-state
+// slot NIT-200 fills from briefs.Evaluate: a locked brief whose review is
+// pending reads "review pending" in the amber state class with the draft-hue
+// dot (board B5), beside its LOCKED badge; the same brief with nothing
+// pending has an empty state and the lock-hue dot. The render-boundary
+// wiring is TestRenderWith_ExplainingBriefShowsReviewPending.
+func TestBriefRowDrawsAPendingReviewAmberWithTheDraftDot(t *testing.T) {
+	c := model.Claim{ID: "widget.contract.a", Module: "widget", Facet: "contract", Status: model.StatusLocked}
+	row := BriefRow{ID: "decisions.round-once", Path: "briefs/decisions/round-once.md", Folder: "decisions", Slug: "round-once", Title: "Round once", Locked: true}
+	pending := row
+	pending.ReviewPending = true
+
+	got := string(EdgesHTMLWithCodeLinks(c, nil, false, nil, nil, BriefRelations{ExplainedBy: []BriefRow{pending}}))
+	for _, want := range []string{
+		`claim-relationship-dot--draft`,
+		`<span class="claim-brief-state claim-brief-state--pending"><span class="claim-brief-sep" aria-hidden="true">· </span>review pending</span>`,
+		`claim-relationship-badge--locked">LOCKED<`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("pending row lacks %q:\n%s", want, got)
+		}
+	}
+	quiet := string(EdgesHTMLWithCodeLinks(c, nil, false, nil, nil, BriefRelations{ExplainedBy: []BriefRow{row}}))
+	if !strings.Contains(quiet, `claim-relationship-dot--locked`) || !strings.Contains(quiet, `<span class="claim-brief-state"></span>`) {
+		t.Errorf("a brief with nothing pending has the lock-hue dot and an empty state:\n%s", quiet)
+	}
+}

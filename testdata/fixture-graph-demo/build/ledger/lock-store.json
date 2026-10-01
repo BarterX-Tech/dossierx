@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "policy_version": 1,
   "policy_migrated_at": "2026-09-25T18:57:03.210647029Z",
   "policy_migration_reason": "lock policy 0 retired in v0.7.21; this store now records local approval v1",
@@ -414,5 +414,191 @@
     "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
     "reason": "fixture roof",
     "locked_at": "2026-09-24T15:48:25.190108Z"
+  },
+  "briefs": {
+    "features.open-the-graph": {
+      "path": "briefs/features/open-the-graph.md",
+      "hash": "ae647e078c9ae0e8df916f3896a4f91036134fdba6e7d3a052c21a2ffa133bf1",
+      "at": "2026-09-30T19:49:06.291712Z",
+      "actor": "dossierx-fixture",
+      "reason": "fixture approval: the locked feature the committed viewer shows",
+      "approved": {
+        "summary": "A reader opens the claims graph from the sidebar and sees every rests_on edge the corpus declares.",
+        "rests_on": [
+          "engine.contract.build-is-pure",
+          "viewer.contract.render-is-pure",
+          "engine.internals.edge-kinds",
+          "viewer.internals.payload-shape",
+          "cli.contract.check-noun"
+        ],
+        "markdown": "# Open the graph\n\n## What it is\n\nOne button beside the modules opens a pane that draws the whole corpus: each claim a node, each `rests_on` a line.\n\n## How it works\n\n`dossierx check` writes the graph into the viewer as data; the pane reads it and draws nothing it was not given.\n\nReading order follows [Reading the graph](../graph/reading-the-graph.md) · narrowing follows [Scope the graph](scope-the-graph.md).\n"
+      },
+      "images": {},
+      "baselines": {
+        "cli.contract.check-noun": "6ee2d067289087e26fad0393a351894e63a61903f50b8a7b172163d7d186a4b1",
+        "engine.contract.build-is-pure": "9d807bce57bcbdffe047d4d641fe3f5dd996c2a7881c71021cfca71e02e17074",
+        "engine.internals.edge-kinds": "0d9173e85f8c4140d61bc8525b6ad3b17d8e83c77387d69e256952a5593e96f4",
+        "viewer.contract.render-is-pure": "0205f50ba8d2cd85bf566c959b50f65144c806c53aa0cb78577492a2f0710403",
+        "viewer.internals.payload-shape": "4363003ec0d141a4208eaa0e8c81d11f6fdde1d6562a34b1afe7cd1f569e3f27"
+      },
+      "receipts": {
+        "cli.contract.check-noun": {
+          "ID": "cli.contract.check-noun",
+          "Facet": "contract",
+          "Module": "cli",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "One command runs review, grouping, rendering and the integrity gate, stopping at the first failure.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "engine.contract.check-is-fail-fast",
+              "cli.internals.exit-codes"
+            ]
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        },
+        "engine.contract.build-is-pure": {
+          "ID": "engine.contract.build-is-pure",
+          "Facet": "contract",
+          "Module": "engine",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "Building the render payload performs no input or output, reads no clock, and returns no error. Rendering cannot fail because of it.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "engine.contract.catalog-shape"
+            ]
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": true,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        },
+        "engine.internals.edge-kinds": {
+          "ID": "engine.internals.edge-kinds",
+          "Facet": "internals",
+          "Module": "engine",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "There is one edge kind and no more: a claim rests on another. A claim that rests on nothing states that absence, with a reason, instead of leaving the edge out.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "engine.contract.claim-shape"
+            ]
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        },
+        "viewer.contract.render-is-pure": {
+          "ID": "viewer.contract.render-is-pure",
+          "Facet": "contract",
+          "Module": "viewer",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "Rendering is a function of the catalog and the configuration. The same inputs produce the same document, apart from the one stamped generation time.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "engine.contract.build-is-pure"
+            ]
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        },
+        "viewer.internals.payload-shape": {
+          "ID": "viewer.internals.payload-shape",
+          "Facet": "internals",
+          "Module": "viewer",
+          "Scope": "",
+          "Status": "locked",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "Fixture claim used by the engine test corpus.",
+          "Body": "The graph payload carries nodes, edges, the two grouping axes and a count of what could not be represented.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": false,
+            "Reason": "",
+            "IDs": [
+              "engine.contract.catalog-shape"
+            ]
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        }
+      }
+    }
   }
 }

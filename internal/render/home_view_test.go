@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/approvaledit"
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
@@ -355,8 +356,54 @@ func BenchmarkBuildHomeView(b *testing.B) {
 			cat.SetReadiness(ra)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				buildHomeView(cat, nil, nil)
+				buildHomeView(cat, nil, nil, homeBriefWaiting{})
 			}
 		})
+	}
+}
+
+// TestRender_HomeCountsABriefsOpenThreads is NIT-198 F2: an open thread on a
+// brief holds `brief lock` as one on a claim holds `claim lock`, so Home's
+// Open threads card counts it. With only a brief's thread the card leads to
+// that brief's page; beside a claim's thread the count is the sum and the
+// card still leads to the claim, as it did before briefs.
+func TestRender_HomeCountsABriefsOpenThreads(t *testing.T) {
+	cfg := projectTestConfig(t)
+	quiet := projectTestClaim("widget", "quiet", model.StatusLocked)
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("decisions/open.md", "---\nsummary: Open.\ncomments:\n  - id: c-aaaaaa\n    status: open\n    author: agent\n    created: \"2026-09-01T10:00:00Z\"\n    body: is this right?\n    edited: false\n  - id: c-bbbbbb\n    status: resolved\n    author: human\n    created: \"2026-09-01T10:00:00Z\"\n    body: done\n    edited: false\n---\n# The open brief\n\nText.\n"),
+		briefFile("decisions/quiet.md", "---\nsummary: Quiet.\n---\n# Quiet\n\nText.\n"),
+	})
+	at := time.Unix(1_700_000_000, 0).UTC()
+
+	cat, err := catalog.Build([]model.Claim{quiet}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set}, at, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cards, _ := homeCards(t, out)
+	if got := cards["thread"]; got != [2]string{"1", "brief-decisions-open"} {
+		t.Fatalf("with only a brief's thread the card = %v, want count 1 -> #brief-decisions-open", got)
+	}
+	if !strings.Contains(out, "On The open brief. A brief can&#39;t lock while a thread on it is open.") {
+		t.Error("the card names the brief and what its thread holds")
+	}
+
+	threaded := projectTestClaim("widget", "threaded", model.StatusLocked)
+	threaded.Comments = []model.Comment{openComment("c-cccccc", "why?")}
+	cat, err = catalog.Build([]model.Claim{quiet, threaded}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = renderBoundedAt(cat, cfg, Extras{Briefs: set}, at, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cards, _ = homeCards(t, out)
+	if got := cards["thread"]; got != [2]string{"2", threaded.ID} {
+		t.Fatalf("beside a claim's thread the card = %v, want count 2 -> #%s", got, threaded.ID)
 	}
 }

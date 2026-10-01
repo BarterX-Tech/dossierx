@@ -170,9 +170,9 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-three leaves, and not one more.
+	// The whole surface: nine nouns, twenty-six leaves, and not one more.
 	//
-	//	brief   list show                                                 2
+	//	brief   list show lock unlock reaudit                             5
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link recover-approved-content 9
 	//	comment inbox list add reply                                      4
@@ -187,12 +187,12 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyThreeLeavesUnderNineNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentySixLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
-	// "brief" is the ninth noun (NIT-204): two read-only leaves over the
-	// briefs tree beside the claims. The lock, unlock and reaudit leaves that
-	// complete it are NIT-205's.
+	// "brief" is the ninth noun: two read-only leaves over the briefs tree
+	// beside the claims (NIT-204), and the lock, unlock and reaudit leaves
+	// that give a brief an approval of its own (NIT-205).
 	//
 	// "track" was a noun through v0.7.21 and was removed in v0.7.22 (NIT-184),
 	// with no retired stub, like build-order below: a feature is a brief now,
@@ -247,7 +247,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyThreeLeavesUnderNineNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentySixLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -1162,7 +1162,10 @@ type checkData struct {
 	// read-only green as a linked one. See check.Result.CodeLinks.
 	CodeLinks    *codeLinksData `json:"code_links,omitempty"`
 	OpenComments map[string]int `json:"open_comments,omitempty"`
-	NextSteps    []string       `json:"next_steps,omitempty"`
+	// OpenBriefComments maps a brief's path to its open-thread count
+	// (NIT-205); absent when no brief has one.
+	OpenBriefComments map[string]int `json:"open_brief_comments,omitempty"`
+	NextSteps         []string       `json:"next_steps,omitempty"`
 }
 
 // codeLinksData is check.CodeLinksReport on the wire.
@@ -1241,6 +1244,7 @@ func newCheckData(res check.Result) checkData {
 		ScanErrors:                 scanErrors,
 		CodeLinks:                  newCodeLinksData(res.CodeLinks),
 		OpenComments:               res.OpenComments,
+		OpenBriefComments:          res.OpenBriefComments,
 		NextSteps:                  res.NextSteps,
 	}
 }
@@ -1349,6 +1353,23 @@ func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
 // shipped a refusal naming a verb the binary does not have, and a reader wedged
 // at exactly that moment got "unknown command" instead of a way out. See
 // TestLedgerHintsNameOnlyRealCommands.
+// commentLedgerDriftNamesABrief is true when a comment-ledger-drift finding
+// is keyed by a brief path (briefs/<folder>/<slug>.md), not a claim id. The
+// recovery must not name claim unlock: that leaves the forged brief thread
+// in place.
+func commentLedgerDriftNamesABrief(findings []lock.Finding) bool {
+	for _, f := range findings {
+		if f.Rule != lock.RuleCommentLedgerDrift {
+			continue
+		}
+		id := filepath.ToSlash(f.ClaimID)
+		if strings.Contains(id, "/") || strings.HasSuffix(id, ".md") {
+			return true
+		}
+	}
+	return false
+}
+
 func ledgerRecoveryHint(findings []lock.Finding) string {
 	rules := make(map[string]bool, len(findings))
 	for _, f := range findings {
@@ -1400,6 +1421,9 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 	case rules[check.RuleCommentDigestAbsent], rules[lock.RuleCommentDigestUnrecorded], rules[check.RuleCommentDigestMissing]:
 		return "the comment digest store is missing entries (or the whole file), so review history on those claims is checked against nothing. Restore " + config.CommentDigestDisplayPath + " from version control — or git add it, if this commit is the one that updated it — then run: dossierx check --validate. Do not run a comment op to re-create an entry: that records whatever the claim says now as the truth"
 	case rules[lock.RuleCommentLedgerDrift]:
+		if commentLedgerDriftNamesABrief(findings) {
+			return "a brief's comment block changed outside the engine. Restore the brief file from version control (and " + config.CommentDigestDisplayPath + ", if a commit carried them as a pair) and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx brief unlock <path> --reason \"...\", fix, then dossierx brief lock <path> --reason \"...\""
+		}
 		return "a locked claim's comment block changed outside the engine. Restore the claim file from version control and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx claim unlock <id> --reason \"...\", fix, then dossierx claim lock <id> --reason \"...\""
 	case rules[lock.RuleLockContentDrift], rules[lock.RuleLockLedgerMissing], rules[lock.RuleLockLedgerOrphan], rules[lock.RuleLockLedgerReleased]:
 		return "read data.ledger_findings: each names its claim and its own recovery. A locked claim that no longer matches its approval is restored from version control, or taken through dossierx claim unlock <id> --reason \"...\", fixed, then dossierx claim lock <id> --reason \"...\" — which is the only path that records a new approval"
@@ -1879,6 +1903,9 @@ func projectionRecoveryHint(res check.Result) string {
 			action = "reduce projected catalog, readiness, or conformance volume"
 		case "render":
 			action = "reduce projected viewer content or facet duplication"
+			if res.BriefImagesOverBound {
+				action = "shrink or remove brief images: every image a brief references is copied beside the viewer and counts toward its bound, together with the page"
+			}
 		default:
 			action = "reduce declared conformance result multiplicity or member size"
 		}
@@ -1952,6 +1979,7 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 			fmt.Fprintf(out, "open comments: module %q: %d\n", m, res.OpenComments[m])
 		}
 	}
+	writeOpenBriefComments(out, res.OpenBriefComments)
 	if len(res.NextSteps) > 0 {
 		fmt.Fprintln(out, "next steps:")
 		for _, h := range res.NextSteps {
@@ -2033,6 +2061,7 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 			fmt.Fprintf(out, "open comments: module %q: %d\n", m, res.OpenComments[m])
 		}
 	}
+	writeOpenBriefComments(out, res.OpenBriefComments)
 	for _, line := range res.ImplinkStatusStdout {
 		fmt.Fprintln(out, line)
 	}

@@ -634,6 +634,19 @@ whole-file hash over it would report drift on every one of those edits. Findings
 a reader learns to wave through are worse than no findings, because they teach
 the wave-through on the day the drift is real.
 
+A **brief** is the other refinement, and it needs no field: when `path` names
+a brief (`briefs_dir/<folder>/<slug>.md`) and `record_id` is unset, `sha256` is
+the brief's **content hash** — its `summary`, its `rests_on` set and its body,
+the hash `brief lock` signs — not the file's sha256. Copy it from `dossierx
+brief show <path>` (`content:` in text, `content_hash` in JSON). A brief's
+`status` line and its `comments:` block are left out because the engine
+rewrites both: a lock flips the status, and every thread the human opens,
+answers or resolves in the served viewer is written into the frontmatter.
+Neither changes what the citing claim rests on, and a whole-file pin would
+have made each of them `source-internal-drift`. An edit to the summary,
+`rests_on` or body still is. Every other internal source, a markdown file
+outside `briefs_dir` included, is pinned whole.
+
 `supports` and `does_not_support` are optional free text on both kinds, and the
 second is the more valuable one: it is where an author records the part of a
 source that does **not** carry the claim, so a later reader does not have to
@@ -655,7 +668,7 @@ rather than cutting one off behind a button that cannot work.
 | `source-ref-undefined` | ERROR | the body cites `[n]` and no entry declares that `ref`. The citation points at nothing, which is a reader sent to look for evidence that was never recorded. |
 | `source-ref-unused` | WARNING | an entry no marker cites. Clutter, not falsehood — the evidence is still recorded and still hashed; nothing a reader is told is wrong. |
 | `source-external-unanchored` | ERROR | an `external` entry missing `url` or `accessed_on`. Without both, the citation names a page but not a version of it, and cannot be checked by anyone. |
-| `source-internal-drift` | ERROR | an `internal` entry whose `sha256` is absent, whose `path` (or `record_id`) cannot be read, or whose content no longer hashes to the recorded value. **A check that cannot execute is reported as a failure, never as a silent pass** — an unreadable source and a rewritten one are the same amount of evidence, which is none. |
+| `source-internal-drift` | ERROR | an `internal` entry whose `sha256` is absent, whose `path` (or `record_id`) cannot be read, or whose content no longer hashes to the recorded value (for a brief, its content hash: summary, `rests_on` and body). **A check that cannot execute is reported as a failure, never as a silent pass** — an unreadable source and a rewritten one are the same amount of evidence, which is none. |
 
 **What signs it, and what does not.** The distinction is subtle and it is the
 point of the field, so it is stated twice — here and under "What is signed, and
@@ -944,12 +957,19 @@ file freeze locking project-wide and stop the viewer regenerating.
 The lock store also carries the constitution's lock record (`"constitution"`,
 see "The constitution"); a store that travels without it arrives with a roof
 that reads as `unrecorded`, and no claim in that clone locks until a human
-locks the roof again.
+locks the roof again. Once a brief is locked it carries the briefs' records
+too (`"briefs"`, see "Briefs"), and the store's `version` is `4`; a store that
+has never held a brief record stays at `version` `3`, byte for byte. A lock
+store or comment digest store whose `version` is above what this dossierx
+knows is refused rather than read — a command answers `store_too_new`, and
+`check` reports `lock-ledger-unreadable` naming the upgrade — because reading
+it would work and the next write would drop whatever this binary does not know,
+which is exactly how a v0.7.21 write drops the `briefs` map.
 
 | File | Holds |
 |---|---|
-| `build/ledger/lock-store.json` | the lock ledger: per locked claim, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
-| `build/ledger/comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
+| `build/ledger/lock-store.json` | the lock ledger: per locked claim, `{hash, at, actor, reason}`, plus the dependency-drift baselines; per locked brief, its record under `briefs` |
+| `build/ledger/comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write, and of each brief's under `briefs` |
 | `build/ledger/flag-store.json` | each flagged claim's pending `claim flag` trigger: `{claim_says, now_does, reason, flagged_at}`, consumed and deleted by a confirmed `claim reaudit` |
 
 All three live under the build directory (`build_dir`, default `build`,
@@ -1053,6 +1073,10 @@ certified exactly the edit that most needed a signature; it is built on
 | `comment-digest-abandoned` | A digest entry that recorded review history still has the claim it recorded it for. This is the comment half's reverse sweep, symmetric with `lock-ledger-abandoned`, and it is what makes the **rename** launder visible: deleting a claim's `comments:` block alone fires `comment-ledger-drift`, but deleting the block *and* changing `id:` in the same edit went completely quiet — the claim the store knows no longer exists, the claim that exists is one the store has never seen, and `claim lock <new id>` then succeeded on a claim whose human review had been erased. The old id's entry survives that edit precisely because it is not reachable from the file the tamper rewrote. It does not fire on the two accounted-for departures — an entry that recorded no threads, and a claim whose record an honest `unlock` released — and `lock.SweepCommentDigests` drops those entries so they never accumulate. `lock.AbandonedCommentDigests` owns the predicate for both the rule and the sweep, so the gate and the sweep cannot disagree. |
 | `store-gitignored` | Every path the engine writes under `build/ledger` and `build/code-links` is trackable. Checked per FILE with `git check-ignore --no-index` — the three ledger stores, `build/.gitignore`, and each module's code-links artifact, whether or not the file exists yet — because a directory-level check reads the index and goes green the moment one file under the directory is force-added, while every sibling stays ignored. One finding per ignored, untracked path, naming the pattern and its line; an ignored path that IS tracked is an envelope warning instead, since that ledger does reach collaborators. The recovery is the replacement block (`build/*` plus a slash-less negation and a `/*` re-include per tracked kind — git never re-enters an excluded directory, and a trailing-slash negation cannot match a directory that does not exist yet) or `build_dir` pointed at a directory the pattern does not match. Outside a work tree, or where git cannot answer, `check`'s read-only modes report `data.gitignore_check` and no finding; the approval-recording verbs refuse with `store_gitignored`. |
 | `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |
+| `brief-content-drift` | A locked brief's summary, `rests_on` and body still hash to what `brief lock` approved, and every image it references still has the sha256 recorded beside that hash (the same set, the same bytes); the message names each image that moved. The finding's `claim_id` is the brief's path. The approved text is kept on the record. Restore the file from version control, or, on the human's yes to the edit, `brief unlock` → fix → `brief lock`; do not re-lock to make the finding go away. Either lock keeps the `rests_on` baselines, so a claim that moved stays review-pending. See "Briefs". |
+| `brief-unrecorded` | A brief that says `status: locked` has a standing record in the lock store's `briefs` map — not none, and not one an unlock released. A status typed by hand approves nothing. `claim_id` is the brief's path. The recovery is restoring the brief or the store from version control, or `brief unlock` (which sets the file back to draft) → fix → `brief lock` on the human's yes — never a lock of the brief as it stands to make the finding go away. When the store is at version `4` but has no `briefs` map at all, an older dossierx rewrote it and dropped every brief record: the finding then says to restore the store from before that write and **not** to re-lock, which would discard the baselines and any review pending. |
+| `brief-orphan` | A `draft` brief holds no *standing* record. `brief unlock` releases the record before it rewrites the file, so a draft on a standing approval was flipped by hand — freeing the brief for edits nobody approved. The twin of `lock-ledger-orphan`. |
+| `brief-abandoned` | A standing brief record still has its brief. Deleting or renaming a locked brief's file removed it from every rule that starts from the briefs that exist; the record is what the deletion did not reach. Unlock first, then delete. `claim_id` is the path the brief was locked at. The twin of `lock-ledger-abandoned`. |
 
 `comment-digest-absent` is the comment half's answer to `lock-ledger-absent`,
 and it is **narrower on purpose**. The lock ledger guards the trust boundary —
@@ -1438,10 +1462,9 @@ for a finding: each answers with `data.findings` beside what it read (shape,
 frontmatter and cap findings, in `lint_findings`' shape) — `brief list` the
 tree's, `brief show` those on its own path or a folder above it — so an
 unreadable folder is a finding while every other folder is still listed, and
-an unreadable tree is never reported as a project with no briefs. The lock
-lifecycle for briefs (lock, unlock, reaudit, drift) is not in this release:
-`status` is read from the frontmatter and reported, and nothing records an
-approval for a brief.
+an unreadable tree is never reported as a project with no briefs. `brief
+lock`, `brief unlock` and `brief reaudit` give a brief an approval of its own,
+beside the claims' and never inside it (see "Lock, review and comments").
 
 ### The tree
 
@@ -1522,6 +1545,9 @@ rests_on:
   a claim is `brief-rests-on-unknown` (ERROR). Two briefs whose non-empty
   `rests_on` sets are identical are each `brief-rests-on-duplicate` (WARNING):
   they may be one brief.
+- `comments` — engine-managed: the brief's review threads, in a claim's comment
+  shape, written by the comment ops (never by hand). Absent until the first
+  thread.
 - No other key. The decode is strict and kind-checked: `summary: 5` is refused,
   not read as the string "5". Every frontmatter defect is `brief-frontmatter`
   (ERROR); the brief is still listed and shown.
@@ -1537,11 +1563,20 @@ title-cased (`order-plan.md` → "Order Plan"). An image is referenced by its
 bare file name in the brief's own folder: `![Flow](flow-diagram.svg)`. Any
 other image src — `PIC.svg`, `./pic.svg`, `../x.svg`, a URL — would render as
 the literal text of its `![alt](src)`, and is refused (`brief-shape`) on the
-brief's path. No route serves a brief's image yet, so for now the viewer
-payload renders **every** image reference as the literal text of its
-`![alt](src)`, the accepted bare-name ones included, until the briefs UI adds
-an image route (NIT-197). The bare-name rule is what the image checks and the
-image cap count today.
+brief's path. An accepted image renders as an image at
+`brief-assets/<folder>/<name>`, relative to the viewer: `dossierx check`
+copies every referenced image there beside `build/viewer/index.html`, and
+`dossierx serve` answers the same path from the brief's folder. The copied
+images count toward the viewer's 64 MiB output bound together with the page,
+and the default brief caps allow more image bytes than that bound holds (60
+briefs × 3 images × 1 MiB is about 180 MiB). A project inside every cap can
+therefore still exceed it; `check` then refuses with
+`conformance_capacity_exceeded`, a message naming the largest images, their
+total and the bound, and a hint to shrink or remove brief images. Nothing is
+written.
+A copy reads each image as a plain file only: an image that is no longer the
+plain file of the size `check` discovered (swapped for a symlink, resized,
+unreadable) fails the render with its path named rather than being copied.
 Citation markers do not resolve in a brief (it has no `sources`).
 
 ### Caps
@@ -1560,17 +1595,118 @@ Words are counted over the text the rendered body puts on the page, so image
 references and link targets are not words. Raising a cap is the human's call,
 only on their explicit approval, and every cap finding says so.
 
+### Lock, review and comments
+
+`dossierx brief lock <path-or-id> --reason "…"` sets the brief's `status` to
+`locked` (that token and nothing else in the file) and records, in
+`build/ledger/lock-store.json` under `briefs`, keyed by the brief's id:
+
+- the brief's **lock hash** — its `summary`, its `rests_on` set and its body.
+  `status` and `comments` are not signed, as a claim's are not. The same hash
+  is what a claim's internal source citing the brief records as its `sha256`
+  (see "`sources` and `[n]` citations"), so a thread written into the brief or
+  its status flipping never reads as drift under that claim. The hash is the
+  markdown's alone, so that pin is unaffected by the images;
+- the **sha256 of every image** the brief references, beside the hash: an
+  image whose bytes change, or a change to the set referenced, is
+  `brief-content-drift` naming the image;
+- the human's `--reason`, the time and the actor;
+- the **approved text** (summary, `rests_on`, markdown), so an edited brief can
+  be shown beside what was approved;
+- one **baseline** per `rests_on` claim — that claim's content hash, the one
+  its dependents' baselines use — and the claim as it read then.
+
+It refuses `already_locked` for a brief that is locked and unchanged (images
+included), `comment_open` for one with an open thread, `lint_failed` for one
+with an error finding, and `write_conflict` for a file that changed while it
+was being locked. A lock approves the brief's own edit and only its edit: a
+lock over an earlier approval — a re-lock of an edited brief over its standing
+record, or a lock after `brief unlock` over the record the unlock released —
+**keeps** that record's baselines of every `rests_on` claim still listed
+(`carried_baselines`, and `relocked: true`), baselines a newly listed claim,
+and drops one no longer listed — so a claim that moved under the brief stays
+review-pending, through either path, until `brief reaudit --confirm` shows it.
+Only a brief's first lock baselines every claim fresh (`relocked: false`,
+`carried_baselines: []`). To change a locked brief, `brief unlock` it, edit
+it, and lock it on the human's yes; an in-place edit is `brief-content-drift`,
+recovered the same way or by restoring the file, never by a lock to make the
+finding go away.
+`brief unlock <path-or-id> --reason "…"` releases the record (kept, stamped
+with the release, as `claim unlock` does) and then sets `status: draft`; a
+failure between the two leaves `status: locked` on a released record, which is
+`brief-unrecorded` and a re-run finishes it. Both take `--dry-run`.
+
+A locked brief is **review-pending** when a claim it rests on has moved since
+its baseline, or is gone; a draft never is. `dossierx brief reaudit <path-or-id>`
+shows each changed claim's wording at the baseline and now;
+`--confirm --reason "…"` records the human's yes and refreshes the baselines
+(refused `comment_open`, `not_review_pending`, and for a brief edited since
+approval). The brief's own approval is untouched by a reaudit.
+
+**Nothing flows back.** A brief's own lock, review or findings never refuse
+`claim lock`, never set `review_pending` on a claim and never enter the claim
+graph, and no brief hash enters any claim's hashes. A claim that cites a brief
+as an internal source still owns that pin: if the brief's content hash no
+longer matches the recorded sha256, `source-internal-drift` refuses that
+claim (including `claim lock`).
+
+A comment thread anchors on a brief's **path** the way it anchors on a claim id:
+`comment add|reply|list briefs/<folder>/<slug>.md` (a brief's id is refused as
+`claim_not_found`, with the path in the hint: an id can collide with a claim
+id), and `comment inbox` lists a brief's threads with `kind: "brief"` (its
+`claims` count counts briefs with threads too). The rights are a claim's (an
+agent replies, the human resolves). No CLI verb resolves a thread: the human
+resolves a brief's thread in the served viewer, on the brief's page, and until
+they do it holds `brief lock` and `brief reaudit --confirm` at `comment_open`.
+`dossierx serve` addresses those threads by the brief's **id**, not its path,
+under `/api/briefs/<folder>.<slug>/comments` (a route's `{id}` segment cannot
+carry the path's slashes; a path, escaped or not, and any other request under
+`/api/briefs/` no route matches answer `404 brief_not_found`):
+`GET` lists the brief's threads (`?open=1` the open ones), and add, reply,
+resolve, reopen, edit and delete are the claim routes' twins with the claim
+routes' admission, rights and error codes — a brief whose frontmatter the
+engine cannot rewrite in place (no `---` block, say) is the claim twin's
+`422 claim_not_serializable`, and one edited between the read and the write
+`409 claim_file_changed`; a thread in a response carries `brief_id` and `path`
+where a claim's carries `claim_id`. Each write records the brief's threads in
+`build/ledger/comment-digest.json` under `briefs`, and a block edited by hand is
+`comment-ledger-drift` on the brief's path (`comment-digest-unrecorded` for
+threads with no entry, in a ledger-covered project). An entry that recorded
+threads for a brief no longer in the tree — deleted, or renamed with the
+comments block left behind — is `comment-digest-abandoned` on the path its id
+names; silent, as for a claim, for an entry that recorded no thread and for a
+brief whose approval an unlock released. `check` counts a brief's
+open threads in `open_brief_comments`.
+
+The render payload carries each brief's `lock_state` (`draft`, `locked`,
+`edited`, `unrecorded`), `locked_at`, `lock_reason`, `review_pending` and its
+trigger, `changed_claims` (each with `changed_at` — when its current content
+was approved, empty when it has no standing approval — and its wording at the
+baseline and now; a baseline no retained snapshot matches reads "earlier
+wording not available"), `open_threads`, and the approved text with its
+rendered HTML.
+
 ### Findings
 
-The eight brief rules are a rule set of their own, beside the claim lints and
+The ten brief rules are a rule set of their own, beside the claim lints and
 never among them: `brief-shape`, `brief-frontmatter`, `brief-word-cap`,
 `brief-image-cap`, `brief-folder-cap`, `brief-total-cap`,
-`brief-rests-on-unknown` and `brief-rests-on-duplicate`. Their findings ride in
+`brief-rests-on-unknown`, `brief-rests-on-duplicate`, and the two that read a
+locked brief's baselines — `brief-rests-on-missing` (ERROR: a baselined claim
+is gone; it stands in for `brief-rests-on-unknown` on that id) and
+`brief-dependency-drift` (WARNING: a baselined claim moved; the brief is
+review-pending). Four more are integrity findings rather than rules:
+`brief-content-drift`, `brief-unrecorded`, `brief-orphan` and
+`brief-abandoned` (see "The findings") ride in
+`ledger_findings` and fail `check` with `integrity_failed`, like a claim's
+ledger findings. The ten rules' findings ride in
 `check`'s `data.lint_findings`, keyed by `lint` like every other finding, and a
 brief finding's `claim_id` is the **path** it is about — the brief
 (`briefs/checkout/flow.md`), the folder (`briefs/checkout/`) or the tree
 (`briefs/`). `check --staged` reads the briefs from the index, like the
-claims, and refuses a symlink entry there exactly as the working tree refuses
+claims — and the lock store and the comment digest from the index too, so a
+brief's `status: locked` staged without its record is `brief-unrecorded` at
+commit — and refuses a symlink entry there exactly as the working tree refuses
 the link. It also refuses a gitlink entry — a submodule or an embedded
 repository — which the working tree reads as an ordinary folder (see "The
 tree"). There the two modes differ in the safe direction: the hook is the
@@ -1581,9 +1717,187 @@ stricter.
 A claim never learns about briefs. A brief never enters `manifest show
 --isolation` or `--integration`, the catalog, or the claims graph. Brief state
 never affects claim readiness, locking or review — `claim lock` does not see a
-brief finding — and no brief byte enters any claim hash. The viewer carries the
-briefs as data (a `dossierx-briefs` JSON block, present only when the project
-holds a brief) and does not yet draw them.
+brief finding — and no brief byte enters any claim hash. A brief's `rests_on`
+baselines are read in one direction only: a moved claim makes the brief
+review-pending, never the reverse.
+
+### In the viewer
+
+A project that holds a brief outside `features/` gets a **Briefs** group in
+the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
+stays as written), each opening to its briefs. `features/` is left out of this
+tree: its briefs are features. Each brief row carries one state mark, read
+from the brief's own lock and review state (its `lock_state`,
+`review_pending` and `open_threads`) in the legend's order: edited since
+approval, then review pending, then a blue dot for an open comment thread,
+then a hollow dot for `draft` or a padlock for `locked`. A file that says
+`status: locked` with no approval on record (`brief-unrecorded`) takes the
+draft mark. A legend above the theme control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
+second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
+`BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
+approval's date and reason for a locked brief, the words and images against
+their caps, the body, and the claims it **rests on**
+(its frontmatter) and is **cited by** (every claim with an `internal` source
+whose `path` is the brief's). The title is the page's top heading; the body's
+`##` sections sit one level below it, and a further `#` in the body sits at
+the same level as a `##` rather than above the title. The right rail is "On
+this page", the body's `##` headings, with a Threads block; on a phone it is a
+sheet. A brief with no `##` heading has no rail. The Threads block counts the
+brief's open threads, and its Comment button (on a phone, and below the rail's
+width, the page-foot "Comment on this brief") opens the comments rail on the
+brief — a bottom sheet on a phone — where the human reads, adds, replies to and
+resolves threads as on a claim. Below the rail's width the page-foot row
+carries the open count itself. Home's Open threads card counts a brief's open
+threads beside the claims', leading to the brief when no claim has one. The viewer never locks, restores or confirms
+a brief: the agent does that after the human settles it in a thread. In a
+static build there is nothing to write to: a brief with threads opens them
+read only, a brief with none has its buttons disabled, and a line says
+comments are written through `dossierx serve`. The "All briefs" index (`#_briefs`)
+lists every folder other than `features/` in file-system order, each "N of 12"
+against the effective per-folder cap (red, with `brief-folder-cap`, when over).
+The totals strip is the inclusive count against the effective total cap
+(60 by default): "11 of 60, 5 are features" when `features/` holds any, then
+locked, review pending, edited since approval and open threads for the other
+folders only, from the same lock and review states as the sidebar marks. Each
+row is the brief's title, its one lock/review pill, and its summary; a folder
+with nothing pending starts collapsed and shows its state dots. Home's
+**Briefs** tile links here: the non-feature folders and the inclusive cap
+total. Home's Edited after approval and To re-read cards count briefs in
+those states beside the claims'. The sidebar search
+reads "Search claims and briefs": a module row matches its claims' titles,
+summaries and ids, and a brief row its title, file name, summary and folder.
+A `check` finding whose `claim_id` is a brief's path, its folder's or the
+tree's shows in the status strip and on the Issues screen of that brief's
+page. A project whose only briefs are in `features/` gets no Briefs group
+and no index. The viewer also carries the briefs as data (a `dossierx-briefs`
+JSON block); a project with no brief has none of this, and its search reads
+"Search modules" while still matching claims.
+
+A brief in `features/` is a **feature**. Features have their own **Features**
+entry in the sidebar, between Modules and Briefs: one row per feature in
+order of file name without `.md` (so `export.md` comes before
+`export-to-csv.md`), labelled with its title, each carrying the same state
+mark a brief row carries, in the same slot.
+A feature's page is the brief page with these differences: the kicker is `FEATURE · path`; the meta line reads
+"Rests on N claims in <modules>", then "all locked" when every `rests_on` id
+names a locked claim and "M of N locked" otherwise (a phone shows "N claims,
+all locked"); a feature that rests on nothing reads "Rests on no claims yet"
+at every width, and so does its Made of card; the page speaks of itself as a
+feature (its status strip, Issues screen, Threads copy and its page-foot
+"Comment on this feature"); and a **Made of** list takes the place of Rests on — the
+`rests_on` claims grouped by module, each group under its module's
+title-cased name (a project claim under "Project"; two modules whose names
+title-case alike stay two groups), modules in the order their first claim appears and
+rows in the order the file lists them, captioned "rests_on, not an order". An
+id that names no claim sits last, under "Not a claim". "On this page" ends
+with a "Made of" row. Home gains a **Features** tile: each feature and its
+state (`locked`, `edited`, `review` or `draft`), or on a phone one line
+counting them. A feature shows its brief's
+own state only: nothing built, specified or conformance-related.
+
+A link in any brief's body to another brief opens that brief's page: a
+markdown link to `briefs/<folder>/<slug>.md`, written relative to the brief's
+own file (`../voice/talking-about-money.md`, `export-to-csv.md`) or from the
+project root (`briefs/voice/talking-about-money.md`, with or without a leading
+`/`), is rewritten to the page's id. A hash naming a brief's path
+(`#briefs/features/split-a-bill.md`) opens the page too. A link that names no
+brief is left as written.
+
+A brief's own warnings show in the status strip on its page, each as a row a
+reader sees without opening the Issues screen. `brief-dependency-drift` (a
+claim a locked brief rests on changed since approval, so the brief is
+review-pending) is **Needs you**, in the draft hue, as a claim's review cause
+is: "1 claim this feature rests on has changed since approval".
+`brief-rests-on-duplicate` is a **Check** that names the other brief by its
+title and opens its page: "Rests on the same claims as Export to CSV". Both
+are warnings: `check` still passes, and a claim's own warnings still wait
+under Later.
+
+A locked brief **edited since its approval** — its file no longer matches
+its lock record, which `check` reports as `brief-content-drift` and fails on —
+reads EDITED SINCE APPROVAL ("Edited" on a phone) under a red banner that
+counts what changed, and its body becomes a card with three views, Changes
+first. **Changes** is the redline against the approved text the lock record
+keeps: an approved passage struck in red above the passage that replaced it
+in green, and a passage added with nothing facing it in green, in the claim
+viewer's own diff, a passage and its replacement counted once. Under it is what the redline
+cannot show: a moved summary or `rests_on`, and each image changed, added or
+removed, read from the image digests the record signs beside the markdown. An
+edit that changes only whitespace the diff does not draw (trailing blank
+lines) says only whitespace differs. **Approved** is the approved text
+rendered as the page renders a brief, with no marks. **Current** is the file
+as it reads now, each changed or added run with a thin red rule and a
+"changed / added since approval" caption, removed passages left out.
+Headings, images and lists render in every view, and "On this page" lists
+the shown view's headings. The record keeps an image's digest, not its
+bytes, so every view draws images as they are now, and says so; an image the
+brief no longer references, or whose file is gone, is drawn as "image
+removed: <name>" or "image missing: <name>" rather than a broken image. The
+chosen view follows the reader to other edited briefs and across a live
+reload, until the tab is closed. `check` writes the viewer before its ledger
+gate fails, so the static build shows the edit as `dossierx serve` does; a
+lint error stops `check` earlier, before it writes the viewer, and the
+static page then stays as it was. There is no lock or restore button:
+"Approve or restore in a thread", the page-foot Comment button, opens the
+brief's threads on the comments rail, where the human says what should
+happen. On their yes the agent restores the
+approved text from version control, or runs `brief unlock` → fix → `brief
+lock`; a lock of the brief as it stands, to clear the finding, is never the
+fix. A record that holds no approved markdown shows a note in place of the
+views, naming `git log -p -- <path>` (the path from the repository root when
+the project is in a git work tree) as where the approved version is, and the
+file as it reads now. A brief whose file says `locked` with no approval on
+record reads LOCK NOT RECORDED, not Locked, and its meta line says "Not
+locked: no approval on record", its sidebar mark's label. A feature brief
+edited since its approval gets the same banner and views on its feature
+page, under the meta line a feature page always has (what it rests on, not
+the approval), and in every view a link to another brief opens that brief's
+page.
+
+A locked brief **whose rests_on claim moved since approval** —
+`brief-dependency-drift`, a warning, so `check` still passes — is
+review-pending. Its page opens with one amber banner per changed claim, stacked,
+each naming the claim and showing that claim's wording then and now as the
+same redline the edited brief uses (the claim renderer, not document mode).
+A baseline no snapshot retains says "earlier wording not available" and still
+links the claim. A listed claim that is gone names `brief-rests-on-missing`.
+That claim's Rests on row (Made of, on a feature) reads "changed <date>" in
+amber, or "changed" when the current wording has no standing approval time.
+The sidebar mark is amber ("review"); edited since approval still outranks
+it. There is no confirm button of the engine's: "Confirm in a thread", the
+page-foot Comment button, opens the brief's threads, and on the human's yes
+the agent runs `brief reaudit --confirm`. Claim locking is not blocked. If
+the agent already edited the brief to follow the claim, the B2 views sit
+under the banners, captioned "Updated by the agent since approval". After
+`brief reaudit --confirm` the banners go and the brief reads as locked
+again. The Threads block on an edited or pending brief says so in those
+words ("To approve the new wording…" / "To confirm the brief still holds…")
+and its button reads "Start a thread".
+
+A claim card does show the briefs around it, derived at render time and never
+stored: a **BRIEFS** group in its relationships panel, after RESTS ON and
+DEPENDED ON BY, marked "derived" and counted in the relationships chip.
+
+- **Explained by** lists every brief whose `rests_on` names the claim.
+- **Cited as evidence** lists every brief an `internal` source of the claim
+  points at: a source whose `path`, once `./` and `..` segments are resolved,
+  is `<briefs_dir>/<folder>/<slug>.md`. The row shows the pinned hash (its
+  first 12 hex characters), or "pin out of date" when `source-internal-drift`
+  reports that source. That lint is an error, so `check` stops before it
+  renders and the out-of-date row is seen under `dossierx serve`. Two sources
+  citing one brief make one row, out of date if either is.
+- A cited path that names no brief in the tree (a deleted or misspelt brief)
+  still gets a row: the source's title, no link and no status, and "pin out of
+  date", since the file cannot be read.
+
+Each row gives the brief's folder, its title and its `status`. The title is a
+link to the brief's page, at the id that page takes (`#brief-<folder>-<slug>`,
+or its `-2` form when another brief or a module spells it first), so a click
+opens the brief it names. An explaining brief whose review is pending reads
+"review pending" in amber on that row (the draft hue, including on a phone).
+A brief that rests on nothing and that no claim
+cites appears on no card; a project with no brief shows no group. The
+claim's Sources panel is unchanged.
 
 ## Project config (`project.config.yaml`)
 

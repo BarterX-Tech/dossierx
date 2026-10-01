@@ -46,9 +46,27 @@ const (
 // rendered plainly. That is not a fallback path bolted on: it is the ordinary
 // case for every passage a reader did not change.
 func renderHunk(h textdiff.Hunk) (rendered string, changedWords []string) {
+	return RenderPassageWith(h, claimBody)
+}
+
+// RenderFunc renders one passage of markdown source to HTML. It must be an
+// escaping renderer (internal/render/markdown): the passage HTML reaches the
+// viewer as markup.
+type RenderFunc func(source string) string
+
+// claimBody is a claim body's renderer: markdown.Render, claim mode.
+func claimBody(source string) string { return string(markdown.Render(source)) }
+
+// RenderPassageWith is renderHunk with the markdown renderer chosen by the
+// caller. A claim passage renders in claim mode (renderHunk); a brief's
+// renders in document mode with its images on the brief's asset path
+// (internal/render's brief diff, NIT-199). Everything else — where the
+// marks go, the check that they did not change the prose, the fallback to
+// an unmarked passage — is the same code for both.
+func RenderPassageWith(h textdiff.Hunk, render RenderFunc) (rendered string, changedWords []string) {
 	text := strings.TrimRight(h.Text, "\n")
 	if len(h.Parts) == 0 {
-		return string(markdown.Render(text)), nil
+		return render(text), nil
 	}
 
 	var marked strings.Builder
@@ -71,8 +89,8 @@ func renderHunk(h textdiff.Hunk) (rendered string, changedWords []string) {
 		changed = append(changed, core)
 	}
 
-	plain := string(markdown.Render(text))
-	withMarks := string(markdown.Render(strings.TrimRight(marked.String(), "\n")))
+	plain := render(text)
+	withMarks := render(strings.TrimRight(marked.String(), "\n"))
 
 	// THE MARKS MUST NOT CHANGE THE PROSE. Stripped of the sentinels, the
 	// marked render has to be the unmarked render, character for character.

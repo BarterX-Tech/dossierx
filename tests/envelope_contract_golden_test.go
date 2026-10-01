@@ -183,6 +183,45 @@ func envBriefs(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
+// envBriefLocked is envBriefs after the human locked the brief (NIT-205): its
+// status is locked and the lock store holds its record and one baseline.
+func envBriefLocked(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBriefs(t, dir)
+	envMustRun(t, dir, "brief", "lock", "briefs/widget/flow.md", "--reason", "fixture approval")
+	return nil
+}
+
+// envBriefDrifted is envBriefLocked after the claim the brief rests on was
+// rewritten, so the brief is review_pending with one changed claim — the only
+// state in which changed_claims is populated.
+func envBriefDrifted(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBriefLocked(t, dir)
+	p := filepath.Join(dir, "claims", "overview.yaml")
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	edited := strings.Replace(string(raw), "fixture claim for CLI tests.", "fixture claim for CLI tests, rewritten.", 1)
+	if edited == string(raw) {
+		t.Fatalf("the claim body to rewrite was not found:\n%s", raw)
+	}
+	if err := os.WriteFile(p, []byte(edited), 0o644); err != nil {
+		t.Fatalf("write claim: %v", err)
+	}
+	return nil
+}
+
+// envBriefOpenThread is envBriefs with a human's open thread on the brief, the
+// state brief lock refuses as comment_open.
+func envBriefOpenThread(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBriefs(t, dir)
+	envMustRun(t, dir, "comment", "add", "briefs/widget/flow.md", "--as", "human", "--body", "is this flow still right?")
+	return nil
+}
+
 // envRemovedTheme pins migration failures across every check mode.
 func envRemovedTheme(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -416,6 +455,17 @@ func envelopeCases() []envelopeCase {
 		{"brief list / only the briefs awaiting review", envBriefs, []string{"brief", "list", "--review-pending"}},
 		{"brief show / by path", envBriefs, []string{"brief", "show", "briefs/widget/flow.md"}},
 		{"brief show / a path no brief is at", envBriefs, []string{"brief", "show", "briefs/widget/ghost.md"}},
+		{"brief show / review_pending, one rests_on claim changed", envBriefDrifted, []string{"brief", "show", "briefs/widget/flow.md"}},
+		{"brief lock / preview", envBriefs, []string{"brief", "lock", "briefs/widget/flow.md", "--dry-run", "--reason", "approved"}},
+		{"brief lock / a draft brief", envBriefs, []string{"brief", "lock", "briefs/widget/flow.md", "--reason", "approved"}},
+		{"brief lock / locked and unchanged", envBriefLocked, []string{"brief", "lock", "briefs/widget/flow.md", "--reason", "again"}},
+		{"brief lock / an open thread on the brief", envBriefOpenThread, []string{"brief", "lock", "briefs/widget/flow.md", "--reason", "approved"}},
+		{"brief unlock / a locked brief", envBriefLocked, []string{"brief", "unlock", "briefs/widget/flow.md", "--reason", "rework"}},
+		{"brief unlock / a draft brief", envBriefs, []string{"brief", "unlock", "briefs/widget/flow.md", "--reason", "rework"}},
+		{"brief reaudit / preview of a changed claim", envBriefDrifted, []string{"brief", "reaudit", "briefs/widget/flow.md"}},
+		{"brief reaudit / confirmed", envBriefDrifted, []string{"brief", "reaudit", "briefs/widget/flow.md", "--confirm", "--reason", "the rewrite is fine"}},
+		{"brief reaudit / not review_pending", envBriefLocked, []string{"brief", "reaudit", "briefs/widget/flow.md", "--confirm", "--reason", "nothing moved"}},
+		{"comment inbox / a thread on a brief", envBriefOpenThread, []string{"comment", "inbox"}},
 
 		{"version / the verb", envNoProject, []string{"version"}},
 		{"version / the root flag", envNoProject, []string{"--version"}},

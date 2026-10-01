@@ -36,10 +36,17 @@ func TestRunConformanceWritesAgreementThenRemovesStaleStatus(t *testing.T) {
 		claimPath:           withDeclaration,
 		nonePath:            plainNone + "embodiment:\n  mode: none\n  reason: documentation-only neutral fixture\n",
 		"observations.json": `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["ready","paused"]}]}`,
+		// A brief image: the conformance write path copies it beside the
+		// viewer exactly as the plain path does (NIT-197 F10).
+		"briefs/flow/overview.md": "---\nsummary: The flow.\n---\n![Flow](flow.png)\n",
+		"briefs/flow/flow.png":    "png-bytes",
 	})
 	res, err := check.Run(claims, cfg)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if img, err := os.ReadFile(filepath.Join(filepath.Dir(cfg.ViewerPath()), "brief-assets", "flow", "flow.png")); err != nil || string(img) != "png-bytes" {
+		t.Fatalf("the conformance write path must copy the brief image beside the viewer: %q, %v", img, err)
 	}
 	if res.Conformance == nil || res.Conformance.Summary.Mismatch != 1 || res.Conformance.Summary.DeclaredNone != 1 || res.ConformancePath == "" {
 		t.Fatalf("conformance result = %+v", res.Conformance)

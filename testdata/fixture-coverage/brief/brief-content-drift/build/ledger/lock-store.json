@@ -1,0 +1,62 @@
+{
+  "version": 4,
+  "policy_version": 1,
+  "hashes": {},
+  "locked_at": {},
+  "constitution": {
+    "hash": "901445c7eba758ba1ff36b947f3e1dc54063b5e42850dad48362f66827839f65",
+    "reason": "fixture roof",
+    "locked_at": "2026-09-30T10:33:50.664135Z"
+  },
+  "briefs": {
+    "flow.overview": {
+      "path": "briefs/flow/overview.md",
+      "hash": "d6675f74082cf02473b1c18553bc42e63ae24f186485090bd09682dd2f03a3b8",
+      "at": "2026-09-30T18:25:49.038405Z",
+      "actor": "fixture",
+      "reason": "fixture approval",
+      "approved": {
+        "summary": "A locked brief edited after its approval.",
+        "rests_on": [
+          "briefmod.contract.anchor"
+        ],
+        "markdown": "Rests on the anchor.\n"
+      },
+      "images": {},
+      "baselines": {
+        "briefmod.contract.anchor": "eec3e70bac37c4fd0b0d114822d0e4c750243a1dd23e38ea37e710363a1879df"
+      },
+      "receipts": {
+        "briefmod.contract.anchor": {
+          "ID": "briefmod.contract.anchor",
+          "Facet": "contract",
+          "Module": "briefmod",
+          "Scope": "",
+          "Status": "draft",
+          "Layout": "card",
+          "Kind": "",
+          "Embodiment": null,
+          "Summary": "The claim the fixture's briefs rest on.",
+          "Body": "The claim the fixture's briefs rest on.\n",
+          "Rows": null,
+          "Section": "",
+          "RawHTML": "",
+          "RawHTMLReviewed": false,
+          "Steps": null,
+          "RestsOn": {
+            "None": true,
+            "Reason": "fixture claim, not backed by any real doctrine",
+            "IDs": null
+          },
+          "Sources": null,
+          "Order": 0,
+          "Emphasis": false,
+          "ReviewPending": false,
+          "AuditNotes": null,
+          "Comments": null,
+          "SourcePath": ""
+        }
+      }
+    }
+  }
+}

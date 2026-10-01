@@ -12,6 +12,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/conformance"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -154,7 +155,7 @@ func TestLazyShell_BriefsPayload(t *testing.T) {
 	cat, cfg := briefViewFixture()
 	at := time.Unix(1_700_000_000, 0).UTC()
 	set := briefViewSet(cfg)
-	want, err := briefsPayloadJSONWithBudget(set, nil)
+	want, err := briefsPayloadJSONWithBudget(set, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,5 +250,78 @@ func TestRenderWith_RefusesABriefsPayloadPastTheOutputCap(t *testing.T) {
 	_, err = RenderWith(cat, &override, Extras{Briefs: set})
 	if !errors.Is(err, conformance.ErrCapacityExceeded) || !strings.Contains(err.Error(), want) {
 		t.Fatalf("override shell: expected the briefs-payload capacity refusal, got %v", err)
+	}
+}
+
+// TestRenderWith_BriefsPayloadCarriesTheReviewState pins the NIT-205 half of
+// the payload, which the viewer's brief screens (NIT-199, NIT-200) render from
+// without computing anything: a locked brief whose rests_on claim moved
+// carries lock_state, review_pending with its trigger, the lock date and
+// reason, the changed claim with its wording at the baseline and now, the
+// retained approved markdown and its rendered HTML, and open_threads; a render
+// with no review state reads every brief as a draft with nothing pending.
+func TestRenderWith_BriefsPayloadCarriesTheReviewState(t *testing.T) {
+	cat, cfg := briefViewFixture()
+	at := time.Unix(1_700_000_000, 0).UTC()
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("widget/flow.md", "---\nsummary: The widget flow.\nstatus: locked\nrests_on: [widget.contract.overview]\ncomments:\n  - id: c-1\n    status: open\n    author: human\n    created: 2026-09-30T00:00:00Z\n    body: why?\n    edited: false\n---\n# Widget flow\n"),
+	})
+	b := set.Briefs[0]
+	then := cat.Claims[0]
+	then.Body = "the wording the brief was approved against"
+	store, err := lock.LoadStore(t.TempDir() + "/lock-store.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, receipts, _ := briefs.Baselines(b, []model.Claim{then})
+	lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{
+		Path: b.Path, Hash: b.LockHash, At: "2026-09-30T00:00:00Z", Reason: "approved",
+		Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: b.RestsOn, Markdown: "# Widget flow, as approved\n"},
+		Baselines: hashes, Receipts: receipts,
+	})
+
+	html, err := renderBoundedAt(cat, cfg, Extras{Briefs: set, BriefReview: briefs.Evaluate(set, cat.Claims, store)}, at, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := briefsBlock.FindStringSubmatch(html)
+	if m == nil {
+		t.Fatal("no briefs payload")
+	}
+	var p struct {
+		Briefs []map[string]any `json:"briefs"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &p); err != nil {
+		t.Fatal(err)
+	}
+	got := p.Briefs[0]
+	changed, okChanged := got["changed_claims"].([]any)
+	approved, okApproved := got["approved"].(map[string]any)
+	html, okHTML := got["approved_body_html"].(string)
+	if !okChanged || !okApproved || !okHTML {
+		t.Fatalf("payload field types: %+v", got)
+	}
+	if got["lock_state"] != "locked" || got["review_pending"] != true || got["review_pending_trigger"] != briefs.TriggerDependencyDrift ||
+		got["locked_at"] != "2026-09-30T00:00:00Z" || got["lock_reason"] != "approved" || got["open_threads"] != float64(1) ||
+		len(changed) != 1 || approved["markdown"] != "# Widget flow, as approved\n" ||
+		!strings.Contains(html, "as approved") {
+		t.Fatalf("review state in the payload = %+v", got)
+	}
+	c, okC := changed[0].(map[string]any)
+	baseline, okB := c["baseline"].(map[string]any)
+	current, okN := c["current"].(map[string]any)
+	if !okC || !okB || !okN || c["id"] != "widget.contract.overview" || baseline["body"] != then.Body || current["body"] != cat.Claims[0].Body {
+		t.Fatalf("changed claim in the payload = %+v", c)
+	}
+
+	html, err = renderBoundedAt(cat, cfg, Extras{Briefs: set}, at, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(briefsBlock.FindStringSubmatch(html)[1]), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Briefs[0]["lock_state"] != "draft" || p.Briefs[0]["review_pending"] != false {
+		t.Fatalf("with no review state every brief reads as a draft: %+v", p.Briefs[0])
 	}
 }

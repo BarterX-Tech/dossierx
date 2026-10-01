@@ -6,8 +6,8 @@ description: >-
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
   any DossierX command. It is short on purpose: the nine nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, which command (flag vs unlock vs reaudit),
-  and which companion skill to load (claims, modules, constitution, comments, code-links,
-  upgrading). Load a companion skill only when this one sends you there.
+  and which companion skill to load (claims, modules, constitution, briefs, comments,
+  code-links, upgrading). Load a companion skill only when this one sends you there.
 ---
 
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
@@ -18,17 +18,17 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 23 commands | the viewer, via `dossierx serve` — including its **Constitution** pin above Modules (the project roof, not a module: The file \| Project claims), its **claims graph**, the pane that draws `rests_on` and overlays isolated claims, dependency cycles, review-pending and open threads |
+| Surface | the CLI — all 26 commands | the viewer, via `dossierx serve` — including its **Constitution** pin above Modules (the project roof, not a module: The file \| Project claims), its **claims graph**, the pane that draws `rests_on` and overlays isolated claims, dependency cycles, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The nine nouns, twenty-three leaves
+## The nine nouns, twenty-six leaves
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing — neither proves code links
 dossierx claim  show list new lock unlock flag reaudit link recover-approved-content
 dossierx comment inbox list add reply
 dossierx constitution show lock            # the project-root constitution.yaml — the roof, not a module: show prints the words, lock records the hash
-dossierx brief  list show                  # read-only: the briefs beside the claims (list --review-pending is empty until briefs lock)
+dossierx brief  list show lock unlock reaudit # the briefs beside the claims; lock/unlock/reaudit take --reason, like claims
 dossierx manifest show list                # module harness: --isolation = constitution + project claims index + manifest + claim summaries; --integration = neighbors; list = catalog
 dossierx serve                             # the human's one command
 dossierx skills export [dir]
@@ -38,6 +38,8 @@ dossierx version
 **Work one module at a time:** `manifest show <module> --isolation` → `manifest list` / `--integration` for neighbors → the human locks. Never walk or read the whole claims tree; `dossierx-modules` has the full reading order and the caps.
 `claim recover-approved-content` is a one-time upgrade migration — `dossierx-upgrading` owns it.
 A **brief** (`briefs/<folder>/<slug>.md`, frontmatter `summary`/`status`/`rests_on`; FORMAT.md "Briefs") is a document, not a claim, and gates no claim. `check` enforces its shape and caps as `brief-*` findings in `lint_findings`, whose `claim_id` is a path (the brief, its folder, or `briefs/`). Split or trim an over-cap brief; raising a `max_brief*` cap is the human's call.
+`brief lock` records the human's approval and a baseline per `rests_on` claim; a moved claim makes the brief `review_pending` (`brief-dependency-drift`), `brief reaudit <path>` shows the change and `--confirm --reason` takes the human's yes. Lock, unlock and reaudit are the human's call, as for claims. A brief's comment threads anchor on its path (`comment add|reply|list briefs/…`) and show in `comment inbox`.
+**DossierX holds guarantees; everything else — design, voice, rationale, research, a feature — goes in `briefs/`** (`dossierx-claims` sorts a statement, `dossierx-briefs` writes the brief). Discovery is `dossierx brief list`, never the isolation view.
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.
@@ -75,7 +77,9 @@ synced" in chat is neither and is never a certificate; when the evidence is miss
 | `claim_not_found` | 2 | you guessed an id. Run `dossierx claim list --match "<what the human said>"` and confirm the id back to them. |
 | `brief_not_found` | 2 | `brief show` got neither a brief's path nor its `<folder>.<slug>` id. Run `dossierx brief list` and pass the path it prints. |
 | `lint_failed` | 1 | findings are in **`data.lint_findings`** — on `check` and on `claim lock` alike (`claim lock` keeps a second copy under `error.details.lint_findings`). Fix the claims, then re-check **with the command that refused you**: `dossierx check --validate` after a `check` failure, `dossierx claim lock <id> --dry-run` after a `claim lock` failure. Re-running `check --validate` after a lock refusal is a **loop, not a recovery**: it does not re-attempt the lock, and it reports *zero* findings for every rule that keys off a claim's own status (`roll-up`) because the claim is still `draft` on disk. The dry run lints the about-to-be-locked form, which is the only form that answers. A cap finding (`module-claim-cap`, `summary-oversize`, `body-oversize`, `module-manifest`, `shared-context-budget`) is loud by design: split or trim per `dossierx-modules`; raising a cap is the human's call, never yours. (Lint findings key on `lint`; ledger findings key on `rule`.) |
-| `integrity_failed` | 1 | **read `data.ledger_findings` and branch on `rule`** — one code, three kinds of arm. `lock-ledger-pre-ledger` is a project whose lock store predates the lock ledger and that still holds something locked (`dossierx-upgrading` has the crossing) — it is SILENT on a pre-ledger project holding nothing locked, which crosses correctly on its next lock. `store-gitignored` is not tampering either: a store the engine writes under `build/ledger` or `build/code-links` is matched by `.gitignore` and untracked, so the approval never reaches the repository — recover by replacing the pattern with the `RecommendedGitignore` block (README's "Where DossierX writes") or pointing `build_dir` elsewhere; `restore from git` and `unlock → fix → lock` are both wrong for it, an agent looping either one is chasing an unchanged finding about *where the store sits*, not its content. Everything else — `lock-ledger-missing`, `lock-ledger-deleted`, `lock-content-drift`, `lock-ledger-released`, `lock-ledger-orphan`, `lock-ledger-abandoned`, `lock-ledger-absent`, `lock-ledger-downgraded`, `comment-ledger-drift`, and the `comment-digest-*` family — is a locked artifact moved outside the approval path: **do not re-lock to make it go away**, restore the file from git or unlock → fix → lock. Two of them are now refusals on the WRITE path too, so you will meet them as a failed `claim lock` and not only as a finding: `lock-ledger-deleted` and `comment-digest-unrecorded`. Re-locking was the step that erased each of them, so there is no command that clears either — the recovery is restoring the named store file, and `unlock → fix → lock` is **wrong** here because it signs the edit. |
+| `integrity_failed` | 1 | **read `data.ledger_findings` and branch on `rule`** — one code, three kinds of arm. `lock-ledger-pre-ledger` is a project whose lock store predates the lock ledger and that still holds something locked (`dossierx-upgrading` has the crossing) — it is SILENT on a pre-ledger project holding nothing locked, which crosses correctly on its next lock. `store-gitignored` is not tampering either: a store the engine writes under `build/ledger` or `build/code-links` is matched by `.gitignore` and untracked, so the approval never reaches the repository — recover by replacing the pattern with the `RecommendedGitignore` block (README's "Where DossierX writes") or pointing `build_dir` elsewhere; `restore from git` and `unlock → fix → lock` are both wrong for it, an agent looping either one is chasing an unchanged finding about *where the store sits*, not its content. Everything else — `lock-ledger-missing`, `lock-ledger-deleted`, `lock-content-drift`, `lock-ledger-released`, `lock-ledger-orphan`, `lock-ledger-abandoned`, `lock-ledger-absent`, `lock-ledger-downgraded`, `comment-ledger-drift`, the `comment-digest-*` family, and a brief's `brief-content-drift` / `brief-unrecorded` / `brief-orphan` / `brief-abandoned` (`claim_id` is its path) — is a locked artifact moved outside the approval path: **do not re-lock to make it go away**, restore the file from git or unlock → fix → lock. Two of them are now refusals on the WRITE path too, so you will meet them as a failed `claim lock` and not only as a finding: `lock-ledger-deleted` and `comment-digest-unrecorded`. Re-locking was the step that erased each of them, so there is no command that clears either — the recovery is restoring the named store file, and `unlock → fix → lock` is **wrong** here because it signs the edit. |
+| `comment_open` | 1 | `brief lock` / `brief reaudit --confirm` on a brief with an open thread. Reply on it (`comment reply <brief-path> <thread>`); resolving is the human's, in the served viewer — until then the refusal stands. |
+| `store_too_new` | 1 | a lock or comment digest store written by a newer dossierx. Upgrade the binary; never edit or restore the store to make an older one read it. |
 | `unresolved_comments` | 1 | the claim has an open thread. Reply on it; the **human** clicks Resolve in the viewer. That click is the approval this gate waits for. |
 | `not_review_pending` | 2 | you reached for `claim reaudit` on a claim that is not drifting. The general edit path is unlock → fix → lock. |
 | `review_pending` | 2 | the claim IS pending, and that is what blocks you. `dossierx claim show <id>` names the trigger. **One exception `claim show` cannot explain:** `claim lock` returns it when you passed `--semantic-conflict <claim-id>=<dependency-id>=<reason>` (repeatable; dependency id may be empty) naming a contradiction you saw. The flag refuses that claim in that one call and is recorded nowhere, so `claim show` will not name it. The dry run shows it as `blocked: true` with a `semantic_contradiction_requires_human_review` verdict. Put `error.details.semantic_conflicts` to the human; re-run without the flag only after they have resolved it. A missing claim id or reason, or a claim not in the set being locked, is `bad_request`. |
@@ -207,11 +211,12 @@ locked claim still resolves to its record. A move that **strands** them fails as
 | cite the evidence behind a claim (`sources`, `[n]` markers) | `dossierx-claims` |
 | orient in a module, draft `manifest.yaml`, read neighbors (`manifest show --isolation` / `--integration`, `manifest list`), or meet any cap | `dossierx-modules` |
 | draft, show, lock or re-lock the constitution; author a project claim (`project.<slug>`) | `dossierx-constitution` |
+| write, edit, lock, unlock or reaudit a brief under `briefs/`, write a feature brief, choose a brief's `rests_on`, cite a brief from a claim, or meet a `brief-*` finding | `dossierx-briefs` |
 | implement code from a locked module, tag it with `dossierx-claim:` or `dossierx-step:`, or report that shipped code no longer matches a locked claim | `dossierx-code-links` |
 | read `dossierx comment inbox`, reply to a review thread, or decide comment vs. `claim flag` | `dossierx-comments` |
-| upgrade the binary: a corpus you did not touch refuses (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks-retired`, `doctrine_facet`, `layout_legacy`, pre-ledger), or re-export skills | `dossierx-upgrading` |
+| upgrade the binary: a corpus you did not touch refuses (`governed_by`, `build_role`, `mirrors`, `migrated_from`, `tracks-retired`, `doctrine_facet`, `layout_legacy`, pre-ledger), sort an old corpus into claims and briefs, or re-export skills | `dossierx-upgrading` |
 
-Load one at a time, not all seven.
+Load one at a time, not all eight.
 
 ## Bootstrap — setting DossierX up in a repo
 

@@ -22,10 +22,11 @@
 //     way it branches on every other rule, but they are this package's rule set
 //     (Rules), not lint.Registry's, and `claim lock` never sees them.
 //
-// WHAT IS NOT HERE YET. The lock store, the state transitions (brief lock,
-// unlock, reaudit), content and dependency drift, and review-pending
-// computation are NIT-205. Status is read from the frontmatter and reported;
-// nothing here writes a file, takes a sentinel or records an approval.
+// THE LOCK LIFECYCLE (NIT-205) is lockstate.go: a brief's state against its
+// record in the lock store, its review-pending state against the rests_on
+// baselines that record keeps, and the four findings they raise. write.go is
+// the one place a brief file is rewritten — its status line and its comments
+// block, never a byte of the body. Discovery itself still writes nothing.
 //
 // THE SHAPE, in full. briefs_dir (default briefs) is ONE folder level deep:
 // briefs/<folder>/ holds <slug>.md files and the images those briefs reference,
@@ -54,6 +55,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -65,11 +67,13 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
 // Status is a brief's lifecycle state as its frontmatter declares it. Only the
-// two values exist; NIT-205 is what will give "locked" a record behind it.
+// two values exist; a "locked" brief is approved only when the lock store holds
+// a standing record for it (lockstate.go).
 type Status string
 
 const (
@@ -87,6 +91,10 @@ type Image struct {
 	Name    string `json:"name"`
 	Bytes   int64  `json:"bytes"`
 	Present bool   `json:"present"`
+	// Digest is the sha256 of the image file's bytes, hex, when present:
+	// what `brief lock` records and brief-content-drift compares (NIT-205).
+	// Not in the payload; the viewer has no use for it.
+	Digest string `json:"-"`
 }
 
 // Brief is one parsed brief. Everything on it is derived from the file's own
@@ -116,6 +124,13 @@ type Brief struct {
 	Content string
 	Body    string
 	Digest  string
+
+	// Comments is the brief's review threads (NIT-205), engine-managed and in
+	// the claim's comment shape. LockHash is what `brief lock` signs — summary,
+	// rests_on and body (see LockHash) — so neither status nor a comment moves
+	// it, the way a claim's status and comments never move its hashes.
+	Comments []model.Comment
+	LockHash string
 
 	// Words is constitution.CountWords — the meter the roof's cap uses — over
 	// the text the rendered Body puts on the page (markdown.DocumentText), so
@@ -185,6 +200,10 @@ type File struct {
 	Size    int64
 	Regular bool
 	Data    []byte
+	// Digest is the sha256 of a regular non-.md file's bytes, hex, when the
+	// reader hashed it without keeping the bytes (Load streams images); the
+	// index reader hands the bytes in Data instead, and FromFiles hashes them.
+	Digest string
 }
 
 // Load discovers the briefs tree on disk at cfg.BriefsDirPath(). A directory
@@ -286,6 +305,14 @@ func Load(cfg *config.Config) *Set {
 				return skip(p, d, readErr)
 			}
 			f.Data = raw
+		} else if markdown.IsDocumentImageExt(path.Ext(f.Rel)) {
+			// An image is signed by a brief's lock (its sha256 on the
+			// record), so it is hashed here — streamed, never held.
+			digest, hashErr := fileDigest(p)
+			if hashErr != nil {
+				return skip(p, d, hashErr)
+			}
+			f.Digest = digest
 		}
 		files = append(files, f)
 		return nil
@@ -300,6 +327,32 @@ func Load(cfg *config.Config) *Set {
 		s.add(RuleShape, u.display, "could not be read (%v); a brief the engine cannot read is not judged, so this is refused rather than skipped", readErrText(u.err))
 	}
 	return s
+}
+
+// fileDigest is the sha256 of a file's bytes, hex, streamed.
+func fileDigest(p string) (string, error) {
+	f, err := os.Open(p)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// ImageDigests is the sha256 of every present image b references, by name —
+// what `brief lock` records beside the lock hash.
+func (b Brief) ImageDigests() map[string]string {
+	out := map[string]string{}
+	for _, img := range b.Images {
+		if img.Present {
+			out[img.Name] = img.Digest
+		}
+	}
+	return out
 }
 
 // readErrText is an I/O error without the absolute path a *fs.PathError
@@ -405,6 +458,13 @@ func FromFiles(cfg *config.Config, files []File) *Set {
 				file, ok := ff.images[img.Name]
 				b.Images[i].Present = ok
 				b.Images[i].Bytes = file.Size
+				if ok {
+					b.Images[i].Digest = file.Digest
+					if b.Images[i].Digest == "" && file.Data != nil {
+						sum := sha256.Sum256(file.Data)
+						b.Images[i].Digest = hex.EncodeToString(sum[:])
+					}
+				}
 				if !ok {
 					s.add(RuleShape, b.Path, "references image %q, which is not in %s/%s/; a brief's images sit beside it in its own folder", img.Name, s.DisplayDir, folder)
 				}
@@ -487,7 +547,8 @@ func (s *Set) parse(folder string, f File) Brief {
 	for _, p := range problems {
 		s.add(RuleFrontmatter, b.Path, "%s", p)
 	}
-	b.Summary, b.RestsOn, b.Body = fm.summary, fm.restsOn, body
+	b.Summary, b.RestsOn, b.Body, b.Comments = fm.summary, fm.restsOn, body, fm.comments
+	b.LockHash = LockHash(b.Summary, b.RestsOn, b.Body)
 	if fm.status != "" {
 		b.Status = Status(fm.status)
 	}
@@ -514,6 +575,44 @@ func (s *Set) parse(folder string, f File) Brief {
 		s.add(RuleShape, b.Path, "image %q is not one a brief can show, so it renders as literal text; a brief references an image by its bare file name in its own folder — [a-z0-9-] and a lowercase .png/.jpg/.jpeg/.gif/.webp/.svg extension, as ![alt](flow-diagram.svg)", src)
 	}
 	return b
+}
+
+// LockHash is the hash `brief lock` records and brief-content-drift compares:
+// the summary, the rests_on set and the body — everything a reader of the
+// brief reads. Status and comments are left out on purpose, as a claim's are:
+// locking flips status, and a review thread is about the brief, not part of
+// it. rests_on is hashed as a set (sorted), because its order carries no
+// meaning. Each field is length-prefixed so no two different briefs can
+// concatenate to the same input.
+//
+// Images a brief references are not signed: the hash covers the markdown file.
+// An image file replaced under the same name is not brief-content-drift.
+func LockHash(summary string, restsOn []string, body string) string {
+	ids := append([]string(nil), restsOn...)
+	sort.Strings(ids)
+	h := sha256.New()
+	fmt.Fprintf(h, "dossierx-brief-lock/v1\nsummary=%d:%s\nrests_on=%d\n", len(summary), summary, len(ids))
+	for _, id := range ids {
+		fmt.Fprintf(h, "id=%d:%s\n", len(id), id)
+	}
+	fmt.Fprintf(h, "body=%d:%s\n", len(body), body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// FilePath is the brief's file on disk: briefs_dir/<folder>/<slug>.md.
+func FilePath(cfg *config.Config, b Brief) string {
+	return filepath.Join(cfg.BriefsDirPath(), b.Folder, b.Slug+briefExt)
+}
+
+// OpenThreads is how many of the brief's comment threads are unresolved.
+func (b Brief) OpenThreads() int {
+	n := 0
+	for _, c := range b.Comments {
+		if c.Status == model.CommentStatusOpen {
+			n++
+		}
+	}
+	return n
 }
 
 // titleCase turns a slug into the fallback title: each hyphen-separated word
@@ -548,4 +647,20 @@ func (s *Set) add(rule, claimID, format string, args ...any) {
 		Severity: severityOf(rule),
 		Message:  fmt.Sprintf(format, args...),
 	})
+}
+
+// init gives source-internal-drift its brief pin (NIT-198): an internal
+// source citing a brief pins the brief's LockHash — summary, rests_on and
+// body — so a status flip or a comment thread written into the brief's
+// frontmatter never reads as drift under the claim that cites it. The file
+// is parsed exactly as discovery parses it (FromFiles), so the value is the
+// content_hash `brief show` prints and `brief lock` signs.
+func init() {
+	lint.BriefContentHash = func(cfg *config.Config, rel string, data []byte) (string, bool) {
+		set := FromFiles(cfg, []File{{Rel: rel, Size: int64(len(data)), Regular: true, Data: data}})
+		if len(set.Briefs) != 1 {
+			return "", false
+		}
+		return set.Briefs[0].LockHash, true
+	}
 }

@@ -136,6 +136,7 @@
         // delegated click that works the control is still attached once, below.
         mountSourceNoteClamps();
         localizeHomeCheck();
+        syncBriefEdits();
       }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
@@ -167,6 +168,20 @@
         if (Object.prototype.hasOwnProperty.call(moduleDefaultFacet, id)) {
           return { module: id, facet: moduleDefaultFacet[id] };
         }
+        // A brief's page and the "All briefs" index (NIT-197) are sections
+        // with no facet, as Home is, so each resolves to itself alone.
+        if (briefPageSection(id)) {
+          return { module: id };
+        }
+        // A brief named by its path, as check names it
+        // ("briefs/features/split-a-bill.md"), opens its page (NIT-201). A
+        // body link to another brief is rewritten to the page's id at render
+        // (render.resolveBriefLinks); this is the same mapping for a hash
+        // typed or pasted by hand.
+        var byPath = briefSectionForPath(id);
+        if (byPath) {
+          return { module: byPath.id };
+        }
         // Home (NIT-196) is the page the viewer opens on, and where any hash
         // it does not recognise lands. It holds no facet, so it resolves to
         // itself alone. Its id, HOME_ID, carries an underscore, which
@@ -190,6 +205,100 @@
 
       // HOME_ID is the Home section's element id and hash (shell.html).
       var HOME_ID = '_home';
+      // BRIEFS_INDEX_ID is the "All briefs" section's id (render.briefsIndexID).
+      var BRIEFS_INDEX_ID = '_briefs';
+
+      // briefPageSection returns the brief page or the "All briefs" index
+      // section with this id, or null. Both are .module-sections with no
+      // .claim-group; their ids come from render.briefAnchors and can never
+      // be a claim or facet id, which resolve() has already tried.
+      function briefPageSection(id) {
+        if (!id) { return null; }
+        var sec = document.getElementById(id);
+        if (!sec || !sec.classList.contains('module-section')) { return null; }
+        return (sec.classList.contains('brief-section') || sec.classList.contains('briefs-index-section')) ? sec : null;
+      }
+
+      // activeBriefSection is the brief page on screen, or null.
+      function activeBriefSection() {
+        return document.querySelector('.brief-section:not([hidden])');
+      }
+
+      // briefFindingPaths is every claim_id a check finding about the brief on
+      // screen can carry: the brief's own path, its folder's ("briefs/x/", a
+      // folder cap) and the tree's ("briefs/", the total cap). A brief finding
+      // names a PATH where a claim finding names a claim id (internal/briefs),
+      // so the strip shows it on the brief's page the way a claim finding
+      // shows on its facet. Rule ids are not listed: any finding whose
+      // claim_id is one of these paths belongs here, including rules added
+      // later (NIT-205's drift and review rules).
+      function briefFindingPaths(section) {
+        var ids = Object.create(null);
+        var p = section && section.getAttribute('data-brief-path');
+        if (!p) { return ids; }
+        ids[p] = true;
+        var folder = p.slice(0, p.lastIndexOf('/') + 1);
+        if (folder) { ids[folder] = true; }
+        var tree = folder.slice(0, folder.slice(0, -1).lastIndexOf('/') + 1);
+        if (tree) { ids[tree] = true; }
+        return ids;
+      }
+
+      // briefSectionForPath is the page of the brief a finding's claim_id
+      // names, or null for a folder or tree path (or a claim id).
+      function briefSectionForPath(p) {
+        if (!p || p.indexOf('/') < 0) { return null; }
+        var pages = document.querySelectorAll('.brief-section[data-brief-path]');
+        for (var i = 0; i < pages.length; i++) {
+          if (pages[i].getAttribute('data-brief-path') === p) { return pages[i]; }
+        }
+        return null;
+      }
+
+      // briefNoun is what a brief page calls itself: a brief in features/ is
+      // a feature (NIT-201; its section carries data-feature), and says so
+      // wherever the page speaks of itself — the strip, the Issues screen.
+      function briefNoun(section) {
+        return section && section.hasAttribute('data-feature') ? 'feature' : 'brief';
+      }
+
+      // BRIEF_DUPLICATE_RULE is the warning a brief draws when its rests_on is
+      // exactly another brief's (internal/briefs RuleRestsOnDuplicate), and
+      // BRIEF_DRIFT_RULE the one a locked brief draws when a claim it rests
+      // on moved since approval (RuleDependencyDrift), which makes it
+      // review_pending.
+      var BRIEF_DUPLICATE_RULE = 'brief-rests-on-duplicate';
+      var BRIEF_DRIFT_RULE = 'brief-dependency-drift';
+
+      // duplicatePeer reads the other brief a duplicate warning names. The
+      // finding carries it only in its message — "rests_on is exactly the
+      // same set as <path>[ and N other brief(s)]; …" (internal/briefs,
+      // restsOnFindings) — so this reads that sentence, and a message it
+      // cannot read yields null and the strip falls back to the rule.
+      function duplicatePeer(message) {
+        var m = /same set as (\S+?\.md)(?: and (\d+) other brief)?/.exec(message || '');
+        if (!m) { return null; }
+        var section = briefSectionForPath(m[1]);
+        var heading = section && document.getElementById(section.id + '_title');
+        return {
+          section: section,
+          title: heading ? heading.textContent.trim() : m[1],
+          more: m[2] ? parseInt(m[2], 10) : 0
+        };
+      }
+
+      // isBriefPath: a finding's claim_id names a brief, its folder or the
+      // tree (a path, which holds a slash) rather than a claim.
+      function isBriefPath(id) {
+        return (id || '').indexOf('/') >= 0;
+      }
+
+      // briefsIndexActive: the "All briefs" index, like Home, is not a
+      // facet, so the strip does not show there.
+      function briefsIndexActive() {
+        var index = document.getElementById(BRIEFS_INDEX_ID);
+        return !!index && !index.hidden;
+      }
 
       function homeActive() {
         var home = document.getElementById(HOME_ID);
@@ -365,15 +474,19 @@
       // syncNavGroups opens the sidebar's Modules group only while a module is
       // the current page (NIT-196: only the current section expands). A
       // search in progress keeps every group open so its matches show.
+      //
+      // Each group answers for itself: the Modules group is open on a module,
+      // the Briefs group (NIT-197) on a brief or the "All briefs" index, and
+      // inside it only the current brief's folder is open. A search opens
+      // every group and every folder that has a visible match.
       function syncNavGroups() {
         var search = document.getElementById('navSearch');
         var searching = !!(search && search.value.trim());
-        var onModule = false;
-        moduleTabs.forEach(function (b) {
-          if (b.classList.contains('on') && b.closest('.system-nav-group')) { onModule = true; }
-        });
         document.querySelectorAll('.system-nav-group').forEach(function (group) {
-          group.open = searching || onModule;
+          group.open = searching || !!group.querySelector('.sec-tab.on');
+        });
+        document.querySelectorAll('.brief-folder').forEach(function (folder) {
+          folder.open = searching ? !folder.hidden : !!folder.querySelector('.sec-tab.on');
         });
       }
 
@@ -401,6 +514,59 @@
           t.textContent = ((phone && sameYear) ? narrow : wide) + ', ' + time;
         } catch (e) {}
       }
+
+      // ---- A brief edited since its approval (NIT-199, Paper B2) ----
+      // The page is server-rendered with all three views (render.BriefDiff);
+      // this only picks which one shows. The choice is one value for the
+      // whole viewer, held in memory: it follows the reader from brief to
+      // brief and across a live reload's fragment swap (initViewer runs this
+      // again over the fresh DOM), and a new tab starts on Changes.
+      var BRIEF_VIEWS = ['changes', 'approved', 'current'];
+      var briefView = 'changes';
+
+      function syncBriefEdits() {
+        document.querySelectorAll('.brief-compare').forEach(function (card) {
+          card.setAttribute('data-brief-view', briefView);
+          card.querySelectorAll('.brief-view').forEach(function (view) {
+            view.hidden = view.getAttribute('data-view') !== briefView;
+          });
+          card.querySelectorAll('[data-caption-for]').forEach(function (caption) {
+            caption.hidden = caption.getAttribute('data-caption-for') !== briefView;
+          });
+          card.querySelectorAll('.brief-view-switch__seg').forEach(function (seg) {
+            seg.setAttribute('aria-pressed', String(seg.getAttribute('data-brief-view') === briefView));
+          });
+        });
+        localizeBriefDates();
+      }
+
+      // localizeBriefDates rewrites each approval date into the reader's own
+      // time zone. The server writes it in UTC so the page is deterministic;
+      // an approval late in the evening west of Greenwich is the next day
+      // there and the same day here. The month is spelled as the claim
+      // panels spell it (editDateLabel), not by the locale.
+      function localizeBriefDates() {
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        document.querySelectorAll('time.brief-date[datetime]').forEach(function (t) {
+          var d = new Date(t.getAttribute('datetime'));
+          if (isNaN(d.getTime())) { return; }
+          var label = d.getDate() + ' ' + months[d.getMonth()];
+          t.textContent = t.getAttribute('data-date-form') === 'short' ? label : label + ' ' + d.getFullYear();
+        });
+      }
+
+      document.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!target || typeof target.closest !== 'function') { return; }
+        var seg = target.closest('.brief-view-switch__seg');
+        if (seg) {
+          var view = seg.getAttribute('data-brief-view');
+          if (BRIEF_VIEWS.indexOf(view) < 0) { return; }
+          event.preventDefault();
+          briefView = view;
+          syncBriefEdits();
+        }
+      });
 
       function showFromHash(opts) {
         var target = resolve(hashId());
@@ -432,19 +598,38 @@
 
       function restoreFocus(target, fallbackSelector) {
         cancelFocusRestore();
+        function next() {
+          return target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+        }
         function apply() {
-          var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
-          if (next && typeof next.focus === 'function') { next.focus(); }
+          var node = next();
+          if (node && typeof node.focus === 'function') { node.focus(); }
+        }
+        // A re-apply only puts back focus the browser dropped: onto <body>,
+        // onto a node in the drawer or the graph pane that just closed, or
+        // onto one that is no longer rendered. Focus the reader (or
+        // a script) has since moved to another control is theirs; taking it
+        // back sent a keypress meant for that control to the old opener
+        // (TestGroup02MobileNavigationAndFacetSheet's Enter on #navToggle
+        // landed on #mobileSearchToggle when it came within these frames).
+        function reapply() {
+          var active = document.activeElement;
+          var sidebarEl = document.getElementById('sidebar');
+          var pane = document.getElementById('dxgPane');
+          var dropped = !active || active === document.body ||
+            (sidebarEl && sidebarEl.contains(active)) || (pane && pane.contains(active)) ||
+            active.getClientRects().length === 0;
+          if (dropped) { apply(); }
         }
         apply();
         // Closing a drawer can hide the previously focused node; Chrome then
         // moves focus to <body> after this turn. Re-apply on the next two
         // frames so Escape lands on the opener instead of the document body.
         focusRestoreFrame = window.requestAnimationFrame(function () {
-          apply();
+          reapply();
           focusRestoreFrame = window.requestAnimationFrame(function () {
             focusRestoreFrame = 0;
-            apply();
+            reapply();
           });
         });
       }
@@ -567,10 +752,16 @@
         empty_body: 'the comment body is empty',
         thread_not_found: 'that thread no longer exists',
         reply_not_found: 'that reply no longer exists',
-        claim_not_found: 'that claim no longer exists'
+        claim_not_found: 'that claim no longer exists',
+        brief_not_found: 'that brief no longer exists'
       };
-      function errMsg(prefix, err) {
+      // errMsg words a failed op for the toast. key is the rail's subject
+      // (see BRIEF_KEY below): a brief's file that changed under a write is
+      // the brief's, not a claim's, though the server gives it the claim
+      // routes' code.
+      function errMsg(prefix, err, key) {
         var code = err && err.code;
+        if (code === 'claim_file_changed' && isBriefKey(key)) { return prefix + ': the brief changed on disk — reload the page'; }
         if (code && ERR_TEXT[code]) { return prefix + ': ' + ERR_TEXT[code]; }
         return prefix + '.';
       }
@@ -609,8 +800,36 @@
           });
         });
       }
+      // ---- the rail's subject: a claim or a brief (NIT-198) -------------
+      // Every function below that takes a `claimID` takes the rail's SUBJECT
+      // KEY. A claim's key is its id, unchanged, so every claim path reads as
+      // it always did. A brief's key is BRIEF_KEY + its <folder>.<slug> id.
+      // The prefix starts with U+0000, which no data-claim-id can: the HTML
+      // parser turns a NUL in an attribute value into U+FFFD, so no claim
+      // chip can ever spell a brief's key, even for a claim whose id is the
+      // same string as a brief's (a project claim and a brief are both two
+      // dot-separated segments). The two namespaces also never share a route
+      // (/api/claims vs /api/briefs) or an attribute (data-claim-id vs
+      // data-brief-id).
+      var BRIEF_KEY = '\u0000brief:';
+      function briefKey(briefID) { return BRIEF_KEY + briefID; }
+      function isBriefKey(key) { return typeof key === 'string' && key.indexOf(BRIEF_KEY) === 0; }
+      function briefIDOf(key) { return key.slice(BRIEF_KEY.length); }
+      // briefSectionFor is the page of the brief a key names, or null.
+      function briefSectionFor(key) {
+        if (!isBriefKey(key)) { return null; }
+        return document.querySelector('.brief-section[data-brief-id="' + cssAttr(briefIDOf(key)) + '"]');
+      }
+      // claimPath is the subject's comments collection: every write URL is
+      // this plus /<thread>[/replies|/resolve|/reopen].
       function claimPath(claimID) {
+        if (isBriefKey(claimID)) {
+          return '/api/briefs/' + encodeURIComponent(briefIDOf(claimID)) + '/comments';
+        }
         return '/api/claims/' + encodeURIComponent(claimID) + '/comments';
+      }
+      function threadPath(claimID, tid) {
+        return claimPath(claimID) + '/' + encodeURIComponent(tid);
       }
 
       // ---- chip / card state fan-out ----------------------------------
@@ -620,6 +839,7 @@
       // one with an id. Each chip's owning card is reached with closest('.claim').
       function chipsFor(claimID) {
         var out = [];
+        if (isBriefKey(claimID)) { return out; } // a brief has no chip; see briefControlsFor
         document.querySelectorAll('.comment-chip').forEach(function (chip) {
           if (chip.getAttribute('data-claim-id') === claimID) { out.push(chip); }
         });
@@ -631,12 +851,16 @@
       // shut, or an open rail on a claim with zero threads). Driven here
       // rather than folded into --open so the two facts never collide.
       function setChipExpanded(claimID, expanded) {
+        briefControlsFor(claimID).forEach(function (btn) {
+          btn.setAttribute('aria-expanded', String(expanded));
+        });
         chipsFor(claimID).forEach(function (chip) {
           chip.setAttribute('aria-expanded', String(expanded));
           chip.classList.toggle('comment-chip--active', expanded);
         });
       }
       function updateChips(claimID, openCount, totalCount) {
+        if (isBriefKey(claimID)) { updateBriefThreadCounts(claimID, openCount, totalCount); return; }
         chipsFor(claimID).forEach(function (chip) {
           var open = openCount > 0;
           var empty = totalCount === 0;
@@ -702,6 +926,11 @@
       // matching head is on the page (e.g. a chip inside a collapsed overview
       // whose canonical copy id was stripped elsewhere in the DOM tree).
       function claimTitleFor(claimID) {
+        if (isBriefKey(claimID)) {
+          var page = briefSectionFor(claimID);
+          var heading = page && page.querySelector('.brief-title');
+          return (heading && heading.textContent.trim()) || briefIDOf(claimID);
+        }
         var head = document.querySelector('.k[data-claim-id="' + cssAttr(claimID) + '"]');
         var titleEl = head && head.querySelector('.k-title');
         return (titleEl && titleEl.textContent.trim()) || claimID;
@@ -748,7 +977,10 @@
         // title= hover only, on the rail element itself.
         if (railTitle) { railTitle.textContent = 'Comments'; }
         if (railSubtitle) { railSubtitle.textContent = 'on ' + claimTitleFor(claimID); }
-        if (rail) { rail.title = claimID; }
+        if (rail) {
+          var briefPage = briefSectionFor(claimID);
+          rail.title = isBriefKey(claimID) ? ((briefPage && briefPage.getAttribute('data-brief-path')) || briefIDOf(claimID)) : claimID;
+        }
         if (railCount) { railCount.textContent = ''; } // cleared here; renderPanel below fills it in
         if (rail) {
           rail.hidden = false;
@@ -774,6 +1006,70 @@
         if (rail) { rail.hidden = true; }
         if (currentClaimID) { setChipExpanded(currentClaimID, false); }
         currentClaimID = null;
+      }
+
+      // ---- threads on a brief (NIT-198) ---------------------------------
+      // A brief has no chip. Its rail opens from the page's Comment buttons
+      // (the "On this page" rail's Threads block, system-record.js, and the
+      // phone's page-foot row, shell.html), and from any caller that holds a
+      // brief id: B2's "Approve or restore in a thread" and B3's "Confirm in
+      // a thread" call openBriefCommentPanel. The viewer never locks,
+      // restores or confirms anything; it opens the thread where the human
+      // says so, and the agent acts on it.
+      //
+      // openBriefCommentPanel(briefID) opens the comments rail on the brief
+      // whose <folder>.<slug> id is briefID (the section's data-brief-id,
+      // the payload's "id"): the live composer under dossierx serve, the
+      // read-only threads in a static build. It returns false, opening
+      // nothing, when no brief page on screen carries that id. It is also
+      // window.dossierxOpenBriefCommentPanel for code outside this file.
+      function openBriefCommentPanel(briefID) {
+        var key = briefKey(String(briefID || ''));
+        if (!briefID || !briefSectionFor(key)) { return false; }
+        openCommentPanel(key);
+        return true;
+      }
+      window.dossierxOpenBriefCommentPanel = openBriefCommentPanel;
+      // dossierxCommentRailBrief is the id of the brief the open rail
+      // shows, or null: system-record.js reads it for the Threads block's
+      // aria-expanded, since that one button follows the page on screen.
+      window.dossierxCommentRailBrief = function () {
+        return commentPanelOpen() && isBriefKey(currentClaimID) ? briefIDOf(currentClaimID) : null;
+      };
+
+      // briefControlsFor is every Comment button that opens this brief's
+      // rail: its page-foot button and, while its page is the one on
+      // screen, the rail's (which carries data-brief-id, set by
+      // system-record.js's syncBriefThreads).
+      function briefControlsFor(key) {
+        var out = [];
+        if (!isBriefKey(key)) { return out; }
+        var id = briefIDOf(key);
+        document.querySelectorAll('.brief-comment, .facet-toc__comment').forEach(function (btn) {
+          if (briefOwnerOf(btn) === id) { out.push(btn); }
+        });
+        return out;
+      }
+
+      // briefOwnerOf is the id of the brief a Comment button belongs to: its
+      // own data-brief-id (the rail's), else its page's (the page-foot's).
+      function briefOwnerOf(btn) {
+        var own = btn.getAttribute('data-brief-id');
+        if (own) { return own; }
+        var page = btn.closest('.brief-section');
+        return page ? page.getAttribute('data-brief-id') : null;
+      }
+
+      // updateBriefThreadCounts is updateChips for a brief: the rail's
+      // threads just loaded (or an optimistic resolve moved them), so the
+      // page's counts follow at once instead of waiting for the live
+      // reload's fresh render, which carries the same numbers.
+      function updateBriefThreadCounts(key, openCount, totalCount) {
+        var page = briefSectionFor(key);
+        if (!page) { return; }
+        page.setAttribute('data-open-threads', String(openCount));
+        page.setAttribute('data-threads', String(totalCount));
+        if (typeof window.dossierxSyncBriefThreads === 'function') { window.dossierxSyncBriefThreads(); }
       }
 
       // ---- panel rendering --------------------------------------------
@@ -802,8 +1098,13 @@
       function renderPanelReadOnly(claimID) {
         railBody.textContent = '';
         var baked = null;
+        // A claim's baked panel carries data-claim-id, a brief's
+        // data-brief-id (components.BriefCommentsPanelHTML); neither kind
+        // can match the other's key.
+        var bakedAttr = isBriefKey(claimID) ? 'data-brief-id' : 'data-claim-id';
+        var bakedID = isBriefKey(claimID) ? briefIDOf(claimID) : claimID;
         document.querySelectorAll('.comments-panel').forEach(function (p) {
-          if (!baked && p.getAttribute('data-claim-id') === claimID) { baked = p; }
+          if (!baked && p.getAttribute(bakedAttr) === bakedID) { baked = p; }
         });
         var list = el('div', 'comments-threads');
         if (baked) {
@@ -828,17 +1129,20 @@
       }
 
       // Serve mode: fetch the authoritative thread list and rebuild the rail with
-      // live controls + composer. GET /api/comments returns every thread; we
-      // filter to this claim client-side (there is no per-claim GET endpoint).
+      // live controls + composer. For a claim, GET /api/comments returns every
+      // claim's threads and we filter to this claim client-side (there is no
+      // per-claim GET endpoint). A brief has its own list,
+      // GET /api/briefs/<id>/comments (NIT-198), which holds only its threads.
       function renderPanelFromAPI(claimID) {
         if (!railBody.querySelector('.comments-threads')) {
           railBody.textContent = '';
           railBody.appendChild(textEl('p', 'comments-loading', 'Loading…'));
         }
-        apiGet('/api/comments').then(function (data) {
+        var brief = isBriefKey(claimID);
+        apiGet(brief ? claimPath(claimID) : '/api/comments').then(function (data) {
           if (currentClaimID !== claimID) { return; } // panel switched/closed while loading
           var threads = ((data && data.comments) || []).filter(function (c) {
-            return c.claim_id === claimID;
+            return brief || c.claim_id === claimID;
           });
           // A JSON signature of exactly what buildPanel would render for this
           // claim. The server serializes deterministically, so two fetches of an
@@ -858,9 +1162,16 @@
           lastRenderedClaimID = claimID;
           lastRenderedThreadsJSON = sig;
           buildPanel(claimID, threads, drafts);
-        }).catch(function () {
+        }).catch(function (err) {
           if (currentClaimID !== claimID) { return; }
           railBody.textContent = '';
+          // A brief renamed or deleted while its rail was open answers 404:
+          // say so, and offer no composer that could only fail.
+          if (brief && err && err.status === 404) {
+            railBody.appendChild(textEl('p', 'comments-error', 'This brief is no longer in the project. It may have been renamed or deleted.'));
+            if (composerSlot) { composerSlot.textContent = ''; }
+            return;
+          }
           railBody.appendChild(textEl('p', 'comments-error', 'Could not load comments.'));
           if (composerSlot) {
             composerSlot.textContent = '';
@@ -1137,7 +1448,12 @@
         // OD14.7: serve-only copy — a static export mounts no composer at all
         // for this caption to sit beside (renderPanelReadOnly never calls
         // buildComposer), so it never needs its own file://-guard here.
-        footer.appendChild(textEl('span', 'comment-composer-caption', 'Saved to the served viewer, not to this file.'));
+        // A claim's comment is not written into the static file a reader
+        // may have saved; a brief's is written into the brief itself
+        // (NIT-198), so its caption says where it goes.
+        footer.appendChild(textEl('span', 'comment-composer-caption', isBriefKey(claimID)
+          ? 'Saved in the brief\'s file by dossierx serve.'
+          : 'Saved to the served viewer, not to this file.'));
         var btn = textEl('button', 'comment-composer-submit', 'Comment');
         btn.type = 'submit';
         footer.appendChild(btn);
@@ -1229,7 +1545,7 @@
             // so without growNow a multi-line draft renders clipped to one row).
             ta.value = body;
             growNow(ta);
-            toast(errMsg('Could not add comment', err));
+            toast(errMsg('Could not add comment', err, claimID));
           });
       }
 
@@ -1244,7 +1560,7 @@
         }
         ta.value = '';
         ta.style.height = 'auto';
-        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/replies', { as: 'human', body: body })
+        apiSend('POST', threadPath(claimID, tid) + '/replies', { as: 'human', body: body })
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
@@ -1254,7 +1570,7 @@
             // draft renders clipped to one row).
             ta.value = body;
             growNow(ta);
-            toast(errMsg('Could not reply', err));
+            toast(errMsg('Could not reply', err, claimID));
           });
       }
 
@@ -1262,12 +1578,12 @@
         var art = threadNode(tid);
         if (art) { art.classList.add('comment-thread--resolved'); }
         recomputeChipsFromPanel(claimID);
-        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/resolve', { as: 'human' })
+        apiSend('POST', threadPath(claimID, tid) + '/resolve', { as: 'human' })
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (art) { art.classList.remove('comment-thread--resolved'); }
             recomputeChipsFromPanel(claimID);
-            toast(errMsg('Could not resolve thread', err));
+            toast(errMsg('Could not resolve thread', err, claimID));
           });
       }
 
@@ -1275,12 +1591,12 @@
         var art = threadNode(tid);
         if (art) { art.classList.remove('comment-thread--resolved'); }
         recomputeChipsFromPanel(claimID);
-        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/reopen', { as: 'human' })
+        apiSend('POST', threadPath(claimID, tid) + '/reopen', { as: 'human' })
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (art) { art.classList.add('comment-thread--resolved'); }
             recomputeChipsFromPanel(claimID);
-            toast(errMsg('Could not reopen thread', err));
+            toast(errMsg('Could not reopen thread', err, claimID));
           });
       }
 
@@ -1297,7 +1613,7 @@
           node = art ? art.querySelector('.comment-reply[data-reply-id="' + cssAttr(rid) + '"]') : null;
         }
         if (node) { node.classList.add('comment-thread--deleting'); }
-        var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
+        var path = threadPath(claimID, tid);
         if (rid) { path += '?reply=' + encodeURIComponent(rid); }
         apiSend('DELETE', path)
           .then(function () {
@@ -1307,7 +1623,7 @@
           })
           .catch(function (err) {
             if (node) { node.classList.remove('comment-thread--deleting'); }
-            toast(errMsg('Could not delete', err));
+            toast(errMsg('Could not delete', err, claimID));
           });
       }
 
@@ -1350,7 +1666,7 @@
           e.preventDefault();
           var newBody = ta.value.trim();
           if (!newBody) { return; }
-          var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
+          var path = threadPath(claimID, tid);
           if (rid) { path += '?reply=' + encodeURIComponent(rid); }
           apiSend('PATCH', path, { as: 'human', body: newBody })
             .then(function () {
@@ -1363,7 +1679,7 @@
             .catch(function (err) {
               // Keep the edit form open with the user's revision (do NOT revert to
               // the rendered body) so a failed edit does not discard the text.
-              toast(errMsg('Could not edit', err));
+              toast(errMsg('Could not edit', err, claimID));
             });
         });
       }
@@ -1430,6 +1746,8 @@
       }
 
       function activeFacetClaimIDs() {
+        var brief = activeBriefSection();
+        if (brief) { return briefFindingPaths(brief); }
         var ids = Object.create(null);
         var section = document.querySelector('.module-section:not([hidden])');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
@@ -1495,6 +1813,13 @@
         }
         var group = groups[key];
         if (fields.claimID) { group.claimIDs[fields.claimID] = true; }
+        // A brief finding's message is what names the other party (the
+        // brief whose rests_on is the same set), so a brief row keeps each
+        // distinct one to show under its path (NIT-201).
+        if (fields.message) {
+          group.messages = group.messages || [];
+          if (group.messages.indexOf(fields.message) < 0) { group.messages.push(fields.message); }
+        }
         group.count += 1;
         return group;
       }
@@ -1547,10 +1872,28 @@
             severity: 'check',
             title: humanRule(finding.lint) || 'Check issue',
             kind: finding.lint || 'lint',
-            claimID: finding.claim_id
+            claimID: finding.claim_id,
+            message: isBriefPath(finding.claim_id) ? finding.message : ''
           });
         });
         lintWarnings.forEach(function (finding) {
+          // A brief's warnings (their claim_id is a path) are shown in the
+          // strip on the brief's page, where a claim warning waits under
+          // Later (NIT-201). brief-dependency-drift makes a locked brief
+          // review_pending, so it files under Needs you, as a claim's
+          // review cause does; every other brief warning (the duplicate,
+          // today) is a Check.
+          if (isBriefPath(finding.claim_id)) {
+            var drift = finding.lint === BRIEF_DRIFT_RULE;
+            addStatusGroup(groups, (drift ? 'needs_you' : 'check') + ':lint:' + (finding.lint || 'lint'), {
+              severity: drift ? 'needs_you' : 'check',
+              title: humanRule(finding.lint) || 'Check issue',
+              kind: finding.lint || 'lint',
+              claimID: finding.claim_id,
+              message: finding.message
+            });
+            return;
+          }
           addStatusGroup(groups, 'later:lint:' + (finding.lint || 'lint'), {
             severity: 'later',
             title: humanRule(finding.lint) || 'Later warning',
@@ -1712,13 +2055,16 @@
           detail.appendChild(link);
         }
         if (detail) { text.appendChild(detail); }
+        (group.messages || []).forEach(function (message) {
+          text.appendChild(textEl('span', 'status-finding-detail status-finding-message', message));
+        });
         row.appendChild(text);
 
         // The right-hand slot. A blocker row keeps its count (04 §4.8: the
         // phrase promoted INTO the 104px slot as a bare `N claims`). A
         // Needs-you row carries its way in instead (Paper ETC-0 / EUD-0):
         // the thing waiting is one claim, and the count would always be 1.
-        if (group.severity === 'needs_you' && group.ownerModuleClaimID) {
+        if (group.severity === 'needs_you' && group.ownerModuleClaimID && !isBriefPath(group.ownerModuleClaimID)) {
           var owner = group.ownerModuleClaimID;
           var action = textEl('button', 'status-finding-action', isEditCause ? 'See changes' : 'Open claim');
           action.type = 'button';
@@ -1730,8 +2076,24 @@
           row.appendChild(action);
           return row;
         }
+        // A finding about one brief (its claim_id is the brief's path) leads
+        // to that brief's page, as a Needs-you row leads to its claim.
+        var briefPage = ids.length === 1 ? briefSectionForPath(ids[0]) : null;
+        if (briefPage) {
+          var open = textEl('button', 'status-finding-action', 'Open ' + briefNoun(briefPage));
+          open.type = 'button';
+          open.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeIssuesView();
+            if (window.location.hash !== '#' + briefPage.id) { window.location.hash = '#' + briefPage.id; }
+          });
+          row.appendChild(open);
+          return row;
+        }
         var n = ids.length || group.count;
-        row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
+        var noun = ids.length && ids.every(function (id) { return id.indexOf('/') >= 0; }) ? ' brief' : ' claim';
+        row.appendChild(textEl('span', 'status-finding-msg', n + noun + (n === 1 ? '' : 's')));
         return row;
       }
 
@@ -1754,7 +2116,9 @@
           return;
         }
         var subNav = section.querySelector(':scope > .sub-nav');
-        var header = section.querySelector(':scope > .system-record-head');
+        // A brief page's header is its own (.brief-head); the strip sits
+        // under it, above the body, as it sits under a module's header.
+        var header = section.querySelector(':scope > .system-record-head') || section.querySelector(':scope > .brief-head');
         if (subNav) {
           if (subNav.nextElementSibling !== stripEl) { subNav.insertAdjacentElement('afterend', stripEl); }
         } else if (header) {
@@ -1778,6 +2142,8 @@
       // know (a project-wide finding with no claim_id at all) resolves to ''
       // and moduleLabel below renders it as the "Other" catch-all group.
       function ownerModuleID(group) {
+        var owner = group.ownerModuleClaimID || '';
+        if (owner.indexOf('/') >= 0) { return BRIEFS_INDEX_ID; }
         var facetID = claimToFacet[group.ownerModuleClaimID];
         return facetID ? facetToModule[facetID] : '';
       }
@@ -1788,6 +2154,7 @@
       // Issues nav tab, so this is read-only lookup, never a written one.
       function moduleLabel(moduleID) {
         if (!moduleID) { return 'Other'; }
+        if (moduleID === BRIEFS_INDEX_ID) { return 'Briefs'; }
         var tab = document.querySelector('.sec-tab[data-target="#' + moduleID.replace(/"/g, '') + '"] .sec-tab__label');
         return tab ? (tab.textContent || '').trim() : moduleID;
       }
@@ -2783,7 +3150,7 @@
         // Home is not a facet: its cards already say what is waiting, and a
         // strip there would count findings "in this facet" for a page that
         // has none. The strip returns with the next module page.
-        if (!groups.length || !actionable || homeActive()) {
+        if (!groups.length || !actionable || homeActive() || briefsIndexActive()) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
@@ -2885,9 +3252,13 @@
             return statusGroupClaimCount(b) - statusGroupClaimCount(a);
           });
           var weight = uniqueClaimCount(rows);
-          var note = stripSeverityFilter === 'needs_you'
-            ? weight + ' of ' + needsTotal + ' need you here'
-            : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
+          // A brief's findings block no claim: they are about the brief, its
+          // folder or the tree, so the head counts findings on this brief.
+          var note = activeBriefSection()
+            ? countLabel(rows.length, 'finding') + ' on this ' + briefNoun(activeBriefSection())
+            : stripSeverityFilter === 'needs_you'
+              ? weight + ' of ' + needsTotal + ' need you here'
+              : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
           stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
         });
 
@@ -2903,7 +3274,7 @@
         // row per finding. They are derived from the SAME groups, ledger and
         // lint lists a line apart, so the two can differ in shape and never
         // in what they say.
-        var rows = statusStripRows(groups, ledger, lintErrors, claimIDs);
+        var rows = statusStripRows(groups, ledger, lintErrors, claimIDs, lintWarnings);
         renderStatusStripCard(rows);
         // The band gets the same rows, one full-bleed row each (Paper board
         // 15, C2M-0 / C92-0), in the same order — most serious first — so the
@@ -2929,12 +3300,15 @@
       // thing the card's tint rule reads: 'alarm' for anything the approval
       // record or the dependency chain is refusing, 'draft' for work in
       // progress that nobody has approved yet.
-      function statusStripRows(groups, ledger, lintErrors, claimIDs) {
+      function statusStripRows(groups, ledger, lintErrors, claimIDs, lintWarnings) {
         var rows = [];
+        var brief = activeBriefSection();
+        var noun = briefNoun(brief);
+        var here = brief ? 'on this ' + noun : 'in this facet';
         if (ledger.length) {
           rows.push({
             tone: 'alarm', severity: 'critical',
-            text: countLabel(ledger.length, 'approval record issue') + ' in this facet need' +
+            text: countLabel(ledger.length, 'approval record issue') + ' ' + here + ' need' +
               (ledger.length === 1 ? 's' : '') + ' attention'
           });
         }
@@ -2945,7 +3319,7 @@
         if (lintErrors.length) {
           rows.push({
             tone: 'alarm', severity: 'critical',
-            text: countLabel(lintErrors.length, 'issue') + ' in this facet need' +
+            text: countLabel(lintErrors.length, 'issue') + ' ' + here + ' need' +
               (lintErrors.length === 1 ? 's' : '') + ' attention'
           });
         }
@@ -2953,6 +3327,33 @@
         // single-sentence head had no space for, and the reason it became a
         // card: it is amber where everything above it is red, and one tinted
         // surface cannot make two severity claims at once.
+        // A brief's own warnings (NIT-201), each a row the reader can see
+        // without opening the Issues screen. A claim this brief rests on
+        // that moved since approval is Needs you, in the draft hue, like a
+        // claim's own edit. A duplicate names the other brief and leads to
+        // it: "Rests on the same claims as Export to CSV".
+        if (brief) {
+          var own = (lintWarnings || []).filter(function (f) { return f.claim_id === brief.getAttribute('data-brief-path'); });
+          var drifted = own.filter(function (f) { return f.lint === BRIEF_DRIFT_RULE; }).length;
+          if (drifted) {
+            rows.push({
+              tone: 'draft', severity: 'needs_you',
+              text: countLabel(drifted, 'claim') + ' this ' + noun + ' rests on ' + (drifted === 1 ? 'has' : 'have') +
+                ' changed since approval'
+            });
+          }
+          own.filter(function (f) { return f.lint === BRIEF_DUPLICATE_RULE; }).forEach(function (f) {
+            var peer = duplicatePeer(f.message);
+            var text = 'Rests on the same claims as ' + (peer ? peer.title : 'another brief');
+            if (peer && peer.more) { text += ' and ' + countLabel(peer.more, 'other brief'); }
+            var row = { tone: 'draft', severity: 'check', text: text };
+            if (peer && peer.section) {
+              row.target = peer.section.id;
+              row.action = 'Open ' + briefNoun(peer.section);
+            }
+            rows.push(row);
+          });
+        }
         var edited = approvedEditIDsIn(claimIDs);
         if (edited.length) {
           rows.push({
@@ -2964,7 +3365,7 @@
         if (!rows.length) {
           rows.push({
             tone: 'alarm', severity: '',
-            text: countLabel(groups.length, 'grouped issue') + ' in this facet'
+            text: countLabel(groups.length, 'grouped issue') + ' ' + here
           });
         }
         return rows;
@@ -2979,7 +3380,18 @@
       // opens the Issues screen as it always did; an edited-since-approval
       // row says what it is for (Paper CDS-0: "Review changes").
       function statusStripRowAction(row) {
+        if (row.action) { return row.action; }
         return row.tone === 'draft' ? 'Review changes' : 'Show issues';
+      }
+
+      // activateStripRow is a row's way in: most open the Issues screen; a
+      // row with a target (a duplicate brief's other page) opens that page.
+      function activateStripRow(row) {
+        if (row.target) {
+          if (window.location.hash !== '#' + row.target) { window.location.hash = '#' + row.target; }
+          return;
+        }
+        openIssuesForBandRow(row.tone, row.severity);
       }
 
       // openIssuesForBandRow: a blocked row opens the screen UNFILTERED — its
@@ -3003,6 +3415,7 @@
         var first = rows[0];
         stripToggle.setAttribute('data-tone', first.tone);
         stripToggle.setAttribute('data-severity', first.severity || '');
+        if (first.target) { stripToggle.setAttribute('data-target', first.target); } else { stripToggle.removeAttribute('data-target'); }
         stripTitle.textContent = first.text;
         var firstAction = document.getElementById('statusStripAction');
         if (firstAction) { firstAction.textContent = statusStripRowAction(first); }
@@ -3027,7 +3440,7 @@
           btn.appendChild(actionRow);
           btn.addEventListener('click', function (event) {
             event.preventDefault();
-            openIssuesForBandRow(row.tone, row.severity);
+            activateStripRow(row);
           });
           // After the previous row and before the phone card, so the band is
           // one stack of rows whatever the count.
@@ -3066,6 +3479,7 @@
           el_.appendChild(chev);
           el_.addEventListener('click', function (event) {
             event.preventDefault();
+            if (row.target) { activateStripRow(row); return; }
             // Filtered to the row's own severity. On a real corpus the
             // unfiltered screen is hundreds of dependency rows and the thing
             // this row named is somewhere inside them; a way in that lands a
@@ -3321,7 +3735,12 @@
             (data.rows.length - ISSUES_RAIL_MAX_ROWS) + ' more not shown'));
         }
         var caveat = '';
-        if (waiting && data.claims > 0) {
+        if (activeBriefSection() && data.claims > 0) {
+          // On a brief the ranked ids are paths: the brief's own, its
+          // folder's and the tree's (briefFindingPaths).
+          var caveatNoun = briefNoun(activeBriefSection());
+          caveat = countLabel(data.claims, 'path') + ' with a finding on this ' + caveatNoun + ': the ' + caveatNoun + ', its folder or the whole tree.';
+        } else if (waiting && data.claims > 0) {
           caveat = countLabel(data.claims, 'claim') + ', ' + countLabel(data.causes, 'cause') +
             ' — a claim can be waiting for more than one reason and is counted under each.';
         } else if (!waiting && data.claims > 0) {
@@ -3339,7 +3758,7 @@
       // (§4.2) off the SAME active-module/active-facet DOM the rest of the
       // reading view already maintains — read-only, no new state.
       function issuesSyncHeader() {
-        var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label');
+        var moduleTab = document.querySelector('.sec-tab.on .sec-tab__label') || document.querySelector('.sec-tab.on .brief-nav__label');
         var activeSection = document.querySelector('.module-section:not([hidden])');
         var subtab = activeSection && activeSection.querySelector('.subtab.on .sec-tab__label');
         if (issuesBreadcrumbFacetEl) {
@@ -3348,7 +3767,24 @@
         if (issuesBreadcrumbSuffixEl) {
           issuesBreadcrumbSuffixEl.textContent = subtab ? ('· ' + subtab.textContent.trim()) : '';
         }
-        if (issuesSubtitleEl) {
+        // On a brief page the screen speaks of the brief: its scope, its sort
+        // and its sentence (NIT-197), as the strip already does.
+        var onBrief = !!activeBriefSection();
+        var facetScope = issuesScopeEl && issuesScopeEl.querySelector('[data-scope="facet"]');
+        var pageNoun = briefNoun(activeBriefSection());
+        if (facetScope) { facetScope.textContent = onBrief ? 'This ' + pageNoun : 'This facet'; }
+        var sortValue = document.getElementById('issuesSortValue');
+        if (sortValue) { sortValue.textContent = onBrief ? 'Most findings' : 'Most claims blocked'; }
+        if (issuesSubtitleEl && onBrief) {
+          var data = lastStatusData || {};
+          var ids = activeFacetClaimIDs();
+          var n = findingsForActiveFacet(data.lint_errors || [], ids).length +
+            findingsForActiveFacet(data.lint_warnings || [], ids).length +
+            findingsForActiveFacet(data.ledger_findings || [], ids).length;
+          issuesSubtitleEl.textContent = n
+            ? countLabel(n, 'finding') + ' on this ' + pageNoun + ' ' + (n === 1 ? 'needs' : 'need') + ' attention.'
+            : 'Nothing on this ' + pageNoun + ' needs attention.';
+        } else if (issuesSubtitleEl) {
           var groups = collectStatusGroups(
             (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
             activeFacetClaimIDs(), [], [], [], []
@@ -3535,6 +3971,10 @@
       // exactly what it filters to, which is what earns it the filter.
       if (stripToggle) {
         stripToggle.addEventListener('click', function () {
+          if (stripToggle.hasAttribute('data-target')) {
+            activateStripRow({ target: stripToggle.getAttribute('data-target') });
+            return;
+          }
           openIssuesForBandRow(stripToggle.getAttribute('data-tone'), stripToggle.getAttribute('data-severity'));
         });
       }
@@ -3994,6 +4434,19 @@
         if (e.target.closest('[data-dxg-close]') && graphFocusReturn) {
           restoreFocus(graphFocusReturn, '#dxgOpen');
         }
+        var briefComment = e.target.closest('.brief-comment, .facet-toc__comment');
+        if (briefComment) {
+          e.preventDefault();
+          if (briefComment.disabled) { return; }
+          var owner = briefOwnerOf(briefComment);
+          if (!owner) { return; }
+          if (commentPanelOpen() && currentClaimID === briefKey(owner)) {
+            closeCommentPanel();
+          } else {
+            openBriefCommentPanel(owner);
+          }
+          return;
+        }
         var chip = e.target.closest('.comment-chip');
         if (chip) {
           e.preventDefault();
@@ -4106,9 +4559,16 @@
           document.querySelectorAll('.system-nav-group').forEach(function (group) {
             var rows = Array.prototype.slice.call(group.querySelectorAll('.sec-tab'));
             var matches = rows.filter(function (row) {
-              var visible = !query || row.textContent.toLowerCase().indexOf(query) !== -1;
+              // A brief row matches on its title, summary and folder
+              // (data-search, render.BriefPageView.Search), not just the
+              // title it shows.
+              var text = row.hasAttribute('data-search') ? row.getAttribute('data-search') : row.textContent.toLowerCase();
+              var visible = !query || text.indexOf(query) !== -1;
               row.hidden = !visible;
               return visible;
+            });
+            group.querySelectorAll('.brief-folder').forEach(function (folder) {
+              folder.hidden = query !== '' && !folder.querySelector('.sec-tab:not([hidden])');
             });
             group.hidden = query !== '' && matches.length === 0;
           });

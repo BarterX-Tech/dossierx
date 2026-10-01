@@ -23,7 +23,8 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 	}
 	in.graphPayload = graphPayload
 
-	briefsPayload, err := briefsPayloadJSONWithBudget(in.briefs, in.briefsBudgetOr(budget))
+	rendered := renderBriefs(in.briefs, in.cat, in.cfg)
+	briefsPayload, err := briefsPayloadJSON(in.briefs, rendered, in.briefReview, in.briefsBudgetOr(budget))
 	if err != nil {
 		return shellData{}, err
 	}
@@ -31,7 +32,8 @@ func buildEagerShellData(in shellInputs, partials map[model.Layout]*template.Tem
 
 	data := buildShellStaticData(in)
 	data.ModuleGroups = buildModuleGroups(buildGroups(in.cat, in.cfg, renderedByID))
-	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups)
+	data.Home = buildHomeView(in.cat, in.cfg, data.ModuleGroups, homeBriefWaitingOf(in.briefs, rendered, in.briefReview))
+	data.Briefs = buildBriefsView(in.briefs, rendered, in.cat, in.cfg, in.briefReview)
 	return data, nil
 }
 
@@ -57,6 +59,12 @@ func (d *lazyShellData) ModuleGroups() ([]ModuleGroup, error) {
 
 func (d *lazyShellData) Home() (HomeView, error) {
 	return d.projection.home()
+}
+
+// Briefs is the brief tree and pages (NIT-197), built only if a project shell
+// references them.
+func (d *lazyShellData) Briefs() (BriefsView, error) {
+	return d.projection.briefsView(), nil
 }
 
 func (d *lazyShellData) GraphPayload() (template.JS, error) {
@@ -93,6 +101,28 @@ type lazyShellProjection struct {
 	homeOnce sync.Once
 	homeView HomeView
 	homeErr  error
+
+	renderedOnce sync.Once
+	rendered     map[string]renderedBrief
+
+	briefsViewOnce sync.Once
+	briefsViewVal  BriefsView
+}
+
+// renderedBriefs renders every brief body once, shared by the payload and the
+// pages.
+func (p *lazyShellProjection) renderedBriefs() map[string]renderedBrief {
+	p.renderedOnce.Do(func() {
+		p.rendered = renderBriefs(p.in.briefs, p.in.cat, p.in.cfg)
+	})
+	return p.rendered
+}
+
+func (p *lazyShellProjection) briefsView() BriefsView {
+	p.briefsViewOnce.Do(func() {
+		p.briefsViewVal = buildBriefsView(p.in.briefs, p.renderedBriefs(), p.in.cat, p.in.cfg, p.in.briefReview)
+	})
+	return p.briefsViewVal
 }
 
 // home builds the Home projection once per render: a shell references .Home
@@ -104,7 +134,7 @@ func (p *lazyShellProjection) home() (HomeView, error) {
 			p.homeErr = err
 			return
 		}
-		p.homeView = buildHomeView(p.in.cat, p.in.cfg, groups)
+		p.homeView = buildHomeView(p.in.cat, p.in.cfg, groups, homeBriefWaitingOf(p.in.briefs, p.renderedBriefs(), p.in.briefReview))
 	})
 	return p.homeView, p.homeErr
 }
@@ -137,7 +167,7 @@ func (p *lazyShellProjection) graphPayloadJSON() (template.JS, error) {
 
 func (p *lazyShellProjection) briefsPayloadJSON() (template.JS, error) {
 	p.briefsOnce.Do(func() {
-		p.briefs, p.briefsErr = briefsPayloadJSONWithBudget(p.in.briefs, p.in.briefsBudgetOr(p.budget))
+		p.briefs, p.briefsErr = briefsPayloadJSON(p.in.briefs, p.renderedBriefs(), p.in.briefReview, p.in.briefsBudgetOr(p.budget))
 	})
 	return p.briefs, p.briefsErr
 }

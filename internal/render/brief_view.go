@@ -11,9 +11,10 @@ import (
 )
 
 // briefsPayload is the viewer's data for briefs (NIT-204): the
-// <script type="application/json" id="dossierx-briefs"> block. It is DATA
-// ONLY — no pane reads it yet; NIT-197 builds the UI on it — so its shape is
-// the contract that UI will be written against, and every number a brief page
+// <script type="application/json" id="dossierx-briefs"> block. It is data
+// only: the brief pages (NIT-197) are rendered into the shell as sections, not
+// built from this block, so a live reload's fragment swap carries them. Its
+// shape is the contract a later pane (the index, NIT-203) reads, and every number a brief page
 // or a folder index needs to show a count against its cap is here beside the
 // cap itself.
 //
@@ -29,13 +30,18 @@ type briefsPayload struct {
 
 // briefPayload is one brief. BodyHTML is the body after the frontmatter,
 // rendered in document mode (markdown.RenderDocument), so "# Title" is an h1
-// here while the same line in a claim body stays literal text. Images render as
-// literal text for now: no route serves a brief's image yet, and an <img>
-// pointing at nothing is worse than the reference the author wrote. The list
-// of images, with their sizes, is carried so the UI can show them against the
-// cap either way.
+// here while the same line in a claim body stays literal text. Its images
+// point at brief-assets/<folder>/<name> (BriefAssetDir), the path the static
+// build copies them to and serve answers (NIT-197). The list of images, with
+// their sizes, is carried so the UI can show them against the cap.
+//
+// Anchor is the brief's page id in this viewer (NIT-197): the section a
+// "#<anchor>" link opens. It is carried rather than left for a reader to
+// spell, because two briefs, or a brief and a module, can spell the same
+// brief-<folder>-<slug> and the later one is given a suffix (briefAnchors).
 type briefPayload struct {
 	ID         string         `json:"id"`
+	Anchor     string         `json:"anchor"`
 	Path       string         `json:"path"`
 	Folder     string         `json:"folder"`
 	Title      string         `json:"title"`
@@ -46,6 +52,17 @@ type briefPayload struct {
 	Words      int            `json:"words"`
 	ImageCount int            `json:"image_count"`
 	Images     []briefs.Image `json:"images"`
+
+	// Review is the brief's lock and review state (NIT-205), flattened into
+	// this object: lock_state (draft / locked / edited / unrecorded),
+	// locked_at, lock_reason, locked_by, review_pending and its trigger, the
+	// changed rests_on claims — each with when its current content was
+	// approved and its wording at the baseline and now — open_threads, and
+	// the retained approved text. ApprovedBodyHTML is that approved markdown
+	// rendered as BodyHTML is, so the viewer shows Approved beside Current
+	// without a renderer of its own; empty while no record stands.
+	briefs.Review
+	ApprovedBodyHTML string `json:"approved_body_html"`
 }
 
 // briefsPayloadJSONWithBudget encodes set for the shell and charges every byte
@@ -58,9 +75,22 @@ type briefPayload struct {
 // encoding/json's default HTML escaping is the guard here exactly as it is for
 // the graph payload: body_html is markup, and it reaches the page as a JSON
 // string whose "<" is written <, never as a tag.
-func briefsPayloadJSONWithBudget(set *briefs.Set, budget *renderByteBudget) (template.JS, error) {
+//
+// rendered is renderBriefs' output for set, shared with the brief pages so
+// each body is rendered once; nil renders it here, with no catalog or config
+// to reserve page ids against.
+func briefsPayloadJSONWithBudget(set *briefs.Set, rendered map[string]renderedBrief, budget *renderByteBudget) (template.JS, error) {
+	return briefsPayloadJSON(set, rendered, nil, budget)
+}
+
+// briefsPayloadJSON is briefsPayloadJSONWithBudget with each brief's review
+// state read off review (nil: every brief a draft with nothing pending).
+func briefsPayloadJSON(set *briefs.Set, rendered map[string]renderedBrief, review *briefs.Evaluation, budget *renderByteBudget) (template.JS, error) {
 	if set.Empty() {
 		return "", nil
+	}
+	if rendered == nil {
+		rendered = renderBriefs(set, nil, nil)
 	}
 	p := briefsPayload{
 		Caps:    set.Caps,
@@ -77,18 +107,27 @@ func briefsPayloadJSONWithBudget(set *briefs.Set, budget *renderByteBudget) (tem
 		if images == nil {
 			images = []briefs.Image{}
 		}
+		r := review.Review(b)
+		approvedHTML := ""
+		if r.Approved != nil {
+			approvedHTML = string(markdown.RenderDocument(r.Approved.Markdown, BriefAssetURLPrefix(b.Folder)))
+		}
 		p.Briefs = append(p.Briefs, briefPayload{
 			ID:         b.ID,
+			Anchor:     rendered[b.ID].anchor,
 			Path:       b.Path,
 			Folder:     b.Folder,
 			Title:      b.Title,
 			Summary:    b.Summary,
 			Status:     string(b.Status),
 			RestsOn:    restsOn,
-			BodyHTML:   string(markdown.RenderDocument(b.Body, "")),
+			BodyHTML:   rendered[b.ID].body,
 			Words:      b.Words,
 			ImageCount: len(b.Images),
 			Images:     images,
+
+			Review:           r,
+			ApprovedBodyHTML: approvedHTML,
 		})
 	}
 	out, err := json.Marshal(p)

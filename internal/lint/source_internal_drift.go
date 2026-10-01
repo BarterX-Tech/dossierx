@@ -33,7 +33,15 @@
 // unhashed file carries a signature over a citation nobody can check, which is
 // the precise failure the Source type was introduced to end.
 //
-// HASHING RULE. With record_id unset, the sha256 pins the whole file. With
+// HASHING RULE. With record_id unset, the sha256 pins the whole file — unless
+// the file is a BRIEF (briefs_dir/<folder>/<slug>.md, NIT-198): then it pins
+// the brief's content hash, the one `brief lock` signs and `brief show`
+// prints as content_hash (summary, rests_on as a set, body; see
+// briefs.LockHash). A brief's status line and its comments block are left
+// out, because the engine rewrites both — a lock flips the status, and every
+// thread the human opens, answers or resolves in the viewer is written into
+// the frontmatter — and neither changes what a citing claim rests on. Pinning
+// the whole file made every thread write on a cited brief a drift finding. With
 // record_id set, it pins the ONE JSONL line whose top-level "id" equals it —
 // the raw line as written, minus its line terminator, hashed as bytes. Not the
 // re-serialized JSON: a canonicalizing hash would quietly forgive a
@@ -121,10 +129,27 @@ func (sourceInternalDriftLint) Check(claims []model.Claim, cfg *config.Config) [
 			}
 
 			full := filepath.Join(root, filepath.FromSlash(s.Path))
-			data, err := os.ReadFile(full)
+			data, err := readPinnedFile(cfg, root, full)
 			if err != nil {
 				add(fmt.Sprintf("cannot read path %q (relative to the project config's directory): %v; the citation names a file that is not there to be checked", s.Path, err))
 				continue
+			}
+
+			if s.RecordID == "" {
+				if rel, isBrief := briefRel(cfg, full); isBrief {
+					if BriefContentHash == nil {
+						add(fmt.Sprintf("%q is a brief, whose pin is its content hash, and no brief reader is linked into this build to compute it, so the hash was not checked", s.Path))
+						continue
+					}
+					if hash, ok := BriefContentHash(cfg, rel, data); ok {
+						if recorded != "" && hash != recorded {
+							add(fmt.Sprintf(
+								"brief %q no longer matches its recorded sha256: recorded %s, content hash now %s (summary, rests_on and body; its status and comment threads are not pinned). The brief under this claim changed after the citation was written, so the claim may now be resting on something the brief no longer says",
+								s.Path, recorded, hash))
+						}
+						continue
+					}
+				}
 			}
 
 			payload := data
@@ -154,6 +179,50 @@ func (sourceInternalDriftLint) Check(claims []model.Claim, cfg *config.Config) [
 		}
 	}
 	return findings
+}
+
+// readPinnedFile returns the bytes this run is judging for an internal
+// source. When cfg.BriefTree names the config-relative path, those bytes
+// win — check --staged puts the index blob there so a staged brief rewrite
+// is hashed even if the worktree copy still matches the pin.
+func readPinnedFile(cfg *config.Config, root, full string) ([]byte, error) {
+	if cfg != nil && len(cfg.BriefTree) > 0 && root != "" {
+		rel, err := filepath.Rel(root, full)
+		if err == nil {
+			if data, ok := cfg.BriefTree[filepath.ToSlash(rel)]; ok {
+				return data, nil
+			}
+		}
+	}
+	return os.ReadFile(full)
+}
+
+// BriefContentHash returns the content hash of the brief file at rel
+// (slash-separated, relative to briefs_dir) whose bytes are data, and false
+// when internal/briefs does not read that file as a brief. internal/briefs
+// sets it at init: it imports this package for its findings, so this package
+// cannot import it back, and the one hashing function stays briefs.LockHash.
+// Nil — a build that links no brief reader — is reported per source rather
+// than falling back to the whole file, which would check a different thing.
+var BriefContentHash func(cfg *config.Config, rel string, data []byte) (hash string, ok bool)
+
+// briefRel reports whether full is a brief file — exactly one folder below
+// briefs_dir, named *.md — and returns its path relative to briefs_dir.
+func briefRel(cfg *config.Config, full string) (string, bool) {
+	dir := cfg.BriefsDirPath()
+	if dir == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(full))
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	parts := strings.Split(rel, "/")
+	if len(parts) != 2 || parts[0] == ".." || parts[0] == "." || strings.HasPrefix(parts[0], ".") || strings.HasPrefix(parts[1], ".") || filepath.Ext(parts[1]) != ".md" {
+		return "", false
+	}
+	return rel, true
 }
 
 // sourceHashSubject names what was hashed, so a mismatch message distinguishes

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/briefs"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/constitution"
@@ -20,10 +21,16 @@ import (
 // record, and nothing on it is written by the project except the title and
 // eyebrow, which the shell already carries.
 //
-// Briefs (NIT-192) are not in the engine yet, so the brief halves of the
-// cards and the Features and Briefs tiles do not exist here. That is the
-// "no briefs/" empty state the design fixes: those parts are hidden, not
-// shown as zero.
+// The brief halves (NIT-203): Edited after approval and To re-read count
+// briefs in those briefMark states beside the claims'; Open threads already
+// counts a brief's unresolved threads (NIT-198). The Draft card stays
+// claims only. A kind at zero on both sides is hidden. The Briefs tile is
+// BriefsView.BriefsTile, read by the shell beside this view, and shows only
+// when a folder other than features/ holds a brief.
+//
+// The Features tile (NIT-201) is not built here: it is BriefsView's
+// FeaturesTile (feature_page.go), read by the shell beside this view, and it
+// shows only when briefs/features/ holds a brief.
 //
 // Cost: two passes over the claims (the cards, and the project-claim count)
 // plus one over each claim's comments, one over the module groups, and two
@@ -117,7 +124,43 @@ const (
 	homeDraftModules = 3
 )
 
-func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGroup) HomeView {
+// homeBriefRef is one brief named on a Waiting-on-you card: its title and
+// the page id the card opens.
+type homeBriefRef struct {
+	title, anchor string
+	open          int
+}
+
+// homeBriefWaiting is the briefs that belong on Home's waiting cards, from
+// the same briefMark states the sidebar and the B6 index read.
+type homeBriefWaiting struct {
+	edited, review, threads []homeBriefRef
+}
+
+// homeBriefWaitingOf lists those briefs in brief-id order (set order).
+func homeBriefWaitingOf(set *briefs.Set, rendered map[string]renderedBrief, review *briefs.Evaluation) homeBriefWaiting {
+	var w homeBriefWaiting
+	if set.Empty() {
+		return w
+	}
+	for _, b := range set.Briefs {
+		r := rendered[b.ID]
+		ref := homeBriefRef{title: b.Title, anchor: r.anchor, open: b.OpenThreads()}
+		mark, _, _ := briefMark(briefReviewOf(review, b))
+		switch mark {
+		case "edited":
+			w.edited = append(w.edited, ref)
+		case "review":
+			w.review = append(w.review, ref)
+		}
+		if ref.open > 0 {
+			w.threads = append(w.threads, ref)
+		}
+	}
+	return w
+}
+
+func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGroup, briefs homeBriefWaiting) HomeView {
 	var view HomeView
 	view.Modules = homeModulesTile(modules)
 	view.Constitution = homeConstitutionTile(cat, cfg)
@@ -146,45 +189,79 @@ func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGro
 		}
 	}
 
-	if len(edited) > 0 {
-		view.Cards = append(view.Cards, HomeCard{
+	if n := len(edited) + len(briefs.edited); n > 0 {
+		names := append(claimNameList(edited), briefNameList(briefs.edited)...)
+		card := HomeCard{
 			Kind:       "edited",
-			Count:      len(edited),
+			Count:      n,
 			Label:      "Edited after approval",
 			ShortLabel: "Edited after approval",
-			Detail:     countNoun(len(edited), "claim") + ": " + claimNames(edited) + ".",
-			Short:      countNoun(len(edited), "claim"),
+			Detail:     waitingDetail(len(edited), len(briefs.edited), names, ""),
+			Short:      waitingShort(len(edited), len(briefs.edited)),
 			Action:     "See changes",
-			Target:     edited[0].ID,
-		})
+		}
+		if len(edited) > 0 {
+			card.Target = edited[0].ID
+		} else {
+			card.Target = briefs.edited[0].anchor
+		}
+		view.Cards = append(view.Cards, card)
 	}
-	if len(review) > 0 {
-		view.Cards = append(view.Cards, HomeCard{
+	if n := len(review) + len(briefs.review); n > 0 {
+		card := HomeCard{
 			Kind:       "review",
-			Count:      len(review),
+			Count:      n,
 			Label:      "To re-read",
 			ShortLabel: "To re-read",
-			Detail:     reviewDetail(len(review)),
-			Short:      countNoun(len(review), "claim"),
+			Detail:     reviewDetail(len(review), len(briefs.review)),
+			Short:      waitingShort(len(review), len(briefs.review)),
 			Action:     "Review",
-			Target:     review[0].ID,
-		})
+		}
+		if len(review) > 0 {
+			card.Target = review[0].ID
+		} else {
+			card.Target = briefs.review[0].anchor
+		}
+		view.Cards = append(view.Cards, card)
+	}
+	for _, b := range briefs.threads {
+		threads += b.open
 	}
 	if threads > 0 {
 		label := "Open threads"
 		if threads == 1 {
 			label = "Open thread"
 		}
-		view.Cards = append(view.Cards, HomeCard{
+		card := HomeCard{
 			Kind:       "thread",
 			Count:      threads,
 			Label:      label,
 			ShortLabel: label,
-			Detail:     "On " + claimNames(threaded) + ". A claim can't lock while a thread on it is open.",
-			Short:      components.ClaimLabel(threaded[0].ID),
 			Action:     "Open thread",
-			Target:     threaded[0].ID,
-		})
+		}
+		var names []string
+		for _, c := range threaded {
+			names = append(names, components.ClaimLabel(c.ID))
+		}
+		for _, b := range briefs.threads {
+			names = append(names, b.title)
+		}
+		switch {
+		case len(briefs.threads) == 0:
+			card.Detail = "On " + joinNames(names) + ". A claim can't lock while a thread on it is open."
+		case len(threaded) == 0:
+			card.Detail = "On " + joinNames(names) + ". A brief can't lock while a thread on it is open."
+		default:
+			card.Detail = "On " + joinNames(names) + ". A claim or brief can't lock while a thread on it is open."
+		}
+		// The first claim's thread, as before briefs; a brief's page when
+		// only briefs have one.
+		if len(threaded) > 0 {
+			card.Short, card.Target = components.ClaimLabel(threaded[0].ID), threaded[0].ID
+		} else {
+			card.Short, card.Target = briefs.threads[0].title, briefs.threads[0].anchor
+		}
+		view.Cards = append(view.Cards, card)
 	}
 	if len(drafts) > 0 {
 		byModule, order := draftsByModule(drafts)
@@ -209,11 +286,50 @@ func buildHomeView(cat *catalog.Catalog, cfg *config.Config, modules []ModuleGro
 	return view
 }
 
-func reviewDetail(n int) string {
+func reviewDetail(claims, briefs int) string {
+	n := claims + briefs
+	what := waitingKind(claims, briefs)
 	if n == 1 {
-		return "1 claim: something it rests on changed since approval."
+		return what + ": something it rests on changed since approval."
 	}
-	return countNoun(n, "claim") + ": something they rest on changed since approval."
+	return what + ": something they rest on changed since approval."
+}
+
+func waitingKind(claims, briefs int) string {
+	switch {
+	case briefs == 0:
+		return countNoun(claims, "claim")
+	case claims == 0:
+		return countNoun(briefs, "brief")
+	default:
+		return countNoun(claims, "claim") + ", " + countNoun(briefs, "brief")
+	}
+}
+
+func waitingDetail(claims, briefs int, names []string, extra string) string {
+	s := waitingKind(claims, briefs) + ": " + joinNames(names) + "."
+	if extra != "" {
+		return s + " " + extra
+	}
+	return s
+}
+
+func waitingShort(claims, briefs int) string { return waitingKind(claims, briefs) }
+
+func claimNameList(claims []model.Claim) []string {
+	names := make([]string, 0, len(claims))
+	for _, c := range claims {
+		names = append(names, components.ClaimLabel(c.ID))
+	}
+	return names
+}
+
+func briefNameList(briefs []homeBriefRef) []string {
+	names := make([]string, 0, len(briefs))
+	for _, b := range briefs {
+		names = append(names, b.title)
+	}
+	return names
 }
 
 // dependencyChanged reports whether live readiness says a claim must be
@@ -309,18 +425,14 @@ func homeConstitutionTile(cat *catalog.Catalog, cfg *config.Config) HomeConstitu
 	return t
 }
 
-// claimNames lists the first homeCardNames claims by their readable label,
-// then how many more there are.
-func claimNames(claims []model.Claim) string {
-	var names []string
-	for i, c := range claims {
-		if i == homeCardNames {
-			break
-		}
-		names = append(names, components.ClaimLabel(c.ID))
+// joinNames names at most homeCardNames of names, then a count of the rest.
+func joinNames(names []string) string {
+	shown := names
+	if len(shown) > homeCardNames {
+		shown = shown[:homeCardNames]
 	}
-	out := strings.Join(names, ", ")
-	if rest := len(claims) - len(names); rest > 0 {
+	out := strings.Join(shown, ", ")
+	if rest := len(names) - len(shown); rest > 0 {
 		out += fmt.Sprintf(" and %d more", rest)
 	}
 	return out
