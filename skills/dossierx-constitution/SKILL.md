@@ -67,9 +67,10 @@ state. You draft and show; the **human** approves:
 2. On their yes: `dossierx constitution lock --reason "<their words>"`. It writes `status: locked`
    and records the content hash and their reason in `build/ledger/lock-store.json`. Commit both.
 
-Until it is locked, `claim lock`, `claim reaudit --confirm` and plain `check` refuse
-`CONSTITUTION_NOT_LOCKED` (`check --validate` / `--staged` report the `constitution-not-locked`
-finding). `error.details.state` says why:
+Until it is locked, `claim lock`, `claim reaudit --confirm` and every `check` — plain, `--validate`
+and `--staged` — refuse `CONSTITUTION_NOT_LOCKED` (exit 1, `stopped_at: constitution`), with a
+`constitution-not-locked` entry in `lint_findings` that only the human's lock clears.
+`error.details.state` says why:
 
 | state | meaning | recovery |
 |---|---|---|
@@ -100,5 +101,3 @@ summary — together with the constitution text, in one fixed **10240-byte** bud
 whose index line crosses it gets `shared-context-budget` (project-wide when the constitution alone
 is over). Recovery: shorten project claim summaries, retire a project claim, or trim the
 constitution — there is no config value to raise.
-
-Upgrading a corpus that still has a doctrine hub or `governed_by`: **[`dossierx-upgrading`](../dossierx-upgrading/SKILL.md)**.

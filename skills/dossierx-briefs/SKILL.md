@@ -50,7 +50,7 @@ is a claim no brief replaces. What fails them and still has to be written down i
 
 | you have… | it is |
 |---|---|
-| one fact that passes all three questions in [Is this worth a claim?](../dossierx-claims/SKILL.md#is-this-worth-a-claim--and-how-to-write-one) | a claim — never a brief |
+| one fact that passes all three questions in [Is this worth a claim?](../dossierx-claims/SKILL.md#is-this-worth-a-claim) | a claim — never a brief |
 | why a module exists, where to start in it | its `manifest.yaml` summary (**[`dossierx-modules`](../dossierx-modules/SKILL.md)**) |
 | a question, or a disagreement with a claim's wording | a comment on that claim (**[`dossierx-comments`](../dossierx-comments/SKILL.md)**) |
 | law every module builds toward | the constitution (**[`dossierx-constitution`](../dossierx-constitution/SKILL.md)**) |
@@ -135,9 +135,12 @@ ask, and wait for an explicit yes. Never raise a value in the same change that h
 
 ## The lock loop — the human's approval
 
-A brief starts `status: draft` and stays freely editable: rewrite it, rename it, delete it, move
-it between folders, no ceremony — unless it carries threads (a rename strands them: see Comments)
-or a claim cites it (the pin breaks: see Citing). Locking is the human's act of approving what it
+There is no `brief new`: write the file under `briefs/<folder>/`, with `summary` (and `rests_on` if
+it describes claims), and run `dossierx check --validate`. A brief starts `status: draft` and stays
+freely editable: rewrite it, rename it, delete it, move it between folders, no ceremony — unless it
+carries threads, open or resolved (deleting or renaming it is `comment-digest-abandoned`: the human
+deletes those threads in the viewer first; a locked brief is unlocked first) or a claim cites it
+(the pin breaks: see Citing). Locking is the human's act of approving what it
 says.
 
 1. When the brief is ready for them: `dossierx brief lock <path> --dry-run`. Show the preview and
@@ -159,7 +162,7 @@ unchanged, images included — a second lock would sign nothing), `store_gitigno
 `pre_ledger_unadopted`, `store_too_new` (a newer binary wrote the store: upgrade, never edit the
 store) and `write_conflict`, each per the router's table. A lock over a standing **or released**
 record signs **only the edit**: it carries the baseline of every `rests_on` claim still listed
-(`carried_baselines`) — through unlock → edit → lock and through an in-place re-lock alike — so a
+(`carried_baselines`) through unlock → edit → lock, so a
 claim that moved under the brief stays `review_pending` until `brief reaudit --confirm` has shown
 the human the change. No lock path accepts a changed claim unseen.
 
@@ -177,9 +180,11 @@ the human the change. No lock path accepts a changed claim unseen.
 **Never re-lock to make the finding go away**: that signs the edit nobody approved. Never write
 `status:` by hand in either direction.
 
-**A brief in any state never blocks claim work.** `claim lock` does not read a brief finding, a
-brief never enters `manifest show`, the catalog or the claims graph, and no brief byte enters a
-claim's hash. If you are holding a claim back for a brief, you have the direction wrong.
+**A brief never gates a claim.** `claim lock` does not read a brief finding, a brief never enters
+`manifest show`, the catalog or the claims graph, and no brief byte enters a claim's hash. If you
+are holding a claim back for a brief, you have the direction wrong. But a brief's own error or
+integrity finding fails `check` and `check --staged` for the whole project, so fix it before you
+commit.
 
 ## `rests_on` — what the brief describes, not what it mentions
 
@@ -198,8 +203,8 @@ that no longer exists is `brief-rests-on-missing` (ERROR): unlock, remove or rep
    no snapshot matches reads "earlier wording not available"); empty when nothing is pending.
    The served viewer draws the same list as one amber banner per claim on the brief's page.
 2. Update the brief so it describes the claim as it now reads: unlock → edit → lock on the
-   human's yes, or an in-place re-lock when that is how they approved the edit. Both paths keep
-   the pending review (the baselines are carried); the reaudit alone refreshes only the baselines.
+   human's yes. The pending review survives it (the baselines are carried); only the reaudit
+   refreshes them.
 3. Show the human the diff from step 1 and wait. On their yes:
    `dossierx brief reaudit <path> --confirm --reason "<their words>"`.
 
@@ -216,8 +221,8 @@ A feature is an ordinary brief in `briefs/features/`. The body says **what the f
 how it works for the user**, in the user's order, and links the voice or design briefs it relies
 on by name rather than restating them. `rests_on` lists the claims the feature is made of —
 across modules, `contract` claims and `project.*` alike. That list is **composition**: it says
-which promises the feature is built from. It is never a gate, never a build sequence, and never
-a status.
+which promises the feature rests on. It is never a gate, never an order of work, and never a
+status.
 
 - **No owner claim.** A claim that only says "the checkout feature exists" or narrates the
   feature fails the three questions and is not written; one already locked is unlocked, then
@@ -225,9 +230,9 @@ a status.
 - **Two briefs with the same `rests_on` set** — features or not — are `brief-rests-on-duplicate`
   (WARNING): two features made of the same claims are one feature. Merge them, or make one of
   them describe something the other does not.
-- **Nothing reports a feature as specified or built.** `brief show` derives nothing from the
-  claims a brief rests on, `check` reports nothing of the kind, and neither do you: every claim
-  in `rests_on` locked and linked is evidence about the claims, not about the feature.
+- **Nothing reports a feature's progress.** `brief show` lists each `rests_on` claim's status and
+  review state (`rests_on_claims[]`) but no feature status, `check` reports none, and neither do you: every claim in `rests_on`
+  locked and linked is evidence about the claims, not about the feature.
   **Never say a feature is built** — say which of its claims are locked, which are linked, and stop.
 
 ## Citing a brief from a claim
