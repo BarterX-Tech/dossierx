@@ -467,14 +467,14 @@ func TestRender_EditedFeatureViewsOpenBriefLinks(t *testing.T) {
 		}
 	}
 
-	recover := render(false)
+	noText := render(false)
 	for _, want := range []string{
 		`no approved text for this feature,`,
 		`or unlocks the feature, fixes it`,
 		`<a href="#brief-voice-money">type</a>`,
 	} {
-		if !strings.Contains(recover, want) {
-			t.Errorf("edited feature with no approved text is missing %q:\n%s", want, recover)
+		if !strings.Contains(noText, want) {
+			t.Errorf("edited feature with no approved text is missing %q:\n%s", want, noText)
 		}
 	}
 }
