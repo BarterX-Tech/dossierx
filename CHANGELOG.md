@@ -67,7 +67,9 @@ ledger-covered project; in one that has never locked anything the dropped
 entry goes unreported). From this release on, a store whose version is newer
 than the binary reading it is refused (`store_too_new`) rather than read and
 re-saved, for the lock store and the comment digest store alike; a v0.7.21
-binary predates that guard.
+binary predates that guard. `check` reports such a store as
+`lock-ledger-unreadable` with a finding and hint that say upgrade the binary,
+never restore or re-lock the store.
 
 ### Added — briefs, the read side (NIT-204)
 
