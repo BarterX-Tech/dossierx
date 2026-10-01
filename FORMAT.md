@@ -1732,7 +1732,8 @@ then a hollow dot for `draft` or a padlock for `locked`. A file that says
 draft mark. A legend above the theme control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
 second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
 `BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
-words and images against their caps, the body, and the claims it **rests on**
+approval's date and reason for a locked brief, the words and images against
+their caps, the body, and the claims it **rests on**
 (its frontmatter) and is **cited by** (every claim with an `internal` source
 whose `path` is the brief's). The title is the page's top heading; the body's
 `##` sections sit one level below it, and a further `#` in the body sits at
@@ -1798,6 +1799,47 @@ is: "1 claim this feature rests on has changed since approval".
 title and opens its page: "Rests on the same claims as Export to CSV". Both
 are warnings: `check` still passes, and a claim's own warnings still wait
 under Later.
+
+A locked brief **edited since its approval** — its file no longer matches
+its lock record, which `check` reports as `brief-content-drift` and fails on —
+reads EDITED SINCE APPROVAL ("Edited" on a phone) under a red banner that
+counts what changed, and its body becomes a card with three views, Changes
+first. **Changes** is the redline against the approved text the lock record
+keeps: an approved passage struck in red above the passage that replaced it
+in green, and a passage added with nothing facing it in green, in the claim
+viewer's own diff, a passage and its replacement counted once. Under it is what the redline
+cannot show: a moved summary or `rests_on`, and each image changed, added or
+removed, read from the image digests the record signs beside the markdown. An
+edit that changes only whitespace the diff does not draw (trailing blank
+lines) says only whitespace differs. **Approved** is the approved text
+rendered as the page renders a brief, with no marks. **Current** is the file
+as it reads now, each changed or added run with a thin red rule and a
+"changed / added since approval" caption, removed passages left out.
+Headings, images and lists render in every view, and "On this page" lists
+the shown view's headings. The record keeps an image's digest, not its
+bytes, so every view draws images as they are now, and says so; an image the
+brief no longer references, or whose file is gone, is drawn as "image
+removed: <name>" or "image missing: <name>" rather than a broken image. The
+chosen view follows the reader to other edited briefs and across a live
+reload, until the tab is closed. `check` writes the viewer before its ledger
+gate fails, so the static build shows the edit as `dossierx serve` does; a
+lint error stops `check` earlier, before it writes the viewer, and the
+static page then stays as it was. There is no lock or restore button:
+"Approve or restore in a thread", the page-foot Comment button, opens the
+brief's threads on the comments rail, where the human says what should
+happen. On their yes the agent restores the
+approved text from version control, or runs `brief unlock` → fix → `brief
+lock`; a lock of the brief as it stands, to clear the finding, is never the
+fix. A record that holds no approved markdown shows a note in place of the
+views, naming `git log -p -- <path>` (the path from the repository root when
+the project is in a git work tree) as where the approved version is, and the
+file as it reads now. A brief whose file says `locked` with no approval on
+record reads LOCK NOT RECORDED, not Locked, and its meta line says "Not
+locked: no approval on record", its sidebar mark's label. A feature brief
+edited since its approval gets the same banner and views on its feature
+page, under the meta line a feature page always has (what it rests on, not
+the approval), and in every view a link to another brief opens that brief's
+page.
 
 A claim card does show the briefs around it, derived at render time and never
 stored: a **BRIEFS** group in its relationships panel, after RESTS ON and

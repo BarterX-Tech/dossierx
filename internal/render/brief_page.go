@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -185,15 +186,17 @@ type BriefPageView struct {
 	NavLabel string
 	Summary  string
 	Status   string
-	// Mark is the brief's one sidebar state mark. The board's priority is
-	// edited, review, open thread, draft, locked; an open thread (NIT-198)
-	// outranks draft and locked here, and the edited and review marks, which
-	// outrank it, arrive with their pages (NIT-199, NIT-200).
-	Mark      string
-	MarkLabel string
 	// BriefID is the brief's <folder>.<slug> id, which the comment rail and
 	// the /api/briefs/{id}/comments routes address it by (NIT-198).
 	BriefID string
+	// LockState is the brief's state against its lock record (NIT-205):
+	// draft, locked, edited or unrecorded.
+	LockState string
+	// Mark is the brief's one sidebar state mark and its label, from
+	// briefMark: the one mark the Briefs tree, the Features list and Home's
+	// Features tile read.
+	Mark      string
+	MarkLabel string
 	// OpenThreads and Threads are the brief's unresolved and total comment
 	// threads; OpenThreads is internal/briefs' OpenThreads, the number the
 	// payload's open_threads carries.
@@ -202,8 +205,23 @@ type BriefPageView struct {
 	// CommentsPanel is the brief's threads baked into the page for a
 	// static build's read-only rail; empty for a brief with none.
 	CommentsPanel template.HTML
-	Pill          template.HTML
-	Body          template.HTML
+	// Pill is the header's pill; PillShort the phone's, which has room for
+	// one word ("Edited" where the wide pill reads "Edited since approval").
+	Pill      template.HTML
+	PillShort template.HTML
+	// Approval is the standing approval a locked or edited brief's meta line
+	// names, with its reason; nil for a draft and an unrecorded brief.
+	Approval *BriefApprovalView
+	// Edit is the edited-since-approval page (NIT-199): nil unless the
+	// brief is locked and its file moved since the approval.
+	Edit *BriefEditView
+	// RepoPath is the brief's path for `git log -p` in the recover note:
+	// from the repository root when the project sits in a git work tree
+	// (RepoRelative), else relative to the project directory. Set only for
+	// an edited brief with no approved text.
+	RepoPath     string
+	RepoRelative bool
+	Body         template.HTML
 	// Meta is the header's count line: words against the word cap, images
 	// against the image cap.
 	Meta string
@@ -318,7 +336,9 @@ func reservedSectionIDs(cat *catalog.Catalog, cfg *config.Config) map[string]boo
 // renderBriefs' output for the same set. review is the briefs' lock and
 // review state (NIT-205), read by every row's mark (briefMark); nil where a
 // render has none, and the marks fall back to the frontmatter status.
-func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *catalog.Catalog, review *briefs.Evaluation) BriefsView {
+// cfg places the project in its repository, for the path an edited brief's
+// recover note names (nil: the path relative to the project directory).
+func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *catalog.Catalog, cfg *config.Config, review *briefs.Evaluation) BriefsView {
 	view := BriefsView{IndexID: briefsIndexID}
 	if set.Empty() {
 		return view
@@ -331,6 +351,13 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 	var names []string
 	for _, b := range set.Briefs {
 		page := briefPage(b, set.Caps, rendered[b.ID], statuses, citedBy[b.Path], targets, review)
+		if page.Edit != nil && !page.Edit.Retained {
+			dir := ""
+			if cfg != nil {
+				dir = cfg.Dir()
+			}
+			page.RepoPath, page.RepoRelative = repoRelativePath(dir, b.Path)
+		}
 		if b.Folder == featuresFolder {
 			if madeOf == nil {
 				madeOf = madeOfIndex(cat)
@@ -357,7 +384,16 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 
 func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string, targets map[string]string, review *briefs.Evaluation) BriefPageView {
 	folderLabel := components.DisplayCase(b.Folder)
-	mark, markLabel, _ := briefMark(briefReviewOf(review, b))
+	rv := briefReviewOf(review, b)
+	mark, markLabel, _ := briefMark(rv)
+	lockState := string(rv.LockState)
+	links := func(body template.HTML) template.HTML {
+		return template.HTML(resolveBriefLinks(string(body), b.Path, targets))
+	}
+	edit := briefEditView(b, rv)
+	if edit != nil && edit.Retained {
+		edit.Changes, edit.Approved, edit.Current = links(edit.Changes), links(edit.Approved), links(edit.Current)
+	}
 	return BriefPageView{
 		ID:            r.anchor,
 		Path:          b.Path,
@@ -367,14 +403,18 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 		NavLabel:      sentenceCase(b.Slug),
 		Summary:       b.Summary,
 		Status:        string(b.Status),
+		LockState:     lockState,
 		Mark:          mark,
 		MarkLabel:     markLabel,
 		BriefID:       b.ID,
 		OpenThreads:   b.OpenThreads(),
 		Threads:       len(b.Comments),
 		CommentsPanel: components.BriefCommentsPanelHTML(b.ID, b.Comments),
-		Pill:          components.BriefStatusPillHTML(string(b.Status)),
-		Body:          template.HTML(resolveBriefLinks(briefBodyOutline(withoutTitleHeading(r.body, b.Body)), b.Path, targets)),
+		Pill:          components.BriefLockPillHTML(lockState, string(b.Status), false),
+		PillShort:     components.BriefLockPillHTML(lockState, string(b.Status), true),
+		Approval:      briefApproval(rv),
+		Edit:          edit,
+		Body:          links(template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body)))),
 		Meta:          fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
 		MetaShort:     groupDigits(b.Words) + " words",
 		RestsOn:       components.BriefRelationRowsHTML(b.RestsOn, statuses),
@@ -574,4 +614,32 @@ func groupDigits(n int) string {
 		return "-" + b.String()
 	}
 	return b.String()
+}
+
+// repoRelativePath is rel (relative to configDir, the project directory)
+// from the root of the git work tree holding the project: the nearest
+// ancestor of configDir with a .git entry (a directory, or the file a
+// worktree has). With none found, or no configDir, it is rel itself and
+// false.
+// It reads the file system and runs no git: a static page stays a function
+// of the tree it was built from.
+func repoRelativePath(configDir, rel string) (string, bool) {
+	if configDir == "" {
+		return rel, false
+	}
+	dir := filepath.Clean(configDir)
+	for {
+		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+			r, err := filepath.Rel(dir, filepath.Join(configDir, filepath.FromSlash(rel)))
+			if err != nil {
+				return rel, false
+			}
+			return filepath.ToSlash(r), true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return rel, false
+		}
+		dir = parent
+	}
 }

@@ -49,3 +49,30 @@ func BriefRelationRowsHTML(ids []string, statuses map[string]TargetStatus) templ
 	}
 	return template.HTML(b.String())
 }
+
+// BriefLockPillHTML is a brief's pill once its lock record is read
+// (NIT-199): a locked or draft brief keeps BriefStatusPillHTML's pill; a
+// locked brief whose file moved since its approval reads EDITED SINCE
+// APPROVAL (Paper B2; "Edited" on a phone, short), a closed padlock in the
+// blocked colour; and one whose file says locked with no approval on record
+// reads LOCK NOT RECORDED ("Unrecorded" short) under an open padlock in the
+// draft colour — the status line approves nothing, so the pill may not say
+// Locked.
+func BriefLockPillHTML(lockState, status string, short bool) template.HTML {
+	var cls, icon, label string
+	switch lockState {
+	case "edited":
+		cls, icon, label = "brief-pill--edited", "#dx-icon-lock", "Edited since approval"
+		if short {
+			label = "Edited"
+		}
+	case "unrecorded":
+		cls, icon, label = "pv brief-pill--unrecorded", "#dx-icon-lock-open", "Lock not recorded"
+		if short {
+			label = "Unrecorded"
+		}
+	default:
+		return BriefStatusPillHTML(status)
+	}
+	return template.HTML(`<span class="pill ` + cls + ` brief-pill"><svg class="dx-icon" aria-hidden="true"><use href="` + icon + `"/></svg><span class="brief-pill__label">` + label + `</span></span>`)
+}

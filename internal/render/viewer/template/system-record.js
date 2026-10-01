@@ -451,8 +451,16 @@
     // under the page's h2 title (render.briefBodyOutline). A heading inside a
     // quote or a list is not a section, so only the body's own children count.
     // A feature's Made of list (NIT-201) is the last row, as Paper B4 draws
-    // the rail: "Made of · 6 claims".
-    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3, :scope > .feature-made-of > .feature-made-of__head')) : [];
+    // the rail: "Made of · 6 claims". An edited brief (NIT-199) shows one of
+    // three views in a card: its headings are the shown view's, including
+    // one inside a changed or added passage, and never one the Changes view
+    // strikes out.
+    if (!section) { return []; }
+    return Array.prototype.slice.call(section.querySelectorAll(
+      ':scope > .brief-body > h3, ' +
+      ':scope > .brief-compare > .brief-view:not([hidden]) > h3, ' +
+      ':scope > .brief-compare > .brief-view:not([hidden]) > .claim-edit-passage:not(.claim-edit-passage--removed) > h3, ' +
+      ':scope > .feature-made-of > .feature-made-of__head'));
   }
 
   // tocTarget is the element a TOC row stands for: a claim card, or on a

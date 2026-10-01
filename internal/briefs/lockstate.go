@@ -147,6 +147,11 @@ type Review struct {
 	OpenThreads int `json:"open_threads"`
 	// Approved is the retained approved text, present while a record stands.
 	Approved *lock.BriefApproved `json:"approved"`
+	// ApprovedImages is the standing record's image digests, sha256 by file
+	// name (lock.BriefRecord.Images): what the viewer's edited-brief page
+	// (NIT-199) compares with the brief's own to name the images that moved.
+	// Not in the payload; nil while no record stands.
+	ApprovedImages map[string]string `json:"-"`
 }
 
 // Evaluation is every brief's Review plus the findings the lifecycle raises.
@@ -212,6 +217,10 @@ func evaluate(set *Set, claims []model.Claim, store *lock.Store, compare bool) *
 				approved.RestsOn = []string{}
 			}
 			r.Approved = &approved
+			r.ApprovedImages = map[string]string{}
+			for name, digest := range rec.Images {
+				r.ApprovedImages[name] = digest
+			}
 		}
 		if b.Status != StatusLocked {
 			if standing {
