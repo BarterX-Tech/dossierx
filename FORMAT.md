@@ -962,7 +962,9 @@ too (`"briefs"`, see "Briefs"), and the store's `version` is `4`; a store that
 has never held a brief record stays at `version` `3`, byte for byte. A lock
 store or comment digest store whose `version` is above what this dossierx
 knows is refused rather than read — a command answers `store_too_new`, and
-`check` reports `lock-ledger-unreadable` naming the upgrade — because reading
+`check` reports `lock-ledger-unreadable` naming the upgrade, with an envelope
+hint that says upgrade, not restore (a lock store too new is the only ledger
+finding that run reports, since every other rule reads it) — because reading
 it would work and the next write would drop whatever this binary does not know,
 which is exactly how a v0.7.21 write drops the `briefs` map.
 
