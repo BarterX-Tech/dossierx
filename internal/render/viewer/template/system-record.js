@@ -576,11 +576,100 @@
     ensureFacetTocTrigger(active, claims.length);
   }
 
+  // ------------------------------------------------------------------
+  // Threads on a brief (NIT-198). The brief's page carries its counts
+  // (data-open-threads, data-threads: internal/briefs' OpenThreads and the
+  // thread total, the numbers the payload's open_threads carries) from the
+  // render, so a live reload's fresh page brings fresh counts; the comment
+  // rail (viewer-runtime.js) also sets them the moment its threads load.
+  //
+  // The Comment buttons open the rail. Under dossierx serve
+  // (body.comments-live) they always do. In a static build there is
+  // nothing to write to, so a brief with threads opens them read-only, as
+  // a claim's chip does, and a brief with none has its button disabled.
+  // Either way a visible line says why (a title would be hover-only).
+  // ------------------------------------------------------------------
+  var BRIEF_READ_ONLY_LINE = 'Read only: comments are written through dossierx serve.';
+
+  function briefThreadState(page) {
+    var open = parseInt(page.getAttribute('data-open-threads'), 10) || 0;
+    var total = parseInt(page.getAttribute('data-threads'), 10) || 0;
+    var live = document.body.classList.contains('comments-live');
+    // A static build has nothing to write to, so the note states the count
+    // and asks for nothing; the read-only line says why.
+    var note = open === 0 ? 'None open.' : open + ' open.';
+    if (live) {
+      note += open === 0
+        ? ' Comment on the brief to ask the agent for a change.'
+        : ' Reply to or resolve ' + (open === 1 ? 'it' : 'them') + ' in the thread.';
+    }
+    return {
+      open: open,
+      total: total,
+      enabled: live || total > 0,
+      note: note,
+      count: open === 0 ? '' : (open === 1 ? '1 open thread' : open + ' open threads'),
+      line: live ? '' : BRIEF_READ_ONLY_LINE
+    };
+  }
+
+  // briefRailOpenOn is true while the comment rail shows this brief
+  // (viewer-runtime.js's window.dossierxCommentRailBrief).
+  function briefRailOpenOn(id) {
+    return typeof window.dossierxCommentRailBrief === 'function' && !!id && window.dossierxCommentRailBrief() === id;
+  }
+
+  function setText(node, text) {
+    if (node && node.textContent !== text) { node.textContent = text; }
+  }
+
+  function syncBriefThreadsBlock(threads, page) {
+    var state = briefThreadState(page);
+    setText(threads.querySelector('.facet-toc__threads-note'), state.note);
+    var btn = threads.querySelector('.facet-toc__comment');
+    btn.disabled = !state.enabled;
+    var id = page.getAttribute('data-brief-id') || '';
+    btn.setAttribute('data-brief-id', id);
+    // The rail's button follows the page on screen, so whether it is
+    // "expanded" is whether the rail shows THIS brief, not the last one.
+    var expanded = String(briefRailOpenOn(id));
+    if (btn.getAttribute('aria-expanded') !== expanded) { btn.setAttribute('aria-expanded', expanded); }
+    var line = threads.querySelector('.facet-toc__threads-later');
+    setText(line, state.line);
+    line.hidden = !state.line;
+  }
+
+  // syncBriefThreads brings every brief's page-foot Comment row and the
+  // rail's Threads block in line with the counts and the serve state. It
+  // runs on every renderToc, when body.comments-live arrives, and from the
+  // comment rail when a brief's threads change
+  // (window.dossierxSyncBriefThreads).
+  function syncBriefThreads() {
+    document.querySelectorAll('.brief-section[data-brief-id]').forEach(function (page) {
+      var state = briefThreadState(page);
+      var btn = page.querySelector('.brief-comment');
+      if (btn && btn.disabled !== !state.enabled) { btn.disabled = !state.enabled; }
+      // Below the rail's width the Threads block is hidden, so the page-foot
+      // row carries the open count itself.
+      var count = page.querySelector('.brief-comment-count');
+      if (count) {
+        setText(count, state.count);
+        if (count.hidden !== !state.count) { count.hidden = !state.count; }
+      }
+      var line = page.querySelector('.brief-comment-note');
+      if (line) {
+        setText(line, state.line);
+        if (line.hidden !== !state.line) { line.hidden = !state.line; }
+      }
+    });
+    var brief = activeBrief();
+    var threads = document.querySelector('#systemFacetToc .facet-toc__threads');
+    if (brief && threads) { syncBriefThreadsBlock(threads, brief); }
+  }
+
   // renderBriefToc fills the panel for a brief page (Paper B1, "On this
-  // page"): one row per ## heading in the body, then the Threads block.
-  // Threads on a brief are NIT-198's; until they exist the block states that
-  // none is open, its Comment button is disabled and drawn so, and a visible
-  // line says threads arrive later (a title would be hover-only).
+  // page"): one row per ## heading in the body, then the Threads block
+  // (syncBriefThreads above).
   function renderBriefToc(toc, brief, kicker) {
     var headings = briefHeadings(brief);
     // A brief with no section heading has nothing to put on this page's
@@ -627,9 +716,10 @@
     if (!toc.querySelector('.facet-toc__threads')) {
       var threads = document.createElement('div');
       threads.className = 'facet-toc__threads';
-      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note">None open. Comment on the brief or on any paragraph to ask the agent for a change.</p><button type="button" class="facet-toc__comment" disabled><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg>Comment</button><p class="facet-toc__threads-later">Threads on briefs arrive in a later release.</p>';
+      threads.innerHTML = '<p class="facet-toc__threads-head">Threads</p><p class="facet-toc__threads-note"></p><button type="button" class="facet-toc__comment" aria-controls="commentsPanel" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"></use></svg>Comment</button><p class="facet-toc__threads-later"></p>';
       list.insertAdjacentElement('afterend', threads);
     }
+    syncBriefThreadsBlock(toc.querySelector('.facet-toc__threads'), brief);
     updateTocActive();
     ensureFacetTocTrigger({ module: brief, triggerHost: brief.querySelector('.brief-toc-slot'), triggerLabel: 'On this page' }, headings.length);
   }
@@ -1001,6 +1091,7 @@
     }
     syncNavigation();
     renderToc();
+    syncBriefThreads();
     // enhanceTimestamp() runs after renderToc(): the freshness footer now
     // lives INSIDE the facet-toc panel renderToc creates (02 §3/§4.17,
     // "the right facet panel" — see the .freshness-footer move below), so
@@ -1046,7 +1137,8 @@
   // body.comments-live (R10.5's "Live" signal) without this lane polling
   // for it or that lane calling back into this file.
   window.setInterval(enhanceTimestamp, 60000);
-  new MutationObserver(enhanceTimestamp).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  new MutationObserver(function () { enhanceTimestamp(); syncBriefThreads(); }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  window.dossierxSyncBriefThreads = syncBriefThreads;
   window.dossierxEnhanceSystemRecord = enhance;
   enhance();
 })();

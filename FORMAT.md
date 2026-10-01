@@ -634,6 +634,19 @@ whole-file hash over it would report drift on every one of those edits. Findings
 a reader learns to wave through are worse than no findings, because they teach
 the wave-through on the day the drift is real.
 
+A **brief** is the other refinement, and it needs no field: when `path` names
+a brief (`briefs_dir/<folder>/<slug>.md`) and `record_id` is unset, `sha256` is
+the brief's **content hash** — its `summary`, its `rests_on` set and its body,
+the hash `brief lock` signs — not the file's sha256. Copy it from `dossierx
+brief show <path>` (`content:` in text, `content_hash` in JSON). A brief's
+`status` line and its `comments:` block are left out because the engine
+rewrites both: a lock flips the status, and every thread the human opens,
+answers or resolves in the served viewer is written into the frontmatter.
+Neither changes what the citing claim rests on, and a whole-file pin would
+have made each of them `source-internal-drift`. An edit to the summary,
+`rests_on` or body still is. Every other internal source, a markdown file
+outside `briefs_dir` included, is pinned whole.
+
 `supports` and `does_not_support` are optional free text on both kinds, and the
 second is the more valuable one: it is where an author records the part of a
 source that does **not** carry the claim, so a later reader does not have to
@@ -655,7 +668,7 @@ rather than cutting one off behind a button that cannot work.
 | `source-ref-undefined` | ERROR | the body cites `[n]` and no entry declares that `ref`. The citation points at nothing, which is a reader sent to look for evidence that was never recorded. |
 | `source-ref-unused` | WARNING | an entry no marker cites. Clutter, not falsehood — the evidence is still recorded and still hashed; nothing a reader is told is wrong. |
 | `source-external-unanchored` | ERROR | an `external` entry missing `url` or `accessed_on`. Without both, the citation names a page but not a version of it, and cannot be checked by anyone. |
-| `source-internal-drift` | ERROR | an `internal` entry whose `sha256` is absent, whose `path` (or `record_id`) cannot be read, or whose content no longer hashes to the recorded value. **A check that cannot execute is reported as a failure, never as a silent pass** — an unreadable source and a rewritten one are the same amount of evidence, which is none. |
+| `source-internal-drift` | ERROR | an `internal` entry whose `sha256` is absent, whose `path` (or `record_id`) cannot be read, or whose content no longer hashes to the recorded value (for a brief, its content hash: summary, `rests_on` and body). **A check that cannot execute is reported as a failure, never as a silent pass** — an unreadable source and a rewritten one are the same amount of evidence, which is none. |
 
 **What signs it, and what does not.** The distinction is subtle and it is the
 point of the field, so it is stated twice — here and under "What is signed, and
@@ -1589,9 +1602,11 @@ only on their explicit approval, and every cap finding says so.
 `build/ledger/lock-store.json` under `briefs`, keyed by the brief's id:
 
 - the brief's **lock hash** — its `summary`, its `rests_on` set and its body.
-  `status` and `comments` are not signed, as a claim's are not. The hash is the
-  markdown's alone, so a claim's `sources` pin on the brief file is unaffected
-  by the images;
+  `status` and `comments` are not signed, as a claim's are not. The same hash
+  is what a claim's internal source citing the brief records as its `sha256`
+  (see "`sources` and `[n]` citations"), so a thread written into the brief or
+  its status flipping never reads as drift under that claim. The hash is the
+  markdown's alone, so that pin is unaffected by the images;
 - the **sha256 of every image** the brief references, beside the hash: an
   image whose bytes change, or a change to the set referenced, is
   `brief-content-drift` naming the image;
@@ -1637,12 +1652,20 @@ A comment thread anchors on a brief's **path** the way it anchors on a claim id:
 `claim_not_found`, with the path in the hint: an id can collide with a claim
 id), and `comment inbox` lists a brief's threads with `kind: "brief"` (its
 `claims` count counts briefs with threads too). The rights are a claim's (an
-agent replies, the human resolves) — but resolving a brief's thread arrives
-with the viewer's brief threads, which have not shipped: no CLI verb resolves
-one, so until then an open thread on a brief holds `brief lock` and
-`brief reaudit --confirm` at `comment_open`. Those threads will be served by
-the brief's **id**, not its path: a route's `{id}` segment cannot carry the
-path's slashes. Each write records the brief's threads in
+agent replies, the human resolves). No CLI verb resolves a thread: the human
+resolves a brief's thread in the served viewer, on the brief's page, and until
+they do it holds `brief lock` and `brief reaudit --confirm` at `comment_open`.
+`dossierx serve` addresses those threads by the brief's **id**, not its path,
+under `/api/briefs/<folder>.<slug>/comments` (a route's `{id}` segment cannot
+carry the path's slashes; a path, escaped or not, and any other request under
+`/api/briefs/` no route matches answer `404 brief_not_found`):
+`GET` lists the brief's threads (`?open=1` the open ones), and add, reply,
+resolve, reopen, edit and delete are the claim routes' twins with the claim
+routes' admission, rights and error codes — a brief whose frontmatter the
+engine cannot rewrite in place (no `---` block, say) is the claim twin's
+`422 claim_not_serializable`, and one edited between the read and the write
+`409 claim_file_changed`; a thread in a response carries `brief_id` and `path`
+where a claim's carries `claim_id`. Each write records the brief's threads in
 `build/ledger/comment-digest.json` under `briefs`, and a block edited by hand is
 `comment-ledger-drift` on the brief's path (`comment-digest-unrecorded` for
 threads with no entry, in a ledger-covered project). An entry that recorded
@@ -1701,7 +1724,8 @@ A project that holds a brief outside `features/` gets a **Briefs** group in
 the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
 stays as written), each opening to its briefs. `features/` is left out of this
 tree: its briefs are features. Each brief row carries one state mark — a
-padlock for `locked`, a hollow dot for `draft` — and a legend above the theme
+padlock for `locked`, a hollow dot for `draft`, and a blue dot for a brief with
+an open comment thread, which outranks both — and a legend above the theme
 control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
 second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
 `BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
@@ -1711,8 +1735,18 @@ whose `path` is the brief's). The title is the page's top heading; the body's
 `##` sections sit one level below it, and a further `#` in the body sits at
 the same level as a `##` rather than above the title. The right rail is "On
 this page", the body's `##` headings, with a Threads block; on a phone it is a
-sheet. A brief with no `##` heading has no rail. Threads on briefs are not
-built yet: both Comment buttons are disabled and say so. The sidebar search
+sheet. A brief with no `##` heading has no rail. The Threads block counts the
+brief's open threads, and its Comment button (on a phone, and below the rail's
+width, the page-foot "Comment on this brief") opens the comments rail on the
+brief — a bottom sheet on a phone — where the human reads, adds, replies to and
+resolves threads as on a claim. Below the rail's width the page-foot row
+carries the open count itself. Home's Open threads card counts a brief's open
+threads beside the claims', leading to the brief when no claim has one. The viewer never locks, restores or confirms
+a brief: the agent does that after the human settles it in a thread. In a
+static build there is nothing to write to: a brief with threads opens them
+read only, a brief with none has its buttons disabled, and a line says
+comments are written through `dossierx serve`. The "All briefs" index gives a
+brief with an open thread its count. The sidebar search
 reads "Search claims and briefs": a module row matches its claims' titles,
 summaries and ids, and a brief row its title, file name, summary and folder.
 A `check` finding whose `claim_id` is a brief's path, its folder's or the

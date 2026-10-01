@@ -648,3 +648,19 @@ func (s *Set) add(rule, claimID, format string, args ...any) {
 		Message:  fmt.Sprintf(format, args...),
 	})
 }
+
+// init gives source-internal-drift its brief pin (NIT-198): an internal
+// source citing a brief pins the brief's LockHash — summary, rests_on and
+// body — so a status flip or a comment thread written into the brief's
+// frontmatter never reads as drift under the claim that cites it. The file
+// is parsed exactly as discovery parses it (FromFiles), so the value is the
+// content_hash `brief show` prints and `brief lock` signs.
+func init() {
+	lint.BriefContentHash = func(cfg *config.Config, rel string, data []byte) (string, bool) {
+		set := FromFiles(cfg, []File{{Rel: rel, Size: int64(len(data)), Regular: true, Data: data}})
+		if len(set.Briefs) != 1 {
+			return "", false
+		}
+		return set.Briefs[0].LockHash, true
+	}
+}

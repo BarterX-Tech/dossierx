@@ -239,3 +239,67 @@ func TestRender_FeaturesOnlyProjectMakesNoBriefsPromise(t *testing.T) {
 		t.Error("the feature brief's page must still render")
 	}
 }
+
+// TestRender_BriefThreadsOnThePageTreeAndIndex is the render half of threads
+// on a brief (NIT-198). A locked brief with an open thread shows the thread
+// mark in the tree (it outranks locked), its count on the "All briefs" index,
+// and its page carries its id and counts for the comment rail and the baked
+// threads a static build's rail reads, keyed data-brief-id and inert. A brief
+// whose only thread is resolved keeps its own mark, its page-foot button is
+// live (there is something to read), and a brief with none has it disabled.
+func TestRender_BriefThreadsOnThePageTreeAndIndex(t *testing.T) {
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	thread := func(id, status, body string) string {
+		return "  - id: " + id + "\n    status: " + status + "\n    author: human\n    created: \"2026-09-01T10:00:00Z\"\n    body: " + body + "\n    edited: false\n"
+	}
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("decisions/open.md", "---\nsummary: Open.\nstatus: locked\ncomments:\n"+thread("c-aaaaaa", "open", "\"<img src=x onerror=alert(1)>\"")+"---\n# Open\n\n## One\n\nText.\n"),
+		briefFile("decisions/settled.md", "---\nsummary: Settled.\nstatus: locked\ncomments:\n"+thread("c-bbbbbb", "resolved", "done")+"---\n# Settled\n\nText.\n"),
+		briefFile("decisions/quiet.md", "---\nsummary: Quiet.\n---\n# Quiet\n\nText.\n"),
+	})
+	out, err := renderBoundedAt(&catalog.Catalog{}, cfg, Extras{Briefs: set}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nav := out[strings.Index(out, `<nav id="nav">`):strings.Index(out, `</nav>`)]
+	for _, want := range []string{
+		`>Open</span><span class="brief-mark" data-mark="thread" role="img" aria-label="1 open thread"`,
+		`>Settled</span><span class="brief-mark" data-mark="locked"`,
+		`>Quiet</span><span class="brief-mark" data-mark="draft"`,
+	} {
+		if !strings.Contains(nav, want) {
+			t.Errorf("sidebar is missing %s", want)
+		}
+	}
+
+	_, index, ok := strings.Cut(out, `id="_briefs"`)
+	if !ok {
+		t.Fatal("no All briefs index")
+	}
+	index, _, _ = strings.Cut(index, "</section>\n        </section>")
+	if !strings.Contains(index, `<a href="#brief-decisions-open">Open</a><span class="briefs-index__threads">`) || strings.Count(index, "open thread") != 1 {
+		t.Errorf("the index must give the brief with an open thread, and only it, its count:\n%s", index)
+	}
+
+	open := sectionHTML(t, out, "brief-decisions-open")
+	for _, want := range []string{
+		`data-brief-id="decisions.open" data-open-threads="1" data-threads="1"`,
+		`<div class="comments-panel" data-brief-id="decisions.open" hidden>`,
+		`data-thread-id="c-aaaaaa"`,
+	} {
+		if !strings.Contains(open, want) {
+			t.Errorf("the brief page is missing %s", want)
+		}
+	}
+	if strings.Contains(open, "<img src=x") || strings.Contains(open, `data-claim-id="decisions.open"`) {
+		t.Error("a baked brief thread must be escaped, and keyed by data-brief-id alone")
+	}
+	settled := sectionHTML(t, out, "brief-decisions-settled")
+	if !strings.Contains(settled, `data-open-threads="0" data-threads="1"`) || strings.Contains(settled, `class="brief-comment" aria-controls="commentsPanel" aria-expanded="false" disabled`) {
+		t.Error("a brief with a resolved thread has none open, and its button opens the thread read only")
+	}
+	quiet := sectionHTML(t, out, "brief-decisions-quiet")
+	if !strings.Contains(quiet, `class="brief-comment" aria-controls="commentsPanel" aria-expanded="false" disabled`) || strings.Contains(quiet, "comments-panel") {
+		t.Error("a brief with no thread renders its button disabled (the viewer enables it under serve) and bakes no panel")
+	}
+}

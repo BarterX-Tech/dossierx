@@ -117,7 +117,9 @@ type briefShowData struct {
 	ReviewPending        bool           `json:"review_pending"`
 	ReviewPendingTrigger string         `json:"review_pending_trigger"`
 	// ContentHash is the brief's lock hash (summary, rests_on, body) — what
-	// `brief lock` signs; Digest is the whole file's. Review is the lock and
+	// `brief lock` signs, and the sha256 a claim's internal source citing the
+	// brief records (source-internal-drift, NIT-198); Digest is the whole
+	// file's, which moves with every thread written into it. Review is the lock and
 	// review state (NIT-205), flattened; RestsOnClaims is one entry per
 	// rests_on claim with its status.
 	ContentHash   string                `json:"content_hash"`
@@ -370,6 +372,7 @@ func writeBriefShowText(cmd *cobra.Command, d briefShowData) {
 		fmt.Fprintf(out, "  locked:   %s (%q)\n", d.LockedAt, d.LockReason)
 	}
 	fmt.Fprintf(out, "  digest:   %s\n", d.Digest)
+	fmt.Fprintf(out, "  content:  %s (the sha256 a claim citing this brief records)\n", d.ContentHash)
 	fmt.Fprintf(out, "  rests_on: %s\n", joinOrNone(d.RestsOn))
 	for _, c := range d.RestsOnClaims {
 		state := "not a claim"

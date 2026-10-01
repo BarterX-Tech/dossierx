@@ -414,6 +414,20 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/claims/{id}/comments/{tid}/reopen", s.handleReopen)
 	mux.HandleFunc("PATCH /api/claims/{id}/comments/{tid}", s.handleEdit)
 	mux.HandleFunc("DELETE /api/claims/{id}/comments/{tid}", s.handleDelete)
+	// Threads on a brief (NIT-198), each the twin of the claim route above it,
+	// addressed by the brief's slash-free <folder>.<slug> id. GET lists one
+	// brief's threads: /api/comments stays the claims' list. See
+	// brief_comments.go.
+	mux.HandleFunc("GET /api/briefs/{id}/comments", s.handleListBriefComments)
+	mux.HandleFunc("POST /api/briefs/{id}/comments", s.handleBriefAddThread)
+	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/replies", s.handleBriefReply)
+	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/resolve", s.handleBriefResolve)
+	mux.HandleFunc("POST /api/briefs/{id}/comments/{tid}/reopen", s.handleBriefReopen)
+	mux.HandleFunc("PATCH /api/briefs/{id}/comments/{tid}", s.handleBriefEdit)
+	mux.HandleFunc("DELETE /api/briefs/{id}/comments/{tid}", s.handleBriefDelete)
+	// Anything else under /api/briefs/ — a brief's path written unescaped
+	// among them — is the JSON brief_not_found, not the mux's text 404.
+	mux.HandleFunc("/api/briefs/", s.handleBriefRouteNotFound)
 	return mux
 }
 

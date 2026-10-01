@@ -150,7 +150,10 @@ sources:
 An `external` source needs `url` **and** `accessed_on` — the date records what the page said on the
 day it was read. An `internal` source needs `path` (relative to `project.config.yaml`) **and**
 `sha256`, and may set `record_id` to pin one JSONL record (matched on its top-level `"id"`) rather
-than the whole file, which churns for reasons unrelated to your claim.
+than the whole file, which churns for reasons unrelated to your claim. An internal source on a
+**brief** (`briefs/<folder>/<slug>.md`) records the brief's content hash instead of the file's —
+the `content:` line of `dossierx brief show <path>` — so its status and its comment threads never
+drift your pin.
 
 Cite from `body` with `[n]`: *"frames arrive only while the stream is running [1]."* Markers are
 read **in prose only** — never inside a fenced block or an inline `` `code` `` span — and **only on

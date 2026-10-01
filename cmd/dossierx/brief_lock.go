@@ -314,7 +314,7 @@ func newBriefLockCmd() *cobra.Command {
 // briefCommentOpen is the comment_open refusal.
 func briefCommentOpen(verb string, b briefs.Brief, n int) error {
 	return cliout.Errorf(cliout.CodeCommentOpen, "%s: refused, %s has %d open comment thread(s)", verb, b.Path, n).
-		WithHint(fmt.Sprintf("run: dossierx comment list %s --open — reply on the thread; resolving it is the human's, and that is the yes this waits for. The viewer's brief threads (where the human resolves one) have not shipped yet, so until they do an open thread on a brief holds this refusal", b.Path))
+		WithHint(fmt.Sprintf("run: dossierx comment list %s --open — reply on the thread; resolving it is the human's, in the served viewer's comment rail on the brief's page, and that is the yes this waits for; until then this refusal stands", b.Path))
 }
 
 // briefLockDryRun previews brief lock: every refusal the write path makes, in

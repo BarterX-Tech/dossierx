@@ -19,7 +19,10 @@
      reveal on chip click; the static render mounts NO composer and NO per-message
      action controls, since a control with nowhere to POST would be dead. Resolved
      threads are tucked into a native <details> collapse — it needs no id and
-     toggles without JS. */ -}}
+     toggles without JS. A brief's threads (NIT-198) bake the same panel into
+     its page through BriefCommentsPanelHTML, keyed data-brief-id instead of
+     data-claim-id: a brief id can spell a claim id, and the attribute keeps
+     the two apart. */ -}}
 {{- define "dossierx-comment-message" -}}
 <div class="comment-meta"><span class="comment-role comment-role--{{.Author}}">{{.Author}}</span> <time class="comment-time" datetime="{{.Created}}">{{.Created}}</time>{{if .Edited}} <span class="comment-edited">(edited)</span>{{end}}</div>
 <div class="comment-body">{{markdown .Body}}</div>
@@ -32,7 +35,7 @@
   {{- end}}
 </article>
 {{- end -}}
-<div class="comments-panel" data-claim-id="{{.ClaimID}}" hidden>
+<div class="comments-panel" {{if .BriefID}}data-brief-id="{{.BriefID}}"{{else}}data-claim-id="{{.ClaimID}}"{{end}} hidden>
   <p class="comments-panel-title">Comments</p>
   {{- range .Open}}
   {{template "dossierx-comment-thread" .}}
