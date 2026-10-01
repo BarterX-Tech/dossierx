@@ -614,15 +614,17 @@
     var note = open === 0 ? 'None open.' : open + ' open.';
     var action = 'Comment';
     if (live) {
-      if (edited) {
-        note = open === 0
-          ? 'To approve the new wording, say so in a thread. On your yes the agent unlocks, fixes and locks, or restores from version control.'
-          : 'Say in the thread what should happen to the new wording.';
-        action = 'Start a thread';
-      } else if (pending) {
+      // Same order as the page-foot Comment label: pending (Confirm in a
+      // thread) outranks edited when both hold.
+      if (pending) {
         note = open === 0
           ? 'To confirm the ' + noun + ' still holds, say so in a thread. On your yes the agent runs brief reaudit --confirm. Claim locking is not blocked.'
           : 'Say in the thread whether the ' + noun + ' still holds.';
+        action = 'Start a thread';
+      } else if (edited) {
+        note = open === 0
+          ? 'To approve the new wording, say so in a thread. On your yes the agent unlocks, fixes and locks, or restores from version control.'
+          : 'Say in the thread what should happen to the new wording.';
         action = 'Start a thread';
       } else {
         note += open === 0

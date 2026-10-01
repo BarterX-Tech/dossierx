@@ -71,9 +71,9 @@ func TestBriefReview_LightDarkAndPhone(t *testing.T) {
 	runCDP(t, ctx, chromedp.Navigate(url+"#"+reviewFlowBrief), chromedp.WaitVisible("#"+reviewFlowBrief, chromedp.ByQuery))
 	suppressTransitions(t, ctx, "")
 
-	for _, tc := range []struct{ theme, draft string }{
-		{"light", "rgb(154, 106, 22)"},
-		{"dark", "rgb(221, 169, 78)"},
+	for _, tc := range []struct{ theme, draft, fill string }{
+		{"light", "rgb(154, 106, 22)", "rgba(154, 106, 22, 0.11)"},
+		{"dark", "rgb(221, 169, 78)", "rgba(221, 169, 78, 0.13)"},
 	} {
 		evalVoid(t, ctx, `document.querySelector('.theme-control [data-theme-choice="`+tc.theme+`"]').click()`)
 		requireAll(t, ctx, "the pending brief in "+tc.theme,
@@ -84,6 +84,7 @@ func TestBriefReview_LightDarkAndPhone(t *testing.T) {
 				{"data-theme is " + tc.theme, `document.documentElement.getAttribute('data-theme') === '` + tc.theme + `'`},
 				{"the pill is the draft hue", `getComputedStyle(pill).color === '` + tc.draft + `'`},
 				{"the banner rule is the draft hue", `getComputedStyle(banner).borderLeftColor === '` + tc.draft + `'`},
+				{"the banner fill is the draft wash", `getComputedStyle(banner).backgroundColor === '` + tc.fill + `'`},
 				{"the banner title is the draft hue", `getComputedStyle(sec.querySelector('.brief-banner--review .brief-banner__title')).color === '` + tc.draft + `'`},
 				{"the rests-on changed note is amber", `getComputedStyle(sec.querySelector('.brief-relation-changed')).color === '` + tc.draft + `'`},
 			})
@@ -123,7 +124,7 @@ func TestBriefReview_LiveReloadKeepsNavAndMain(t *testing.T) {
 	p := reviewPendingProject(t)
 	ctx := serveAndOpenLive(t, p, "#"+reviewFlowBrief)
 	pollTrue(t, ctx, onlyShown(reviewFlowBrief))
-	evalVoid(t, ctx, `window.__dxNav = document.getElementById('nav'); window.__dxMain = document.querySelector('main');`)
+	evalVoid(t, ctx, `window.__dxNav = document.getElementById('nav'); window.__dxMain = document.querySelector('main'); window.__dxRoot = document.documentElement;`)
 	if err := os.WriteFile(filepath.Join(p.dir, "briefs", "widget", "flow.md"), []byte("---\nsummary: The widget flow.\nstatus: locked\nrests_on:\n  - "+testClaimID+"\n---\n# Widget flow\n\n## Why\n\nIt matters.\n\nA line added while open.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +132,7 @@ func TestBriefReview_LiveReloadKeepsNavAndMain(t *testing.T) {
 	requireAll(t, ctx, "live reload of a pending brief",
 		``,
 		[][2]string{
+			{"the document element stayed", `document.documentElement === window.__dxRoot`},
 			{"nav was swapped, not the whole document", `document.getElementById('nav') !== window.__dxNav`},
 			{"main was swapped", `document.querySelector('main') !== window.__dxMain`},
 			{"the pending banner is still there", `!!document.querySelector('#` + reviewFlowBrief + ` .brief-banner--review')`},

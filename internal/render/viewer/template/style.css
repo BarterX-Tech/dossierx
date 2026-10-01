@@ -11172,15 +11172,6 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   background: var(--status-draft-bg);
   color: var(--status-draft);
 }
-.brief-banner--review {
-  border-left-color: var(--status-draft);
-  background: var(--status-draft-bg);
-}
-.brief-banner--review .brief-banner__title,
-.brief-banner--review .brief-banner__title a {
-  color: var(--status-draft);
-}
-.brief-banner--review .brief-banner__title a:hover { text-decoration: underline; }
 .brief-review-diff {
   margin-top: 4px;
 }
@@ -11209,6 +11200,17 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   border-radius: 8px;
   background: var(--edit-banner-bg);
 }
+/* After the base shorthand: border-left-color alone loses to
+   `border-left: 3px solid var(--warn)` at the same specificity. */
+.brief-banner.brief-banner--review {
+  border-left: 3px solid var(--status-draft);
+  background: var(--status-draft-bg);
+}
+.brief-banner--review .brief-banner__title,
+.brief-banner--review .brief-banner__title a {
+  color: var(--status-draft);
+}
+.brief-banner--review .brief-banner__title a:hover { text-decoration: underline; }
 .brief-banner > p { margin: 0; }
 .brief-banner__head {
   display: flex;

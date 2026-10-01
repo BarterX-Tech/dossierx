@@ -57,7 +57,9 @@ computes a lock state, a review verdict or a baseline, and nothing writes.
   except as data and as the passage helper NIT-199 already exported.
 - **Nothing is written and nothing is recomputed.** `buildBriefsView` and
   `buildBriefRelationsLookup` read the `*briefs.Evaluation` the render
-  already held for the payload; the payload's shape is unchanged.
+  already held for the payload; the payload's shape is unchanged. Serve
+  now fingerprints `cfg.LockStorePath()` so a reaudit (lock-store write,
+  no brief-file edit) re-renders; Evaluate still owns the verdict.
 - **A project with no brief renders the same page outside the stylesheet and
   scripts.** The new template (`briefReview`) is a `{{define}}` joined to its
   neighbour with no text between them. Measured against `3967ab5f`'s

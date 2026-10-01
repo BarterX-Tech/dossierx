@@ -15,9 +15,8 @@ import (
 // BriefStatusPillHTML is the status pill for a brief's frontmatter status,
 // drawn by the claim pill's own rules (pillClass, StatusLabel,
 // StatusIconHTML): a closed padlock and "Locked" for locked, an open one and
-// "Draft" for draft. A brief carries no review_pending state yet (NIT-199
-// and NIT-200 add the brief lock record and review), so the review form of
-// the pill never appears here. Any other value renders no pill: the
+// "Draft" for draft. Lock-aware pills (edited, review pending, unrecorded)
+// go through BriefLockPillHTML. Any other value renders no pill: the
 // frontmatter parser refuses it, and a pill that guessed would be wrong.
 func BriefStatusPillHTML(status string) template.HTML {
 	st := model.Status(status)

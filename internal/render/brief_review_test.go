@@ -271,3 +271,54 @@ func TestRender_FeatureReviewPendingMadeOfChanged(t *testing.T) {
 		t.Error("a feature must keep Made of in place of Rests on when pending")
 	}
 }
+
+// TestRender_BriefReviewPendingTwoClaims stacks one banner per changed
+// rests_on claim. A first-only renderer would still satisfy the single-claim
+// page test.
+func TestRender_BriefReviewPendingTwoClaims(t *testing.T) {
+	thenA := pendingClaim("first as approved", true)
+	thenB := thenA
+	thenB.ID, thenB.Body = "widget.contract.other", "second as approved"
+	nowA := pendingClaim("first rewritten", true)
+	nowB := nowA
+	nowB.ID, nowB.Body = "widget.contract.other", "second rewritten"
+	cat := &catalog.Catalog{Claims: []model.Claim{nowA, nowB}}
+	for i := range cat.Claims {
+		cat.Claims[i].Module, cat.Claims[i].Facet, cat.Claims[i].Layout = "widget", "contract", model.LayoutCard
+	}
+	_, cfg := briefViewFixture()
+	set := briefs.FromFiles(cfg, []briefs.File{
+		briefFile("widget/flow.md", "---\nsummary: The widget flow.\nstatus: locked\nrests_on: [widget.contract.overview, widget.contract.other]\n---\n# Widget flow\n"),
+	})
+	b := set.Briefs[0]
+	store, err := lock.LoadStore(t.TempDir() + "/lock-store.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, receipts, _ := briefs.Baselines(b, []model.Claim{thenA, thenB})
+	lock.RecordBriefApproval(store, b.ID, lock.BriefRecord{
+		Path: b.Path, Hash: b.LockHash, At: "2026-09-18T10:00:00Z", Reason: "flow approved",
+		Approved:  lock.BriefApproved{Summary: b.Summary, RestsOn: b.RestsOn, Markdown: b.Body},
+		Baselines: hashes, Receipts: receipts,
+	})
+	out, err := renderBoundedAt(cat, cfg, Extras{Briefs: set, BriefReview: briefs.Evaluate(set, cat.Claims, store)}, time.Unix(1_700_000_000, 0).UTC(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec := sectionHTML(t, out, "brief-widget-flow")
+	if n := strings.Count(sec, `class="brief-banner brief-banner--review"`); n != 2 {
+		t.Fatalf("want 2 stacked banners, got %d\n%s", n, sec)
+	}
+	for _, want := range []string{
+		`data-claim-id="widget.contract.overview"`,
+		`data-claim-id="widget.contract.other"`,
+		`first as approved`,
+		`first rewritten`,
+		`second as approved`,
+		`second rewritten`,
+	} {
+		if !strings.Contains(sec, want) {
+			t.Errorf("two-claim page is missing %q", want)
+		}
+	}
+}
