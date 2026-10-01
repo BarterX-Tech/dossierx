@@ -89,7 +89,9 @@ facet is part of the id, so moving it later is a new id, a new lock, and every `
 old id rewritten.
 
 **Choosing `rests_on`.** Name a target only when your claim stops being true if the target changes:
-every edge is a future `review_pending` on your claim. "Related" is not an edge; say it in prose.
+every edge is a future `review_pending` on your claim. "Related" is not an edge: mention it by its title in prose. Writing another claim's **id**
+in prose draws the `body-edge-hint` warning (name it in `rests_on`, or use the title), and an id in a
+fenced code block that resolves to no claim is `code-orphan`, an error.
 Pick a neighbor's target from `manifest show <module> --integration`, not by opening its files. A
 claim that rests on nothing says so — `{none: true, reason: "..."}` — with a reason a reviewer can
 check, not "n/a".
@@ -107,12 +109,14 @@ full account.
   lock gate and the ledger reports it as `integrity_failed`.
 - `summary` — required, one plain line, at most 200 characters (`summary-required` / `summary-oversize`).
 - Content — **at least one** of `body` (markdown; headings `###`–`######` only, images only from the
-  claim's own `assets/`), `rows` (a table; every cell a quoted **string**, inline markdown only),
+  claim's own `assets/`, else `asset-scope`), `rows` (a table; every cell a quoted **string**, inline markdown only),
   `steps` (an ordered list of strings) or `raw_html`. None is `layout-shape-mismatch`. `body`,
   `steps` and `rows` cells share the 2,000-character cap (`body-oversize`); `raw_html` is exempt.
-- `raw_html` — markup rendered beside the layout's own content. Only modules listed in the config's
-  `mockup_modules` may carry it or `layout: mockup` (`raw-html-scope`), and `raw_html_reviewed: true` is the **human's**
-  sign-off on that markup: never set it yourself.
+- `raw_html` — markup rendered beside the layout's own content, gated by `raw-html-scope`: only a
+  module listed in the config's `mockup_modules` may carry it; only `div`, `span`, `b`, `br` and
+  `img` tags, with a `class` attribute whose every token starts `gcp-` or `mockup-` (an `img` adds a
+  same-origin `src` and an `alt`); and the claim cannot lock until `raw_html_reviewed: true` — the
+  **human's** sign-off on that markup. Ask them to set it; never set it yourself.
 - `layout: card | table | list | steps | tree | banner | mockup` — `rows` infers `table`, `steps`
   infers `steps`, anything else `card`; the other four are never inferred. Be explicit once a claim
   is non-trivial.
@@ -125,7 +129,8 @@ full account.
   claim (`mode: none` with a `reason`). **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**.
 - `section` / `order` — optional reading order in the viewer, nothing more. `emphasis: true` renders
   a hard-boundary card. `kind` is omitted or `fact` (`kind-shape`).
-- `comments` — engine-managed; only the comment verbs and the viewer write it.
+- `comments`, `review_pending`, `audit_notes` — engine-managed: the comment verbs, the viewer and a
+  confirmed reaudit write them, never you.
 
 Module context is `claims/<module>/manifest.yaml` — not a claim, and **you draft it**
 (**[`dossierx-modules`](../dossierx-modules/SKILL.md)**). A `project.<slug>` claim lives in
@@ -134,16 +139,19 @@ Module context is `claims/<module>/manifest.yaml` — not a claim, and **you dra
 ## Authoring — `dossierx claim new`, not a text editor
 
 Author through the command: it enforces the id grammar, `--summary`, `--body` and the `rests_on`
-rule before it writes, then lints the project with the new claim in it. An `orphan` warning on a
-claim with no edges yet is a warning, not a refusal. The command needs `claims_dir` to exist, and
+rule before it writes, then lints the project with the new claim in it. **`ok: true` means written, not clean**: read
+`data.lint_error_count` (a `rests_on` naming a foreign module's internals is written, then fails
+lint) and run `check --validate`. An `orphan` warning on a claim with no edges yet is only a warning. The command needs `claims_dir` to exist, and
 writes a stub `manifest.yaml` (empty summary, refused until you draft it) for a module that has none.
 
 `--layout` takes `card`, `list`, `tree` or `banner`; a `table`, `steps` or `mockup` claim gets its
-`rows`, `steps` or `raw_html` by editing the draft file afterwards. `--file` is a path relative to
-`claims_dir`. Once created, the claim is a draft: edit its file freely.
+`rows`, `steps` or `raw_html` by editing the draft file afterwards. `--section` sets the in-content
+heading it sits under, and `--file` is a path relative to `claims_dir`. Once created, the claim is a draft: edit its file freely.
 
 The loop while authoring is `dossierx check --validate`: the same lint gate at the same severity,
-writing **nothing**. Run plain `dossierx check` when you want the viewer rebuilt and code links
+writing **nothing**. Until the human has locked the constitution it exits 1
+`CONSTITUTION_NOT_LOCKED` even when every claim is clean — that one is theirs to clear, not a defect
+in your claims. Run plain `dossierx check` when you want the viewer rebuilt and code links
 scanned; only that run proves a locked claim is linked to code. Report the envelope, never your belief: an exit code
 you did not see is one you do not have.
 
@@ -154,13 +162,14 @@ it. Never keep evidence in a sidecar file: nothing checks it.
 
 ```yaml
 sources:
-  - {ref: 1, kind: external, title: HTTP Semantics, section 15.6.4, url: https://www.rfc-editor.org/rfc/rfc9110#section-15.6.4, accessed_on: 2026-08-15}
+  - {ref: 1, kind: external, title: "HTTP Semantics, section 15.6.4", url: https://www.rfc-editor.org/rfc/rfc9110#section-15.6.4, accessed_on: 2026-08-15}
   - {ref: 2, kind: internal, title: Load test results, path: research/load-test.jsonl, record_id: run-42, sha256: 8afd3c9a...}
 ```
 
 `external` needs `url` and `accessed_on` (the date pins what the page said). `internal` needs `path`
-(relative to `project.config.yaml`) and `sha256`, and may set `record_id` to pin one JSONL record by
-its top-level `"id"`. Both kinds may add `supports` / `does_not_support` to say what the source
+(relative to `project.config.yaml`) and `sha256`: the hex sha256 of the whole file's bytes
+(`shasum -a 256 <path>`). `record_id` narrows the pin to the one JSONL line whose top-level `"id"`
+matches; the hash is then of that raw line, without its line terminator. Both kinds may add `supports` / `does_not_support` to say what the source
 does and does not establish. An internal source on a **brief** pins the brief's content hash — the
 `content:` line of `dossierx brief show <path>` — not the file's bytes.
 
@@ -191,10 +200,12 @@ cannot disagree with what a command would do.
 ## Locked means locked
 
 A draft claim is yours; a locked claim is the human's. Body-only meaning drift is `claim flag`
-(**[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**). Every other change is unlock → fix →
-lock: `claim unlock <id> --reason "<their words>"` → edit → `claim lock <id> --dry-run` → `claim lock
+— only when the summary still holds, because a confirmed flag replaces the **whole** body with
+`--now-does` and never touches `summary` (**[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**).
+Every other change is unlock → fix → lock: `claim unlock <id> --reason "<their words>"` → edit → `claim lock <id> --dry-run` → `claim lock
 <id> --proposal "<snapshot>" --reason "<their words>"`. Preview each end, show the human the
-`side_effects` (unlocking releases the approval and can flip dependents), and get a yes.
+`side_effects` (unlocking releases the approval, and claims resting on it show
+`dependency_unapproved` until it re-locks), and get a yes.
 
 Between the two ends, plain `dossierx check` fails `implink_refused` (`claim is not locked (status
 "draft")`) on every `dossierx-claim:` / `dossierx-step:` tag for that id. The tag is right; the claim
@@ -204,6 +215,13 @@ is mid-edit. Finish the re-lock — never touch the tag, and never leave the cla
 --validate`), `unresolved_comments` (reply; the human resolves) and `already_locked` (a second
 lock would sign whatever the file now says with no diff shown: unlock → fix → lock, or restore the
 file from git if a gate reported drift).
+
+**Deleting or renaming a claim.** There is no delete verb. A draft is deleted by removing its file —
+unless it carries a comment thread, open or resolved: that is `comment-digest-abandoned`, and the
+human deletes those threads in the viewer first. A locked claim is unlocked first, on the human's
+yes. Renaming changes the id and counts as a delete plus a new claim. In the same change, fix every
+`rests_on` that named it (`dangling`), every manifest `provides` / `depends_on`, and every brief's
+`rests_on` (`brief-rests-on-missing`).
 
 ## `review_pending` — and why `reaudit` is not the edit tool
 
@@ -217,14 +235,14 @@ triggers stands, and clears only when all are gone (or on `unlock`):
 | an open comment thread on the claim | anyone commenting (`dossierx-comments`) | the **human** resolving it in the viewer |
 
 `claim reaudit` refuses a claim that is not locked and `review_pending` (`not_review_pending`), and
-one whose only trigger is an open thread — there is no diff to confirm. Its dependency-drift
+one whose only trigger is an open thread (`review_pending`, exit 2) — there is no diff to confirm. Its dependency-drift
 proposal is a no-change stub, and it rewrites `body` and nothing else. Any other change — new
 information, better wording, a `rows` fix — is unlock → fix → lock.
 
 When it is right: run it bare (a preview that renders the before/after), **show the human the diff
-and wait**, then `--confirm --reason "<their words>"`. On rejection do nothing. An **empty** preview
-after a flag means `build/ledger/flag-store.json` did not travel with the claim — stop and say so;
-confirming it clears the human's flag having changed nothing.
+and wait**, then `--confirm --reason "<their words>"`. On rejection do nothing. A preview of a flagged claim
+showing `data.trigger: "none"` and `no_change: true` means `build/ledger/flag-store.json` did not
+travel with the claim — stop and say so; confirming it clears the human's flag having changed nothing.
 
 ## Integrity
 

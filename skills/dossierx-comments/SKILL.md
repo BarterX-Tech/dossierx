@@ -30,7 +30,7 @@ treat an unanswered thread as a blocked task, not as background noise.
 | 4 | **you** | fix the claim if it is draft (or take a locked one through unlock → fix, with their yes — the re-lock waits for their Resolve), then `dossierx comment reply <claim-id> <thread-id> --as agent --body "..."` |
 | 5 | human | clicks **Resolve** in the viewer. That click is their approval, and it is what unblocks locking |
 | 6 | human | "good, lock it" |
-| 7 | **you** | resolve their words to an id, `--dry-run`, show it, get a yes, `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"` |
+| 7 | **you** | resolve their words to an id, run `dossierx claim lock <id> --dry-run`, show it, and on their yes `--proposal "<snapshot>" --reason "<their words>"` |
 
 Step 4 ends in a reply, never in a lock. The thread you are answering is still open — step 5 has
 not happened — and an open thread is exactly what the lock gate refuses (`unresolved_comments`),
@@ -64,7 +64,7 @@ Never hand-edit the `comments:` block in a claim file. The verbs and the viewer'
 code path behind the same project-wide lock, so a CLI write and a browser write cannot clobber
 each other. A raw text edit bypasses the lock and can destroy a comment the human just posted —
 and the ledger reports it as `integrity_failed`. It also **wedges the claim for comments**: every
-comment verb refuses a claim whose block no longer matches the recorded digest
+comment write (`add`, `reply`) refuses a claim whose block no longer matches the recorded digest
 (`comment_digest_drift`), rather than re-recording the edited block as the new truth.
 
 Getting out of that wedge is version control and nothing else. No command in the surface clears a
@@ -131,7 +131,7 @@ your next `claim lock`.
 ## Advisory rights — you reply, you never resolve
 
 Rights are advisory: `--as` is **asserted, not authenticated**. The engine enforces them against
-the actor it is handed, and refuses with `rights_denied`.
+the actor it is handed, and refuses with `rights_denied` (from `serve`'s API).
 
 | actor | may act on |
 |---|---|
@@ -139,9 +139,10 @@ the actor it is handed, and refuses with `rights_denied`.
 | agent | only agent-authored messages |
 | anyone | **reply** to any open thread — this is your tool |
 
-**Where that is a wall, and where it is a rule.** On the CLI it is a wall: `--as` is required on
-every mutating comment verb, the engine enforces the table above against it, and `--as agent` on a
-human's thread fails. **On `dossierx serve`'s HTTP API it is only a rule.** That API reads the
+**Where that is a wall, and where it is a rule.** On the CLI it is a wall by construction: its only
+comment writes are `add` and `reply`, which anyone may do, and there is no verb that resolves,
+reopens, edits or deletes. `--as` is still required and recorded. **On `dossierx serve`'s HTTP API
+it is only a rule.** That API reads the
 actor out of the request body and treats a request with no `as` field as `human`, so any process
 that can reach the localhost port has full human rights — it can resolve, reopen, edit or delete
 the human's blocking thread, and the record it leaves positively attests `human`. Nothing in the
@@ -178,8 +179,8 @@ concrete "this line should say X instead of Y" in a thread where it cannot feed 
 - **Third `review_pending` trigger.** Adding a thread to an already-locked claim sets
   `review_pending`. It clears when the last open thread is resolved — but only if no *other*
   trigger (dependency drift, a flag) still stands.
-- **Reaudit refuses a comment-only claim.** There is no content diff to confirm, so it exits
-  non-zero and tells you to clear the conversation instead. Do not route a comment through
+- **Reaudit refuses a comment-only claim.** There is no content diff to confirm, so it refuses
+  `review_pending` (exit 2) and tells you to clear the conversation instead. Do not route a comment through
   reaudit, and never clear `review_pending` by hand.
 
 The loop before locking anything is therefore: `dossierx check` → work the open threads (reply,
@@ -198,9 +199,9 @@ Four refusals, all of them meaning "look again, do not retry":
 - `thread_resolved` (exit 1) — a write against a thread the human resolved while you were working. This is
   the good outcome, not an error: their Resolve is the approval the lock gate was waiting for.
   Drop the reply and move to the lock step.
-- `read_only` (exit 1) — a write against a surface that has writes disabled: a `file://` viewer export, or
-  `dossierx serve` started without them. Nothing about the claim is wrong; the surface cannot
-  accept the call. Use the CLI.
+- `read_only` (exit 1) — a comment write to `dossierx serve` when its viewer cannot host comments (a
+  `viewer.template_overrides` `shell.html` without the live viewer runtime); a static viewer file
+  never writes at all. The CLI never returns it. Nothing about the claim is wrong; use the CLI.
 
 ## Portability
 

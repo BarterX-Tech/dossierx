@@ -33,10 +33,9 @@ v0.7.20 first, with that release's binary and the skills it exports, then comes 
 ## The pass, in this order
 
 Every locked claim's lock hash moves in this upgrade (`migrated_from` was signed even when empty;
-from v0.7.20, `governed_by` and `build_role` too), so every locked claim reports
-`lock-content-drift` until it re-locks. Plan the whole pass with the human before the first
-unlock, so each locked claim is unlocked once and re-locked once. Steps marked **(v0.7.20)** are
-already done on a v0.7.21 project.
+from v0.7.20, `governed_by` and `build_role` too), so every locked claim has to be unlocked and
+re-locked once. Plan the whole pass with the human before the first unlock. Steps marked
+**(v0.7.20)** are already done on a v0.7.21 project.
 
 **Before upgrading the binary — on the old one:**
 
@@ -45,35 +44,38 @@ already done on a v0.7.21 project.
    - **`review_pending: true`**: a lock refreshes the baselines and clears the flag, approving an
      upstream change nobody reviewed. Show the human each cause (`claim show <id>`) and take it
      through `claim reaudit` or a real review, not the batch.
-   - **an open thread**: after the unlock, `claim lock` refuses it (`unresolved_comments`), so it
-     stays draft and its dependents show `dependency_unapproved`. The human resolves the thread in
-     the viewer first.
+   - **an open thread**: `claim lock` refuses it later (`unresolved_comments`), so it stays draft and
+     its dependents show `dependency_unapproved`. The human resolves the thread in the viewer first.
 2. **Recover old approval wording if the human wants it.** `dossierx claim
    recover-approved-content` finds the approved wording of an approval recorded before the ledger
    kept text, by hashing git history against the recorded hash. After the upgrade the hash differs
-   and it recovers nothing, so run it now, with the old binary: `--dry-run`, show the human, then
-   `--reason "…"`. `git_unavailable` means nothing was looked for, not that nothing was found.
+   and it recovers nothing, so run it now: `--dry-run`, show the human, then `--reason "…"`.
+   `git_unavailable` means nothing was looked for, not that nothing was found.
+3. **Unlock every locked claim, once, on the human's yes**: `dossierx claim unlock <id> --reason
+   "…"`. Do it now: the new binary loads nothing until the retired keys are gone, and a locked
+   claim the pass deletes (a doctrine claim, a track's owner) must be released before its file goes.
+   Commit the lock store.
 
-**Then:**
+**Then, on this release:**
 
-3. **Upgrade every binary that judges the project** before the first re-lock or `brief lock` lands:
+4. **Upgrade every binary that judges the project** before the first re-lock or `brief lock` lands:
    the pre-commit hook's, CI's pin and each collaborator's. An older binary reports every re-locked
    claim as `lock-content-drift`, and re-locking with it signs the old hash back. The first `brief
    lock` moves `build/ledger/lock-store.json` to version 4; an older binary writing that store
    afterwards silently drops every brief's approval (this release then reports `brief-unrecorded`:
    restore the store from git, never re-lock), and an older binary reading it judges no brief at
    all. A store written by a newer binary is refused `store_too_new`: upgrade, never edit the store.
-4. **Re-export the skills** (below).
-5. **Make the corpus load.** In `project.config.yaml`: set `facets: [contract, internals]`
-   **(v0.7.20)**, drop `doctrine_facet:` by folding the doctrine hub **(v0.7.20)**, and copy the
-   `tracks:` list aside before deleting it. In every claim file, draft and locked: delete
-   `governed_by:` **(v0.7.20)**, `build_role:` **(v0.7.20)**, `mirrors:` **(v0.7.20)** and
-   `tracks:` (copy each owner claim aside first), and fold `migrated_from:` into `sources`. Check
-   for an existing `briefs/` directory. Every fold is a section below.
-6. **(v0.7.20)** Write `constitution.yaml` if the project has none, and
+5. **Re-export the skills** (below).
+6. **Make the corpus load.** Copy aside what the folds need first: the config's `tracks:` list, each
+   track's owner claim, every doctrine claim and every claim's `governed_by` list **(v0.7.20)**.
+   Then, in `project.config.yaml`: set `facets: [contract, internals]` **(v0.7.20)**, drop
+   `doctrine_facet:` and the hub module **(v0.7.20)**, and delete `tracks:`. In every claim file:
+   delete `governed_by:`, `build_role:`, `mirrors:` **(v0.7.20)** and `tracks:`, and fold
+   `migrated_from:` into `sources`. Check for an existing `briefs/` directory. Each fold is a
+   section below, named as the binary's refusal names it.
+7. **(v0.7.20)** Write `constitution.yaml` if the project has none, and
    `claims/<module>/manifest.yaml` for every module ("New requirements", below). The human locks the
    constitution (`dossierx constitution lock`) before any claim can lock.
-7. **Unlock** each locked claim, once, on the human's yes: `dossierx claim unlock <id> --reason "…"`.
 8. **Fix the content while everything is draft:** every claim gets a `summary` and a `rests_on`
    **(v0.7.20)**; sort every claim (claim fit, below) and fold each old track into a feature brief;
    move claims off any other facet and fit the caps **(v0.7.20)**.
@@ -83,13 +85,13 @@ already done on a v0.7.21 project.
     same way (`brief lock <path> --dry-run`, then `--reason`), in the same pass.
 11. **Plain `dossierx check`.** With `source_dirs` set, link code for every locked module claim
     ("New requirements").
-12. **Commit** the claims, briefs, config and `build/ledger/` stores together.
+12. **Commit** the claims, briefs, config, `build/ledger/` stores and `build/code-links/` together.
 
 ## Re-export the skills
 
 The skills on disk came from the old binary. Run `dossierx skills export` (it writes every
-`.claude/skills` and `.agents/skills` the repo already has; name the directory when the harness reads
-another), then `dossierx skills export --check`. The export removes a `dossierx-*` bundle the
+`.claude/skills` when the repo has `.claude/`, `.agents/skills` when it has `.agents/`; name the
+directory when the harness reads another), then `dossierx skills export --check`. The export removes a `dossierx-*` bundle the
 previous `dossierx-skills.lock` listed that this release no longer ships, and the guide file older
 releases wrote under `docs/`. `--check` refuses `skills_drift` with `data.retired[]` for one it could
 not prove an export wrote: ask the human, then delete it. Commit the deletions and the refreshed
@@ -104,29 +106,37 @@ keeps something unrelated there, `check` fails `lint_failed` with `brief-shape` 
 `build_dir` that is, contains or sits inside the briefs directory fails config load
 (`invalid_config`): set `briefs_dir` to another name.
 
-## The doctrine hub and `governed_by` (v0.7.20)
+## governed_by and the doctrine hub are gone
 
-A claim carrying `governed_by:` or a config setting `doctrine_facet:` fails to load; restoring from
-git brings back the same file. The constitution replaces the hub, and it is never cited.
+v0.7.20 corpora. A claim carrying `governed_by:` or a config setting `doctrine_facet:` fails to load,
+and so does every other command until both are gone — `claim new` included. Restoring from git
+brings back the same file. The constitution replaces the hub, and it is never cited.
 
-1. Write `constitution.yaml` from the critical doctrine claims — system law every module builds
+1. **Copy aside, then make it load.** Keep a copy of every doctrine claim and of every claim's
+   `governed_by` list. Then delete the hub module (its claim files and its `modules:` entry), drop
+   `doctrine_facet:`, and delete `governed_by:` from every claim file.
+2. Write `constitution.yaml` from the critical doctrine claims — system law every module builds
    toward, plain text, under 800 words (**[`dossierx-constitution`](../dossierx-constitution/SKILL.md)**).
-2. Every other doctrine claim that something rests on becomes a project claim: `dossierx claim new
+3. Every other doctrine claim that something rests on becomes a project claim: `dossierx claim new
    project.<slug> --summary "…" --body "…" --rests-on …` (or `--rests-on-none-reason`), carrying the
-   old body across. The rest is deleted. Delete the hub module, its facet and its claim files, and
-   drop `doctrine_facet:`.
-3. In every remaining claim delete `governed_by:` and write `rests_on`: `project.<slug>` where the
+   old body across from your copy. The rest is not carried over.
+4. From the copied `governed_by` lists, write each claim's `rests_on`: `project.<slug>` where the
    governor became a project claim, nothing where it became a constitution entry, `{none: true,
    reason: "…"}` otherwise. Fix every `rests-on-required` / `rests-on-target` finding.
 
-## `build_role` and `mirrors` (v0.7.20)
+## build_role is gone
 
-Delete both keys from every claim file. Nothing replaces `build_role`: what to implement next is a
-locked module's claims and edges (**[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**). If a
-mirrored fact is one the claim depends on, name it in `rests_on`. Every claim that used to be exempt
-from code links by its role is now covered by the code-link gate ("New requirements").
+v0.7.20 corpora. Delete `build_role:` from every claim file. Nothing replaces it: what to implement
+next is a locked module's claims and edges (**[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**).
+Every claim that used to be exempt from code links by its role is now covered by the code-link gate
+("New requirements").
 
-## `migrated_from`
+## mirrors is gone
+
+v0.7.20 corpora. Delete the `mirrors:` block from every claim file. If a mirrored fact is one the
+claim depends on, name it in `rests_on`.
+
+## migrated_from is gone
 
 What a claim replaced is git history; what backs it is `sources`. For each note:
 
@@ -136,11 +146,11 @@ What a claim replaced is git history; what backs it is `sources`. For each note:
   (`source-ref-unused` warns until it is cited).
 - **Anything else** (free text, a deleted file, an old claim id): delete the line.
 
-## `tracks` → feature briefs
+## tracks are gone
 
 A feature is now a brief in `briefs/features/` whose `rests_on` lists the claims it is made of
 (**[`dossierx-briefs`](../dossierx-briefs/SKILL.md)**). A claim or config still carrying `tracks:`
-refuses with a hint starting `tracks-retired`. From the copies you kept at step 5:
+refuses with a hint starting `tracks-retired`. From the copies you kept at step 6:
 
 1. For each track write `briefs/features/<slug>.md`, the track id slugged to `[a-z0-9-]` (`Checkout
    Flow v2` → `checkout-flow-v2`): the body from the owner claim's summary and body — with no owner,
@@ -170,7 +180,7 @@ the manifest `summary`). Each `--reason` below is `<thread id>: ` followed by th
    resolves it — the order you want). A batch that only deletes anchors on a project claim. Nothing
    moves until the human resolves the thread in the viewer.
 2. On their Resolve: write each brief as a draft; delete each moved or deleted claim's file (it is
-   already unlocked at step 7); edit each dependent's `rests_on` in the same change, or `check` fails
+   already unlocked at step 3); edit each dependent's `rests_on` in the same change, or `check` fails
    `dangling`. Deleting a claim that was **never locked** and carries any thread, open or resolved,
    is refused `comment-digest-abandoned`: the human deletes those threads in the viewer first. Never
    delete the batch thread. A module left with no claims is removed: its `manifest.yaml`, its

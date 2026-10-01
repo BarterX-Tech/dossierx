@@ -62,7 +62,9 @@ Two channels close the loop from spec back to code, and they never mix:
        ...
    ```
 
-   A bare `dossierx-step: <id>` with no `#n` and hash is a scan error. Both markers may appear on
+   The hash is over the step's text exactly as YAML decodes it, with no trailing newline:
+   `printf '%s' "<step text>" | shasum -a 256`. A bare `dossierx-step: <id>` with no `#n` and hash
+   is a scan error. Both markers may appear on
    the same claim; each adds a link. A claim may have any number of tagged files, and a file may
    carry tags for any number of claims.
 
@@ -112,6 +114,13 @@ file changed since it was linked), and `claim show <id>` reports it per file:
 "implemented_in": [{"file": "internal/widget/queue.go", "symbol": "dropForSaturation", "drifted": true, "step": 2, "step_hash": "..."}]
 ```
 
+**Drifted means "look", not "broken".** Read the change: if the claim still holds, refresh the link —
+a tagged file refreshes on the next plain `check`, a `claim link`ed file only when you re-run
+`claim link` — and if it no longer holds, that is the decision below. No command removes a link:
+moving a tag, removing it, or deleting the linked file leaves the old link standing (shown as
+drifted, and still counted by the gate), so re-tag or `claim link` the new location, and tell the
+human when a link points at a file that is gone.
+
 ## Embodiment and conformance — checks the project's own tools observe
 
 A claim may declare what its implementation must show, so the project's own tooling can compare it:
@@ -131,8 +140,17 @@ embodiment:
 ```
 
 Every value is a string; DossierX never interprets versions, units or numbers. A project-owned
-adapter writes one observation file (the path in `conformance.observations`); **DossierX never runs
-the adapter** — producing that file is the project's job. Each check comes out `matched`, `owed`
+adapter writes one observation file (the path in `conformance.observations`, outside `build_dir`);
+**DossierX never runs the adapter** — producing that file is the project's job. Its shape is strict:
+
+```json
+{"format_version": 1, "snapshot": "7c91e2a",
+ "observations": [
+   {"adapter": "source-symbols/v1", "target": "source://widget/state", "shape": "set", "value": ["blocked", "ready", "waiting"]},
+   {"adapter": "schema-metadata/v1", "target": "schema://widget/record", "error": {"code": "input_unavailable", "message": "…"}}]}
+```
+
+With no `conformance.observations` configured, every check is `uncheckable`. Each check comes out `matched`, `owed`
 (no observation for that adapter and target), `mismatch` (with sorted `missing` / `extra`, or
 `expected` / `observed`) or `uncheckable` (bad input or an adapter error). Results are in
 `data.conformance` and `build/conformance/status.json`, and on the claim's card.
@@ -140,7 +158,9 @@ the adapter** — producing that file is the project's job. Each check comes out
 With `conformance.blocking: true`, any non-matched check fails `check` with `conformance_failed`.
 Fix the code or produce the observation, then re-run. **Never unlock or re-lock to clear it**: this
 gate does not touch approval. The `embodiment` block is signed content, so adding or changing it on
-a locked claim is unlock → fix → lock with the human. `mode: none` is the declaration that no code
+a locked claim is unlock → fix → lock with the human — and its mode and expectations are part of the
+dependency hash, so every claim resting on it goes `review_pending` (adapter and target are not).
+Say so when you propose the edit. `mode: none` is the declaration that no code
 embodies the claim, and it exempts the claim from the code-link gate.
 
 ## When a code change means the claim is wrong
@@ -148,7 +168,9 @@ embodies the claim, and it exempts the claim from the code-link gate.
 Months after a lock, a new requirement changes the code. Ask one question: **can you state a
 specific before/after for the claim's wording?**
 
-- **Yes, and the claim renders from `body` only → `dossierx claim flag`** (below).
+- **Yes, the claim renders from `body` only, and its `summary` still holds → `dossierx claim
+  flag`** (below). A confirmed flag replaces the whole body and never touches `summary`, so a fact
+  stated in the summary goes through unlock → fix → lock instead.
 - **Yes, but the claim carries `rows`, `steps` or `raw_html`, or uses `layout: mockup` → unlock →
   fix → lock** with the human's `--reason`. `claim flag` refuses these with `structured_layout`: a
   flag's reaudit rewrites `body` only, and would clear `review_pending` while the content a reader
@@ -164,9 +186,11 @@ dossierx claim flag <id> \
   --reason     "why the code changed"
 ```
 
-All three are required; `--dry-run` previews it. It sets `locked, review_pending` and hands the claim
-to the human: `--claim-says` renders as the removal and `--now-does` as the addition in `claim
-reaudit`'s diff. Continue from the reaudit section of
+All three are required. Preview it with `--dry-run`, show the human, and flag on their yes. **`--now-does`
+is the complete replacement body**, `[n]` markers included: on `--confirm` it replaces the whole
+`body` verbatim, so a one-line `--now-does` on a longer body deletes the rest. The flag sets `locked,
+review_pending` and hands the claim to the human, who sees `--claim-says` as the removal and
+`--now-does` as the addition in `claim reaudit`'s diff. Continue from the reaudit section of
 **[`dossierx-claims`](../dossierx-claims/SKILL.md)**.
 
 **The before/after lives in `build/ledger/flag-store.json`.** Commit it in the same commit as the
