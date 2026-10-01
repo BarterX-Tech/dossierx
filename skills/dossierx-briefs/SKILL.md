@@ -28,7 +28,7 @@ on claims, and it gates no claim work in any state.
 | you want to | run |
 |---|---|
 | see every brief: path, id, summary, status, review state | `dossierx brief list` · `--review-pending` |
-| read one brief: content, digest, status, `rests_on` | `dossierx brief show <path or folder.slug>` |
+| read one brief: content, digest, status, `rests_on`, and the `content:` hash a citing claim records | `dossierx brief show <path or folder.slug>` |
 | check the tree's shape, frontmatter and caps, writing nothing | `dossierx check --validate` (`brief-*` findings in `data.lint_findings`, `claim_id` is a path) |
 | freeze a brief, on the human's word | `dossierx brief lock <path> --dry-run`, then `--reason "<their words>"` |
 | change a locked brief | `dossierx brief unlock <path> --reason "…"` → edit → `dossierx brief lock <path> --dry-run`, then `--reason "…"` (a pending review survives it) |
@@ -151,7 +151,7 @@ says.
 The dry run always answers `ok: true`: read `data.blocked` and `data.missing[]`, not the exit
 status, and show `side_effects`. The real `brief lock` refuses `missing_flag` (no `--reason`),
 `lint_failed` (an error finding on the brief — fix the shape or the cap first), `comment_open`
-(a thread is open: reply, and the human resolves it in the viewer), `already_locked` (locked and
+(a thread is open: reply, and the human resolves it in the served viewer), `already_locked` (locked and
 unchanged, images included — a second lock would sign nothing), `store_gitignored`,
 `pre_ledger_unadopted`, `store_too_new` (a newer binary wrote the store: upgrade, never edit the
 store) and `write_conflict`, each per the router's table. A lock over a standing **or released**
@@ -233,13 +233,18 @@ A claim may cite a brief in `sources` as an `internal` entry (`path` and `sha256
 research finding, a recorded decision. Never cite a guidance brief (voice, design system, a
 feature walkthrough): guidance is not what makes a claim true.
 
-The citation pins the **whole file's bytes** — not the lock hash. A lock or unlock (the `status:`
-write), any edit, and every comment thread opened or answered on the brief moves them, and every
-citing claim then reports `source-internal-drift` (ERROR) on the next `check`. Expect it, and
-batch it: refresh the citing claims' `sha256` **after the brief's final lock**, taking them
-through unlock → refresh → lock in the **same review** as the brief, with the human's words,
-rather than meeting them one at a time later. A thread on a cited brief carries that cost too,
-so a brief that claims cite is a brief to edit, and to discuss, rarely and deliberately.
+On a brief, `sha256` is the brief's **content hash** — its summary, its `rests_on` set and its
+body, the hash `brief lock` signs — not the file's bytes. Copy it from `dossierx brief show <path>`
+(the `content:` line; `content_hash` in JSON), never from a checksum of the file. A lock or
+unlock (the `status:` write) and every thread the human opens, answers or resolves on the brief
+leave every citing claim's pin intact. An edit to the summary, `rests_on` or body moves it — as
+does a rename, which leaves `path` unreadable — and every citing claim then reports
+`source-internal-drift` (ERROR) on the next `check`. Cite the brief as the human approved it:
+take the hash **after the brief's final lock**, and when a cited brief has to change, carry the
+citing claims through unlock → refresh `sha256` → lock in the **same review** as the brief, with
+the human's words, rather than meeting them one at a time later. A brief that claims cite is a
+brief to edit, and to move, rarely and deliberately; a thread on it costs the citing claims
+nothing.
 
 ## Comments on a brief
 
@@ -248,13 +253,14 @@ The human can open a thread on a brief in the viewer, exactly as on a claim. It 
 the brief's **path** as `claim_id`; `check` counts it as `open comments: brief "<path>": N`. The
 `comment` verbs take that path, never the id (`comment list <brief-path>`,
 `dossierx comment reply briefs/checkout/flow.md <thread-id> --as agent --body "…"`; an id is
-refused `claim_not_found`). Reply and **never resolve** — the human resolves it in the viewer,
-and their Resolve is the approval. An open thread blocks `brief lock` and
-`brief reaudit --confirm` (`comment_open`) until they do, so **do not open a thread on a brief
-you are about to lock unless the human asked for one**: a question about a draft goes in chat.
-An open thread never blocks a claim. Threads live in the brief's frontmatter, excluded from its
-lock hash, so a comment never drifts a locked brief — it does move a citing claim's pin (above).
-A brief renamed with its threads left behind is `comment-digest-abandoned`.
+refused `claim_not_found`). Reply and **never resolve** — the human resolves it in the served
+viewer's comment rail on the brief's page (a static build shows threads read-only), and their
+Resolve is the approval. An open thread blocks `brief lock` and `brief reaudit --confirm`
+(`comment_open`) until they do, so **do not open a thread on a brief you are about to lock
+unless the human asked for one**: a question about a draft goes in chat. An open thread never
+blocks a claim. Threads live in the brief's frontmatter, outside its content hash, so a comment
+never drifts a locked brief and never moves a citing claim's pin (above): the lock it holds is a
+thread's only cost. A brief renamed with its threads left behind is `comment-digest-abandoned`.
 
 ## Portability
 
