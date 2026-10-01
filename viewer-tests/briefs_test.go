@@ -95,7 +95,8 @@ func TestBriefPage_OpensByHashWithItsTreeAndImage(t *testing.T) {
 			{"the Modules group is closed", `groups[0] !== briefsGroup && groups[0].open === false`},
 			{"its folder is open", `row.closest('.brief-folder').open === true`},
 			{"another folder is closed", `nav.querySelector('.brief-folder[data-folder="research"]').open === false`},
-			{"features/ is not in the tree", `!nav.querySelector('[data-folder="features"]') && !nav.querySelector('[data-target="#brief-features-split-a-bill"]')`},
+			// A feature is listed once, under Features (NIT-201), never in the tree.
+			{"features/ is not in the tree", `!briefsGroup.querySelector('[data-folder="features"]') && !briefsGroup.querySelector('[data-target="#brief-features-split-a-bill"]') && !!nav.querySelector('.feature-nav [data-target="#brief-features-split-a-bill"]')`},
 			{"the locked brief carries the padlock mark", `!!row.querySelector('.brief-mark[data-mark="locked"] .dx-icon')`},
 			{"the static build carries the image", `img.getAttribute('src') === 'brief-assets/decisions/split.png' && img.naturalWidth === 40`},
 			{"the title is the header's, not the body's", `sec.querySelector('.brief-title').textContent === 'Balances round to the cent, once' && !sec.querySelector('.brief-body h1')`},

@@ -133,8 +133,8 @@ func (e *briefImagesBoundError) Is(target error) bool {
 }
 
 // featuresFolder is the brief folder the Briefs tree leaves out: its briefs
-// are features, and they live under Features in the sidebar (NIT-194). Their
-// pages still render, so a link to one resolves.
+// are features, listed under the sidebar's own Features entry and given the
+// feature page (NIT-201, feature_page.go).
 const featuresFolder = "features"
 
 // briefsIndexID is the id of the "All briefs" page. Like Home's "_home" it
@@ -146,7 +146,9 @@ const briefsIndexID = "_briefs"
 type BriefsView struct {
 	// Folders are the tree's folders in name order, features/ excluded.
 	Folders []BriefFolderView
-	// Features are the pages under features/, rendered but not in the tree.
+	// Features are the pages under features/, ordered by file name without
+	// ".md" (the brief id's order, so export sorts before export-to-csv): the
+	// Features entry's rows and pages (NIT-201), never in the tree.
 	Features []BriefPageView
 	// Total is how many briefs the tree lists.
 	Total int
@@ -217,6 +219,9 @@ type BriefPageView struct {
 	// Search is what the sidebar search matches a brief against: its title,
 	// summary and folder, lowercased.
 	Search string
+	// Feature is set on a brief in features/ (NIT-201): its Made of list,
+	// which takes the Rests on list's place. Nil on every other brief.
+	Feature *FeatureDetail
 }
 
 // OpenThreadsLabel is the index row's thread count, "1 open thread".
@@ -310,20 +315,27 @@ func reservedSectionIDs(cat *catalog.Catalog, cfg *config.Config) map[string]boo
 }
 
 // buildBriefsView assembles the tree and the pages. rendered is
-// renderBriefs' output for the same set.
-func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *catalog.Catalog) BriefsView {
+// renderBriefs' output for the same set. review is the briefs' lock and
+// review state (NIT-205), read by every row's mark (briefMark); nil where a
+// render has none, and the marks fall back to the frontmatter status.
+func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *catalog.Catalog, review *briefs.Evaluation) BriefsView {
 	view := BriefsView{IndexID: briefsIndexID}
 	if set.Empty() {
 		return view
 	}
 	statuses := buildTargetStatusLookup(cat)
 	citedBy := internalCitations(cat)
+	targets := briefLinkTargets(set, rendered)
+	var madeOf map[string]madeOfClaim
 	byFolder := map[string]*BriefFolderView{}
 	var names []string
 	for _, b := range set.Briefs {
-		page := briefPage(b, set.Caps, rendered[b.ID], statuses, citedBy[b.Path])
+		page := briefPage(b, set.Caps, rendered[b.ID], statuses, citedBy[b.Path], targets, review)
 		if b.Folder == featuresFolder {
-			view.Features = append(view.Features, page)
+			if madeOf == nil {
+				madeOf = madeOfIndex(cat)
+			}
+			view.Features = append(view.Features, featurePage(page, b, madeOf, statuses, review))
 			continue
 		}
 		f, ok := byFolder[b.Folder]
@@ -343,9 +355,9 @@ func buildBriefsView(set *briefs.Set, rendered map[string]renderedBrief, cat *ca
 	return view
 }
 
-func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string) BriefPageView {
+func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses map[string]components.TargetStatus, citedBy []string, targets map[string]string, review *briefs.Evaluation) BriefPageView {
 	folderLabel := components.DisplayCase(b.Folder)
-	mark, markLabel := briefMark(b)
+	mark, markLabel, _ := briefMark(briefReviewOf(review, b))
 	return BriefPageView{
 		ID:            r.anchor,
 		Path:          b.Path,
@@ -362,7 +374,7 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 		Threads:       len(b.Comments),
 		CommentsPanel: components.BriefCommentsPanelHTML(b.ID, b.Comments),
 		Pill:          components.BriefStatusPillHTML(string(b.Status)),
-		Body:          template.HTML(briefBodyOutline(withoutTitleHeading(r.body, b.Body))),
+		Body:          template.HTML(resolveBriefLinks(briefBodyOutline(withoutTitleHeading(r.body, b.Body)), b.Path, targets)),
 		Meta:          fmt.Sprintf("%s of %s words · %d of %d images", groupDigits(b.Words), groupDigits(caps.Words), len(b.Images), caps.Images),
 		MetaShort:     groupDigits(b.Words) + " words",
 		RestsOn:       components.BriefRelationRowsHTML(b.RestsOn, statuses),
@@ -373,18 +385,50 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 	}
 }
 
-// briefMark is a brief's sidebar mark and its label: an open thread
-// outranks the draft and locked states (the board's priority, below edited
-// and review), so a locked brief with a thread the human has not resolved
-// shows the thread.
-func briefMark(b briefs.Brief) (mark, label string) {
-	if n := b.OpenThreads(); n > 0 {
-		return "thread", openThreadsLabel(n)
+// briefMark is a brief's one sidebar mark, its label, and the word Home's
+// Features tile shows for it. The Briefs tree, the Features list and the
+// tile all read it, from the brief's lock and review state (NIT-205's
+// Review: the payload's lock_state, review_pending and open_threads). The
+// marks outrank one another as the sidebar legend reads: edited since
+// approval, then review pending, then an open thread (NIT-198: a locked
+// brief with a thread the human has not resolved shows the thread), then
+// the draft dot, then the padlock. A brief whose file says locked with no
+// standing record (unrecorded) is not locked: it takes the draft mark, and
+// check reports brief-unrecorded. The state is the lock state's word,
+// raised to edited or review when those hold; a thread is a mark, not a
+// state.
+func briefMark(r briefs.Review) (mark, label, state string) {
+	state = "draft"
+	if r.LockState == briefs.LockLocked {
+		state = "locked"
 	}
+	switch {
+	case r.LockState == briefs.LockEdited:
+		return "edited", "Edited since approval", "edited"
+	case r.LockState == briefs.LockLocked && r.ReviewPending:
+		return "review", "Review pending", "review"
+	case r.OpenThreads > 0:
+		return "thread", openThreadsLabel(r.OpenThreads), state
+	case r.LockState == briefs.LockUnrecorded:
+		return "draft", "Not locked: no approval on record", state
+	case state == "locked":
+		return "locked", "Locked", state
+	}
+	return "draft", "Draft", state
+}
+
+// briefReviewOf is b's Review from review, or, for a render with no
+// evaluation (nil), one read from the frontmatter status and the brief's
+// own threads, so the marks fall back to what the file says.
+func briefReviewOf(review *briefs.Evaluation, b briefs.Brief) briefs.Review {
+	if review != nil {
+		return review.Review(b)
+	}
+	r := briefs.Review{LockState: briefs.LockDraft, OpenThreads: b.OpenThreads()}
 	if b.Status == briefs.StatusLocked {
-		return string(b.Status), "Locked"
+		r.LockState = briefs.LockLocked
 	}
-	return string(b.Status), "Draft"
+	return r
 }
 
 // openThreadsLabel is "1 open thread" or "N open threads".
@@ -393,6 +437,28 @@ func openThreadsLabel(n int) string {
 		return "1 open thread"
 	}
 	return strconv.Itoa(n) + " open threads"
+}
+
+// featurePage turns a features/ brief's page into a feature page (NIT-201):
+// its sidebar row reads the brief's title (Paper B4 lists "Export to CSV",
+// which no file name can spell), its meta line counts what it rests on, and
+// its Made of list replaces the Rests on list.
+func featurePage(page BriefPageView, b briefs.Brief, index map[string]madeOfClaim, statuses map[string]components.TargetStatus, review *briefs.Evaluation) BriefPageView {
+	f := buildFeatureDetail(b.RestsOn, index, statuses)
+	modules := make([]string, 0, len(f.Groups))
+	for _, g := range f.Groups {
+		if !g.Unknown {
+			modules = append(modules, g.Label)
+		}
+	}
+	page.Feature = f
+	page.NavLabel = b.Title
+	_, _, f.State = briefMark(briefReviewOf(review, b))
+	page.Meta = featureMeta(f, modules, page.Meta)
+	page.MetaShort = featureMetaShort(f)
+	page.RestsOn = ""
+	page.RestsOnCount = 0
+	return page
 }
 
 // withoutTitleHeading drops the level-1 heading a body opens with when that

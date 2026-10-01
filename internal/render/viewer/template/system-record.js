@@ -450,7 +450,9 @@
     // The body's section headings: "##" (and a stray "#") render as h3
     // under the page's h2 title (render.briefBodyOutline). A heading inside a
     // quote or a list is not a section, so only the body's own children count.
-    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3')) : [];
+    // A feature's Made of list (NIT-201) is the last row, as Paper B4 draws
+    // the rail: "Made of · 6 claims".
+    return section ? Array.prototype.slice.call(section.querySelectorAll(':scope > .brief-body > h3, :scope > .feature-made-of > .feature-made-of__head')) : [];
   }
 
   // tocTarget is the element a TOC row stands for: a claim card, or on a
@@ -595,12 +597,14 @@
     var open = parseInt(page.getAttribute('data-open-threads'), 10) || 0;
     var total = parseInt(page.getAttribute('data-threads'), 10) || 0;
     var live = document.body.classList.contains('comments-live');
+    // A feature's page (NIT-201) speaks of a feature.
+    var noun = page.hasAttribute('data-feature') ? 'feature' : 'brief';
     // A static build has nothing to write to, so the note states the count
     // and asks for nothing; the read-only line says why.
     var note = open === 0 ? 'None open.' : open + ' open.';
     if (live) {
       note += open === 0
-        ? ' Comment on the brief to ask the agent for a change.'
+        ? ' Comment on the ' + noun + ' to ask the agent for a change.'
         : ' Reply to or resolve ' + (open === 1 ? 'it' : 'them') + ' in the thread.';
     }
     return {
@@ -695,7 +699,7 @@
     list.replaceChildren();
     select.replaceChildren();
     headings.forEach(function (heading, index) {
-      var label = heading.textContent.replace(/\s+/g, ' ').trim();
+      var label = (heading.getAttribute('data-toc-label') || heading.textContent).replace(/\s+/g, ' ').trim();
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'facet-toc__item';

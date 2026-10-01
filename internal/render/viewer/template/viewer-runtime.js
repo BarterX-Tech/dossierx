@@ -172,6 +172,15 @@
         if (briefPageSection(id)) {
           return { module: id };
         }
+        // A brief named by its path, as check names it
+        // ("briefs/features/split-a-bill.md"), opens its page (NIT-201). A
+        // body link to another brief is rewritten to the page's id at render
+        // (render.resolveBriefLinks); this is the same mapping for a hash
+        // typed or pasted by hand.
+        var byPath = briefSectionForPath(id);
+        if (byPath) {
+          return { module: byPath.id };
+        }
         // Home (NIT-196) is the page the viewer opens on, and where any hash
         // it does not recognise lands. It holds no facet, so it resolves to
         // itself alone. Its id, HOME_ID, carries an underscore, which
@@ -243,6 +252,44 @@
           if (pages[i].getAttribute('data-brief-path') === p) { return pages[i]; }
         }
         return null;
+      }
+
+      // briefNoun is what a brief page calls itself: a brief in features/ is
+      // a feature (NIT-201; its section carries data-feature), and says so
+      // wherever the page speaks of itself — the strip, the Issues screen.
+      function briefNoun(section) {
+        return section && section.hasAttribute('data-feature') ? 'feature' : 'brief';
+      }
+
+      // BRIEF_DUPLICATE_RULE is the warning a brief draws when its rests_on is
+      // exactly another brief's (internal/briefs RuleRestsOnDuplicate), and
+      // BRIEF_DRIFT_RULE the one a locked brief draws when a claim it rests
+      // on moved since approval (RuleDependencyDrift), which makes it
+      // review_pending.
+      var BRIEF_DUPLICATE_RULE = 'brief-rests-on-duplicate';
+      var BRIEF_DRIFT_RULE = 'brief-dependency-drift';
+
+      // duplicatePeer reads the other brief a duplicate warning names. The
+      // finding carries it only in its message — "rests_on is exactly the
+      // same set as <path>[ and N other brief(s)]; …" (internal/briefs,
+      // restsOnFindings) — so this reads that sentence, and a message it
+      // cannot read yields null and the strip falls back to the rule.
+      function duplicatePeer(message) {
+        var m = /same set as (\S+?\.md)(?: and (\d+) other brief)?/.exec(message || '');
+        if (!m) { return null; }
+        var section = briefSectionForPath(m[1]);
+        var heading = section && document.getElementById(section.id + '_title');
+        return {
+          section: section,
+          title: heading ? heading.textContent.trim() : m[1],
+          more: m[2] ? parseInt(m[2], 10) : 0
+        };
+      }
+
+      // isBriefPath: a finding's claim_id names a brief, its folder or the
+      // tree (a path, which holds a slash) rather than a claim.
+      function isBriefPath(id) {
+        return (id || '').indexOf('/') >= 0;
       }
 
       // briefsIndexActive: the "All briefs" index, like Home, is not a
@@ -497,19 +544,38 @@
 
       function restoreFocus(target, fallbackSelector) {
         cancelFocusRestore();
+        function next() {
+          return target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
+        }
         function apply() {
-          var next = target && target.isConnected ? target : document.querySelector(fallbackSelector || '');
-          if (next && typeof next.focus === 'function') { next.focus(); }
+          var node = next();
+          if (node && typeof node.focus === 'function') { node.focus(); }
+        }
+        // A re-apply only puts back focus the browser dropped: onto <body>,
+        // onto a node in the drawer or the graph pane that just closed, or
+        // onto one that is no longer rendered. Focus the reader (or
+        // a script) has since moved to another control is theirs; taking it
+        // back sent a keypress meant for that control to the old opener
+        // (TestGroup02MobileNavigationAndFacetSheet's Enter on #navToggle
+        // landed on #mobileSearchToggle when it came within these frames).
+        function reapply() {
+          var active = document.activeElement;
+          var sidebarEl = document.getElementById('sidebar');
+          var pane = document.getElementById('dxgPane');
+          var dropped = !active || active === document.body ||
+            (sidebarEl && sidebarEl.contains(active)) || (pane && pane.contains(active)) ||
+            active.getClientRects().length === 0;
+          if (dropped) { apply(); }
         }
         apply();
         // Closing a drawer can hide the previously focused node; Chrome then
         // moves focus to <body> after this turn. Re-apply on the next two
         // frames so Escape lands on the opener instead of the document body.
         focusRestoreFrame = window.requestAnimationFrame(function () {
-          apply();
+          reapply();
           focusRestoreFrame = window.requestAnimationFrame(function () {
             focusRestoreFrame = 0;
-            apply();
+            reapply();
           });
         });
       }
@@ -1693,6 +1759,13 @@
         }
         var group = groups[key];
         if (fields.claimID) { group.claimIDs[fields.claimID] = true; }
+        // A brief finding's message is what names the other party (the
+        // brief whose rests_on is the same set), so a brief row keeps each
+        // distinct one to show under its path (NIT-201).
+        if (fields.message) {
+          group.messages = group.messages || [];
+          if (group.messages.indexOf(fields.message) < 0) { group.messages.push(fields.message); }
+        }
         group.count += 1;
         return group;
       }
@@ -1745,10 +1818,28 @@
             severity: 'check',
             title: humanRule(finding.lint) || 'Check issue',
             kind: finding.lint || 'lint',
-            claimID: finding.claim_id
+            claimID: finding.claim_id,
+            message: isBriefPath(finding.claim_id) ? finding.message : ''
           });
         });
         lintWarnings.forEach(function (finding) {
+          // A brief's warnings (their claim_id is a path) are shown in the
+          // strip on the brief's page, where a claim warning waits under
+          // Later (NIT-201). brief-dependency-drift makes a locked brief
+          // review_pending, so it files under Needs you, as a claim's
+          // review cause does; every other brief warning (the duplicate,
+          // today) is a Check.
+          if (isBriefPath(finding.claim_id)) {
+            var drift = finding.lint === BRIEF_DRIFT_RULE;
+            addStatusGroup(groups, (drift ? 'needs_you' : 'check') + ':lint:' + (finding.lint || 'lint'), {
+              severity: drift ? 'needs_you' : 'check',
+              title: humanRule(finding.lint) || 'Check issue',
+              kind: finding.lint || 'lint',
+              claimID: finding.claim_id,
+              message: finding.message
+            });
+            return;
+          }
           addStatusGroup(groups, 'later:lint:' + (finding.lint || 'lint'), {
             severity: 'later',
             title: humanRule(finding.lint) || 'Later warning',
@@ -1910,13 +2001,16 @@
           detail.appendChild(link);
         }
         if (detail) { text.appendChild(detail); }
+        (group.messages || []).forEach(function (message) {
+          text.appendChild(textEl('span', 'status-finding-detail status-finding-message', message));
+        });
         row.appendChild(text);
 
         // The right-hand slot. A blocker row keeps its count (04 §4.8: the
         // phrase promoted INTO the 104px slot as a bare `N claims`). A
         // Needs-you row carries its way in instead (Paper ETC-0 / EUD-0):
         // the thing waiting is one claim, and the count would always be 1.
-        if (group.severity === 'needs_you' && group.ownerModuleClaimID) {
+        if (group.severity === 'needs_you' && group.ownerModuleClaimID && !isBriefPath(group.ownerModuleClaimID)) {
           var owner = group.ownerModuleClaimID;
           var action = textEl('button', 'status-finding-action', isEditCause ? 'See changes' : 'Open claim');
           action.type = 'button';
@@ -1932,7 +2026,7 @@
         // to that brief's page, as a Needs-you row leads to its claim.
         var briefPage = ids.length === 1 ? briefSectionForPath(ids[0]) : null;
         if (briefPage) {
-          var open = textEl('button', 'status-finding-action', 'Open brief');
+          var open = textEl('button', 'status-finding-action', 'Open ' + briefNoun(briefPage));
           open.type = 'button';
           open.addEventListener('click', function (event) {
             event.preventDefault();
@@ -3107,7 +3201,7 @@
           // A brief's findings block no claim: they are about the brief, its
           // folder or the tree, so the head counts findings on this brief.
           var note = activeBriefSection()
-            ? countLabel(rows.length, 'finding') + ' on this brief'
+            ? countLabel(rows.length, 'finding') + ' on this ' + briefNoun(activeBriefSection())
             : stripSeverityFilter === 'needs_you'
               ? weight + ' of ' + needsTotal + ' need you here'
               : 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
@@ -3126,7 +3220,7 @@
         // row per finding. They are derived from the SAME groups, ledger and
         // lint lists a line apart, so the two can differ in shape and never
         // in what they say.
-        var rows = statusStripRows(groups, ledger, lintErrors, claimIDs);
+        var rows = statusStripRows(groups, ledger, lintErrors, claimIDs, lintWarnings);
         renderStatusStripCard(rows);
         // The band gets the same rows, one full-bleed row each (Paper board
         // 15, C2M-0 / C92-0), in the same order — most serious first — so the
@@ -3152,9 +3246,11 @@
       // thing the card's tint rule reads: 'alarm' for anything the approval
       // record or the dependency chain is refusing, 'draft' for work in
       // progress that nobody has approved yet.
-      function statusStripRows(groups, ledger, lintErrors, claimIDs) {
+      function statusStripRows(groups, ledger, lintErrors, claimIDs, lintWarnings) {
         var rows = [];
-        var here = activeBriefSection() ? 'on this brief' : 'in this facet';
+        var brief = activeBriefSection();
+        var noun = briefNoun(brief);
+        var here = brief ? 'on this ' + noun : 'in this facet';
         if (ledger.length) {
           rows.push({
             tone: 'alarm', severity: 'critical',
@@ -3177,6 +3273,33 @@
         // single-sentence head had no space for, and the reason it became a
         // card: it is amber where everything above it is red, and one tinted
         // surface cannot make two severity claims at once.
+        // A brief's own warnings (NIT-201), each a row the reader can see
+        // without opening the Issues screen. A claim this brief rests on
+        // that moved since approval is Needs you, in the draft hue, like a
+        // claim's own edit. A duplicate names the other brief and leads to
+        // it: "Rests on the same claims as Export to CSV".
+        if (brief) {
+          var own = (lintWarnings || []).filter(function (f) { return f.claim_id === brief.getAttribute('data-brief-path'); });
+          var drifted = own.filter(function (f) { return f.lint === BRIEF_DRIFT_RULE; }).length;
+          if (drifted) {
+            rows.push({
+              tone: 'draft', severity: 'needs_you',
+              text: countLabel(drifted, 'claim') + ' this ' + noun + ' rests on ' + (drifted === 1 ? 'has' : 'have') +
+                ' changed since approval'
+            });
+          }
+          own.filter(function (f) { return f.lint === BRIEF_DUPLICATE_RULE; }).forEach(function (f) {
+            var peer = duplicatePeer(f.message);
+            var text = 'Rests on the same claims as ' + (peer ? peer.title : 'another brief');
+            if (peer && peer.more) { text += ' and ' + countLabel(peer.more, 'other brief'); }
+            var row = { tone: 'draft', severity: 'check', text: text };
+            if (peer && peer.section) {
+              row.target = peer.section.id;
+              row.action = 'Open ' + briefNoun(peer.section);
+            }
+            rows.push(row);
+          });
+        }
         var edited = approvedEditIDsIn(claimIDs);
         if (edited.length) {
           rows.push({
@@ -3203,7 +3326,18 @@
       // opens the Issues screen as it always did; an edited-since-approval
       // row says what it is for (Paper CDS-0: "Review changes").
       function statusStripRowAction(row) {
+        if (row.action) { return row.action; }
         return row.tone === 'draft' ? 'Review changes' : 'Show issues';
+      }
+
+      // activateStripRow is a row's way in: most open the Issues screen; a
+      // row with a target (a duplicate brief's other page) opens that page.
+      function activateStripRow(row) {
+        if (row.target) {
+          if (window.location.hash !== '#' + row.target) { window.location.hash = '#' + row.target; }
+          return;
+        }
+        openIssuesForBandRow(row.tone, row.severity);
       }
 
       // openIssuesForBandRow: a blocked row opens the screen UNFILTERED — its
@@ -3227,6 +3361,7 @@
         var first = rows[0];
         stripToggle.setAttribute('data-tone', first.tone);
         stripToggle.setAttribute('data-severity', first.severity || '');
+        if (first.target) { stripToggle.setAttribute('data-target', first.target); } else { stripToggle.removeAttribute('data-target'); }
         stripTitle.textContent = first.text;
         var firstAction = document.getElementById('statusStripAction');
         if (firstAction) { firstAction.textContent = statusStripRowAction(first); }
@@ -3251,7 +3386,7 @@
           btn.appendChild(actionRow);
           btn.addEventListener('click', function (event) {
             event.preventDefault();
-            openIssuesForBandRow(row.tone, row.severity);
+            activateStripRow(row);
           });
           // After the previous row and before the phone card, so the band is
           // one stack of rows whatever the count.
@@ -3290,6 +3425,7 @@
           el_.appendChild(chev);
           el_.addEventListener('click', function (event) {
             event.preventDefault();
+            if (row.target) { activateStripRow(row); return; }
             // Filtered to the row's own severity. On a real corpus the
             // unfiltered screen is hundreds of dependency rows and the thing
             // this row named is somewhere inside them; a way in that lands a
@@ -3548,7 +3684,8 @@
         if (activeBriefSection() && data.claims > 0) {
           // On a brief the ranked ids are paths: the brief's own, its
           // folder's and the tree's (briefFindingPaths).
-          caveat = countLabel(data.claims, 'path') + ' with a finding on this brief: the brief, its folder or the whole tree.';
+          var caveatNoun = briefNoun(activeBriefSection());
+          caveat = countLabel(data.claims, 'path') + ' with a finding on this ' + caveatNoun + ': the ' + caveatNoun + ', its folder or the whole tree.';
         } else if (waiting && data.claims > 0) {
           caveat = countLabel(data.claims, 'claim') + ', ' + countLabel(data.causes, 'cause') +
             ' — a claim can be waiting for more than one reason and is counted under each.';
@@ -3580,7 +3717,8 @@
         // and its sentence (NIT-197), as the strip already does.
         var onBrief = !!activeBriefSection();
         var facetScope = issuesScopeEl && issuesScopeEl.querySelector('[data-scope="facet"]');
-        if (facetScope) { facetScope.textContent = onBrief ? 'This brief' : 'This facet'; }
+        var pageNoun = briefNoun(activeBriefSection());
+        if (facetScope) { facetScope.textContent = onBrief ? 'This ' + pageNoun : 'This facet'; }
         var sortValue = document.getElementById('issuesSortValue');
         if (sortValue) { sortValue.textContent = onBrief ? 'Most findings' : 'Most claims blocked'; }
         if (issuesSubtitleEl && onBrief) {
@@ -3590,8 +3728,8 @@
             findingsForActiveFacet(data.lint_warnings || [], ids).length +
             findingsForActiveFacet(data.ledger_findings || [], ids).length;
           issuesSubtitleEl.textContent = n
-            ? countLabel(n, 'finding') + ' on this brief ' + (n === 1 ? 'needs' : 'need') + ' attention.'
-            : 'Nothing on this brief needs attention.';
+            ? countLabel(n, 'finding') + ' on this ' + pageNoun + ' ' + (n === 1 ? 'needs' : 'need') + ' attention.'
+            : 'Nothing on this ' + pageNoun + ' needs attention.';
         } else if (issuesSubtitleEl) {
           var groups = collectStatusGroups(
             (lastStatusData && lastStatusData.readiness) || offlineReadiness(),
@@ -3779,6 +3917,10 @@
       // exactly what it filters to, which is what earns it the filter.
       if (stripToggle) {
         stripToggle.addEventListener('click', function () {
+          if (stripToggle.hasAttribute('data-target')) {
+            activateStripRow({ target: stripToggle.getAttribute('data-target') });
+            return;
+          }
           openIssuesForBandRow(stripToggle.getAttribute('data-tone'), stripToggle.getAttribute('data-severity'));
         });
       }

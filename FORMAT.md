@@ -1723,10 +1723,13 @@ review-pending, never the reverse.
 A project that holds a brief outside `features/` gets a **Briefs** group in
 the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
 stays as written), each opening to its briefs. `features/` is left out of this
-tree: its briefs are features. Each brief row carries one state mark — a
-padlock for `locked`, a hollow dot for `draft`, and a blue dot for a brief with
-an open comment thread, which outranks both — and a legend above the theme
-control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
+tree: its briefs are features. Each brief row carries one state mark, read
+from the brief's own lock and review state (its `lock_state`,
+`review_pending` and `open_threads`) in the legend's order: edited since
+approval, then review pending, then a blue dot for an open comment thread,
+then a hollow dot for `draft` or a padlock for `locked`. A file that says
+`status: locked` with no approval on record (`brief-unrecorded`) takes the
+draft mark. A legend above the theme control names the marks. Each brief is a page at `#brief-<folder>-<slug>` (a
 second brief, or a module, spelling the same id takes a `-2` suffix): a kicker
 `BRIEF · FOLDER · path`, the title, the frontmatter `summary` as the lede, the
 words and images against their caps, the body, and the claims it **rests on**
@@ -1751,11 +1754,50 @@ reads "Search claims and briefs": a module row matches its claims' titles,
 summaries and ids, and a brief row its title, file name, summary and folder.
 A `check` finding whose `claim_id` is a brief's path, its folder's or the
 tree's shows in the status strip and on the Issues screen of that brief's
-page. A project whose only briefs are in `features/` gets their pages, but no
-Briefs group, no index and no "…and briefs" in the search box. The viewer also
-carries the briefs as data (a `dossierx-briefs` JSON block); a project with no
-brief has none of this, and its search reads "Search modules" while still
-matching claims.
+page. A project whose only briefs are in `features/` gets no Briefs group
+and no index. The viewer also carries the briefs as data (a `dossierx-briefs`
+JSON block); a project with no brief has none of this, and its search reads
+"Search modules" while still matching claims.
+
+A brief in `features/` is a **feature**. Features have their own **Features**
+entry in the sidebar, between Modules and Briefs: one row per feature in
+order of file name without `.md` (so `export.md` comes before
+`export-to-csv.md`), labelled with its title, each carrying the same state
+mark a brief row carries, in the same slot.
+A feature's page is the brief page with these differences: the kicker is `FEATURE · path`; the meta line reads
+"Rests on N claims in <modules>", then "all locked" when every `rests_on` id
+names a locked claim and "M of N locked" otherwise (a phone shows "N claims,
+all locked"); a feature that rests on nothing reads "Rests on no claims yet"
+at every width, and so does its Made of card; the page speaks of itself as a
+feature (its status strip, Issues screen, Threads copy and its page-foot
+"Comment on this feature"); and a **Made of** list takes the place of Rests on — the
+`rests_on` claims grouped by module, each group under its module's
+title-cased name (a project claim under "Project"; two modules whose names
+title-case alike stay two groups), modules in the order their first claim appears and
+rows in the order the file lists them, captioned "rests_on, not an order". An
+id that names no claim sits last, under "Not a claim". "On this page" ends
+with a "Made of" row. Home gains a **Features** tile: each feature and its
+state (`locked`, `edited`, `review` or `draft`), or on a phone one line
+counting them. A feature shows its brief's
+own state only: nothing built, specified or conformance-related.
+
+A link in any brief's body to another brief opens that brief's page: a
+markdown link to `briefs/<folder>/<slug>.md`, written relative to the brief's
+own file (`../voice/talking-about-money.md`, `export-to-csv.md`) or from the
+project root (`briefs/voice/talking-about-money.md`, with or without a leading
+`/`), is rewritten to the page's id. A hash naming a brief's path
+(`#briefs/features/split-a-bill.md`) opens the page too. A link that names no
+brief is left as written.
+
+A brief's own warnings show in the status strip on its page, each as a row a
+reader sees without opening the Issues screen. `brief-dependency-drift` (a
+claim a locked brief rests on changed since approval, so the brief is
+review-pending) is **Needs you**, in the draft hue, as a claim's review cause
+is: "1 claim this feature rests on has changed since approval".
+`brief-rests-on-duplicate` is a **Check** that names the other brief by its
+title and opens its page: "Rests on the same claims as Export to CSV". Both
+are warnings: `check` still passes, and a claim's own warnings still wait
+under Later.
 
 A claim card does show the briefs around it, derived at render time and never
 stored: a **BRIEFS** group in its relationships panel, after RESTS ON and

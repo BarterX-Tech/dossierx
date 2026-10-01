@@ -212,6 +212,40 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	}
 }
 
+// Closing the phone drawer returns focus to its opener and re-applies it
+// for two frames, because Chrome drops focus onto <body> once the drawer's
+// node is hidden. Those re-applies must not take back focus the reader has
+// moved in the meantime: they did, and TestGroup02MobileNavigationAndFacetSheet's
+// Enter on #navToggle, sent within those frames, opened the drawer from
+// #mobileSearchToggle instead, so Escape returned focus there (a flake in
+// about one run in twelve, found by logging focus events). Here the newer
+// focus comes in the same task as the close, so the old re-apply always won.
+func TestDrawerFocusRestoreYieldsToANewerFocus(t *testing.T) {
+	p := group02NavigationProject(t)
+	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.EmulateViewport(390, 844), chromedp.Navigate(p.renderStatic()+widgetPage))
+	pollTrue(t, ctx, `!!document.querySelector('.mobile-app-bar')`)
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
+	pollTrue(t, ctx, `document.body.classList.contains('nav-open')`)
+	evalVoid(t, ctx, `(function(){
+		document.getElementById('navDrawerClose').click();
+		document.getElementById('navToggle').focus();
+		window.__afterFrames = null;
+		requestAnimationFrame(function(){ requestAnimationFrame(function(){ requestAnimationFrame(function(){
+			window.__afterFrames = document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : 'none';
+		}); }); });
+	})()`)
+	pollTrue(t, ctx, `window.__afterFrames !== null`)
+	if got := evalString(t, ctx, `window.__afterFrames`); got != "navToggle" {
+		t.Fatalf("focus three frames after the drawer closed = %q, want navToggle: the close's re-apply took it back", got)
+	}
+	// A close with nothing newer still lands on the opener.
+	runCDP(t, ctx, chromedp.Evaluate(`document.getElementById('mobileSearchToggle').click()`, nil))
+	pollTrue(t, ctx, `document.body.classList.contains('nav-open')`)
+	runCDP(t, ctx, chromedp.KeyEvent(kb.Escape))
+	pollTrue(t, ctx, `!document.body.classList.contains('nav-open') && document.activeElement === document.getElementById('mobileSearchToggle')`)
+}
+
 func TestGroup02MobileNavigationAndFacetSheet(t *testing.T) {
 	p := group02NavigationProject(t)
 	ctx := browserContext(t)

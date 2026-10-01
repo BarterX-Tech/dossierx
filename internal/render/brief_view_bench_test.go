@@ -66,7 +66,7 @@ func BenchmarkBriefsView(b *testing.B) {
 			b.ReportAllocs()
 			var size int
 			for i := 0; i < b.N; i++ {
-				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat)
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, nil)
 				size = 0
 				for _, f := range view.Folders {
 					for _, p := range f.Pages {
@@ -128,6 +128,55 @@ func BenchmarkBriefsPayloadWithReview(b *testing.B) {
 				size = len(out)
 			}
 			b.ReportMetric(float64(size), "payload-bytes")
+		})
+	}
+}
+
+// BenchmarkFeaturesView is the feature half (NIT-201): n features, each
+// resting on r claims spread over 20 modules and linking to every other
+// feature's file in its body (up to 200 links), the worst case for the Made
+// of grouping and the body-link rewrite. n = 12 is the default folder cap;
+// 2,000 is a raised one. It reports the bytes of the feature pages' bodies
+// and Made of lists, the part of the page that grows with them.
+func BenchmarkFeaturesView(b *testing.B) {
+	_, cfg := briefViewFixture()
+	for _, tc := range []struct{ features, restsOn int }{{12, 200}, {2000, 50}} {
+		cat := &catalog.Catalog{}
+		for i := 0; i < tc.restsOn*4; i++ {
+			status := model.StatusDraft
+			if i%2 == 0 {
+				status = model.StatusLocked
+			}
+			cat.Claims = append(cat.Claims, model.Claim{ID: fmt.Sprintf("m%02d.contract.c%05d", i%20, i), Module: fmt.Sprintf("m%02d", i%20), Facet: "contract", Status: status})
+		}
+		files := make([]briefs.File, 0, tc.features)
+		for i := 0; i < tc.features; i++ {
+			var fm, links strings.Builder
+			fm.WriteString("---\nsummary: s\nrests_on:\n")
+			for j := 0; j < tc.restsOn; j++ {
+				fmt.Fprintf(&fm, "  - %s\n", cat.Claims[(i+j)%len(cat.Claims)].ID)
+			}
+			fm.WriteString("---\n# Feature\n\n## What\n\n")
+			for j := 0; j < tc.features && j < 200; j++ {
+				fmt.Fprintf(&links, "[f%d](f%05d.md) ", j, j)
+			}
+			files = append(files, briefFile(fmt.Sprintf("features/f%05d.md", i), fm.String()+links.String()+"\n"))
+		}
+		set := briefs.FromFiles(cfg, files)
+		b.Run(fmt.Sprintf("features=%d/rests_on=%d", tc.features, tc.restsOn), func(b *testing.B) {
+			b.ReportAllocs()
+			var size int
+			for i := 0; i < b.N; i++ {
+				view := buildBriefsView(set, renderBriefs(set, cat, cfg), cat, nil)
+				size = 0
+				for _, p := range view.Features {
+					size += len(p.Body)
+					for _, g := range p.Feature.Groups {
+						size += len(g.Rows)
+					}
+				}
+			}
+			b.ReportMetric(float64(size), "page-bytes")
 		})
 	}
 }

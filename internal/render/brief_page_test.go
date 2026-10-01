@@ -81,8 +81,12 @@ func TestRender_BriefPageAndTree(t *testing.T) {
 			t.Errorf("sidebar is missing %s", want)
 		}
 	}
-	if strings.Contains(nav, "features") || strings.Contains(nav, "split-a-bill") {
-		t.Error("features/ must be left out of the Briefs tree")
+	_, tree, ok := strings.Cut(nav, `class="system-nav-group brief-nav"`)
+	if !ok {
+		t.Fatal("no Briefs group in the sidebar")
+	}
+	if strings.Contains(tree, "features") || strings.Contains(tree, "split-a-bill") {
+		t.Error("features/ must be left out of the Briefs tree: a feature is listed once, under Features")
 	}
 	if !strings.Contains(out, `id="brief-features-split-a-bill"`) {
 		t.Error("a features/ brief still renders its page, so a link to it resolves")
@@ -218,9 +222,10 @@ func TestRenderBoundedWith_ChargesBriefImagesToTheBound(t *testing.T) {
 }
 
 // TestRender_FeaturesOnlyProjectMakesNoBriefsPromise: a project whose only
-// briefs are under features/ has no tree, so it gets no Briefs group, no
-// "All briefs" index and no "…and briefs" search promise — but its feature
-// pages still render, so a link to one resolves (NIT-197 F14).
+// briefs are under features/ has no tree, so it gets no Briefs group and no
+// "All briefs" index (NIT-197 F14). Since NIT-201 its features are listed
+// under Features, which the search reaches and whose rows carry marks, so it
+// does get the "…and briefs" search promise and the marks legend.
 func TestRender_FeaturesOnlyProjectMakesNoBriefsPromise(t *testing.T) {
 	cat, cfg := briefViewFixture()
 	set := briefs.FromFiles(cfg, []briefs.File{
@@ -230,9 +235,14 @@ func TestRender_FeaturesOnlyProjectMakesNoBriefsPromise(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, absent := range []string{"Search claims and briefs", `id="_briefs"`, `class="system-nav-group brief-nav"`, `class="brief-legend"`} {
+	for _, absent := range []string{`id="_briefs"`, `class="system-nav-group brief-nav"`} {
 		if strings.Contains(out, absent) {
 			t.Errorf("a features-only project must not carry %s", absent)
+		}
+	}
+	for _, present := range []string{"Search claims and briefs", `class="system-nav-group feature-nav"`, `class="brief-legend"`} {
+		if !strings.Contains(out, present) {
+			t.Errorf("a features-only project lists its features, so it must carry %s", present)
 		}
 	}
 	if !strings.Contains(out, `id="brief-features-split-a-bill"`) {

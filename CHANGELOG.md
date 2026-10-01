@@ -267,6 +267,40 @@ binary predates that guard.
 
 ### Added
 
+- **Features in the viewer** (NIT-201). A brief in `briefs/features/` is a
+  feature. The sidebar lists features under their own **Features** entry,
+  between Modules and Briefs, by file name without `.md` (`export.md`
+  before `export-to-csv.md`) and titled, each with one
+  mark for its brief's own lock and review state (NIT-205): edited since
+  approval, review pending, an open thread, then a padlock for locked or a
+  hollow dot for draft. A Briefs tree row now reads the same mark from the
+  same state, so an edited or review-pending brief shows it there too, and a
+  file that says `status: locked` with no approval on record takes the draft
+  mark;
+  the Briefs tree still leaves `features/` out, so a feature is listed once.
+  A feature's page is the brief page with a `FEATURE · path` kicker, a meta
+  line counting what it rests on ("Rests on 6 claims in Expenses, Splitting
+  and Settlements, all locked", or "M of N locked" while any is not), and a
+  **Made of** list in place of Rests on: its `rests_on` claims grouped by
+  module in the order the file names them, each row the claim's lifecycle
+  badge and a link to it, captioned "rests_on, not an order". "On this page"
+  ends with a "Made of" row. Home gains a Features tile listing each feature
+  and its state (locked, edited, review or draft). Nothing shows built, specified or conformance state. A link
+  in any brief's body to another brief's file — relative
+  (`../voice/talking-about-money.md`) or from the project root
+  (`briefs/voice/talking-about-money.md`) — opens that brief's page, and so
+  does a hash naming a brief's path. A brief's own warnings show in the
+  status strip on its page as visible rows: `brief-dependency-drift` under
+  Needs you ("1 claim this feature rests on has changed since approval"), and
+  `brief-rests-on-duplicate` under Check, naming the other brief and opening
+  it ("Rests on the same claims as Export to CSV"). A feature's page says
+  "feature" in its strip, Issues screen and Threads copy, and its page-foot
+  button reads "Comment on this feature"; and a feature that
+  rests on nothing reads "Rests on no claims yet" at every width. The phone
+  drawer no longer takes focus back from a control focused just after it
+  closes. A
+  project with a `features/` folder and no other brief now gets the "Search
+  claims and briefs" box and the marks legend.
 - **Briefs on a claim card** (NIT-202). A claim's relationships panel gains a
   BRIEFS group after RESTS ON and DEPENDED ON BY, derived at render time and
   marked "derived": "Explained by" lists the briefs whose `rests_on` names the
