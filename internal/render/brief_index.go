@@ -19,21 +19,25 @@ type BriefsIndex struct {
 	Features int
 	// OverTotal is Total > TotalCap; check already refuses brief-total-cap.
 	OverTotal bool
-	// Headline is "11 of 60, 5 are features" (or "6 of 60" with none).
+	// Headline is "6 briefs · 5 features, under Features · 11 of 60
+	// allowed" (NIT-250): the briefs number is the one the sidebar's Briefs
+	// entry shows, features are named as their own section, and the cap
+	// counts both. "6 briefs · 6 of 60 allowed" with no features.
 	Headline string
-	// Locked, Review, Edited and Threads are the non-feature briefs' states,
-	// from the same briefMark / Evaluation the sidebar reads. Threads is the
-	// open-thread count, matching Home's Open threads card.
-	Locked, Review, Edited, Threads int
-	States                          string
-	Folders                         []BriefsIndexFolder
+	// Locked, Review, Edited, Draft and Threads are the non-feature briefs'
+	// states, from the same briefMark / Evaluation the sidebar reads. Threads
+	// is the open-thread count, matching Home's Open threads card.
+	Locked, Review, Edited, Draft, Threads int
+	States                                 string
+	Folders                                []BriefsIndexFolder
 }
 
 // BriefsIndexFolder is one folder on the index.
 type BriefsIndexFolder struct {
 	Name, Label string
 	Count, Cap  int
-	// Pair is "N of 12" with the same grouping the headline uses.
+	// Pair is "N · cap 12" (NIT-250): the folder's count and its cap, never
+	// "N of 12", which read as progress toward a target.
 	Pair string
 	Over bool
 	// Open is true when a brief in the folder is edited, review-pending or
@@ -50,7 +54,8 @@ type BriefsIndexFolder struct {
 type BriefsTile struct {
 	Count    int
 	Headline string
-	// FeaturesNote is "5 are features" when features/ holds any; empty otherwise.
+	// Headline is "11 of 60 allowed", the inclusive total against the cap.
+	// FeaturesNote is "5 features" when features/ holds any; empty otherwise.
 	FeaturesNote string
 	OverTotal    bool
 	Line         string
@@ -73,15 +78,15 @@ func (v BriefsView) BriefsTile() BriefsTile {
 	if t.Count <= 0 {
 		return t
 	}
-	t.Headline = capPair(idx.Total, idx.TotalCap)
+	t.Headline = capAllowed(idx.Total, idx.TotalCap)
 	t.OverTotal = idx.OverTotal
 	if idx.Features > 0 {
-		t.FeaturesNote = featuresAre(idx.Features)
+		t.FeaturesNote = countNoun(idx.Features, "feature")
 	}
 	for _, f := range idx.Folders {
 		t.Folders = append(t.Folders, BriefsTileFolder{
 			Label: f.Label,
-			Count: capPair(f.Count, f.Cap),
+			Count: groupDigits(f.Count),
 			Over:  f.Over,
 		})
 	}
@@ -107,26 +112,28 @@ func (v BriefsView) BriefsTile() BriefsTile {
 	return t
 }
 
-func capPair(n, limit int) string {
-	return groupDigits(n) + " of " + groupDigits(limit)
+// capAllowed is the project cap: "11 of 60 allowed".
+func capAllowed(n, limit int) string {
+	return groupDigits(n) + " of " + groupDigits(limit) + " allowed"
 }
 
-func featuresAre(n int) string {
-	if n == 1 {
-		return "1 is a feature"
-	}
-	return strconv.Itoa(n) + " are features"
+// folderCap is a folder's count against its cap: "2 · cap 12".
+func folderCap(n, limit int) string {
+	return groupDigits(n) + " · cap " + groupDigits(limit)
 }
 
-func briefsCapHeadline(total, limit, features int) string {
-	h := capPair(total, limit)
+// briefsHeadline is the index's counts line. briefs is the tree's count, the
+// number the sidebar's Briefs entry shows; total includes features.
+func briefsHeadline(briefs, features, total, limit int) string {
+	parts := []string{countNoun(briefs, "brief")}
 	if features > 0 {
-		return h + ", " + featuresAre(features)
+		parts = append(parts, countNoun(features, "feature")+", under Features")
 	}
-	return h
+	parts = append(parts, capAllowed(total, limit))
+	return strings.Join(parts, " · ")
 }
 
-func briefsStatesLine(locked, review, edited, threads int) string {
+func briefsStatesLine(locked, review, edited, draft, threads int) string {
 	var parts []string
 	if locked > 0 {
 		parts = append(parts, strconv.Itoa(locked)+" locked")
@@ -136,6 +143,9 @@ func briefsStatesLine(locked, review, edited, threads int) string {
 	}
 	if edited > 0 {
 		parts = append(parts, strconv.Itoa(edited)+" edited since approval")
+	}
+	if draft > 0 {
+		parts = append(parts, strconv.Itoa(draft)+" draft")
 	}
 	if threads > 0 {
 		parts = append(parts, openThreadsLabel(threads))
@@ -183,7 +193,7 @@ func buildBriefsIndex(set *briefs.Set, folders []BriefFolderView, features int) 
 		TotalCap:  caps.Total,
 		Features:  features,
 		OverTotal: total > caps.Total,
-		Headline:  briefsCapHeadline(total, caps.Total, features),
+		Headline:  briefsHeadline(total-features, features, total, caps.Total),
 	}
 	for _, f := range folders {
 		folder := BriefsIndexFolder{
@@ -191,7 +201,7 @@ func buildBriefsIndex(set *briefs.Set, folders []BriefFolderView, features int) 
 			Label: f.Label,
 			Count: f.Count,
 			Cap:   caps.PerFolder,
-			Pair:  capPair(f.Count, caps.PerFolder),
+			Pair:  folderCap(f.Count, caps.PerFolder),
 			Over:  f.Count > caps.PerFolder,
 			Open:  folderIsOpen(f.Pages),
 			Marks: folderMarks(f.Pages),
@@ -206,10 +216,12 @@ func buildBriefsIndex(set *briefs.Set, folders []BriefFolderView, features int) 
 				idx.Review++
 			case "locked":
 				idx.Locked++
+			case "draft":
+				idx.Draft++
 			}
 			idx.Threads += p.OpenThreads
 		}
 	}
-	idx.States = briefsStatesLine(idx.Locked, idx.Review, idx.Edited, idx.Threads)
+	idx.States = briefsStatesLine(idx.Locked, idx.Review, idx.Edited, idx.Draft, idx.Threads)
 	return idx
 }

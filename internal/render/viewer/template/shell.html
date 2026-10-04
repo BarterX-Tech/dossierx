@@ -286,7 +286,7 @@
               <span class="home-tile__main">
                 <span class="home-tile__head"><span class="home-tile__title">Briefs</span><span class="home-tile__count home-wide">{{.Count}}</span></span>
                 <span class="home-tile__desc home-wide">Design, voice, rationale — everything that is not a claim.</span>
-                <span class="home-briefs-cap home-wide{{if .OverTotal}} home-briefs-cap--over{{end}}">{{.Headline}}{{if .FeaturesNote}}, {{.FeaturesNote}}{{end}}{{if .OverTotal}} <span class="briefs-index-rule">brief-total-cap</span>{{end}}</span>
+                <span class="home-briefs-cap home-wide{{if .OverTotal}} home-briefs-cap--over{{end}}">{{if .FeaturesNote}}{{.FeaturesNote}} · {{end}}{{.Headline}}{{if .OverTotal}} <span class="briefs-index-rule">brief-total-cap</span>{{end}}</span>
                 <span class="home-briefs home-wide">{{range .Folders}}<span class="home-brief-folder{{if .Over}} home-brief-folder--over{{end}}"><span class="home-brief-folder__label">{{.Label}}</span><span class="home-brief-folder__count">{{.Count}}</span></span>{{end}}</span>
                 <span class="home-tile__line home-narrow">{{.Line}}</span>
               </span>

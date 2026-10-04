@@ -182,10 +182,11 @@ type BriefPageView struct {
 	Folder      string
 	FolderLabel string
 	Title       string
-	// NavLabel is the brief's row in the sidebar tree: its file name in
-	// sentence case ("round-to-the-cent" reads "Round to the cent"), as the
-	// B1 board draws the tree. The full title is the row's tooltip and one
-	// of the words the search matches.
+	// NavLabel is the brief's row in the sidebar tree: its own title, the
+	// words its page heading and the "All briefs" index show (NIT-249). Until
+	// 0.7.23 it was the file name in sentence case, which turned
+	// "macos-app-lifecycle" into "Macos app lifecycle" beside a page titled
+	// "macOS app lifecycle". A long title wraps rather than truncating.
 	NavLabel string
 	Summary  string
 	Status   string
@@ -398,7 +399,7 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 	mark, markLabel, _ := briefMark(rv)
 	lockState := string(rv.LockState)
 	links := func(body template.HTML) template.HTML {
-		return template.HTML(resolveBriefLinks(string(body), b.Path, targets))
+		return template.HTML(linkCodeRefs(resolveBriefLinks(string(body), b.Path, targets), b.Path, targets, statuses))
 	}
 	edit := briefEditView(b, rv)
 	if edit != nil && edit.Retained {
@@ -422,7 +423,7 @@ func briefPage(b briefs.Brief, caps config.BriefCaps, r renderedBrief, statuses 
 		Folder:        b.Folder,
 		FolderLabel:   folderLabel,
 		Title:         b.Title,
-		NavLabel:      sentenceCase(b.Slug),
+		NavLabel:      b.Title,
 		Summary:       b.Summary,
 		Status:        string(b.Status),
 		LockState:     lockState,
@@ -525,7 +526,6 @@ func featurePage(page BriefPageView, b briefs.Brief, index map[string]madeOfClai
 		}
 	}
 	page.Feature = f
-	page.NavLabel = b.Title
 	_, _, f.State = briefMark(briefReviewOf(review, b))
 	page.Meta = featureMeta(f, modules, page.Meta)
 	page.MetaShort = featureMetaShort(f)

@@ -73,8 +73,11 @@ func TestRender_BriefPageAndTree(t *testing.T) {
 		`data-folder="decisions"`, `<span class="brief-folder__label">Decisions</span><span class="brief-folder__count">2</span>`,
 		`data-folder="research"`,
 		`data-target="#brief-decisions-round-to-the-cent"`,
-		`title="Balances round to the cent, once">Round to the cent</span><span class="brief-mark" data-mark="locked"`,
-		`>No bank linking</span><span class="brief-mark" data-mark="draft"`,
+		// A row is the brief's own title, the page heading's words (NIT-249),
+		// not its file name in sentence case; with no heading the title is
+		// the file name title-cased.
+		`title="Balances round to the cent, once">Balances round to the cent, once</span><span class="brief-mark" data-mark="locked"`,
+		`>No Bank Linking</span><span class="brief-mark" data-mark="draft"`,
 		`class="brief-legend"`,
 	} {
 		if !strings.Contains(nav, want) {
