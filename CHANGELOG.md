@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.23] - 2026-10-04
+
+A hotfix for brief pages, found on the first real corpus to move to v0.7.22.
+No command, flag, exit code, lint rule or error code changed, and nothing in
+a project needs to change: rebuild the viewer (`dossierx check`) to get it.
+
+### Fixed
+
+- **A bullet that mixes bold, code or links reads as one paragraph.** On
+  v0.7.22 each piece of such a bullet (a bold lead, a code span, a link, the
+  prose between them) was laid out as its own column, so a bullet like
+  "**Explained first.** Onboarding explains … (`features/onboarding`)" read
+  one word per line with the code chips stretched tall. The dash still hangs
+  in its own slot and the text wraps under the first word.
+- **Long code and URLs stay inside the brief card.** A claim id, an API name
+  or a bare URL wider than the card used to run past it, and three of
+  Curtainly's briefs widened the whole page (one rendered 1844px wide in a
+  1440px window). They now break at the card edge; a code span broken across
+  lines keeps its chip on both halves.
+- **The sidebar names each brief by its title.** A row in the Briefs tree was
+  the file name in sentence case ("Macos app lifecycle", "Light only
+  appearance") beside a page titled "macOS app lifecycle" or "Light only". It
+  is now the title the page heading and the index show, and a long one wraps
+  to a second line instead of being cut off. Feature rows wrap the same way.
+- **The briefs counts agree.** The sidebar's Briefs count, the index
+  headline and the folder labels read as three different numbers. The index
+  now says "29 briefs · 16 features, under Features · 45 of 60 allowed", where
+  29 is the sidebar's count, and adds the draft count to its states line. A
+  folder reads "13 · cap 18" instead of "13 of 18". Home's Briefs tile reads
+  "16 features · 45 of 60 allowed" and its folder rows show their counts.
+  The caps themselves are unchanged.
+
+### Added
+
+- **References in a brief body are links.** An inline code span that names
+  another brief as `<folder>/<slug>` (with or without `.md`) or names a claim
+  id the catalog holds is a link to that page or claim, drawn in the link
+  colour on the link tint. Any other code span keeps the plain grey chip, so
+  nothing reads as a link that goes nowhere. A brief's word count is
+  unchanged: it is counted from the markdown text, not from the page.
+
+### Viewer size
+
+Every rendered viewer grows by about 2.3 KB of CSS:
+
+| Fixture | v0.7.22 | v0.7.23 |
+| --- | ---: | ---: |
+| fixture-basic | 1,300,312 | 1,302,579 |
+| fixture-conformance-v1 | 1,355,856 | 1,358,123 |
+| fixture-graph-demo | 1,604,741 | 1,607,100 |
+| fixture-portability | 1,304,640 | 1,306,907 |
+| fixture-theme-flat | 1,339,123 | 1,341,390 |
+
 ## [0.7.22] - 2026-10-01
 
 **Surface** (net, against v0.7.21): 26 leaves under 9 nouns (was 24 under

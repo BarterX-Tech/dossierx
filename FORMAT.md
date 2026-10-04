@@ -1732,7 +1732,8 @@ review-pending, never the reverse.
 A project that holds a brief outside `features/` gets a **Briefs** group in
 the sidebar, after Modules: "All briefs", then one row per folder (its name title-cased; the path
 stays as written), each opening to its briefs. `features/` is left out of this
-tree: its briefs are features. Each brief row carries one state mark, read
+tree: its briefs are features. Each brief row is the brief's title (the words
+its page heading shows; a long title wraps to a second line) and carries one state mark, read
 from the brief's own lock and review state (its `lock_state`,
 `review_pending` and `open_threads`) in the legend's order: edited since
 approval, then review pending, then a blue dot for an open comment thread,
@@ -1759,11 +1760,13 @@ a brief: the agent does that after the human settles it in a thread. In a
 static build there is nothing to write to: a brief with threads opens them
 read only, a brief with none has its buttons disabled, and a line says
 comments are written through `dossierx serve`. The "All briefs" index (`#_briefs`)
-lists every folder other than `features/` in file-system order, each "N of 12"
+lists every folder other than `features/` in file-system order, each "N · cap 12"
 against the effective per-folder cap (red, with `brief-folder-cap`, when over).
 The totals strip is the inclusive count against the effective total cap
-(60 by default): "11 of 60, 5 are features" when `features/` holds any, then
-locked, review pending, edited since approval and open threads for the other
+(60 by default): "6 briefs · 5 features, under Features · 11 of 60 allowed",
+where the briefs number is the sidebar's Briefs count (the features part only
+when `features/` holds any), then
+locked, review pending, edited since approval, draft and open threads for the other
 folders only, from the same lock and review states as the sidebar marks. Each
 row is the brief's title, its one lock/review pill, and its summary; a folder
 with nothing pending starts collapsed and shows its state dots. Home's
@@ -1807,7 +1810,11 @@ own file (`../voice/talking-about-money.md`, `export-to-csv.md`) or from the
 project root (`briefs/voice/talking-about-money.md`, with or without a leading
 `/`), is rewritten to the page's id. A hash naming a brief's path
 (`#briefs/features/split-a-bill.md`) opens the page too. A link that names no
-brief is left as written.
+brief is left as written. An inline code span that names a brief as
+`<folder>/<slug>` (with or without `.md`), or names a claim id the catalog
+holds, is a link to that page or claim, drawn in the link colour on the link
+tint; any other code span keeps the plain code chip. Neither changes the
+brief's word count, which reads the markdown text.
 
 A brief's own warnings show in the status strip on its page, each as a row a
 reader sees without opening the Issues screen. `brief-dependency-drift` (a
