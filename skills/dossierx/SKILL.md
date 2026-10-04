@@ -267,9 +267,9 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
    reverts, and which `--no-verify` bypasses. Neither the hook installer nor
    `scripts/ci/dossierx-check.yml` exists in *their* repo — both ship with DossierX, so fetch each
    from the same release path (the workflow is
-   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.22/scripts/ci/dossierx-check.yml`,
+   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.23/scripts/ci/dossierx-check.yml`,
    copied into `.github/workflows/`). If yes, fetch
-   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.22/scripts/install-git-hook.sh`,
+   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.23/scripts/install-git-hook.sh`,
    show them what it does, run `sh install-git-hook.sh --yes`, then add the CI workflow as well.
    If no, skip the hook, add the CI workflow alone, and say so.
 5. If the repository `.gitignore` has a bare `build/` pattern, replace it with the block under

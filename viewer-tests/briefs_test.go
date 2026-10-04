@@ -196,7 +196,7 @@ func TestBriefsIndex_HomeTileAndCaps(t *testing.T) {
 		[][2]string{
 			{"the tile is on Home", `!!tile`},
 			{"it leads to the index", `tile.getAttribute('href') === '#_briefs'`},
-			{"the cap is inclusive", `tile.querySelector('.home-briefs-cap').textContent.indexOf('4 of 60') === 0 && tile.querySelector('.home-briefs-cap').textContent.indexOf('1 is a feature') >= 0`},
+			{"the cap is inclusive and names the features", `tile.querySelector('.home-briefs-cap').textContent.indexOf('1 feature · 4 of 60 allowed') === 0`},
 			{"the sidebar count is the non-feature total", `navCount && navCount.textContent === '3'`},
 			{"features/ is not a folder row", `!Array.prototype.some.call(tile.querySelectorAll('.home-brief-folder__label'), function (el) { return el.textContent === 'Features'; })`},
 		})
@@ -209,11 +209,12 @@ func TestBriefsIndex_HomeTileAndCaps(t *testing.T) {
 		 var research = idx.querySelector('.briefs-index-folder[data-folder="research"]');
 		 var decisions = idx.querySelector('.briefs-index-folder[data-folder="decisions"]');`,
 		[][2]string{
-			{"the meter is inclusive", `idx.querySelector('.briefs-index-meter').textContent.indexOf('4 of 60') === 0`},
+			{"the meter leads with the sidebar's count", `idx.querySelector('.briefs-index-meter').textContent.indexOf(document.querySelector('#nav .brief-nav .system-nav-group__count').textContent + ' briefs · ') === 0`},
+			{"the meter's cap is inclusive", `idx.querySelector('.briefs-index-meter').textContent.indexOf('1 feature, under Features · 4 of 60 allowed') > 0`},
 			{"no Features group", `!idx.querySelector('[data-folder="features"]')`},
 			{"research starts collapsed", `research && research.open === false`},
 			{"research shows its dots while closed", `research && getComputedStyle(research.querySelector('.briefs-index-folder__dots')).display !== 'none' && research.querySelector('.brief-mark[data-mark="draft"]')`},
-			{"decisions is N of 12", `!!decisions && decisions.querySelector('.briefs-index-folder__count').textContent === '2 of 12'`},
+			{"decisions is N · cap 12", `!!decisions && decisions.querySelector('.briefs-index-folder__count').textContent === '2 · cap 12'`},
 			{"a row is a link", `!!idx.querySelector('a[href="#` + roundBrief + `"]')`},
 		})
 

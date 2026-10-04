@@ -31,7 +31,8 @@ func briefsIndexHTML(t *testing.T, page string) string {
 // Authoring gate: (1) the index lists every non-feature folder against the
 // effective caps and keeps features/ out while the 60-total stays inclusive;
 // (2) dropping the features exclusion, the inclusive total, or the cap
-// pair would ship a page that disagrees with the sidebar and with check;
+// pair would ship a page that disagrees with the sidebar and with check
+// (NIT-250: the headline's briefs number is the sidebar's, "N briefs");
 // (3) NIT-197's placeholder only counted files — it never named the cap or
 // excluded features from the groups while counting them in the total;
 // (4) no new production seam.
@@ -44,11 +45,11 @@ func TestRender_BriefsIndexFoldersCapsAndNoFeatures(t *testing.T) {
 	index := briefsIndexHTML(t, out)
 	for _, want := range []string{
 		`>All briefs</h2>`,
-		`class="briefs-index-meter">4 of 60, 1 is a feature</p>`,
+		`class="briefs-index-meter">3 briefs · 1 feature, under Features · 4 of 60 allowed</p>`,
 		`data-folder="decisions"`,
-		`>Decisions</h3><span class="briefs-index-folder__count">2 of 12</span>`,
+		`>Decisions</h3><span class="briefs-index-folder__count">2 · cap 12</span>`,
 		`data-folder="research"`,
-		`>Research</h3><span class="briefs-index-folder__count">1 of 12</span>`,
+		`>Research</h3><span class="briefs-index-folder__count">1 · cap 12</span>`,
 		`href="#brief-decisions-round-to-the-cent">Balances round to the cent, once</a>`,
 		`class="briefs-index__summary">Round once, at display.</span>`,
 		`class="briefs-index__summary">No bank.</span>`,
@@ -73,8 +74,8 @@ func TestRender_BriefsIndexFoldersCapsAndNoFeatures(t *testing.T) {
 	for _, want := range []string{
 		`href="#_briefs"`,
 		`>Briefs</span><span class="home-tile__count home-wide">3</span>`,
-		`>4 of 60, 1 is a feature</span>`,
-		`>Decisions</span><span class="home-brief-folder__count">2 of 12</span>`,
+		`>1 feature · 4 of 60 allowed</span>`,
+		`>Decisions</span><span class="home-brief-folder__count">2</span>`,
 		`<span class="home-tile__line home-narrow">3 · 1 locked</span>`,
 	} {
 		if !strings.Contains(tile, want) {
@@ -104,10 +105,10 @@ func TestRender_BriefsIndexUsesEffectiveCapsAndMarksOver(t *testing.T) {
 		t.Fatal(err)
 	}
 	index := briefsIndexHTML(t, out)
-	if !strings.Contains(index, `>2 of 10</p>`) {
+	if !strings.Contains(index, `>2 briefs · 2 of 10 allowed</p>`) {
 		t.Errorf("the headline must use the configured total cap:\n%s", index)
 	}
-	if !strings.Contains(index, `briefs-index-folder__count--over">2 of 1</span>`) || !strings.Contains(index, `>brief-folder-cap</span>`) {
+	if !strings.Contains(index, `briefs-index-folder__count--over">2 · cap 1</span>`) || !strings.Contains(index, `>brief-folder-cap</span>`) {
 		t.Errorf("an over-cap folder must go red and name brief-folder-cap:\n%s", index)
 	}
 	if !strings.Contains(index, `>Design System</h3>`) {
@@ -193,7 +194,7 @@ func TestRender_HomeCardsCountBriefHalves(t *testing.T) {
 	if !strings.Contains(index, `1 review pending`) || strings.Contains(index, "Moved feature") {
 		t.Errorf("state totals cover the other folders only; features stay off the groups:\n%s", index)
 	}
-	if !strings.Contains(index, `3 of 60, 1 is a feature`) {
+	if !strings.Contains(index, `2 briefs · 1 feature, under Features · 3 of 60 allowed`) {
 		t.Errorf("the inclusive total is missing:\n%s", index)
 	}
 }
@@ -245,7 +246,7 @@ func TestRender_BriefsIndexMarksTotalOver(t *testing.T) {
 		t.Fatal(err)
 	}
 	index := briefsIndexHTML(t, out)
-	if !strings.Contains(index, `briefs-index-meter--over">2 of 1`) || !strings.Contains(index, `>brief-total-cap</span>`) {
+	if !strings.Contains(index, `briefs-index-meter--over">2 briefs · 2 of 1 allowed`) || !strings.Contains(index, `>brief-total-cap</span>`) {
 		t.Errorf("an over-cap project must go red and name brief-total-cap:\n%s", index)
 	}
 }
