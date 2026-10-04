@@ -50,15 +50,15 @@ a project needs to change: rebuild the viewer (`dossierx check`) to get it.
 
 ### Viewer size
 
-Every rendered viewer grows by about 2.3 KB of CSS:
+Every rendered viewer grows by about 2.4 KB of CSS:
 
 | Fixture | v0.7.22 | v0.7.23 |
 | --- | ---: | ---: |
-| fixture-basic | 1,300,312 | 1,302,579 |
-| fixture-conformance-v1 | 1,355,856 | 1,358,123 |
-| fixture-graph-demo | 1,604,741 | 1,607,100 |
-| fixture-portability | 1,304,640 | 1,306,907 |
-| fixture-theme-flat | 1,339,123 | 1,341,390 |
+| fixture-basic | 1,300,312 | 1,302,745 |
+| fixture-conformance-v1 | 1,355,856 | 1,358,289 |
+| fixture-graph-demo | 1,604,741 | 1,607,266 |
+| fixture-portability | 1,304,640 | 1,307,073 |
+| fixture-theme-flat | 1,339,123 | 1,341,556 |
 
 ## [0.7.22] - 2026-10-01
 

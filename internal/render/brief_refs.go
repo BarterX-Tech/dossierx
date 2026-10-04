@@ -11,7 +11,7 @@ import (
 // linkCodeRefs turns an inline code span that names another brief or a claim
 // into a link to it (NIT-248, Paper boards H1 and H1b of Release 0.7.23).
 // Briefs cite each other and claims as code: `features/onboarding`,
-// `decisions/beta-telemetry-on-by-default`,
+// `voice/talking-about-money`,
 // `app-shell.contract.removing-or-hiding-the-icon-quits-nothing`. A span
 // resolves when its text, trimmed, is
 //

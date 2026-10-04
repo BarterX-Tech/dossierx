@@ -10806,7 +10806,10 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   padding-top: 6px;
   padding-bottom: 6px;
 }
-.brief-nav__row .brief-mark { height: 18px; margin-left: auto; }
+/* The mark's box is its dot (8px) or padlock (12px); centre it on the 18px
+   first line. */
+.brief-nav__row .brief-mark { margin-top: 5px; margin-left: auto; }
+.brief-nav__row .brief-mark[data-mark="locked"] { margin-top: 3px; }
 
 /* The group that holds the current row reads as current (B1 HRP-0/HRQ-0):
    its heading, icon and count in the accent, the label at 600. One rule for
